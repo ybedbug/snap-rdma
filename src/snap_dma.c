@@ -370,17 +370,26 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
 				   SNAP_DMA_QP_GID_INDEX, &sw_gid);
 		if (rc) {
-			snap_error("Failed to get SW QP gid[%d]\n",
-				   SNAP_DMA_QP_GID_INDEX);
-			return rc;
-		}
-
-		rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-				   SNAP_DMA_QP_GID_INDEX, &fw_gid);
-		if (rc) {
-			snap_error("Failed to get FW QP gid[%d]\n",
-				   SNAP_DMA_QP_GID_INDEX);
-			return rc;
+			/*
+			 * In case roce enabled, but GIDs cannot be found,
+			 * only loopback QPs are allowed. Treat such case
+			 * the same way as if roce was disabled
+			 */
+			roce_en = 0;
+			rc = 0;
+		} else {
+			rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+					   SNAP_DMA_QP_GID_INDEX, &fw_gid);
+			if (rc) {
+				/*
+				 * If querying SW QP GIDs was successful,
+				 * there is no reason why it will fail for
+				 * FW QP, so treat such scenario as an error
+				 */
+				snap_error("Failed to get FW QP gid[%d]\n",
+					   SNAP_DMA_QP_GID_INDEX);
+				return rc;
+			}
 		}
 	}
 
