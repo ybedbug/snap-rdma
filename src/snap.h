@@ -41,10 +41,26 @@
 
 #include <infiniband/verbs.h>
 
+#include "queue.h"
+
 #define PFX "snap: "
 
-struct snap_ctx {
-	struct ibv_context *ibv_context;
+struct snap_driver;
+
+struct snap_device {
+	struct ibv_context *context;
+	struct snap_driver *driver;
+};
+
+typedef struct snap_device *(*snap_driver_open)(struct ibv_device *ibdev);
+typedef void (*snap_driver_close)(struct snap_device *sdev);
+
+struct snap_driver {
+	const char			*name;
+	TAILQ_ENTRY(snap_driver)	entry;
+
+	snap_driver_open		open;
+	snap_driver_close		close;
 };
 
 int snap_open();
