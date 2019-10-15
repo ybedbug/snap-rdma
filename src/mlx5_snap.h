@@ -35,6 +35,19 @@
 
 #include <stdlib.h>
 
+#include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
+
 #include "snap.h"
+
+struct mlx5_snap_device {
+	struct snap_device sdev;
+};
+
+static inline struct mlx5_snap_device*
+to_mlx5_snap_device(struct snap_device *sdev)
+{
+    return container_of(sdev, struct mlx5_snap_device, sdev);
+}
 
 #endif

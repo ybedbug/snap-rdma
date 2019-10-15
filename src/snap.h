@@ -46,6 +46,16 @@
 
 #define PFX "snap: "
 
+#ifndef offsetof
+#define offsetof(t, m) ((size_t) &((t *)0)->m)
+#endif
+
+#ifndef container_of
+#define container_of(ptr, type, member) ({ \
+		typeof(((type *)0)->member)*__mptr = (ptr); \
+		(type *)((char *)__mptr - offsetof(type, member)); })
+#endif
+
 struct snap_driver;
 
 struct snap_device {
