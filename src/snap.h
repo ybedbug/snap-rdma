@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <pthread.h>
 
 #include <infiniband/verbs.h>
@@ -54,6 +55,9 @@ struct snap_device {
 
 typedef struct snap_device *(*snap_driver_open)(struct ibv_device *ibdev);
 typedef void (*snap_driver_close)(struct snap_device *sdev);
+
+void snap_unregister_driver(struct snap_driver *driver);
+void snap_register_driver(struct snap_driver *driver);
 
 struct snap_driver {
 	const char			*name;
