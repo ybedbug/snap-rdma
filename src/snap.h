@@ -69,6 +69,9 @@ typedef void (*snap_driver_close)(struct snap_device *sdev);
 void snap_unregister_driver(struct snap_driver *driver);
 void snap_register_driver(struct snap_driver *driver);
 
+void snap_close_device(struct snap_device *sdev);
+struct snap_device *snap_open_device(struct ibv_device *ibdev);
+
 struct snap_driver {
 	const char			*name;
 	TAILQ_ENTRY(snap_driver)	entry;
