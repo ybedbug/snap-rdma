@@ -5,9 +5,10 @@ AC_CONFIG_HEADERS([config.h])
 
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
+AM_PROG_LIBTOOL
 
 # Init libtool
-LT_INIT()
+LT_INIT([dlopen])
 
 # Use C not C++
 AC_LANG([C])
@@ -15,6 +16,7 @@ AC_LANG([C])
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_INSTALL
+AC_ENABLE_SHARED
 
 # Checks for header files.
 AC_CHECK_HEADER([stdlib.h])
