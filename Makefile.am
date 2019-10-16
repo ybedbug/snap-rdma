@@ -1,12 +1,10 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src
+SUBDIRS = src tests
 
 EXTRA_DIST = README.md autogen.sh
 
-#
-# do not go into gtest dir
-#
+# do not install tests
 install:
 	$(MAKE) -C src install

@@ -27,6 +27,7 @@ AC_SEARCH_LIBS([rdma_establish],
 		[AC_MSG_WARN([RDMA CM does not support external QP.])])
 
 AC_CONFIG_FILES([Makefile
-		 src/Makefile])
+		 src/Makefile
+		 tests/Makefile])
 
 AC_OUTPUT
