@@ -1,3 +1,4 @@
+#include <dlfcn.h>
 
 #include "snap.h"
 
@@ -76,6 +77,8 @@ void snap_close_device(struct snap_device *sdev)
 
 int snap_open()
 {
+	struct snap_driver *driver;
+	void *dlhandle;
 	int rc;
 
 	rc = pthread_mutex_init(&sctx.lock, NULL);
@@ -84,13 +87,33 @@ int snap_open()
 
 	TAILQ_INIT(&sctx.drivers_list);
 
+	dlhandle = dlopen("libmlx5_snap.so", RTLD_LAZY);
+	if (!dlhandle) {
+		fprintf(stderr, PFX "couldn't load mlx5 driver.\n");
+		goto out_mutex_destroy;
+	}
+
+	TAILQ_FOREACH(driver, &sctx.drivers_list, entry) {
+		if (!strcmp(driver->name, "mlx5_snap")) {
+			driver->dlhandle = dlhandle;
+			break;
+		}
+	}
+
 	return 0;
 
+out_mutex_destroy:
+	pthread_mutex_destroy(&sctx.lock);
 out_err:
 	return rc;
 }
 
 void snap_close()
 {
+	struct snap_driver *driver, *next;
+
+	TAILQ_FOREACH_SAFE(driver, &sctx.drivers_list, entry, next)
+		dlclose(driver->dlhandle);
+
 	pthread_mutex_destroy(&sctx.lock);
 }

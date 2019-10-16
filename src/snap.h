@@ -74,6 +74,7 @@ struct snap_device *snap_open_device(struct ibv_device *ibdev);
 
 struct snap_driver {
 	const char			*name;
+	void				*dlhandle;
 	TAILQ_ENTRY(snap_driver)	entry;
 
 	snap_driver_open		open;
