@@ -37,8 +37,11 @@
 
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
+#include <linux/types.h>
 
-#include "snap.h"
+#include <snap.h>
+
+#include "mlx5_ifc.h"
 
 struct mlx5_snap_device {
 	struct snap_device sdev;
