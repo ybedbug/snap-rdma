@@ -65,12 +65,14 @@ struct snap_device {
 
 typedef struct snap_device *(*snap_driver_open)(struct ibv_device *ibdev);
 typedef void (*snap_driver_close)(struct snap_device *sdev);
+typedef bool (*snap_is_capable)(struct ibv_device *ibdev);
 
 void snap_unregister_driver(struct snap_driver *driver);
 void snap_register_driver(struct snap_driver *driver);
 
 void snap_close_device(struct snap_device *sdev);
 struct snap_device *snap_open_device(struct ibv_device *ibdev);
+bool snap_is_capable_device(struct ibv_device *ibdev);
 
 struct snap_driver {
 	const char			*name;
@@ -79,6 +81,7 @@ struct snap_driver {
 
 	snap_driver_open		open;
 	snap_driver_close		close;
+	snap_is_capable			is_capable;
 };
 
 int snap_open();

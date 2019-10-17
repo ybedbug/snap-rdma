@@ -42,6 +42,28 @@ void snap_register_driver(struct snap_driver *driver)
 	pthread_mutex_unlock(&sctx.lock);
 }
 
+bool snap_is_capable_device(struct ibv_device *ibdev)
+{
+	bool found = false;
+	struct snap_driver *driver;
+
+	pthread_mutex_lock(&sctx.lock);
+	TAILQ_FOREACH(driver, &sctx.drivers_list, entry) {
+		if (!strncmp(driver->name, ibdev->name,
+		    strlen(driver->name))) {
+			found = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&sctx.lock);
+
+	if (found)
+		return driver->is_capable(ibdev);
+
+	return false;
+
+}
+
 struct snap_device *snap_open_device(struct ibv_device *ibdev)
 {
 	struct snap_driver *driver;
