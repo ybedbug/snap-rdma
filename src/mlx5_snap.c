@@ -33,7 +33,7 @@ void mlx5_snap_close(struct snap_device *sdev)
 }
 
 static struct snap_driver mlx5_snap_driver = {
-	.name = "mlx5_snap",
+	.name = "mlx5",
 	.open = mlx5_snap_open,
 	.close = mlx5_snap_close,
 };
