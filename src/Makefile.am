@@ -23,6 +23,6 @@ libmlx5_snap_la_SOURCES = \
 
 libmlx5_snap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -fPIC
 
-libmlx5_snap_la_LIBADD = -L/usr/local/lib -lrdma_snap
+libmlx5_snap_la_LIBADD = -libverbs -lmlx5 -L$(libdir) -lrdma_snap
 
 libmlx5_snap_la_LDFLAGS = -module -avoid-version -export-dynamic
