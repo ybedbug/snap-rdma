@@ -8,7 +8,6 @@ int main(int argc, char **argv)
 {
 	struct ibv_device **list;
 	struct snap_context *sctx;
-	struct snap_device *sdev;
 	int ret, i, dev_count;
 
 	ret = snap_open();
@@ -27,8 +26,6 @@ int main(int argc, char **argv)
 	}
 
 	for (i = 0; i < dev_count; i++) {
-		struct snap_device_attr attr = {};
-
 		if (!snap_is_capable_device(list[i])) {
 			fprintf(stderr, "device %s is not snap device\n",
 				list[i]->name);
@@ -36,15 +33,12 @@ int main(int argc, char **argv)
 			continue;
 		}
 		sctx = snap_create_context(list[i]);
-		if (!sctx)
+		if (!sctx) {
+			fprintf(stderr, "failed to create snap ctx for %s\n",
+				list[i]->name);
+			fflush(stderr);
 			continue;
-
-		attr.type = SNAP_NVME_DEV;
-		attr.dev_id = 0;
-		sdev = snap_open_device(sctx, &attr);
-		if (sdev)
-			snap_close_device(sdev);
-
+		}
 		snap_destroy_context(sctx);
 	}
 

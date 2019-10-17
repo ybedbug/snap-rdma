@@ -56,31 +56,58 @@
 		(type *)((char *)__mptr - offsetof(type, member)); })
 #endif
 
-struct snap_driver;
-
-struct snap_device {
-	struct ibv_context *context;
-	struct snap_driver *driver;
+enum snap_device_type {
+	SNAP_NVME_DEV		= 1 << 0,
+	SNAP_VIRTIO_BLK_DEV	= 1 << 1,
 };
 
-typedef struct snap_device *(*snap_driver_open)(struct ibv_device *ibdev);
-typedef void (*snap_driver_close)(struct snap_device *sdev);
+struct snap_driver;
+struct snap_context;
+
+struct snap_device_attr {
+	enum snap_device_type	type;
+	int			dev_id;
+};
+
+struct snap_device {
+	struct snap_context		*sctx;
+	int				dev_id;
+	enum snap_device_type		type;
+};
+
+struct snap_context {
+	struct ibv_context		*context;
+	struct snap_driver		*driver;
+};
+
 typedef bool (*snap_is_capable)(struct ibv_device *ibdev);
+typedef struct snap_context *(*snap_driver_create_ctx)(struct ibv_device *ibdev);
+typedef void (*snap_driver_destroy_ctx)(struct snap_context *sctx);
+
+typedef struct snap_device *(*snap_driver_open_dev)(struct snap_context *sctx,
+					    struct snap_device_attr *attr);
+typedef void (*snap_driver_close_dev)(struct snap_device *sdev);
 
 void snap_unregister_driver(struct snap_driver *driver);
 void snap_register_driver(struct snap_driver *driver);
 
 void snap_close_device(struct snap_device *sdev);
-struct snap_device *snap_open_device(struct ibv_device *ibdev);
+struct snap_device *snap_open_device(struct snap_context *sctx,
+		struct snap_device_attr *attr);
 bool snap_is_capable_device(struct ibv_device *ibdev);
+
+struct snap_context *snap_create_context(struct ibv_device *ibdev);
+void snap_destroy_context(struct snap_context *sctx);
 
 struct snap_driver {
 	const char			*name;
 	void				*dlhandle;
 	TAILQ_ENTRY(snap_driver)	entry;
 
-	snap_driver_open		open;
-	snap_driver_close		close;
+	snap_driver_create_ctx		create;
+	snap_driver_destroy_ctx		destroy;
+	snap_driver_open_dev		open;
+	snap_driver_close_dev		close;
 	snap_is_capable			is_capable;
 };
 

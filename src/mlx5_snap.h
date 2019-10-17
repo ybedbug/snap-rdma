@@ -37,20 +37,39 @@
 
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
+#include <pthread.h>
 #include <linux/types.h>
 
 #include <snap.h>
 
 #include "mlx5_ifc.h"
+#include "queue.h"
+
+struct mlx5_snap_device;
+
+struct mlx5_snap_context {
+	struct snap_context		sctx;
+	pthread_mutex_t			lock;
+	TAILQ_HEAD(, mlx5_snap_device)	device_list;
+};
 
 struct mlx5_snap_device {
-	struct snap_device sdev;
+	struct snap_device		sdev;
+	TAILQ_ENTRY(mlx5_snap_device)	entry;
+
+	struct mlx5_snap_context	*mctx;
 };
 
 static inline struct mlx5_snap_device*
 to_mlx5_snap_device(struct snap_device *sdev)
 {
     return container_of(sdev, struct mlx5_snap_device, sdev);
+}
+
+static inline struct mlx5_snap_context*
+to_mlx5_snap_context(struct snap_context *sctx)
+{
+    return container_of(sctx, struct mlx5_snap_context, sctx);
 }
 
 #endif

@@ -42,23 +42,68 @@ static bool mlx5_snap_is_capable(struct ibv_device *ibdev)
 	return capable;
 }
 
-static struct snap_device *mlx5_snap_open(struct ibv_device *ibdev)
+static struct snap_context *mlx5_snap_create_context(struct ibv_device *ibdev)
 {
 	struct mlx5dv_context_attr attrs = {0};
-	struct mlx5_snap_device *mdev;
+	struct mlx5_snap_context *mctx;
+	int rc;
 
 	if (!mlx5_snap_is_capable(ibdev))
 		return NULL;
+
+	mctx = calloc(1, sizeof(*mctx));
+	if (!mctx)
+		return NULL;
+
+	attrs.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
+	mctx->sctx.context = mlx5dv_open_device(ibdev, &attrs);
+	if (!mctx->sctx.context)
+		goto out_free;
+
+	rc = pthread_mutex_init(&mctx->lock, NULL);
+	if (rc)
+		goto out_close_dev;
+
+	TAILQ_INIT(&mctx->device_list);
+
+	return &mctx->sctx;
+
+out_close_dev:
+	ibv_close_device(mctx->sctx.context);
+out_free:
+	free(mctx);
+	return NULL;
+
+}
+
+static void mlx5_snap_destroy_context(struct snap_context *sctx)
+{
+	struct mlx5_snap_context *mctx = to_mlx5_snap_context(sctx);
+
+	/* TODO: assert if there are open devices */
+	pthread_mutex_destroy(&mctx->lock);
+	ibv_close_device(sctx->context);
+	free(mctx);
+}
+
+static struct snap_device *mlx5_snap_open_device(struct snap_context *sctx,
+		struct snap_device_attr *attr)
+{
+	struct mlx5_snap_context *mctx = to_mlx5_snap_context(sctx);
+	struct mlx5dv_context_attr attrs = {0};
+	struct mlx5_snap_device *mdev;
 
 	mdev = calloc(1, sizeof(*mdev));
 	if (!mdev)
 		return NULL;
 
-	attrs.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
-	mdev->sdev.context = mlx5dv_open_device(ibdev, &attrs);
-	if (!mdev->sdev.context)
-		goto out_free;
+	pthread_mutex_lock(&mctx->lock);
+	TAILQ_INSERT_HEAD(&mctx->device_list, mdev, entry);
+	pthread_mutex_unlock(&mctx->lock);
 
+	mdev->mctx = mctx;
+
+	/* TODO: create emulation object */
 	return &mdev->sdev;
 
 out_free:
@@ -66,18 +111,26 @@ out_free:
 	return NULL;
 }
 
-static void mlx5_snap_close(struct snap_device *sdev)
+static void mlx5_snap_close_device(struct snap_device *sdev)
 {
 	struct mlx5_snap_device *mdev = to_mlx5_snap_device(sdev);
+	struct mlx5_snap_context *mctx = mdev->mctx;
 
-	ibv_close_device(sdev->context);
+	/* TODO: destroy emulation object */
+
+	pthread_mutex_lock(&mctx->lock);
+	TAILQ_REMOVE(&mctx->device_list, mdev, entry);
+	pthread_mutex_unlock(&mctx->lock);
+
 	free(mdev);
 }
 
 static struct snap_driver mlx5_snap_driver = {
 	.name = "mlx5",
-	.open = mlx5_snap_open,
-	.close = mlx5_snap_close,
+	.create = mlx5_snap_create_context,
+	.destroy = mlx5_snap_destroy_context,
+	.open = mlx5_snap_open_device,
+	.close = mlx5_snap_close_device,
 	.is_capable = mlx5_snap_is_capable,
 };
 
