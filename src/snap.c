@@ -77,6 +77,7 @@ void snap_close_device(struct snap_device *sdev)
 
 int snap_open()
 {
+	bool found = false;
 	struct snap_driver *driver;
 	void *dlhandle;
 	int rc;
@@ -94,14 +95,20 @@ int snap_open()
 	}
 
 	TAILQ_FOREACH(driver, &sctx.drivers_list, entry) {
-		if (!strcmp(driver->name, "mlx5_snap")) {
+		if (!strcmp(driver->name, "mlx5")) {
 			driver->dlhandle = dlhandle;
+			found = true;
 			break;
 		}
 	}
 
+	if (!found)
+		goto out_close;
+
 	return 0;
 
+out_close:
+	dlclose(dlhandle);
 out_mutex_destroy:
 	pthread_mutex_destroy(&sctx.lock);
 out_err:
