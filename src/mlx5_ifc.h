@@ -58,6 +58,7 @@ enum {
 	MLX5_CMD_OP_MODIFY_GENERAL_OBJECT = 0xa01,
 	MLX5_CMD_OP_QUERY_GENERAL_OBJECT = 0xa02,
 	MLX5_CMD_OP_SYNC_STEERING = 0xb00,
+	MLX5_CMD_OP_QUERY_EMULATED_FUNCTIONS_INFO = 0xb03,
 };
 
 struct mlx5_ifc_atomic_caps_bits {
@@ -1006,6 +1007,25 @@ struct mlx5_ifc_odp_cap_bits {
 	u8         reserved_at_120[0x6e0];
 };
 
+struct mlx5_ifc_emulation_cap_bits {
+	u8         nvme_offload_type_sqe[0x1];
+	u8         nvme_offload_type_doorbell_only[0x1];
+	u8         nvme_offload_type_command_capsule[0x1];
+	u8         log_max_nvme_offload_namespaces[0x5];
+	u8         reserved_at_7[0x10];
+	u8         total_emulated_pfs[0x8];
+
+	u8         reserved_at_20[0x10];
+	u8         registers_size[0x10];
+
+	u8         reserved_at_40[0x13];
+	u8         log_max_emulated_sq[0x5];
+	u8         reserved_at_58[0x3];
+	u8         log_max_emulated_cq[0x5];
+
+	u8         reserved_at_60[0x7a0];
+};
+
 union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_atomic_caps_bits atomic_caps;
 	struct mlx5_ifc_cmd_hca_cap_bits cmd_hca_cap;
@@ -1013,6 +1033,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_flow_table_eswitch_cap_bits flow_table_eswitch_cap;
 	struct mlx5_ifc_device_mem_cap_bits device_mem_cap;
 	struct mlx5_ifc_odp_cap_bits odp_cap;
+	struct mlx5_ifc_emulation_cap_bits emulation_cap;
 	u8         reserved_at_0[0x8000];
 };
 
@@ -1041,6 +1062,36 @@ struct mlx5_ifc_query_hca_cap_in_bits {
 	u8         reserved_at_60[0x20];
 };
 
+struct mlx5_ifc_emulated_pf_info_bits {
+	u8         pf_pci_number[0x10];
+	u8         pf_vhca_id[0x10];
+
+	u8         num_of_vfs[0x10];
+	u8         vfs_base_vhca_id[0x10];
+};
+
+struct mlx5_ifc_query_emulated_functions_info_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x38];
+	u8         num_emulated_pfs[0x8];
+
+	struct mlx5_ifc_emulated_pf_info_bits emulated_pf_info[0];
+};
+
+struct mlx5_ifc_query_emulated_functions_info_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
+};
+
 enum mlx5_cap_type {
 	MLX5_CAP_ODP = 2,
 	MLX5_CAP_ATOMIC = 3,
@@ -1051,6 +1102,7 @@ enum {
 	MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE        = 0x7 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_ESW_FLOW_TABLE        = 0x8 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_MEMORY         = 0xf << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_EMULATION      = 0x10 << 1,
 };
 
 enum {
@@ -1720,6 +1772,7 @@ struct mlx5_ifc_alloc_flow_counter_out_bits {
 };
 
 enum {
+	MLX5_OBJ_TYPE_DEVICE_EMULATION = 0x0006,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
 };
 
@@ -1853,6 +1906,25 @@ struct mlx5_ifc_query_esw_vport_context_in_bits {
 	u8         vport_number[0x10];
 
 	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_device_emulation_bits {
+	u8         modify_field_select[0x40];
+
+	u8         reserved_at_40[0x10];
+	u8         vhca_id[0x10];
+
+	u8         enabled[0x1];
+	u8         reserved_at_61[0x1f];
+
+	u8         counter_set_id[0x20];
+
+	u8         vendor_id[0x10];
+	u8         subsystem_vendor_id[0x10];
+
+	u8         reserved_at_c0[0xc0];
+
+	u8         register_data[0][0x20];
 };
 
 enum {
