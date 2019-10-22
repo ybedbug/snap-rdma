@@ -89,17 +89,21 @@ static int mlx5_snap_alloc_virtual_functions(struct mlx5_snap_pci *pf)
 {
 	int ret, i;
 
-	pf->vfs = calloc(pf->num_vfs, sizeof(struct mlx5_snap_pci));
+	pf->vfs = calloc(pf->spci.num_vfs, sizeof(struct mlx5_snap_pci));
 	if (!pf->vfs)
 		return -ENOMEM;
 
-	for (i = 0; i < pf->num_vfs; i++) {
+	for (i = 0; i < pf->spci.num_vfs; i++) {
 		struct mlx5_snap_pci *vf = &pf->vfs[i];
 
 		vf->type = MLX5_SNAP_VF;
-		vf->pf = pf;
 		vf->mctx = pf->mctx;
 		vf->vhca_id = pf->vfs_base_vhca_id + i;
+
+		vf->spci.id = i;
+		vf->spci.pci_number = pf->spci.pci_number;
+		vf->spci.num_vfs = 0;
+		vf->spci.parent = &pf->spci;
 	}
 
 	return 0;
@@ -110,7 +114,7 @@ static void mlx5_snap_free_functions(struct mlx5_snap_context *mctx)
 	int i;
 
 	for (i = 0; i < mctx->max_pfs; i++) {
-		if (mctx->pfs[i].num_vfs)
+		if (mctx->pfs[i].spci.num_vfs)
 			mlx5_snap_free_virtual_functions(&mctx->pfs[i]);
 	}
 	free(mctx->pfs);
@@ -156,17 +160,19 @@ static int mlx5_snap_alloc_functions(struct mlx5_snap_context *mctx)
 
 		pf->type = MLX5_SNAP_PF;
 		pf->mctx = mctx;
-		pf->pci_number = DEVX_GET(query_emulated_functions_info_out,
-					  out,
-					  emulated_pf_info[i].pf_pci_number);
+		pf->spci.id = i;
+		pf->spci.pci_number = DEVX_GET(query_emulated_functions_info_out,
+					       out,
+					       emulated_pf_info[i].pf_pci_number);
 		pf->vhca_id = DEVX_GET(query_emulated_functions_info_out, out,
 					  emulated_pf_info[i].pf_vhca_id);
-		pf->num_vfs = DEVX_GET(query_emulated_functions_info_out, out,
-					  emulated_pf_info[i].num_of_vfs);
 		pf->vfs_base_vhca_id = DEVX_GET(query_emulated_functions_info_out,
 						out,
 						emulated_pf_info[i].vfs_base_vhca_id);
-		if (pf->num_vfs) {
+		pf->spci.num_vfs = DEVX_GET(query_emulated_functions_info_out,
+					    out,
+					    emulated_pf_info[i].num_of_vfs);
+		if (pf->spci.num_vfs) {
 			ret = mlx5_snap_alloc_virtual_functions(pf);
 			if (ret)
 				goto free_vfs;
@@ -179,7 +185,7 @@ static int mlx5_snap_alloc_functions(struct mlx5_snap_context *mctx)
 
 free_vfs:
 	for (j = 0; j < i; j++) {
-		if (mctx->pfs[j].num_vfs)
+		if (mctx->pfs[j].spci.num_vfs)
 			mlx5_snap_free_virtual_functions(&mctx->pfs[j]);
 	}
 out_free:
@@ -283,6 +289,8 @@ static struct snap_device *mlx5_snap_open_device(struct snap_context *sctx,
 	mdev->device_emulation = mlx5_snap_create_device_emulation(mdev);
 	if (!mdev->device_emulation)
 		goto out_free;
+
+	mdev->sdev.pci = &mdev->pci->spci;
 
 	pthread_mutex_lock(&mctx->lock);
 	TAILQ_INSERT_HEAD(&mctx->device_list, mdev, entry);

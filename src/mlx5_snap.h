@@ -54,15 +54,13 @@ enum mlx5_snap_pci_type {
 };
 
 struct mlx5_snap_pci {
+	struct snap_pci			spci;
 	enum mlx5_snap_pci_type		type;
-	int				pci_number;
 	int				vhca_id;
-	int				num_vfs;
 	int				vfs_base_vhca_id;
 	struct mlx5_snap_pci		*vfs;// VFs array for PF
 
 	struct mlx5_snap_context	*mctx;
-	struct mlx5_snap_pci		*pf;//parent PF for VFs
 };
 
 struct mlx5_snap_context {
@@ -84,6 +82,12 @@ struct mlx5_snap_device {
 	struct mlx5_snap_context	*mctx;
 	struct mlx5_snap_pci		*pci;
 };
+
+static inline struct mlx5_snap_pci*
+to_mlx5_snap_pci(struct snap_pci *spci)
+{
+    return container_of(spci, struct mlx5_snap_pci, spci);
+}
 
 static inline struct mlx5_snap_device*
 to_mlx5_snap_device(struct snap_device *sdev)

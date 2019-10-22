@@ -72,9 +72,18 @@ struct snap_device_attr {
 	int			vf_id;
 };
 
+struct snap_pci {
+	int			id;
+	int			pci_number;
+	int			num_vfs;
+
+	struct snap_pci		*parent; //parent PF for VFs
+};
+
 struct snap_device {
 	struct snap_context		*sctx;
 	enum snap_device_type		type;
+	struct snap_pci			*pci;
 };
 
 struct snap_context {
