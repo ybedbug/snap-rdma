@@ -1,4 +1,4 @@
-# rdma-snap Library
+# snap-rdma Library
 
 This is the userspace library for developing SNAP (Software-defined Network Accelerated Processing)
 based applications on Linux RDMA subsystem.
@@ -16,7 +16,14 @@ TBD
 
 # Building
 
-TBD
+To build and install this library, run:
+./autogen.sh && ./configure && make && make install
+
+Typically the autogen and configure steps only need be done the first
+time unless configure.ac or Makefile.am changes.
+
+Libraries are installed by default at /usr/local/lib.
+
 
 # Tests
 
