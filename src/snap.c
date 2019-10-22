@@ -121,6 +121,16 @@ void snap_close_device(struct snap_device *sdev)
 	driver->close(sdev);
 }
 
+struct snap_pci **snap_get_pf_list(struct snap_context *sctx, int *count)
+{
+	return sctx->driver->get_pf_list(sctx, count);
+}
+
+void snap_free_pf_list(struct snap_pci **list)
+{
+	free(list);
+}
+
 int snap_open()
 {
 	bool found = false;
