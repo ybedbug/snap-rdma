@@ -39,11 +39,16 @@ int main(int argc, char **argv)
 		if (!sctx)
 			continue;
 
-		attr.type = SNAP_NVME_DEV;
-		attr.dev_id = 0;
+		attr.type = SNAP_NVME_PF_DEV;
+		attr.pf_id = 0;
 		sdev = snap_open_device(sctx, &attr);
-		if (sdev)
+		if (sdev) {
 			snap_close_device(sdev);
+		} else {
+			fprintf(stderr, "failed to create device %d for %s\n",
+				attr.pf_id, list[i]->name);
+			fflush(stderr);
+		}
 
 		snap_destroy_context(sctx);
 	}
