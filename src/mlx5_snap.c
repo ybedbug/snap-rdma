@@ -316,12 +316,34 @@ static void mlx5_snap_close_device(struct snap_device *sdev)
 	free(mdev);
 }
 
+struct snap_pci **mlx5_snap_get_pf_list(struct snap_context *sctx, int *count)
+{
+	struct mlx5_snap_context *mctx = to_mlx5_snap_context(sctx);
+	struct snap_pci **list;
+	int i;
+
+	if (!count)
+		return NULL;
+
+	list = calloc(mctx->max_pfs, sizeof(struct snap_pci *));
+	if (!list)
+		return NULL;
+
+	for (i = 0; i < mctx->max_pfs; i++)
+		list[i] = &mctx->pfs[i].spci;
+
+	*count = mctx->max_pfs;
+
+	return list;
+}
+
 static struct snap_driver mlx5_snap_driver = {
 	.name = "mlx5",
 	.create = mlx5_snap_create_context,
 	.destroy = mlx5_snap_destroy_context,
 	.open = mlx5_snap_open_device,
 	.close = mlx5_snap_close_device,
+	.get_pf_list = mlx5_snap_get_pf_list,
 	.is_capable = mlx5_snap_is_capable,
 };
 
