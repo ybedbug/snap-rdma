@@ -57,8 +57,10 @@
 #endif
 
 enum snap_device_type {
-	SNAP_NVME_DEV		= 1 << 0,
-	SNAP_VIRTIO_BLK_DEV	= 1 << 1,
+	SNAP_NVME_PF_DEV	= 1 << 0,
+	SNAP_NVME_VF_DEV	= 1 << 1,
+	SNAP_VIRTIO_BLK_PF_DEV	= 1 << 2,
+	SNAP_VIRTIO_BLK_VF_DEV	= 1 << 3,
 };
 
 struct snap_driver;
@@ -66,12 +68,12 @@ struct snap_context;
 
 struct snap_device_attr {
 	enum snap_device_type	type;
-	int			dev_id;
+	int			pf_id;
+	int			vf_id;
 };
 
 struct snap_device {
 	struct snap_context		*sctx;
-	int				dev_id;
 	enum snap_device_type		type;
 };
 

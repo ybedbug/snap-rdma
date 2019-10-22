@@ -107,8 +107,9 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	sdev = driver->open(sctx, attr);
 	if (!sdev)
 		return NULL;
-	else
-		sdev->sctx = sctx;
+
+	sdev->sctx = sctx;
+	sdev->type = attr->type;
 
 	return sdev;
 }
