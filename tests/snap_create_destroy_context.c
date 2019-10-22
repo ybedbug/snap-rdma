@@ -2,7 +2,7 @@
 
 #include <infiniband/verbs.h>
 
-#include <snap.h>
+#include "snap.h"
 
 int main(int argc, char **argv)
 {
