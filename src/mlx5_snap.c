@@ -80,7 +80,7 @@ static int mlx5_snap_query_emulation_caps(struct mlx5_snap_context *mctx)
 
 }
 
-static int mlx5_snap_free_virtual_functions(struct mlx5_snap_pci *pf)
+static void mlx5_snap_free_virtual_functions(struct mlx5_snap_pci *pf)
 {
 	free(pf->vfs);
 }
