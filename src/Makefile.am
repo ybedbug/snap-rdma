@@ -22,6 +22,6 @@ libmlx5_snap_la_SOURCES = \
 
 libmlx5_snap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -fPIC
 
-libmlx5_snap_la_LIBADD = -libverbs -lmlx5 -lpthread -L$(libdir) -lrdma_snap
+libmlx5_snap_la_LIBADD = -libverbs -lmlx5 -lpthread librdma_snap.la
 
 libmlx5_snap_la_LDFLAGS = -module -avoid-version -export-dynamic
