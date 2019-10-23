@@ -10,6 +10,13 @@ struct g_snap_ctx {
 
 static struct g_snap_ctx g_sctx;
 
+/**
+ * snap_unregister_driver() - Unregister providers driver
+ * @driver:       snap driver
+ *
+ * This routine should only be called from providers library destructor. It
+ * will unregister a previously registered snap driver.
+ */
 void snap_unregister_driver(struct snap_driver *driver)
 {
 	struct snap_driver *tmp, *next;
@@ -24,6 +31,13 @@ void snap_unregister_driver(struct snap_driver *driver)
 	pthread_mutex_unlock(&g_sctx.lock);
 }
 
+/**
+ * snap_register_driver() - Register providers driver
+ * @driver:       snap driver
+ *
+ * This routine should only be called from providers library constructor. It
+ * will register a driver that implements snap mandatory capabilities.
+ */
 void snap_register_driver(struct snap_driver *driver)
 {
 	struct snap_driver *tmp;
@@ -42,6 +56,12 @@ void snap_register_driver(struct snap_driver *driver)
 	pthread_mutex_unlock(&g_sctx.lock);
 }
 
+/**
+ * snap_is_capable_device() - Checks if RDMA device is snap capable
+ * @ibdev:       RDMA device
+ *
+ * Return: Returns true if ibdev is snap capable. Otherwise, returns false.
+ */
 bool snap_is_capable_device(struct ibv_device *ibdev)
 {
 	bool found = false;
@@ -131,6 +151,14 @@ void snap_free_pf_list(struct snap_pci **list)
 	free(list);
 }
 
+/**
+ * snap_open() - Initialize snap library
+ *
+ * Notes:
+ * This routine should be the first routine that is called by the library user.
+ * It should be called once per process. It will create and initialize global
+ * internal resources and load providers shared objects as well.
+ */
 int snap_open()
 {
 	bool found = false;
@@ -171,6 +199,15 @@ out_err:
 	return rc;
 }
 
+/**
+ * snap_close() - Close snap library
+ *
+ * Notes:
+ * This routine should be the last routine that is called by the library user.
+ * It should be called once per process and only if snap_open() was called to
+ * initialize the library. It will destroy internal resources and unload
+ * providers shared objects as well.
+ */
 void snap_close()
 {
 	struct snap_driver *driver, *next;
