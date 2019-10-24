@@ -84,6 +84,12 @@ bool snap_is_capable_device(struct ibv_device *ibdev)
 
 }
 
+/**
+ * snap_create_context() - Create a new snap context
+ * @ibdev:       RDMA device
+ *
+ * Return: Returns snap_context in case of success, NULL otherwise.
+ */
 struct snap_context *snap_create_context(struct ibv_device *ibdev)
 {
 	bool found = false;
@@ -113,11 +119,27 @@ struct snap_context *snap_create_context(struct ibv_device *ibdev)
 	return sctx;
 }
 
+/**
+ * snap_destroy_context() - Destroy a snap context
+ * @sctx:       snap context
+ *
+ * Destroy and free a snap context.
+ */
 void snap_destroy_context(struct snap_context *sctx)
 {
 	sctx->driver->destroy(sctx);
 }
 
+/**
+ * snap_open_device() - Create a new snap device from snap context
+ * @sctx:       snap context
+ * @attr:       snap device attributes
+ *
+ * Allocates a new snap device that will be associated to the given snap
+ * context according to the requested attributes.
+ *
+ * Return: Returns a new snap_device in case of success, NULL otherwise.
+ */
 struct snap_device *snap_open_device(struct snap_context *sctx,
 				     struct snap_device_attr *attr)
 {
@@ -134,6 +156,12 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	return sdev;
 }
 
+/**
+ * snap_close_device() - Destroy a snap device
+ * @sdev:       snap device
+ *
+ * Destroy and free a snap device.
+ */
 void snap_close_device(struct snap_device *sdev)
 {
 	struct snap_driver *driver = sdev->sctx->driver;
@@ -141,11 +169,30 @@ void snap_close_device(struct snap_device *sdev)
 	driver->close(sdev);
 }
 
+/**
+ * snap_get_pf_list() - Get an array of snap pci devices for a given context.
+ * @sctx:       snap context
+ * @count:      the number of devices returned in the array (output)
+ *
+ * Allocates a new array of snap_pci devices that are available for a given
+ * snap context. This must be followed by calling snap_free_pf_list() to avoid
+ * Memory leaks. The count argument must be a valid pointer to contain the
+ * returned array size.
+ *
+ * Return: Returns an array of snap pci devices in case of success, NULL
+ * otherwise.
+ */
 struct snap_pci **snap_get_pf_list(struct snap_context *sctx, int *count)
 {
 	return sctx->driver->get_pf_list(sctx, count);
 }
 
+/**
+ * snap_free_pf_list() - Frees the array of snap pci devices.
+ * @list:       array of snap pci devices
+ *
+ * Frees the array of devices returned by snap_get_pf_list().
+  */
 void snap_free_pf_list(struct snap_pci **list)
 {
 	free(list);
