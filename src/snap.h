@@ -72,9 +72,18 @@ struct snap_device_attr {
 	int			vf_id;
 };
 
+struct snap_pci {
+	int			id;
+	int			pci_number;
+	int			num_vfs;
+
+	struct snap_pci		*parent; //parent PF for VFs
+};
+
 struct snap_device {
 	struct snap_context		*sctx;
 	enum snap_device_type		type;
+	struct snap_pci			*pci;
 };
 
 struct snap_context {
@@ -89,6 +98,8 @@ typedef void (*snap_driver_destroy_ctx)(struct snap_context *sctx);
 typedef struct snap_device *(*snap_driver_open_dev)(struct snap_context *sctx,
 					    struct snap_device_attr *attr);
 typedef void (*snap_driver_close_dev)(struct snap_device *sdev);
+typedef struct snap_pci **(*snap_driver_get_pf_list)(struct snap_context *sctx,
+		int *count);
 
 void snap_unregister_driver(struct snap_driver *driver);
 void snap_register_driver(struct snap_driver *driver);
@@ -101,6 +112,9 @@ bool snap_is_capable_device(struct ibv_device *ibdev);
 struct snap_context *snap_create_context(struct ibv_device *ibdev);
 void snap_destroy_context(struct snap_context *sctx);
 
+struct snap_pci **snap_get_pf_list(struct snap_context *sctx, int *count);
+void snap_free_pf_list(struct snap_pci **pci_list);
+
 struct snap_driver {
 	const char			*name;
 	void				*dlhandle;
@@ -110,6 +124,7 @@ struct snap_driver {
 	snap_driver_destroy_ctx		destroy;
 	snap_driver_open_dev		open;
 	snap_driver_close_dev		close;
+	snap_driver_get_pf_list		get_pf_list;
 	snap_is_capable			is_capable;
 };
 

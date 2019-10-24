@@ -1,17 +1,17 @@
 ACLOCAL_AMFLAGS = -I m4
 
-lib_LTLIBRARIES = librdma_snap.la libmlx5_snap.la
+lib_LTLIBRARIES = libsnap_rdma.la libmlx5_snap.la
 
-librdma_snap_ladir = $(includedir)/rdma-snap
+libsnap_rdma_ladir = $(includedir)/snap-rdma
 
-librdma_snap_la_HEADERS = snap.h queue.h
+libsnap_rdma_la_HEADERS = snap.h queue.h
 
-librdma_snap_la_SOURCES = \
+libsnap_rdma_la_SOURCES = \
 				snap.c
 
-librdma_snap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -fPIC
+libsnap_rdma_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -fPIC
 
-librdma_snap_la_LDFLAGS = -module -avoid-version -export-dynamic -ldl
+libsnap_rdma_la_LDFLAGS = -module -avoid-version -export-dynamic -ldl
 
 libmlx5_snap_ladir = $(includedir)/mlx5-snap
 
@@ -22,6 +22,6 @@ libmlx5_snap_la_SOURCES = \
 
 libmlx5_snap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -fPIC
 
-libmlx5_snap_la_LIBADD = -libverbs -lmlx5 -lpthread -L$(libdir) -lrdma_snap
+libmlx5_snap_la_LIBADD = -libverbs -lmlx5 -lpthread libsnap_rdma.la
 
 libmlx5_snap_la_LDFLAGS = -module -avoid-version -export-dynamic
