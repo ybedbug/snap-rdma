@@ -40,65 +40,16 @@
 #include <pthread.h>
 #include <linux/types.h>
 
-#include <snap.h>
-
 #include "mlx5_ifc.h"
-#include "queue.h"
-
-struct mlx5_snap_device;
-struct mlx5_snap_context;
-
-enum mlx5_snap_pci_type {
-	MLX5_SNAP_PF	= 1 << 0,
-	MLX5_SNAP_VF	= 1 << 1,
-};
 
 struct mlx5_snap_pci {
-	struct snap_pci			spci;
-	enum mlx5_snap_pci_type		type;
 	int				vhca_id;
 	int				vfs_base_vhca_id;
-	struct mlx5_snap_pci		*vfs;// VFs array for PF
-
-	struct mlx5_snap_context	*mctx;
-};
-
-struct mlx5_snap_context {
-	struct snap_context		sctx;
-	pthread_mutex_t			lock;
-	TAILQ_HEAD(, mlx5_snap_device)	device_list;
-
-	int				max_pfs;
-	struct mlx5_snap_pci		*pfs;
 };
 
 struct mlx5_snap_device {
-	struct snap_device		sdev;
-	TAILQ_ENTRY(mlx5_snap_device)	entry;
-
 	struct mlx5dv_devx_obj		*device_emulation;
 	u8				obj_id;
-
-	struct mlx5_snap_context	*mctx;
-	struct mlx5_snap_pci		*pci;
 };
-
-static inline struct mlx5_snap_pci*
-to_mlx5_snap_pci(struct snap_pci *spci)
-{
-    return container_of(spci, struct mlx5_snap_pci, spci);
-}
-
-static inline struct mlx5_snap_device*
-to_mlx5_snap_device(struct snap_device *sdev)
-{
-    return container_of(sdev, struct mlx5_snap_device, sdev);
-}
-
-static inline struct mlx5_snap_context*
-to_mlx5_snap_context(struct snap_context *sctx)
-{
-    return container_of(sctx, struct mlx5_snap_context, sctx);
-}
 
 #endif

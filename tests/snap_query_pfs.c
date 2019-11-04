@@ -10,13 +10,6 @@ int main(int argc, char **argv)
 	struct snap_context *sctx;
 	int ret, i, dev_count;
 
-	ret = snap_open();
-	if (ret) {
-		fprintf(stderr, "failed to open snap. ret=%d\n", ret);
-		fflush(stderr);
-		exit(1);
-	}
-
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
 		fprintf(stderr, "failed to open ib device list.\n");
@@ -29,40 +22,35 @@ int main(int argc, char **argv)
 		struct snap_pci **slist;
 		int j, scount;
 
-		if (!snap_is_capable_device(list[i])) {
-			fprintf(stderr, "device %s is not snap device\n",
-				list[i]->name);
-			fflush(stderr);
-			continue;
-		}
-		sctx = snap_create_context(list[i]);
+		sctx = snap_open(list[i]);
 		if (!sctx) {
 			fprintf(stderr, "failed to create snap ctx for %s\n",
 				list[i]->name);
 			fflush(stderr);
 			continue;
 		}
-		slist = snap_get_pf_list(sctx, &scount);
+
+		slist = calloc(sctx->max_pfs, sizeof(*slist));
 		if (!slist) {
-			fprintf(stderr, "failed to get snap pfs for %s\n",
-				list[i]->name);
-			fflush(stderr);
-		} else {
-			for (j = 0; j < scount; j++) {
-				fprintf(stdout,
-					"snap pf id=%d number=%d num_vfs=%d for %s\n",
-					slist[j]->id, slist[j]->pci_number,
-					slist[j]->num_vfs, list[i]->name);
-				fflush(stdout);
-			}
-			snap_free_pf_list(slist);
+			snap_close(sctx);
+			goto out;
 		}
-		snap_destroy_context(sctx);
+
+		scount = snap_get_pf_list(sctx, SNAP_NVME_PF, slist);
+		for (j = 0; j < scount; j++) {
+			fprintf(stdout,
+				"snap pf id=%d number=%d num_vfs=%d for %s\n",
+				slist[j]->id, slist[j]->pci_number,
+				slist[j]->num_vfs, list[i]->name);
+			fflush(stdout);
+		}
+		free(slist);
+
+		snap_close(sctx);
 	}
 
-	ibv_free_device_list(list);
 out:
-	snap_close();
+	ibv_free_device_list(list);
 
 	return ret;
 }

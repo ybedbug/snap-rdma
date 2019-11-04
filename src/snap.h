@@ -38,11 +38,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
 #include <pthread.h>
 
 #include <infiniband/verbs.h>
 
 #include "queue.h"
+#include "mlx5_snap.h"
 
 #define PFX "snap: "
 
@@ -56,79 +58,61 @@
 		(type *)((char *)__mptr - offsetof(type, member)); })
 #endif
 
-enum snap_device_type {
-	SNAP_NVME_PF_DEV	= 1 << 0,
-	SNAP_NVME_VF_DEV	= 1 << 1,
-	SNAP_VIRTIO_BLK_PF_DEV	= 1 << 2,
-	SNAP_VIRTIO_BLK_VF_DEV	= 1 << 3,
+enum snap_pci_type {
+	SNAP_NVME_PF		= 1 << 0,
+	SNAP_NVME_VF		= 1 << 1,
+	SNAP_VIRTIO_BLK_PF	= 1 << 2,
+	SNAP_VIRTIO_BLK_VF	= 1 << 3,
 };
 
-struct snap_driver;
 struct snap_context;
 
 struct snap_device_attr {
-	enum snap_device_type	type;
+	enum snap_pci_type	type;
 	int			pf_id;
 	int			vf_id;
 };
 
 struct snap_pci {
+	struct snap_context	*sctx;
+	enum snap_pci_type	type;
 	int			id;
 	int			pci_number;
-	int			num_vfs;
 
-	struct snap_pci		*parent; //parent PF for VFs
+	int			num_vfs;
+	struct snap_pci		*vfs;// VFs array for PF
+	struct snap_pci		*parent;//parent PF for VFs
+
+	struct mlx5_snap_pci	mpci;
 };
 
 struct snap_device {
 	struct snap_context		*sctx;
-	enum snap_device_type		type;
 	struct snap_pci			*pci;
+
+	TAILQ_ENTRY(snap_device)	entry;
+
+	struct mlx5_snap_device		mdev;
 };
 
 struct snap_context {
 	struct ibv_context		*context;
-	struct snap_driver		*driver;
+
+	int				max_pfs;
+	struct snap_pci			*pfs;
+
+	pthread_mutex_t			lock;
+	TAILQ_HEAD(, snap_device)	device_list;
 };
-
-typedef bool (*snap_is_capable)(struct ibv_device *ibdev);
-typedef struct snap_context *(*snap_driver_create_ctx)(struct ibv_device *ibdev);
-typedef void (*snap_driver_destroy_ctx)(struct snap_context *sctx);
-
-typedef struct snap_device *(*snap_driver_open_dev)(struct snap_context *sctx,
-					    struct snap_device_attr *attr);
-typedef void (*snap_driver_close_dev)(struct snap_device *sdev);
-typedef struct snap_pci **(*snap_driver_get_pf_list)(struct snap_context *sctx,
-		int *count);
-
-void snap_unregister_driver(struct snap_driver *driver);
-void snap_register_driver(struct snap_driver *driver);
 
 void snap_close_device(struct snap_device *sdev);
 struct snap_device *snap_open_device(struct snap_context *sctx,
 		struct snap_device_attr *attr);
-bool snap_is_capable_device(struct ibv_device *ibdev);
 
-struct snap_context *snap_create_context(struct ibv_device *ibdev);
-void snap_destroy_context(struct snap_context *sctx);
+struct snap_context *snap_open(struct ibv_device *ibdev);
+void snap_close(struct snap_context *sctx);
 
-struct snap_pci **snap_get_pf_list(struct snap_context *sctx, int *count);
-void snap_free_pf_list(struct snap_pci **pci_list);
-
-struct snap_driver {
-	const char			*name;
-	void				*dlhandle;
-	TAILQ_ENTRY(snap_driver)	entry;
-
-	snap_driver_create_ctx		create;
-	snap_driver_destroy_ctx		destroy;
-	snap_driver_open_dev		open;
-	snap_driver_close_dev		close;
-	snap_driver_get_pf_list		get_pf_list;
-	snap_is_capable			is_capable;
-};
-
-int snap_open();
-void snap_close();
+int snap_get_pf_list(struct snap_context *sctx, enum snap_pci_type type,
+		struct snap_pci **pfs);
 
 #endif

@@ -8,7 +8,7 @@ AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_PROG_LIBTOOL
 
 # Init libtool
-LT_INIT([dlopen shared disable-static])
+LT_INIT([shared disable-static])
 
 # Use C not C++
 AC_LANG([C])
