@@ -47,9 +47,14 @@ struct mlx5_snap_pci {
 	int				vfs_base_vhca_id;
 };
 
-struct mlx5_snap_device {
-	struct mlx5dv_devx_obj		*device_emulation;
+struct mlx5_snap_devx_obj {
+	struct mlx5dv_devx_obj		*obj;
 	u8				obj_id;
+};
+
+struct mlx5_snap_device {
+	struct mlx5_snap_devx_obj	*device_emulation;
+	struct mlx5_snap_devx_obj	*vtunnel;
 };
 
 #endif

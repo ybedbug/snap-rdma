@@ -161,39 +161,93 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 
 }
 
+static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
+{
+	mlx5dv_devx_obj_destroy(sdev->mdev.vtunnel->obj);
+	free(sdev->mdev.vtunnel);
+	sdev->mdev.vtunnel = NULL;
+}
+
+static struct mlx5_snap_devx_obj*
+snap_create_vhca_tunnel(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(vhca_tunnel)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct ibv_context *context = sdev->sctx->context;
+	uint8_t *vtunnel_in;
+	struct mlx5_snap_devx_obj *vtunnel;
+
+	vtunnel = calloc(1, sizeof(*vtunnel));
+	if (!vtunnel)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_VHCA_TUNNEL);
+
+	vtunnel_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(vhca_tunnel, vtunnel_in, vhca_id, sdev->pci->mpci.vhca_id);
+
+	vtunnel->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
+					      sizeof(out));
+	if (!vtunnel->obj)
+		goto out_free;
+
+	vtunnel->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	return vtunnel;
+
+out_free:
+	free(vtunnel);
+out_err:
+	return NULL;
+}
+
 static void snap_destroy_device_emulation(struct snap_device *sdev)
 {
-	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation);
+	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation->obj);
+	free(sdev->mdev.device_emulation);
 	sdev->mdev.device_emulation = NULL;
 }
 
-static struct mlx5dv_devx_obj*
+static struct mlx5_snap_devx_obj*
 snap_create_device_emulation(struct snap_device *sdev)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(device_emulation)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	struct ibv_context *context = sdev->sctx->context;
-	uint8_t *device_emulation;
-	struct mlx5dv_devx_obj *obj;
+	uint8_t *device_emulation_in;
+	struct mlx5_snap_devx_obj *device_emulation;
+
+	device_emulation = calloc(1, sizeof(*device_emulation));
+	if (!device_emulation)
+		goto out_err;
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 		 MLX5_OBJ_TYPE_DEVICE_EMULATION);
 
-	device_emulation = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	DEVX_SET(device_emulation, device_emulation, vhca_id,
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
 
-	obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
-				     sizeof(out));
-	if (!obj)
-		return NULL;
+	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						       out, sizeof(out));
+	if (!device_emulation->obj)
+		goto out_free;
 
-	sdev->mdev.obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
 
-	return obj;
+	return device_emulation;
+
+out_free:
+	free(device_emulation);
+out_err:
+	return NULL;
 }
 
 /**
@@ -261,12 +315,21 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		goto out_free;
 	}
 
+	/* This should be done only for BF-1 */
+	sdev->mdev.vtunnel = snap_create_vhca_tunnel(sdev);
+	if (!sdev->mdev.vtunnel) {
+		errno = EINVAL;
+		goto out_free_device_emulation;
+	}
+
 	pthread_mutex_lock(&sctx->lock);
 	TAILQ_INSERT_HEAD(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
 	return sdev;
 
+out_free_device_emulation:
+	snap_destroy_device_emulation(sdev);
 out_free:
 	free(sdev);
 out_err:
@@ -287,6 +350,8 @@ void snap_close_device(struct snap_device *sdev)
 	TAILQ_REMOVE(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
+	if (sdev->mdev.vtunnel)
+		snap_destroy_vhca_tunnel(sdev);
 	snap_destroy_device_emulation(sdev);
 	free(sdev);
 }

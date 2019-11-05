@@ -1774,6 +1774,7 @@ struct mlx5_ifc_alloc_flow_counter_out_bits {
 enum {
 	MLX5_OBJ_TYPE_DEVICE_EMULATION = 0x0006,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
+	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
@@ -1906,6 +1907,13 @@ struct mlx5_ifc_query_esw_vport_context_in_bits {
 	u8         vport_number[0x10];
 
 	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_vhca_tunnel_bits {
+	u8         modify_field_select[0x40];
+
+	u8         reserved_at_40[0x10];
+	u8         vhca_id[0x10];
 };
 
 struct mlx5_ifc_device_emulation_bits {
