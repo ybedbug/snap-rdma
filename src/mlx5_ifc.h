@@ -34,6 +34,7 @@
 #define MLX5_IFC_H
 
 #define u8 uint8_t
+#define u16 uint16_t
 
 enum mlx5_cap_mode {
 	HCA_CAP_OPMOD_GET_CUR	= 1,
@@ -41,6 +42,10 @@ enum mlx5_cap_mode {
 
 enum {
 	MLX5_CMD_OP_QUERY_HCA_CAP = 0x100,
+	MLX5_CMD_OP_INIT_HCA = 0x102,
+	MLX5_CMD_OP_TEARDOWN_HCA = 0x103,
+	MLX5_CMD_OP_ENABLE_HCA = 0x104,
+	MLX5_CMD_OP_DISABLE_HCA = 0x105,
 	MLX5_CMD_OP_CREATE_MKEY = 0x200,
 	MLX5_CMD_OP_CREATE_QP = 0x500,
 	MLX5_CMD_OP_RST2INIT_QP = 0x502,
@@ -1916,6 +1921,13 @@ struct mlx5_ifc_vhca_tunnel_bits {
 	u8         vhca_id[0x10];
 };
 
+struct mlx5_ifc_vhca_tunnel_cmd_bits {
+	u8         reserved_at_0[0x20];
+
+	u8         vhca_tunnel_id[0x10];
+	u8         op_mod[0x10];
+};
+
 struct mlx5_ifc_device_emulation_bits {
 	u8         modify_field_select[0x40];
 
@@ -2361,6 +2373,100 @@ struct mlx5_ifc_query_roce_address_in_bits {
 	u8         vhca_port_num[0x4];
 
 	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_disable_hca_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_disable_hca_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x10];
+	u8         function_id[0x10];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_enable_hca_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_enable_hca_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x10];
+	u8         function_id[0x10];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_teardown_hca_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x3f];
+
+	u8         force_state[0x1];
+};
+
+enum {
+	MLX5_TEARDOWN_HCA_IN_PROFILE_GRACEFUL_CLOSE  = 0x0,
+	MLX5_TEARDOWN_HCA_IN_PROFILE_FORCE_CLOSE     = 0x1,
+};
+
+struct mlx5_ifc_teardown_hca_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x10];
+	u8         profile[0x10];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_init_hca_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_init_hca_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
+
+	u8	   sw_owner_id[4][0x20];
 };
 
 /* Both HW set and HW add share the same HW format with different opcodes */

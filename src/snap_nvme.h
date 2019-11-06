@@ -47,4 +47,7 @@ struct snap_nvme_device {
 	int		num_queues;
 };
 
+int snap_nvme_init_device(struct snap_device *sdev);
+int snap_nvme_teardown_device(struct snap_device *sdev);
+
 #endif

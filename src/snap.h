@@ -93,6 +93,8 @@ struct snap_device {
 	TAILQ_ENTRY(snap_device)	entry;
 
 	struct mlx5_snap_device		mdev;
+
+	void				*dd_data;
 };
 
 struct snap_context {
@@ -114,5 +116,9 @@ void snap_close(struct snap_context *sctx);
 
 int snap_get_pf_list(struct snap_context *sctx, enum snap_pci_type type,
 		struct snap_pci **pfs);
+
+/* The following 2 functions are to be used by NVMe/VirtIO libraries only */
+int snap_init_device(struct snap_device *sdev);
+int snap_teardown_device(struct snap_device *sdev);
 
 #endif

@@ -1,5 +1,85 @@
 #include "snap.h"
 
+#define SNAP_INITIALIZE_HCA_RETRY_CNT 100
+#define SNAP_TEARDOWN_HCA_RETRY_CNT 5
+#define SNAP_GENERAL_CMD_USEC_WAIT 50000
+
+static int snap_general_tunneled_cmd(struct snap_device *sdev, void *in,
+		size_t inlen, void *out, size_t outlen, int retries)
+{
+	struct ibv_context *context = sdev->sctx->context;
+	int ret = -EINVAL, retry_count = -1;
+
+	/* This operation is allowed only for tunneled PCI functions */
+	if (!sdev->mdev.vtunnel)
+		return ret;
+
+	DEVX_SET(vhca_tunnel_cmd, in, vhca_tunnel_id,
+		 sdev->mdev.vtunnel->obj_id);
+
+retry:
+	if (retry_count == retries)
+		return ret;
+
+	memset(out, 0, outlen);
+	ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
+	if (ret) {
+		retry_count++;
+		usleep(SNAP_GENERAL_CMD_USEC_WAIT);
+		goto retry;
+	}
+
+	return 0;
+}
+
+static int snap_enable_hca(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(enable_hca_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(enable_hca_out)] = {0};
+
+	DEVX_SET(enable_hca_in, in, opcode, MLX5_CMD_OP_ENABLE_HCA);
+
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out),
+					 SNAP_INITIALIZE_HCA_RETRY_CNT);
+}
+
+static int snap_disable_hca(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(disable_hca_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(disable_hca_out)] = {0};
+
+	DEVX_SET(disable_hca_in, in, opcode, MLX5_CMD_OP_DISABLE_HCA);
+
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out),
+					 SNAP_TEARDOWN_HCA_RETRY_CNT);
+}
+
+static int snap_init_hca(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init_hca_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init_hca_out)] = {0};
+
+	DEVX_SET(init_hca_in, in, opcode, MLX5_CMD_OP_INIT_HCA);
+
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out),
+					 SNAP_INITIALIZE_HCA_RETRY_CNT);
+}
+
+static int snap_teardown_hca(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(teardown_hca_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(teardown_hca_out)] = {0};
+
+	DEVX_SET(teardown_hca_in, in, opcode, MLX5_CMD_OP_TEARDOWN_HCA);
+
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out),
+					 SNAP_TEARDOWN_HCA_RETRY_CNT);
+}
+
 static void snap_free_virtual_functions(struct snap_pci *pf)
 {
 	free(pf->vfs);
@@ -166,6 +246,59 @@ static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 	mlx5dv_devx_obj_destroy(sdev->mdev.vtunnel->obj);
 	free(sdev->mdev.vtunnel);
 	sdev->mdev.vtunnel = NULL;
+}
+
+/**
+ * snap_init_device() - Initialize all the resources for the emulated device
+ * @sdev:       snap device
+ *
+ * Create all the initial resources for a given device
+ *
+ * Return: Returns 0 on success.
+ */
+int snap_init_device(struct snap_device *sdev)
+{
+	int ret;
+
+	if (!sdev->mdev.vtunnel)
+		return 0;
+
+	ret = snap_enable_hca(sdev);
+	if (ret)
+		return ret;
+
+	ret = snap_init_hca(sdev);
+	if (ret)
+		goto out_disable;
+
+	return 0;
+
+out_disable:
+	snap_disable_hca(sdev);
+	return ret;
+}
+
+/**
+ * snap_teardown_device() - Teardown all the resources for the given device
+ *                          that were initialized by snap_init_device
+ * @sdev:       snap device
+ *
+ * Destroy all the initial resources for a given device
+ *
+ * Return: Returns 0 on success.
+ */
+int snap_teardown_device(struct snap_device *sdev)
+{
+	int ret;
+
+	if (!sdev->mdev.vtunnel)
+		return 0;
+
+	ret = snap_teardown_hca(sdev);
+	if (ret)
+		return ret;
+
+	return snap_disable_hca(sdev);
 }
 
 static struct mlx5_snap_devx_obj*

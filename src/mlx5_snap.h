@@ -49,7 +49,7 @@ struct mlx5_snap_pci {
 
 struct mlx5_snap_devx_obj {
 	struct mlx5dv_devx_obj		*obj;
-	u8				obj_id;
+	u16				obj_id;
 };
 
 struct mlx5_snap_device {
