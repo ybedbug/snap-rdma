@@ -35,6 +35,7 @@
 
 #define u8 uint8_t
 #define u16 uint16_t
+#define u32 uint32_t
 
 enum mlx5_cap_mode {
 	HCA_CAP_OPMOD_GET_CUR	= 1,
@@ -62,6 +63,7 @@ enum {
 	MLX5_CMD_OP_CREATE_GENERAL_OBJECT = 0xa00,
 	MLX5_CMD_OP_MODIFY_GENERAL_OBJECT = 0xa01,
 	MLX5_CMD_OP_QUERY_GENERAL_OBJECT = 0xa02,
+	MLX5_CMD_OP_DESTROY_GENERAL_OBJECT = 0xa03,
 	MLX5_CMD_OP_SYNC_STEERING = 0xb00,
 	MLX5_CMD_OP_QUERY_EMULATED_FUNCTIONS_INFO = 0xb03,
 };
@@ -1780,6 +1782,7 @@ enum {
 	MLX5_OBJ_TYPE_DEVICE_EMULATION = 0x0006,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
 	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
+	MLX5_OBJ_TYPE_NVME_NAMESPACE = 0x000f,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
@@ -2467,6 +2470,25 @@ struct mlx5_ifc_init_hca_in_bits {
 	u8         reserved_at_40[0x40];
 
 	u8	   sw_owner_id[4][0x20];
+};
+
+/* NVMe emulation related structures */
+struct mlx5_ifc_nvme_namespace_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   device_emulation_id[0x20];
+
+	u8	   src_nsid[0x20];
+
+	u8	   dst_nsid[0x20];
+
+	u8	   reserved_at_a0[0x8];
+	u8	   lba_size[0x8];
+	u8	   metadata_size[0x10];
+
+	u8	   nvme_namespace_counter_set_id[0x20];
+
+	u8	   reserved_at_e0[0x720];
 };
 
 /* Both HW set and HW add share the same HW format with different opcodes */

@@ -249,6 +249,87 @@ static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 }
 
 /**
+ * TODO
+ */
+int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj)
+{
+	int ret;
+
+	if (snap_obj->obj) {
+		ret = mlx5dv_devx_obj_destroy(snap_obj->obj);
+	} else if (snap_obj->vtunnel) {
+		ret =  snap_general_tunneled_cmd(snap_obj->sdev,
+						 snap_obj->dtor_in,
+						 snap_obj->inlen,
+						 snap_obj->dtor_out,
+						 snap_obj->outlen, 0);
+		free(snap_obj->dtor_out);
+		free(snap_obj->dtor_in);
+	}
+
+	free(snap_obj);
+
+	return ret;
+}
+
+/**
+ * TODO
+ */
+struct mlx5_snap_devx_obj*
+snap_devx_obj_create(struct snap_device *sdev, void *in, size_t inlen,
+		     void *out, size_t outlen,
+		     struct mlx5_snap_devx_obj *vtunnel,
+		     size_t dtor_inlen, size_t dtor_outlen)
+{
+	struct ibv_context *context = sdev->sctx->context;
+	struct mlx5_snap_devx_obj *snap_obj;
+	int ret;
+
+	snap_obj = calloc(1, sizeof(*snap_obj));
+	if (!snap_obj)
+		goto out_err;
+
+	if (vtunnel) {
+		/* Allocate destructor resources before creating the real obj */
+		snap_obj->dtor_in = calloc(1, dtor_inlen);
+		if (!snap_obj->dtor_in)
+			goto out_free;
+		snap_obj->inlen = dtor_inlen;
+
+		snap_obj->dtor_out = calloc(1, dtor_outlen);
+		if (!snap_obj->dtor_out)
+			goto out_free_dtor_in;
+		snap_obj->outlen = dtor_outlen;
+
+		ret = snap_general_tunneled_cmd(sdev, in, inlen, out, outlen,
+						0);
+		if (ret)
+			goto out_free_dtor_out;
+
+	} else {
+		snap_obj->obj = mlx5dv_devx_obj_create(context, in, inlen, out,
+						       outlen);
+		if (!snap_obj->obj)
+			goto out_free;
+	}
+
+	snap_obj->vtunnel = vtunnel;
+	snap_obj->sdev = sdev;
+	snap_obj->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	return snap_obj;
+
+out_free_dtor_out:
+	free(snap_obj->dtor_out);
+out_free_dtor_in:
+	free(snap_obj->dtor_in);
+out_free:
+	free(snap_obj);
+out_err:
+	return NULL;
+}
+
+/**
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
  *
@@ -329,6 +410,7 @@ snap_create_vhca_tunnel(struct snap_device *sdev)
 		goto out_free;
 
 	vtunnel->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	vtunnel->sdev = sdev;
 
 	return vtunnel;
 
@@ -374,6 +456,7 @@ snap_create_device_emulation(struct snap_device *sdev)
 		goto out_free;
 
 	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	device_emulation->sdev = sdev;
 
 	return device_emulation;
 

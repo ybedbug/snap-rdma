@@ -43,11 +43,35 @@
 #include "snap.h"
 #include "mlx5_ifc.h"
 
+struct snap_nvme_device;
+
+struct snap_nvme_namespace_attr {
+	int			src_nsid;
+	int			dst_nsid;
+	int			lba_size;
+	int			md_size;
+};
+
+struct snap_nvme_namespace {
+	struct mlx5_snap_devx_obj		*ns;
+	int					src_id;
+	int					dst_id;
+	TAILQ_ENTRY(snap_nvme_namespace)	entry;
+};
+
 struct snap_nvme_device {
-	int		num_queues;
+	struct snap_device			*sdev;
+	int					num_queues;
+
+	pthread_mutex_t				lock;
+	TAILQ_HEAD(, snap_nvme_namespace)	ns_list;
 };
 
 int snap_nvme_init_device(struct snap_device *sdev);
 int snap_nvme_teardown_device(struct snap_device *sdev);
+struct snap_nvme_namespace*
+snap_nvme_create_namespace(struct snap_device *sdev,
+		struct snap_nvme_namespace_attr *attr);
+int snap_nvme_destroy_namespace(struct snap_nvme_namespace *ns);
 
 #endif
