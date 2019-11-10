@@ -40,9 +40,15 @@ int snap_nvme_init_device(struct snap_device *sdev)
 		goto out_free;
 	}
 
+	ndev->sqs = calloc(ndev->num_queues, sizeof(*ndev->sqs));
+	if (!ndev->sqs) {
+		ret = -ENOMEM;
+		goto out_free_cqs;
+	}
+
 	ret = pthread_mutex_init(&ndev->lock, NULL);
 	if (ret)
-		goto out_free_cqs;
+		goto out_free_sqs;
 
 	TAILQ_INIT(&ndev->ns_list);
 
@@ -57,6 +63,8 @@ int snap_nvme_init_device(struct snap_device *sdev)
 
 out_free_mutex:
 	pthread_mutex_destroy(&ndev->lock);
+out_free_sqs:
+	free(ndev->sqs);
 out_free_cqs:
 	free(ndev->cqs);
 out_free:
@@ -85,6 +93,7 @@ int snap_nvme_teardown_device(struct snap_device *sdev)
 	ret = snap_teardown_device(sdev);
 
 	pthread_mutex_destroy(&ndev->lock);
+	free(ndev->sqs);
 	free(ndev->cqs);
 	free(ndev);
 
@@ -294,4 +303,104 @@ out:
 int snap_nvme_destroy_cq(struct snap_nvme_cq *cq)
 {
 	return snap_devx_obj_destroy(cq->cq);
+}
+
+/**
+ * snap_nvme_create_sq() - Create a new NVMe snap SQ object
+ * @sdev:       snap device
+ * @attr:       attributes for the SQ creation
+ *
+ * Create an NVMe snap SQ object with the given attributes.
+ *
+ * Return: Returns snap_nvme_sq in case of success, NULL otherwise and
+ * errno will be set to indicate the failure reason.
+ */
+struct snap_nvme_sq*
+snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct snap_nvme_device *ndev = (struct snap_nvme_device *)sdev->dd_data;
+	uint8_t *sq_in;
+	struct snap_nvme_sq *sq;
+	int offload_type;
+
+	if (attr->type == SNAP_NVME_SQE_MODE) {
+		offload_type = MLX5_NVME_SQ_OFFLOAD_TYPE_SQE;
+	} else if (attr->type == SNAP_NVME_CC_MODE) {
+		offload_type = MLX5_NVME_SQ_OFFLOAD_TYPE_CC;
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->id != attr->doorbell_offset >> NVME_DB_STRIDE) {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->id > ndev->num_queues) {
+		errno = EINVAL;
+		goto out;
+	}
+
+	sq = &ndev->sqs[attr->id];
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, MLX5_OBJ_TYPE_NVME_SQ);
+
+	sq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(nvme_sq, sq_in, device_emulation_id, sdev->pci->mpci.vhca_id);
+	DEVX_SET(nvme_sq, sq_in, offload_type, offload_type);
+	DEVX_SET(nvme_sq, sq_in, nvme_num_of_entries, attr->queue_depth);
+	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
+		 NVME_DB_BASE + attr->doorbell_offset);
+	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
+	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
+	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size, NVME_SQ_LOG_ENTRY_SIZE);
+
+	//DEVX_SET(nvme_sq, sq_in, log_nvme_page_size, attr->log_nvme_page_size);
+	//DEVX_SET(nvme_sq, sq_in, max_transaction_size, attr->max_transcation_size);
+
+
+	sq->sq = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				      sdev->mdev.vtunnel,
+				      DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
+				      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
+	if (!sq->sq) {
+		errno = ENODEV;
+		goto out;
+	}
+
+	if (sdev->mdev.vtunnel) {
+		void *dtor = sq->sq->dtor_in;
+
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, opcode,
+			 MLX5_CMD_OP_DESTROY_GENERAL_OBJECT);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_type,
+			 MLX5_OBJ_TYPE_NVME_SQ);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_id, sq->sq->obj_id);
+	}
+
+	sq->id = attr->id;
+
+	return sq;
+
+out:
+	return NULL;
+}
+
+/**
+ * snap_nvme_destroy_sq() - Destroy NVMe SQ object
+ * @sq:       nvme SQ
+ *
+ * Destroy and free a snap nvme SQ context.
+ *
+ * Return: Returns 0 on success.
+ */
+int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
+{
+	return snap_devx_obj_destroy(sq->sq);
 }

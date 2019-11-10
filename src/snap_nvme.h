@@ -44,6 +44,7 @@
 #include "mlx5_ifc.h"
 
 struct snap_nvme_device;
+struct snap_nvme_cq;
 
 struct snap_nvme_namespace_attr {
 	int			src_nsid;
@@ -62,6 +63,20 @@ struct snap_nvme_namespace {
 enum snap_nvme_queue_type {
 	SNAP_NVME_SQE_MODE	= 1 << 0,
 	SNAP_NVME_CC_MODE	= 1 << 1,
+};
+
+struct snap_nvme_sq_attr {
+	enum snap_nvme_queue_type	type;
+	uint32_t			id;
+	uint32_t			doorbell_offset;
+	uint16_t			queue_depth;
+	uint64_t			base_addr;
+	struct snap_nvme_cq		*cq;
+};
+
+struct snap_nvme_sq {
+	uint32_t				id;
+	struct mlx5_snap_devx_obj		*sq;
 };
 
 struct snap_nvme_cq_attr {
@@ -88,6 +103,7 @@ struct snap_nvme_device {
 	TAILQ_HEAD(, snap_nvme_namespace)	ns_list;
 
 	struct snap_nvme_cq			*cqs;
+	struct snap_nvme_sq			*sqs;
 };
 
 int snap_nvme_init_device(struct snap_device *sdev);
@@ -99,5 +115,8 @@ int snap_nvme_destroy_namespace(struct snap_nvme_namespace *ns);
 struct snap_nvme_cq*
 snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr);
 int snap_nvme_destroy_cq(struct snap_nvme_cq *cq);
+struct snap_nvme_sq*
+snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr);
+int snap_nvme_destroy_sq(struct snap_nvme_sq *sq);
 
 #endif

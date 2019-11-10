@@ -1780,10 +1780,16 @@ struct mlx5_ifc_alloc_flow_counter_out_bits {
 
 enum {
 	MLX5_OBJ_TYPE_DEVICE_EMULATION = 0x0006,
+	MLX5_OBJ_TYPE_NVME_SQ = 0x0007,
 	MLX5_OBJ_TYPE_NVME_CQ = 0x0009,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
 	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
 	MLX5_OBJ_TYPE_NVME_NAMESPACE = 0x000f,
+};
+
+enum {
+	MLX5_NVME_SQ_OFFLOAD_TYPE_SQE = 0x0,
+	MLX5_NVME_SQ_OFFLOAD_TYPE_CC = 0x2,
 };
 
 enum {
@@ -2525,6 +2531,38 @@ struct mlx5_ifc_nvme_cq_bits {
 	u8	   cq_max_count[0x10];
 
 	u8	   reserved_at_160[0x6a0];
+};
+
+struct mlx5_ifc_nvme_sq_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   device_emulation_id[0x20];
+
+	u8	   reserved_at_60[0x8];
+	u8	   pd[0x18];
+
+	u8	   network_state[0x4];
+	u8	   offload_type[0x4];
+	u8	   qpn[0x18];
+
+	u8	   qpn_vhca_id[0x10];
+	u8	   reserved_at_b0[0x3];
+	u8	   log_nvme_page_size[0x5];
+	u8	   msix_vector[0x8];
+
+	u8	   nvme_base_addr[0x40];
+
+	u8	   max_transaction_size[0x8];
+	u8	   nvme_log_entry_size[0x8];
+	u8	   nvme_num_of_entries[0x10];
+
+	u8	   nvme_doorbell_offset[0x20];
+
+	u8	   reserved_at_140[0x60];
+
+	u8	   nvme_cq_id[0x20];
+
+	u8	   reserved_at_1c0[0x640];
 };
 
 /* Both HW set and HW add share the same HW format with different opcodes */
