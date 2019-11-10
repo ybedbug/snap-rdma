@@ -254,8 +254,15 @@ static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 	sdev->mdev.vtunnel = NULL;
 }
 
-/**
- * TODO
+/*
+ * snap_devx_obj_destroy() - Destroy a snap devx object
+ * @snap_obj:      snap devx object
+ *
+ * Destroy a snap devx object that was created using snap_devx_obj_create(). In
+ * case of a tunneld object, the destruction will use a pre-allocated
+ * destructor command.
+ *
+ * Return: Returns 0 in case of success.
  */
 int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj)
 {
@@ -278,8 +285,22 @@ int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj)
 	return ret;
 }
 
-/**
- * TODO
+/*
+ * snap_devx_obj_create() - Create a devx object for snap
+ * @sdev:          snap device
+ * @in:            input cmd buffer
+ * @inlen:         input cmd buffer length
+ * @out:           output cmd buffer
+ * @outlen:        output cmd buffer length
+ * @vtunnel:       tunnel object (in case of a tunneled cmd)
+ * @dtor_inlen:    destructor input cmd buffer length (to allocate)
+ * @dtor_outlen:   destructor output cmd buffer length (to allocate)
+ *
+ * Create a devx object for a given input command. In case of a tunneled
+ * command, a pointer to vhca tunnel object should be given with indicators
+ * for the destruction as well (dtor_inlen and dtor_outlen.
+ *
+ * Return: Returns a new mlx5_snap_devx_obj in case of success, NULL otherwise.
  */
 struct mlx5_snap_devx_obj*
 snap_devx_obj_create(struct snap_device *sdev, void *in, size_t inlen,
@@ -335,7 +356,7 @@ out_err:
 	return NULL;
 }
 
-/**
+/*
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
  *
@@ -365,7 +386,7 @@ out_disable:
 	return ret;
 }
 
-/**
+/*
  * snap_teardown_device() - Teardown all the resources for the given device
  *                          that were initialized by snap_init_device
  * @sdev:       snap device

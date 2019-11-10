@@ -121,13 +121,4 @@ void snap_close(struct snap_context *sctx);
 int snap_get_pf_list(struct snap_context *sctx, enum snap_pci_type type,
 		struct snap_pci **pfs);
 
-/* The following functions are to be used by NVMe/VirtIO libraries only */
-int snap_init_device(struct snap_device *sdev);
-int snap_teardown_device(struct snap_device *sdev);
-struct mlx5_snap_devx_obj*
-snap_devx_obj_create(struct snap_device *sdev, void *in, size_t inlen,
-		void *out, size_t outlen, struct mlx5_snap_devx_obj *vtunnel,
-		size_t dtor_inlen, size_t dtor_outlen);
-int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj);
-
 #endif
