@@ -1780,9 +1780,15 @@ struct mlx5_ifc_alloc_flow_counter_out_bits {
 
 enum {
 	MLX5_OBJ_TYPE_DEVICE_EMULATION = 0x0006,
+	MLX5_OBJ_TYPE_NVME_CQ = 0x0009,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
 	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
 	MLX5_OBJ_TYPE_NVME_NAMESPACE = 0x000f,
+};
+
+enum {
+	MLX5_NVME_CQ_OFFLOAD_TYPE_SQE = 0x0,
+	MLX5_NVME_CQ_OFFLOAD_TYPE_CC = 0x2,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
@@ -2489,6 +2495,36 @@ struct mlx5_ifc_nvme_namespace_bits {
 	u8	   nvme_namespace_counter_set_id[0x20];
 
 	u8	   reserved_at_e0[0x720];
+};
+
+struct mlx5_ifc_nvme_cq_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   device_emulation_id[0x20];
+
+	u8	   reserved_at_60[0x20];
+
+	u8	   reserved_at_80[0x4];
+	u8	   offload_type[0x4];
+	u8	   reserved_at_88[0x18];
+
+	u8	   reserved_at_a0[0x18];
+	u8	   msix_vector[0x8];
+
+	u8	   nvme_base_addr[0x40];
+
+	u8	   reserved_at_100[0x8];
+	u8	   nvme_log_entry_size[0x8];
+	u8	   nvme_num_of_entries[0x10];
+
+	u8	   nvme_doorbell_offset[0x20];
+
+	u8	   cq_period_mode[0x1];
+	u8	   reserved_at_144[0x3];
+	u8	   cq_period[0xc];
+	u8	   cq_max_count[0x10];
+
+	u8	   reserved_at_160[0x6a0];
 };
 
 /* Both HW set and HW add share the same HW format with different opcodes */

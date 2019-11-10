@@ -58,6 +58,9 @@
 		(type *)((char *)__mptr - offsetof(type, member)); })
 #endif
 
+#define snap_min(a,b) (((a)<(b))?(a):(b))
+#define snap_max(a,b) (((a)>(b))?(a):(b))
+
 enum snap_pci_type {
 	SNAP_NVME_PF		= 1 << 0,
 	SNAP_NVME_VF		= 1 << 1,
