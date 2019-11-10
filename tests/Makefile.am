@@ -5,7 +5,8 @@ bin_PROGRAMS = \
 		snap_open_close_device \
 		snap_query_pfs \
 		snap_init_teardown_nvme_device \
-		snap_create_destroy_nvme_namespace
+		snap_create_destroy_nvme_namespace \
+		snap_create_destroy_nvme_cq
 
 snap_open_close_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_open_close_SOURCES = snap_open_close.c
@@ -26,3 +27,7 @@ snap_init_teardown_nvme_device_LDADD = $(top_builddir)/src/libsnap.la $(top_buil
 snap_create_destroy_nvme_namespace_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_create_destroy_nvme_namespace_SOURCES = snap_create_destroy_nvme_namespace.c
 snap_create_destroy_nvme_namespace_LDADD = $(top_builddir)/src/libsnap.la $(top_builddir)/src/libsnap_nvme.la
+
+snap_create_destroy_nvme_cq_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
+snap_create_destroy_nvme_cq_SOURCES = snap_create_destroy_nvme_cq.c
+snap_create_destroy_nvme_cq_LDADD = $(top_builddir)/src/libsnap.la $(top_builddir)/src/libsnap_nvme.la
