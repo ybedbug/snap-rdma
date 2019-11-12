@@ -44,6 +44,12 @@
 
 struct mlx5_snap_device;
 
+struct mlx5_snap_context {
+	uint32_t	max_nvme_namespaces;
+	uint32_t	max_emulated_nvme_cqs;
+	uint32_t	max_emulated_nvme_sqs;
+};
+
 struct mlx5_snap_pci {
 	int				vhca_id;
 	int				vfs_base_vhca_id;

@@ -236,6 +236,12 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 
 	sctx->max_pfs = DEVX_GET(query_hca_cap_out, out,
 				 capability.emulation_cap.total_emulated_pfs);
+	sctx->mctx.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
+		capability.emulation_cap.log_max_nvme_offload_namespaces);
+	sctx->mctx.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
+		capability.emulation_cap.log_max_emulated_cq);
+	sctx->mctx.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
+		capability.emulation_cap.log_max_emulated_sq);
 
 	return 0;
 

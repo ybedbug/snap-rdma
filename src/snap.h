@@ -99,6 +99,7 @@ struct snap_device {
 
 struct snap_context {
 	struct ibv_context		*context;
+	struct mlx5_snap_context	mctx;
 
 	int				max_pfs;
 	struct snap_pci			*pfs;
