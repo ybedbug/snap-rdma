@@ -218,6 +218,51 @@ static bool is_emulation_manager(struct ibv_context *context)
 	return true;
 }
 
+static int snap_query_flow_table_caps(struct snap_context *sctx)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	struct ibv_context *context = sctx->context;
+	uint8_t max_ft_level_tx, max_ft_level_rx;
+	uint8_t log_max_ft_size_tx, log_max_ft_size_rx;
+	bool rx_supported, tx_supported;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	rx_supported = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_receive_rdma.ft_support);
+	tx_supported = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_transmit_rdma.ft_support);
+
+	if (!rx_supported || !tx_supported)
+		return -ENOSYS;
+
+	max_ft_level_rx = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_receive_rdma.max_ft_level);
+	log_max_ft_size_rx = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_receive_rdma.log_max_ft_size);
+
+	max_ft_level_tx = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_transmit_rdma.max_ft_level);
+	log_max_ft_size_tx = DEVX_GET(query_hca_cap_out, out,
+		capability.flow_table_nic_cap.flow_table_properties_nic_transmit_rdma.log_max_ft_size);
+
+	sctx->mctx.max_ft_level = snap_min(max_ft_level_tx, max_ft_level_rx);
+	sctx->mctx.log_max_ft_size = snap_min(log_max_ft_size_tx,
+					      log_max_ft_size_rx);
+
+	return 0;
+
+}
+
 static int snap_query_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
@@ -356,6 +401,166 @@ out_err:
 	return NULL;
 }
 
+static int snap_destroy_flow_table(struct mlx5_snap_flow_table *ft)
+{
+	return snap_devx_obj_destroy(ft->ft);
+}
+
+static struct mlx5_snap_flow_table*
+snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(create_flow_table_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(create_flow_table_out)] = {0};
+	struct mlx5_snap_flow_table *ft;
+	void *ft_ctx;
+	uint8_t ft_level;
+	uint8_t ft_log_size;
+	int ret;
+
+	ft = calloc(1, sizeof(*ft));
+	if (!ft)
+		return NULL;
+
+	DEVX_SET(create_flow_table_in, in, opcode,
+		 MLX5_CMD_OP_CREATE_FLOW_TABLE);
+	DEVX_SET(create_flow_table_in, in, table_type, table_type);
+
+	ft_ctx = DEVX_ADDR_OF(create_flow_table_in, in, flow_table_context);
+	DEVX_SET(flow_table_context, ft_ctx, table_miss_action,
+		 MLX5_FLOW_TABLE_MISS_ACTION_DEF);
+	/* at the moment we only need root level tables */
+	ft_level = snap_min(SNAP_FT_ROOT_LEVEL, sdev->sctx->mctx.max_ft_level);
+	DEVX_SET(flow_table_context, ft_ctx, level, ft_level);
+	/* limit the flow table size to 1024 elements, if possible */
+	ft_log_size = snap_min(SNAP_FT_LOG_SIZE,
+			       sdev->sctx->mctx.log_max_ft_size);
+	DEVX_SET(flow_table_context, ft_ctx, log_size, ft_log_size);
+
+	ft->ft = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				      sdev->mdev.vtunnel,
+				      DEVX_ST_SZ_BYTES(destroy_flow_table_in),
+				      DEVX_ST_SZ_BYTES(destroy_flow_table_out));
+	if (!ft->ft)
+		goto out_free;
+
+	ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
+	ft->table_type = table_type;
+	ft->level = ft_level;
+	ft->ft_size = 1 << ft_log_size;
+
+	if (sdev->mdev.vtunnel) {
+		void *dtor = ft->ft->dtor_in;
+
+		DEVX_SET(destroy_flow_table_in, dtor, opcode,
+			 MLX5_CMD_OP_DESTROY_FLOW_TABLE);
+		DEVX_SET(destroy_flow_table_in, dtor, table_type,
+			 ft->table_type);
+		DEVX_SET(destroy_flow_table_in, in, table_id, ft->table_id);
+	}
+
+	return ft;
+
+out_free:
+	free(ft);
+	return NULL;
+
+}
+
+static int snap_set_flow_table_root(struct snap_device *sdev,
+		struct mlx5_snap_flow_table *ft)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(set_flow_table_root_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(set_flow_table_root_out)] = {0};
+	int ret;
+
+	DEVX_SET(set_flow_table_root_in, in, opcode,
+		 MLX5_CMD_OP_SET_FLOW_TABLE_ROOT);
+	DEVX_SET(set_flow_table_root_in, in, table_type, ft->table_type);
+	DEVX_SET(set_flow_table_root_in, in, table_id, ft->table_id);
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out), 0);
+}
+
+static struct mlx5_snap_flow_table*
+snap_create_root_flow_table(struct snap_device *sdev, uint32_t table_type)
+{
+	struct mlx5_snap_flow_table *ft;
+	int ret;
+
+	ft = snap_create_flow_table(sdev, table_type);
+	if (!ft)
+		return NULL;
+
+	ret = snap_set_flow_table_root(sdev, ft);
+	if (ret)
+		goto destroy_ft;
+
+	return ft;
+
+destroy_ft:
+	snap_destroy_flow_table(ft);
+	return NULL;
+}
+
+static int snap_reset_tx_steering(struct snap_device *sdev)
+{
+	return snap_destroy_flow_table(sdev->mdev.tx);
+}
+
+static int snap_init_tx_steering(struct snap_device *sdev)
+{
+	/* FT6 creation (match source QPN) */
+	sdev->mdev.tx = snap_create_root_flow_table(sdev, FS_FT_NIC_TX_RDMA);
+	if (!sdev->mdev.tx)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static int snap_reset_rx_steering(struct snap_device *sdev)
+{
+	return snap_destroy_flow_table(sdev->mdev.rx);
+}
+
+static int snap_init_rx_steering(struct snap_device *sdev)
+{
+	/* FT3 creation (match desr QPN, miss send to FW NIC RX ROOT) */
+	sdev->mdev.rx = snap_create_root_flow_table(sdev, FS_FT_NIC_RX_RDMA);
+	if (!sdev->mdev.rx)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static int snap_reset_steering(struct snap_device *sdev)
+{
+	int ret;
+
+	ret = snap_reset_rx_steering(sdev);
+	if (ret)
+		return ret;
+	return snap_reset_tx_steering(sdev);
+}
+
+static int snap_init_steering(struct snap_device *sdev)
+{
+	int ret;
+
+	ret = snap_init_tx_steering(sdev);
+	if (ret)
+		return ret;
+
+	ret = snap_init_rx_steering(sdev);
+	if (ret)
+		goto reset_tx;
+
+	return 0;
+
+reset_tx:
+	snap_reset_tx_steering(sdev);
+	return ret;
+}
+
 /*
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
@@ -379,8 +584,14 @@ int snap_init_device(struct snap_device *sdev)
 	if (ret)
 		goto out_disable;
 
+	ret = snap_init_steering(sdev);
+	if (ret)
+		goto out_teardown;
+
 	return 0;
 
+out_teardown:
+	snap_teardown_hca(sdev);
 out_disable:
 	snap_disable_hca(sdev);
 	return ret;
@@ -402,6 +613,9 @@ int snap_teardown_device(struct snap_device *sdev)
 	if (!sdev->mdev.vtunnel)
 		return 0;
 
+	ret = snap_reset_steering(sdev);
+	if (ret)
+		return ret;
 	ret = snap_teardown_hca(sdev);
 	if (ret)
 		return ret;
@@ -636,6 +850,12 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 
 	sctx->context = context;
 	rc = snap_query_emulation_caps(sctx);
+	if (rc) {
+		errno = EINVAL;
+		goto out_free;
+	}
+
+	rc = snap_query_flow_table_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
 		goto out_free;

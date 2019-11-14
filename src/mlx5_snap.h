@@ -42,12 +42,17 @@
 
 #include "mlx5_ifc.h"
 
+#define SNAP_FT_ROOT_LEVEL 5
+#define SNAP_FT_LOG_SIZE 10
+
 struct mlx5_snap_device;
 
 struct mlx5_snap_context {
 	uint32_t	max_nvme_namespaces;
 	uint32_t	max_emulated_nvme_cqs;
 	uint32_t	max_emulated_nvme_sqs;
+	uint8_t		max_ft_level;
+	uint8_t		log_max_ft_size;
 };
 
 struct mlx5_snap_pci {
@@ -68,9 +73,19 @@ struct mlx5_snap_devx_obj {
 	int				outlen;
 };
 
+struct mlx5_snap_flow_table {
+	struct mlx5_snap_devx_obj       *ft;
+	uint32_t			table_id;
+	uint32_t			table_type;
+	uint8_t				level;
+	uint64_t			ft_size;
+};
+
 struct mlx5_snap_device {
 	struct mlx5_snap_devx_obj	*device_emulation;
 	struct mlx5_snap_devx_obj	*vtunnel;
+	struct mlx5_snap_flow_table	*tx;
+	struct mlx5_snap_flow_table	*rx;
 };
 
 /* The following functions are to be used by NVMe/VirtIO libraries only */

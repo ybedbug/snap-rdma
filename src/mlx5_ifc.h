@@ -56,8 +56,18 @@ enum {
 	MLX5_CMD_OP_CREATE_TIR = 0x900,
 	MLX5_CMD_OP_QUERY_ESW_VPORT_CONTEXT = 0x752,
 	MLX5_CMD_OP_QUERY_ROCE_ADDRESS = 0x760,
+	MLX5_CMD_OP_SET_FLOW_TABLE_ROOT = 0x92f,
 	MLX5_CMD_OP_CREATE_FLOW_TABLE = 0x930,
+	MLX5_CMD_OP_DESTROY_FLOW_TABLE = 0x931,
+	MLX5_CMD_OP_QUERY_FLOW_TABLE = 0x932,
+	MLX5_CMD_OP_CREATE_FLOW_GROUP = 0x933,
+	MLX5_CMD_OP_DESTROY_FLOW_GROUP = 0x934,
+	MLX5_CMD_OP_QUERY_FLOW_GROUP = 0x935,
+	MLX5_CMD_OP_SET_FLOW_TABLE_ENTRY = 0x936,
+	MLX5_CMD_OP_QUERY_FLOW_TABLE_ENTRY = 0x937,
+	MLX5_CMD_OP_DELETE_FLOW_TABLE_ENTRY = 0x938,
 	MLX5_CMD_OP_CREATE_FLOW_COUNTER = 0x939,
+	MLX5_CMD_OP_MODIFY_FLOW_TABLE = 0x93c,
 	MLX5_CMD_OP_ALLOC_PACKET_REFORMAT_CONTEXT = 0x93d,
 	MLX5_CMD_OP_DEALLOC_PACKET_REFORMAT_CONTEXT = 0x93e,
 	MLX5_CMD_OP_CREATE_GENERAL_OBJECT = 0xa00,
@@ -95,6 +105,12 @@ struct mlx5_ifc_atomic_caps_bits {
 	u8         compare_swap_pci_atomic[0x10];
 
 	u8         reserved_at_2b0[0x550];
+};
+
+enum mlx5_flow_table_miss_action {
+	MLX5_FLOW_TABLE_MISS_ACTION_DEF,
+	MLX5_FLOW_TABLE_MISS_ACTION_FWD,
+	MLX5_FLOW_TABLE_MISS_ACTION_SWITCH_DOMAIN,
 };
 
 struct mlx5_ifc_flow_table_context_bits {
@@ -151,6 +167,70 @@ struct mlx5_ifc_create_flow_table_out_bits {
 	u8         table_id[0x18];
 
 	u8         icm_address_31_0[0x20];
+};
+
+struct mlx5_ifc_destroy_flow_table_in_bits {
+	u8	   opcode[0x10];
+	u8	   uid[0x10];
+
+	u8	   reserved_at_20[0x10];
+	u8	   op_mod[0x10];
+
+	u8	   other_vport[0x1];
+	u8	   reserved_at_41[0xf];
+	u8	   vport_number[0x10];
+
+	u8	   reserved_at_60[0x20];
+
+	u8	   table_type[0x8];
+	u8	   reserved_at_88[0x18];
+
+	u8	   reserved_at_a0[0x8];
+	u8	   table_id[0x18];
+
+	u8	   reserved_at_c0[0x140];
+};
+
+struct mlx5_ifc_destroy_flow_table_out_bits {
+	u8	   status[0x8];
+	u8	   reserved_at_8[0x18];
+
+	u8	   syndrome[0x20];
+
+	u8	   reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_set_flow_table_root_out_bits {
+	u8	   status[0x8];
+	u8	   reserved_at_8[0x18];
+
+	u8	   syndrome[0x20];
+
+	u8	   reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_set_flow_table_root_in_bits {
+	u8	   opcode[0x10];
+	u8	   uid[0x10];
+
+	u8	   reserved_at_20[0x10];
+	u8	   op_mod[0x10];
+
+	u8	   other_vport[0x1];
+	u8	   reserved_at_41[0xf];
+	u8	   vport_number[0x10];
+
+	u8	   reserved_at_60[0x20];
+
+	u8	   table_type[0x8];
+	u8	   reserved_at_88[0x18];
+
+	u8	   reserved_at_a0[0x8];
+	u8	   table_id[0x18];
+
+	u8	   reserved_at_c0[0x8];
+	u8	   underlay_qpn[0x18];
+	u8	   reserved_at_e0[0x120];
 };
 
 struct mlx5_ifc_sync_steering_in_bits {
@@ -1218,6 +1298,8 @@ enum {
 	FS_FT_FDB		= 0X4,
 	FS_FT_SNIFFER_RX	= 0X5,
 	FS_FT_SNIFFER_TX	= 0X6,
+	FS_FT_NIC_RX_RDMA	= 0x7,
+	FS_FT_NIC_TX_RDMA	= 0x8,
 };
 
 struct mlx5_ifc_ste_general_bits {
