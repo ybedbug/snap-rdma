@@ -196,10 +196,11 @@ out_free_pfs:
 	return ret;
 }
 
-static bool is_emulation_manager(struct ibv_context *context)
+static int snap_set_device_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	struct ibv_context *context = sctx->context;
 	int ret;
 
 	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
@@ -209,13 +210,26 @@ static bool is_emulation_manager(struct ibv_context *context)
 	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
 				      sizeof(out));
 	if (ret)
-		return false;
+		return ret;
 
-	if (!DEVX_GET(query_hca_cap_out, out,
-		      capability.cmd_hca_cap.device_emulation_manager))
-		return false;
+	sctx->emulation_caps = 0;
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.nvme_device_emulation_manager))
+		sctx->emulation_caps |= SNAP_NVME;
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.virtio_net_device_emulation_manager))
+		sctx->emulation_caps |= SNAP_VIRTIO_NET;
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.virtio_blk_device_emulation_manager))
+		sctx->emulation_caps |= SNAP_VIRTIO_BLK;
 
-	return true;
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.resources_on_emulation_manager))
+		sctx->mctx.need_tunnel = false;
+	else
+		sctx->mctx.need_tunnel = true;
+
+	return 0;
 }
 
 static int snap_query_flow_table_caps(struct snap_context *sctx)
@@ -263,7 +277,17 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 
 }
 
-static int snap_query_emulation_caps(struct snap_context *sctx)
+static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
+{
+	return ENOSYS;
+}
+
+static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
+{
+	return ENOSYS;
+}
+
+static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
@@ -272,7 +296,7 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 
 	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
 	DEVX_SET(query_hca_cap_in, in, op_mod,
-		 MLX5_SET_HCA_CAP_OP_MOD_DEVICE_EMULATION);
+		 MLX5_SET_HCA_CAP_OP_MOD_NVME_DEVICE_EMULATION);
 
 	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
 				      sizeof(out));
@@ -280,17 +304,42 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 		return ret;
 
 	sctx->max_pfs = DEVX_GET(query_hca_cap_out, out,
-				 capability.emulation_cap.total_emulated_pfs);
+				 capability.nvme_emulation_cap.total_emulated_pfs);
 	sctx->mctx.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
-		capability.emulation_cap.log_max_nvme_offload_namespaces);
+		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
 	sctx->mctx.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
-		capability.emulation_cap.log_max_emulated_cq);
+		capability.nvme_emulation_cap.log_max_emulated_cq);
 	sctx->mctx.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
-		capability.emulation_cap.log_max_emulated_sq);
+		capability.nvme_emulation_cap.log_max_emulated_sq);
 
 	return 0;
 
 }
+
+static int snap_query_emulation_caps(struct snap_context *sctx)
+{
+	int ret;
+
+	if (sctx->emulation_caps & SNAP_NVME) {
+		ret = snap_query_nvme_emulation_caps(sctx);
+		if (ret)
+			return ret;
+	}
+	if (sctx->emulation_caps & SNAP_VIRTIO_NET) {
+		ret = snap_query_virtio_net_emulation_caps(sctx);
+		if (ret)
+			return ret;
+	}
+	if (sctx->emulation_caps & SNAP_VIRTIO_BLK) {
+		ret = snap_query_virtio_blk_emulation_caps(sctx);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+
+}
+
 
 static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 {
@@ -773,10 +822,12 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	}
 
 	/* This should be done only for BF-1 */
-	sdev->mdev.vtunnel = snap_create_vhca_tunnel(sdev);
-	if (!sdev->mdev.vtunnel) {
-		errno = EINVAL;
-		goto out_free_device_emulation;
+	if (sctx->mctx.need_tunnel) {
+		sdev->mdev.vtunnel = snap_create_vhca_tunnel(sdev);
+		if (!sdev->mdev.vtunnel) {
+			errno = EINVAL;
+			goto out_free_device_emulation;
+		}
 	}
 
 	pthread_mutex_lock(&sctx->lock);
@@ -837,11 +888,6 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 		goto out_err;
 	}
 
-	if (!is_emulation_manager(context)) {
-		errno = EAGAIN;
-		goto out_close_device;
-	}
-
 	sctx = calloc(1, sizeof(*sctx));
 	if (!sctx) {
 		errno = ENOMEM;
@@ -849,6 +895,16 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	}
 
 	sctx->context = context;
+	if (snap_set_device_emulation_caps(sctx)) {
+		errno = EAGAIN;
+		goto out_free;
+	}
+
+	if (!sctx->emulation_caps) {
+		errno = EINVAL;
+		goto out_free;
+	}
+
 	rc = snap_query_emulation_caps(sctx);
 	if (rc) {
 		errno = EINVAL;

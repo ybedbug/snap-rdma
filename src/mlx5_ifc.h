@@ -619,7 +619,9 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 	u8         reserved_at_c0[0x8];
 	u8         log_max_cq_sz[0x8];
-	u8         reserved_at_d0[0xb];
+	u8         reserved_at_d0[0x9];
+	u8         virtio_net_device_emulation_manager[0x1];
+	u8         virtio_blk_device_emulation_manager[0x1];
 	u8         log_max_cq[0x5];
 
 	u8         log_max_eq_sz[0x8];
@@ -631,18 +633,20 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         m_pci_port[0x1];
 	u8         m_vhca_mk[0x1];
 	u8         cmd_on_behalf[0x1];
-	u8         device_emulation_manager[0x1];
+	u8         nvme_device_emulation_manager[0x1];
 	u8         terminate_scatter_list_mkey[0x1];
 	u8         repeated_mkey[0x1];
 	u8         dump_fill_mkey[0x1];
-	u8         reserved_at_f9[0x3];
+	u8         dpp[0x1];
+	u8         resources_on_emulation_manager[0x1];
+	u8         fast_teardown[0x1];
 	u8         log_max_eq[0x4];
 
 	u8         max_indirection[0x8];
 	u8         fixed_buffer_size[0x1];
 	u8         log_max_mrw_sz[0x7];
 	u8         force_teardown[0x1];
-	u8         fast_teardown[0x1];
+	u8         hard_coded_1[0x1];
 	u8         log_max_bsf_list_size[0x6];
 	u8         umr_extended_translation_offset[0x1];
 	u8         null_mkey[0x1];
@@ -1094,7 +1098,7 @@ struct mlx5_ifc_odp_cap_bits {
 	u8         reserved_at_120[0x6e0];
 };
 
-struct mlx5_ifc_emulation_cap_bits {
+struct mlx5_ifc_nvme_emulation_cap_bits {
 	u8         nvme_offload_type_sqe[0x1];
 	u8         nvme_offload_type_doorbell_only[0x1];
 	u8         nvme_offload_type_command_capsule[0x1];
@@ -1120,7 +1124,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_flow_table_eswitch_cap_bits flow_table_eswitch_cap;
 	struct mlx5_ifc_device_mem_cap_bits device_mem_cap;
 	struct mlx5_ifc_odp_cap_bits odp_cap;
-	struct mlx5_ifc_emulation_cap_bits emulation_cap;
+	struct mlx5_ifc_nvme_emulation_cap_bits nvme_emulation_cap;
 	u8         reserved_at_0[0x8000];
 };
 
@@ -1185,11 +1189,14 @@ enum mlx5_cap_type {
 };
 
 enum {
-	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE        = 0x0 << 1,
-	MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE        = 0x7 << 1,
-	MLX5_SET_HCA_CAP_OP_MOD_ESW_FLOW_TABLE        = 0x8 << 1,
-	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_MEMORY         = 0xf << 1,
-	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_EMULATION      = 0x10 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE              = 0x0 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE              = 0x7 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_ESW_FLOW_TABLE              = 0x8 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_MEMORY               = 0xf << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_NVME_DEVICE_EMULATION       = 0x10 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_NET_DEVICE_EMULATION = 0x16 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_BLK_DEVICE_EMULATION = 0x17 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_HOTPLUG                     = 0x18 << 1,
 };
 
 enum {

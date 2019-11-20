@@ -53,6 +53,8 @@ struct mlx5_snap_context {
 	uint32_t	max_emulated_nvme_sqs;
 	uint8_t		max_ft_level;
 	uint8_t		log_max_ft_size;
+
+	bool		need_tunnel;
 };
 
 struct mlx5_snap_pci {

@@ -68,6 +68,13 @@ enum snap_pci_type {
 	SNAP_VIRTIO_BLK_VF	= 1 << 3,
 };
 
+enum snap_emulation_type {
+	SNAP_NVME	= 1 << 0,
+	SNAP_VIRTIO_NET	= 1 << 1,
+	SNAP_VIRTIO_BLK	= 1 << 2,
+};
+
+
 struct snap_context;
 
 struct snap_device_attr {
@@ -102,6 +109,7 @@ struct snap_device {
 
 struct snap_context {
 	struct ibv_context		*context;
+	int				emulation_caps; //mask for supported snap_emulation_types
 	struct mlx5_snap_context	mctx;
 
 	int				max_pfs;
