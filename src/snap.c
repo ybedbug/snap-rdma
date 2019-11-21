@@ -1,4 +1,5 @@
 #include "snap.h"
+#include "snap_nvme.h"
 
 #define SNAP_INITIALIZE_HCA_RETRY_CNT 100
 #define SNAP_TEARDOWN_HCA_RETRY_CNT 5
@@ -399,12 +400,20 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 
 	sctx->max_nvme_pfs = DEVX_GET(query_hca_cap_out, out,
 				 capability.nvme_emulation_cap.total_emulated_pfs);
-	sctx->mctx.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->mctx.nvme.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
-	sctx->mctx.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->mctx.nvme.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_cq);
-	sctx->mctx.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->mctx.nvme.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_sq);
+	sctx->mctx.nvme.reg_size = DEVX_GET(query_hca_cap_out, out,
+		capability.nvme_emulation_cap.registers_size);
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.nvme_emulation_cap.nvme_offload_type_sqe))
+		sctx->mctx.nvme.supported_types |= SNAP_NVME_SQE_MODE;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.nvme_emulation_cap.nvme_offload_type_command_capsule))
+		sctx->mctx.nvme.supported_types |= SNAP_NVME_CC_MODE;
 
 	return 0;
 

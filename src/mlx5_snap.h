@@ -47,14 +47,20 @@
 
 struct mlx5_snap_device;
 
-struct mlx5_snap_context {
+struct mlx5_snap_nvme_context {
+	int		supported_types;//mask of snap_nvme_queue_type
 	uint32_t	max_nvme_namespaces;
 	uint32_t	max_emulated_nvme_cqs;
 	uint32_t	max_emulated_nvme_sqs;
-	uint8_t		max_ft_level;
-	uint8_t		log_max_ft_size;
+	uint16_t	reg_size;
+};
 
-	bool		need_tunnel;
+struct mlx5_snap_context {
+	struct mlx5_snap_nvme_context	nvme;
+	uint8_t				max_ft_level;
+	uint8_t				log_max_ft_size;
+
+	bool				need_tunnel;
 };
 
 struct mlx5_snap_pci {

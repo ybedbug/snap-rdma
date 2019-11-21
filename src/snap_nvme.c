@@ -31,8 +31,8 @@ int snap_nvme_init_device(struct snap_device *sdev)
 	 * Admin queue is calculated in num_queues. Also Keep 1:1 mapping for
 	 * NVMe SQs/CQs.
 	 */
-	ndev->num_queues = snap_min(sdev->sctx->mctx.max_emulated_nvme_cqs,
-				    sdev->sctx->mctx.max_emulated_nvme_sqs);
+	ndev->num_queues = snap_min(sdev->sctx->mctx.nvme.max_emulated_nvme_cqs,
+				    sdev->sctx->mctx.nvme.max_emulated_nvme_sqs);
 
 	ndev->cqs = calloc(ndev->num_queues, sizeof(*ndev->cqs));
 	if (!ndev->cqs) {
