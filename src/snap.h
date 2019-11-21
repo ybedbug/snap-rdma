@@ -64,8 +64,10 @@
 enum snap_pci_type {
 	SNAP_NVME_PF		= 1 << 0,
 	SNAP_NVME_VF		= 1 << 1,
-	SNAP_VIRTIO_BLK_PF	= 1 << 2,
-	SNAP_VIRTIO_BLK_VF	= 1 << 3,
+	SNAP_VIRTIO_NET_PF	= 1 << 2,
+	SNAP_VIRTIO_NET_VF	= 1 << 3,
+	SNAP_VIRTIO_BLK_PF	= 1 << 4,
+	SNAP_VIRTIO_BLK_VF	= 1 << 5,
 };
 
 enum snap_emulation_type {
@@ -112,8 +114,14 @@ struct snap_context {
 	int				emulation_caps; //mask for supported snap_emulation_types
 	struct mlx5_snap_context	mctx;
 
-	int				max_pfs;
-	struct snap_pci			*pfs;
+	int				max_nvme_pfs;
+	struct snap_pci			*nvme_pfs;
+
+	int				max_virtio_net_pfs;
+	struct snap_pci			*virtio_net_pfs;
+
+	int				max_virtio_blk_pfs;
+	struct snap_pci			*virtio_blk_pfs;
 
 	pthread_mutex_t			lock;
 	TAILQ_HEAD(, snap_device)	device_list;

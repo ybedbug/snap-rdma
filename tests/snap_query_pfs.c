@@ -8,7 +8,7 @@ int main(int argc, char **argv)
 {
 	struct ibv_device **list;
 	struct snap_context *sctx;
-	int ret, i, dev_count;
+	int ret = 0, i, dev_count;
 
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		slist = calloc(sctx->max_pfs, sizeof(*slist));
+		slist = calloc(sctx->max_nvme_pfs, sizeof(*slist));
 		if (!slist) {
 			snap_close(sctx);
 			goto out;
