@@ -443,7 +443,6 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 
 }
 
-
 static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 {
 	mlx5dv_devx_obj_destroy(sdev->mdev.vtunnel->obj);
@@ -553,9 +552,36 @@ out_err:
 	return NULL;
 }
 
+static void snap_free_flow_table_entries(struct mlx5_snap_flow_table *ft)
+{
+	free(ft->ftes);
+}
+
+static int snap_alloc_flow_table_entries(struct mlx5_snap_flow_table *ft)
+{
+	int i;
+
+	ft->ftes = calloc(ft->ft_size, sizeof(*ft->ftes));
+	if (!ft->ftes)
+		return -ENOMEM;
+
+	for (i = 0; i < ft->ft_size; i++)
+		ft->ftes[i].idx = i;
+
+	return 0;
+}
+
 static int snap_destroy_flow_table(struct mlx5_snap_flow_table *ft)
 {
-	return snap_devx_obj_destroy(ft->ft);
+	int ret;
+
+	/* TODO: make sure fg_list is empty */
+	ret = snap_devx_obj_destroy(ft->ft);
+	snap_free_flow_table_entries(ft);
+	pthread_mutex_destroy(&ft->lock);
+	free(ft);
+
+	return ret;
 }
 
 static struct mlx5_snap_flow_table*
@@ -573,6 +599,12 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 	if (!ft)
 		return NULL;
 
+	ret = pthread_mutex_init(&ft->lock, NULL);
+	if (ret)
+		goto out_free;
+
+	TAILQ_INIT(&ft->fg_list);
+
 	DEVX_SET(create_flow_table_in, in, opcode,
 		 MLX5_CMD_OP_CREATE_FLOW_TABLE);
 	DEVX_SET(create_flow_table_in, in, table_type, table_type);
@@ -586,6 +618,11 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 	/* limit the flow table size to 1024 elements, if possible */
 	ft_log_size = snap_min(SNAP_FT_LOG_SIZE,
 			       sdev->sctx->mctx.log_max_ft_size);
+	ft->ft_size = 1 << ft_log_size;
+	ret = snap_alloc_flow_table_entries(ft);
+	if (ret)
+		goto out_free_mutex;
+
 	DEVX_SET(flow_table_context, ft_ctx, log_size, ft_log_size);
 
 	ft->ft = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
@@ -593,12 +630,11 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 				      DEVX_ST_SZ_BYTES(destroy_flow_table_in),
 				      DEVX_ST_SZ_BYTES(destroy_flow_table_out));
 	if (!ft->ft)
-		goto out_free;
+		goto out_free_ftes;
 
 	ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
 	ft->table_type = table_type;
 	ft->level = ft_level;
-	ft->ft_size = 1 << ft_log_size;
 
 	if (sdev->mdev.vtunnel) {
 		void *dtor = ft->ft->dtor_in;
@@ -612,6 +648,10 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 
 	return ft;
 
+out_free_ftes:
+	snap_free_flow_table_entries(ft);
+out_free_mutex:
+	pthread_mutex_destroy(&ft->lock);
 out_free:
 	free(ft);
 	return NULL;
@@ -637,6 +677,7 @@ static struct mlx5_snap_flow_table*
 snap_create_root_flow_table(struct snap_device *sdev, uint32_t table_type)
 {
 	struct mlx5_snap_flow_table *ft;
+	struct mlx5_snap_flow_group *fg;
 	int ret;
 
 	ft = snap_create_flow_table(sdev, table_type);
@@ -654,34 +695,217 @@ destroy_ft:
 	return NULL;
 }
 
+/*
+ * Must be called with flow table (fg->ft) lock held
+ */
+static int snap_destroy_flow_group(struct mlx5_snap_flow_group *fg)
+{
+	int ret;
+
+	TAILQ_REMOVE(&fg->ft->fg_list, fg, entry);
+	/* TODO: make sure fte_list is empty */
+	ret = snap_devx_obj_destroy(fg->fg);
+	free(fg->fte_bitmap);
+	pthread_mutex_destroy(&fg->lock);
+	free(fg);
+
+	return ret;
+}
+
+static struct mlx5_snap_flow_group*
+snap_create_flow_group(struct snap_device *sdev,
+		struct mlx5_snap_flow_table *ft, uint32_t start_index,
+		uint32_t end_index, uint8_t match_criteria_bits,
+		void *match_criteria, enum mlx5_snap_flow_group_type type)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(create_flow_group_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(create_flow_group_out)] = {0};
+	struct mlx5_snap_flow_group *fg;
+	void *match;
+	int ret, fg_size;
+
+	fg = calloc(1, sizeof(*fg));
+	if (!fg)
+		return NULL;
+
+	ret = pthread_mutex_init(&fg->lock, NULL);
+	if (ret)
+		goto out_free;
+
+	fg_size = end_index - start_index + 1;
+	fg->fte_bitmap = calloc(fg_size, sizeof(*fg->fte_bitmap));
+	if (!fg->fte_bitmap)
+		goto free_mutex;
+
+	fg->start_idx = start_index;
+	fg->end_idx = end_index;
+	fg->ft = ft;
+	fg->type = type;
+
+	DEVX_SET(create_flow_group_in, in, opcode,
+		 MLX5_CMD_OP_CREATE_FLOW_GROUP);
+	DEVX_SET(create_flow_group_in, in, table_type, ft->table_type);
+	DEVX_SET(create_flow_group_in, in, table_id, ft->table_id);
+	DEVX_SET(create_flow_group_in, in, start_flow_index, start_index);
+	DEVX_SET(create_flow_group_in, in, end_flow_index, end_index);
+
+	/* Set the criteria and the mask for the flow group */
+	DEVX_SET(create_flow_group_in, in, match_criteria_enable,
+		 match_criteria_bits);
+	match = DEVX_ADDR_OF(create_flow_group_in, in, match_criteria);
+	memcpy(match, match_criteria, DEVX_ST_SZ_BYTES(fte_match_param));
+
+	fg->fg = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				      sdev->mdev.vtunnel,
+				      DEVX_ST_SZ_BYTES(destroy_flow_group_in),
+				      DEVX_ST_SZ_BYTES(destroy_flow_group_out));
+        if (!fg->fg)
+                goto out_free_bitmap;
+
+	fg->group_id = DEVX_GET(create_flow_group_out, out, group_id);
+
+	if (sdev->mdev.vtunnel) {
+		void *dtor = fg->fg->dtor_in;
+
+		DEVX_SET(destroy_flow_group_in, dtor, opcode,
+			 MLX5_CMD_OP_DESTROY_FLOW_GROUP);
+		DEVX_SET(destroy_flow_group_in, dtor, table_type,
+			 fg->ft->table_type);
+		DEVX_SET(destroy_flow_group_in, dtor, table_id,
+			 fg->ft->table_id);
+		DEVX_SET(destroy_flow_group_in, dtor, group_id, fg->group_id);
+	}
+
+	pthread_mutex_lock(&ft->lock);
+	TAILQ_INSERT_HEAD(&ft->fg_list, fg, entry);
+	pthread_mutex_unlock(&ft->lock);
+
+	return fg;
+
+out_free_bitmap:
+	free(fg->fte_bitmap);
+free_mutex:
+	pthread_mutex_destroy(&fg->lock);
+out_free:
+	free(fg);
+
+	return NULL;
+}
+
 static int snap_reset_tx_steering(struct snap_device *sdev)
 {
+	struct mlx5_snap_flow_group *fg, *next;
+	int ret;
+
+	pthread_mutex_lock(&sdev->mdev.tx->lock);
+	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.tx->fg_list, entry, next) {
+		ret = snap_destroy_flow_group(fg);
+		if (ret)
+			goto out_unlock;
+	}
+out_unlock:
+	pthread_mutex_unlock(&sdev->mdev.tx->lock);
+	if (ret)
+		return ret;
 	return snap_destroy_flow_table(sdev->mdev.tx);
 }
 
 static int snap_init_tx_steering(struct snap_device *sdev)
 {
+	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
+	struct mlx5_snap_flow_group *fg;
+
 	/* FT6 creation (match source QPN) */
 	sdev->mdev.tx = snap_create_root_flow_table(sdev, FS_FT_NIC_TX_RDMA);
 	if (!sdev->mdev.tx)
 		return -ENOMEM;
 
+	/* Flow group that matches source qpn rule (limit to 1024 QPs) */
+	DEVX_SET(fte_match_param, match, misc_parameters.source_sqn, 0xffffff);
+	fg = snap_create_flow_group(sdev, sdev->mdev.tx, 0,
+		sdev->mdev.tx->ft_size - 1,
+		1 << MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS,
+		match, SNAP_FG_MATCH);
+	if (!fg)
+		goto out_err;
+
 	return 0;
+
+out_err:
+	snap_destroy_flow_table(sdev->mdev.tx);
+	return -ENOMEM;
 }
 
 static int snap_reset_rx_steering(struct snap_device *sdev)
 {
+	struct mlx5_snap_flow_group *fg, *next;
+	int ret;
+
+	pthread_mutex_lock(&sdev->mdev.rx->lock);
+	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.rx->fg_list, entry, next) {
+		ret = snap_destroy_flow_group(fg);
+		if (ret)
+			goto out_unlock;
+	}
+out_unlock:
+	pthread_mutex_unlock(&sdev->mdev.rx->lock);
+	if (ret)
+		return ret;
+
 	return snap_destroy_flow_table(sdev->mdev.rx);
 }
 
 static int snap_init_rx_steering(struct snap_device *sdev)
 {
-	/* FT3 creation (match desr QPN, miss send to FW NIC RX ROOT) */
+	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
+	struct mlx5_snap_flow_group *fg, *fg_miss;
+
+	/* FT3 creation (match dest QPN, miss send to FW NIC RX ROOT) */
 	sdev->mdev.rx = snap_create_root_flow_table(sdev, FS_FT_NIC_RX_RDMA);
 	if (!sdev->mdev.rx)
 		return -ENOMEM;
 
+	/* Flow group that matches dst qpn rule (limit to 1023 QPs) */
+	DEVX_SET(fte_match_param, match, misc_parameters.bth_dst_qp, 0xffffff);
+	fg = snap_create_flow_group(sdev, sdev->mdev.rx, 0,
+		sdev->mdev.rx->ft_size - 2,
+		1 << MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS,
+		match, SNAP_FG_MATCH);
+	if (!fg)
+		goto out_err;
+
+	/*
+	 * Create flow group and entry that forwards to SF (that will be given later).
+	 * The reason is:
+	 * On a packet coming from QP8 (PF) -> QP7 (SF), QP8 transmit to FT6
+	 * (PF root tx table) Jumps to NIC TX root on ECPF
+	 * Hit in local loopback table
+	 * ** !!!Loops back as RX in the PF side!!! ***
+	 * Hits FT3 (PF root rx RDMA table), match on flow group #2 + fte with future
+	 * SF mac. Then jumps again to SF NIC RX (root) and from there to QP7.
+	 *
+	 * There is no table default rule that allows jumping between PF/SF, so
+	 * we create a special flow group with one flow table entry that acts
+	 * as a catch all rule (zero in match and in criteria should act like
+	 * match all).
+	 */
+	memset(match, 0, sizeof(match));
+	fg_miss = snap_create_flow_group(sdev, sdev->mdev.rx,
+		sdev->mdev.rx->ft_size - 1,
+		sdev->mdev.rx->ft_size - 1,
+		0, match, SNAP_FG_MISS);
+	if (!fg_miss)
+		goto out_free_fg;
+
 	return 0;
+
+out_free_fg:
+	pthread_mutex_lock(&fg->ft->lock);
+	snap_destroy_flow_group(fg);
+	pthread_mutex_unlock(&fg->ft->lock);
+out_err:
+	snap_destroy_flow_table(sdev->mdev.rx);
+	return -ENOMEM;
 }
 
 static int snap_reset_steering(struct snap_device *sdev)

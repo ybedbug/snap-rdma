@@ -45,7 +45,14 @@
 #define SNAP_FT_ROOT_LEVEL 5
 #define SNAP_FT_LOG_SIZE 10
 
+enum mlx5_snap_flow_group_type {
+	SNAP_FG_MATCH	= 1 << 0,
+	SNAP_FG_MISS	= 1 << 1,
+};
+
 struct mlx5_snap_device;
+struct mlx5_snap_flow_group;
+struct mlx5_snap_flow_table_entry;
 
 struct mlx5_snap_nvme_context {
 	int		supported_types;//mask of snap_nvme_queue_type
@@ -82,11 +89,38 @@ struct mlx5_snap_devx_obj {
 };
 
 struct mlx5_snap_flow_table {
-	struct mlx5_snap_devx_obj       *ft;
-	uint32_t			table_id;
-	uint32_t			table_type;
-	uint8_t				level;
-	uint64_t			ft_size;
+	struct mlx5_snap_devx_obj       	*ft;
+	uint32_t				table_id;
+	uint32_t				table_type;
+	uint8_t					level;
+	uint64_t				ft_size;
+
+	pthread_mutex_t				lock;
+	TAILQ_HEAD(, mlx5_snap_flow_group)	fg_list;
+
+
+	struct mlx5_snap_flow_table_entry	*ftes;
+};
+
+struct mlx5_snap_flow_group {
+	struct mlx5_snap_devx_obj       	*fg;
+	uint32_t				group_id;
+	uint32_t				start_idx;
+	uint32_t				end_idx;
+	enum mlx5_snap_flow_group_type		type;
+
+	pthread_mutex_t				lock;
+	uint8_t					*fte_bitmap;
+
+	TAILQ_ENTRY(mlx5_snap_flow_group)	entry;
+	struct mlx5_snap_flow_table		*ft;
+};
+
+struct mlx5_snap_flow_table_entry {
+	struct mlx5_snap_devx_obj       	*fte;
+	uint32_t				idx;
+
+	struct mlx5_snap_flow_group		*fg;
 };
 
 struct mlx5_snap_device {

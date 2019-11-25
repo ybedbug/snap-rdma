@@ -76,7 +76,6 @@ enum snap_emulation_type {
 	SNAP_VIRTIO_BLK	= 1 << 2,
 };
 
-
 struct snap_context;
 
 struct snap_device_attr {
