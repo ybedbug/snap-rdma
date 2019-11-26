@@ -2335,23 +2335,142 @@ struct mlx5_ifc_vhca_tunnel_cmd_bits {
 	u8         op_mod[0x10];
 };
 
-struct mlx5_ifc_device_emulation_bits {
-	u8         modify_field_select[0x40];
+struct mlx5_ifc_virtio_device_bits {
+	u8	   device_feature[0x40];
 
-	u8         reserved_at_40[0x10];
-	u8         vhca_id[0x10];
+	u8	   driver_feature[0x40];
 
-	u8         enabled[0x1];
-	u8         reserved_at_61[0x1f];
+	u8	   msix_config[0x10];
+	u8	   num_queues[0x10];
 
-	u8         counter_set_id[0x20];
+	u8	   device_status[0x8];
+	u8	   config_generation[0x8];
+	u8	   reserved_at_116[0x10];
 
-	u8         vendor_id[0x10];
-	u8         subsystem_vendor_id[0x10];
+	u8	   reserved_at_126[0x40];
+};
 
-	u8         reserved_at_c0[0xc0];
+struct mlx5_ifc_virtio_net_config_bits {
+	u8	   mac_47_16[0x20];
 
-	u8         register_data[0][0x20];
+	u8	   mac_15_0[0x10];
+	u8	   status[0x10];
+
+	u8	   max_virtqueue_pairs[0x10];
+	u8	   mtu[0x10];
+
+	u8	   reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_virtio_q_layout_bits {
+	u8	   queue_size[0x10];
+	u8	   queue_msix_vector[0x10];
+
+	u8	   queue_enable[0x10];
+	u8	   queue_notify_off[0x10];
+
+	u8	   queue_desc[0x40];
+
+	u8	   queue_driver[0x40];
+
+	u8	   queue_device[0x40];
+};
+
+struct mlx5_ifc_virtio_net_device_emulation_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   arm[0x1];
+	u8	   reserved_at_41[0xf];
+	u8	   vhca_id[0x10];
+
+	u8	   reserved_at_60[0x20];
+
+	struct mlx5_ifc_virtio_device_bits virtio_device;
+
+	struct mlx5_ifc_virtio_net_config_bits virtio_net_config;
+
+	struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
+};
+
+struct mlx5_ifc_virtio_blk_config_bits {
+	u8	   capacity[0x40];
+
+	u8	   size_max[0x20];
+
+	u8	   seg_max[0x20];
+
+	u8	   reserved_at_80[0x20];
+
+	u8	   cylinders[0x10];
+	u8	   heads[0x8];
+	u8	   sectors[0x8];
+
+	u8	   reserved_at_c0[0x20];
+
+	u8	   blk_size[0x20];
+
+	u8	   reserved_at_100[0x20];
+
+	u8	   physical_blk_exp[0x8];
+	u8	   alignment_offset[0x8];
+	u8	   min_io_size[0x10];
+
+	u8	   opt_io_size[0x20];
+
+	u8	   reserved_at_140[0x20];
+
+	u8	   writeback[0x8];
+	u8	   reserved_at_168[0x18];
+
+	u8	   max_discard_sectors[0x20];
+
+	u8	   max_discard_seg[0x20];
+
+	u8	   discard_sector_alignment[0x20];
+
+	u8	   max_write_zeroes_sectors[0x20];
+
+	u8	   max_write_zeroes_segs[0x20];
+
+	u8	   write_zeroes_may_unmap[0x8];
+	u8	   reserved_at_228[0x18];
+
+	u8	   reserved_at_240[0x20];
+};
+
+struct mlx5_ifc_virtio_blk_device_emulation_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   arm[0x1];
+	u8	   reserved_at_41[0xf];
+	u8	   vhca_id[0x10];
+
+	u8	   reserved_at_60[0x20];
+
+	struct mlx5_ifc_virtio_device_bits virtio_device;
+
+	struct mlx5_ifc_virtio_blk_config_bits virtio_blk_config;
+
+	struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
+};
+
+struct mlx5_ifc_nvme_device_emulation_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x10];
+	u8	   vhca_id[0x10];
+
+	u8	   enabled[0x1];
+	u8	   reserved_at_61[0x1f];
+
+	u8	   counter_set_id[0x20];
+
+	u8	   vendor_id[0x10];
+	u8	   subsystem_vendor_id[0x10];
+
+	u8	   reserved_at_c0[0xc0];
+
+	u8	   register_data[0][0x20];
 };
 
 enum {

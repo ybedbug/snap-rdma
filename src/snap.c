@@ -378,12 +378,42 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 
 static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 {
-	return ENOSYS;
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	struct ibv_context *context = sctx->context;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_BLK_DEVICE_EMULATION);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	/* TODO: save the output caps */
+	return 0;
 }
 
 static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
 {
-	return ENOSYS;
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	struct ibv_context *context = sctx->context;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_NET_DEVICE_EMULATION);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	/* TODO: save the output caps */
+	return 0;
 }
 
 static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
@@ -1087,12 +1117,78 @@ static void snap_destroy_device_emulation(struct snap_device *sdev)
 static struct mlx5_snap_devx_obj*
 snap_create_virtio_net_device_emulation(struct snap_device *sdev)
 {
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct ibv_context *context = sdev->sctx->context;
+	uint8_t *device_emulation_in;
+	struct mlx5_snap_devx_obj *device_emulation;
+
+	device_emulation = calloc(1, sizeof(*device_emulation));
+	if (!device_emulation)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
+
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
+		 sdev->pci->mpci.vhca_id);
+
+	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						       out, sizeof(out));
+	if (!device_emulation->obj)
+		goto out_free;
+
+	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	device_emulation->sdev = sdev;
+
+	return device_emulation;
+
+out_free:
+	free(device_emulation);
+out_err:
 	return NULL;
 }
 
 static struct mlx5_snap_devx_obj*
 snap_create_virtio_blk_device_emulation(struct snap_device *sdev)
 {
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct ibv_context *context = sdev->sctx->context;
+	uint8_t *device_emulation_in;
+	struct mlx5_snap_devx_obj *device_emulation;
+
+	device_emulation = calloc(1, sizeof(*device_emulation));
+	if (!device_emulation)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
+
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(virtio_blk_device_emulation, device_emulation_in, vhca_id,
+		 sdev->pci->mpci.vhca_id);
+
+	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						       out, sizeof(out));
+	if (!device_emulation->obj)
+		goto out_free;
+
+	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	device_emulation->sdev = sdev;
+
+	return device_emulation;
+
+out_free:
+	free(device_emulation);
+out_err:
 	return NULL;
 }
 
@@ -1100,7 +1196,7 @@ static struct mlx5_snap_devx_obj*
 snap_create_nvme_device_emulation(struct snap_device *sdev)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(device_emulation)] = {0};
+		   DEVX_ST_SZ_BYTES(nvme_device_emulation)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	struct ibv_context *context = sdev->sctx->context;
 	uint8_t *device_emulation_in;
@@ -1116,7 +1212,7 @@ snap_create_nvme_device_emulation(struct snap_device *sdev)
 		 MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION);
 
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	DEVX_SET(device_emulation, device_emulation_in, vhca_id,
+	DEVX_SET(nvme_device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
