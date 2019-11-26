@@ -108,6 +108,12 @@ struct snap_device {
 	void				*dd_data;
 };
 
+struct snap_hotplug_context {
+	int		supported_types;//mask of snap_emulation_type
+	uint8_t		max_devices;
+	uint8_t		log_max_bar_size;
+};
+
 struct snap_context {
 	struct ibv_context		*context;
 	int				emulation_caps; //mask for supported snap_emulation_types
@@ -121,6 +127,9 @@ struct snap_context {
 
 	int				max_virtio_blk_pfs;
 	struct snap_pci			*virtio_blk_pfs;
+
+	bool				hotplug_supported;
+	struct snap_hotplug_context	hotplug;
 
 	pthread_mutex_t			lock;
 	TAILQ_HEAD(, snap_device)	device_list;

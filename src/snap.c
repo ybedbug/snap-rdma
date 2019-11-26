@@ -324,6 +324,10 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 	else
 		sctx->mctx.need_tunnel = true;
 
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.hotplug_manager))
+		sctx->hotplug_supported = true;
+
 	return 0;
 }
 
@@ -414,6 +418,42 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.nvme_emulation_cap.nvme_offload_type_command_capsule))
 		sctx->mctx.nvme.supported_types |= SNAP_NVME_CC_MODE;
+
+	return 0;
+
+}
+
+static int snap_query_hotplug_caps(struct snap_context *sctx)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	struct ibv_context *context = sctx->context;
+	int ret, supported_types;
+
+	if (!sctx->hotplug_supported)
+		return 0;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_HOTPLUG);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	sctx->hotplug.max_devices = DEVX_GET(query_hca_cap_out, out,
+				capability.hotplug_cap.max_hotplug_devices);
+	sctx->hotplug.log_max_bar_size = DEVX_GET(query_hca_cap_out, out,
+				capability.hotplug_cap.log_max_bar_size);
+	supported_types = DEVX_GET(query_hca_cap_out, out,
+			capability.hotplug_cap.hotplug_device_types_supported);
+	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_NVME)
+		sctx->hotplug.supported_types |= SNAP_NVME;
+	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET)
+		sctx->hotplug.supported_types |= SNAP_VIRTIO_NET;
+	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK)
+		sctx->hotplug.supported_types |= SNAP_VIRTIO_BLK;
 
 	return 0;
 
@@ -1283,6 +1323,12 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	}
 
 	rc = snap_query_flow_table_caps(sctx);
+	if (rc) {
+		errno = EINVAL;
+		goto out_free;
+	}
+
+	rc = snap_query_hotplug_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
 		goto out_free;

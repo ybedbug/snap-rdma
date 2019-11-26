@@ -907,7 +907,7 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         as_notify[0x1];
 	u8         m_pci_port[0x1];
 	u8         m_vhca_mk[0x1];
-	u8         cmd_on_behalf[0x1];
+	u8         hotplug_manager[0x1];
 	u8         nvme_device_emulation_manager[0x1];
 	u8         terminate_scatter_list_mkey[0x1];
 	u8         repeated_mkey[0x1];
@@ -1392,6 +1392,20 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 	u8         reserved_at_60[0x7a0];
 };
 
+enum {
+	MLX5_HOTPLUG_DEVICE_TYPE_NVME		= 1 << 0,
+	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET	= 1 << 1,
+	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 1 << 2,
+};
+
+struct mlx5_ifc_hotplug_cap_bits {
+	u8         hotplug_device_types_supported[0x10];
+	u8         log_max_bar_size[0x8];
+	u8         max_hotplug_devices[0x8];
+
+	u8         reserved_at_20[0x7e0];
+};
+
 union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_atomic_caps_bits atomic_caps;
 	struct mlx5_ifc_cmd_hca_cap_bits cmd_hca_cap;
@@ -1400,6 +1414,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_device_mem_cap_bits device_mem_cap;
 	struct mlx5_ifc_odp_cap_bits odp_cap;
 	struct mlx5_ifc_nvme_emulation_cap_bits nvme_emulation_cap;
+	struct mlx5_ifc_hotplug_cap_bits hotplug_cap;
 	u8         reserved_at_0[0x8000];
 };
 
