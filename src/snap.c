@@ -295,6 +295,7 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	uint64_t general_obj_types = 0;
 	struct ibv_context *context = sctx->context;
 	int ret;
 
@@ -308,14 +309,21 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		return ret;
 
 	sctx->emulation_caps = 0;
+	general_obj_types = DEVX_GET(query_hca_cap_out, out,
+				     capability.cmd_hca_cap.general_obj_types);
+	//TODO: remove this after FW bug fixed
+	general_obj_types = 0xffffffffffffffff;
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.nvme_device_emulation_manager))
+		capability.cmd_hca_cap.nvme_device_emulation_manager) &&
+	    general_obj_types & (1 << MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION))
 		sctx->emulation_caps |= SNAP_NVME;
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.virtio_net_device_emulation_manager))
+		capability.cmd_hca_cap.virtio_net_device_emulation_manager) &&
+	    general_obj_types & (1 << MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION))
 		sctx->emulation_caps |= SNAP_VIRTIO_NET;
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.virtio_blk_device_emulation_manager))
+		capability.cmd_hca_cap.virtio_blk_device_emulation_manager) &&
+	    general_obj_types & (1 << MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION))
 		sctx->emulation_caps |= SNAP_VIRTIO_BLK;
 
 	if (DEVX_GET(query_hca_cap_out, out,
@@ -325,7 +333,8 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->mctx.need_tunnel = true;
 
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.hotplug_manager))
+		capability.cmd_hca_cap.hotplug_manager) &&
+	    general_obj_types & (1 << MLX5_OBJ_TYPE_DEVICE))
 		sctx->hotplug_supported = true;
 
 	return 0;
@@ -478,11 +487,11 @@ static int snap_query_hotplug_caps(struct snap_context *sctx)
 				capability.hotplug_cap.log_max_bar_size);
 	supported_types = DEVX_GET(query_hca_cap_out, out,
 			capability.hotplug_cap.hotplug_device_types_supported);
-	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_NVME)
+	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_NVME))
 		sctx->hotplug.supported_types |= SNAP_NVME;
-	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET)
+	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET))
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_NET;
-	if (supported_types & MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK)
+	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK))
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_BLK;
 
 	return 0;
@@ -1103,6 +1112,61 @@ snap_create_vhca_tunnel(struct snap_device *sdev)
 
 out_free:
 	free(vtunnel);
+out_err:
+	return NULL;
+}
+
+static void snap_destroy_device_object(struct mlx5_snap_devx_obj *device)
+{
+	mlx5dv_devx_obj_destroy(device->obj);
+	free(device);
+}
+
+static struct mlx5_snap_devx_obj*
+snap_create_device_object(struct snap_context *sctx,
+		enum snap_emulation_type type)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(device)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct ibv_context *context = sctx->context;
+	uint8_t *device_in, device_type;
+	struct mlx5_snap_devx_obj *device;
+
+	device = calloc(1, sizeof(*device));
+	if (!device)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_DEVICE);
+
+	device_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	if (type == SNAP_NVME)
+		device_type = MLX5_HOTPLUG_DEVICE_TYPE_NVME;
+	else if (type == SNAP_VIRTIO_NET)
+		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET;
+	else if (type == SNAP_VIRTIO_BLK)
+		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK;
+	else
+		goto out_free;
+
+	DEVX_SET(device, device_in, device_type, device_type);
+
+	device->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
+					     sizeof(out));
+	if (!device->obj)
+		goto out_free;
+
+	device->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	/* sdev will be assigned after creating the emulation object */
+	device->sdev = NULL;
+
+	return device;
+
+out_free:
+	free(device);
 out_err:
 	return NULL;
 }

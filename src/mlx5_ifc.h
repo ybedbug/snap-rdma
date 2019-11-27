@@ -1393,9 +1393,9 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 };
 
 enum {
-	MLX5_HOTPLUG_DEVICE_TYPE_NVME		= 1 << 0,
-	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET	= 1 << 1,
-	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 1 << 2,
+	MLX5_HOTPLUG_DEVICE_TYPE_NVME		= 0x0,
+	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET	= 0x1,
+	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 0x2,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -2333,6 +2333,15 @@ struct mlx5_ifc_vhca_tunnel_cmd_bits {
 
 	u8         vhca_tunnel_id[0x10];
 	u8         op_mod[0x10];
+};
+
+struct mlx5_ifc_device_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x18];
+	u8	   device_type[0x8];
+
+	u8	   reserved_at_60[0x1a0];
 };
 
 struct mlx5_ifc_virtio_device_bits {
