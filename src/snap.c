@@ -722,7 +722,7 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 			 MLX5_CMD_OP_DESTROY_FLOW_TABLE);
 		DEVX_SET(destroy_flow_table_in, dtor, table_type,
 			 ft->table_type);
-		DEVX_SET(destroy_flow_table_in, in, table_id, ft->table_id);
+		DEVX_SET(destroy_flow_table_in, dtor, table_id, ft->table_id);
 	}
 
 	return ft;
@@ -756,7 +756,6 @@ static struct mlx5_snap_flow_table*
 snap_create_root_flow_table(struct snap_device *sdev, uint32_t table_type)
 {
 	struct mlx5_snap_flow_table *ft;
-	struct mlx5_snap_flow_group *fg;
 	int ret;
 
 	ft = snap_create_flow_table(sdev, table_type);
