@@ -25,6 +25,8 @@ AC_SEARCH_LIBS([pthread_create],[pthread])
 # check for IB
 m4_include([m4/ib.m4])
 
+AC_PREFIX_DEFAULT(/usr/local/snap)
+
 AC_CONFIG_FILES([Makefile
 		 src/Makefile
 		 tests/Makefile])
