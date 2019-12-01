@@ -94,11 +94,13 @@ static enum snap_pci_type snap_pf_to_vf_type(enum snap_pci_type pf_type)
 		return SNAP_VIRTIO_NET_VF;
 	else if (pf_type == SNAP_VIRTIO_BLK_PF)
 		return SNAP_VIRTIO_BLK_VF;
+	else
+		return pf_type;
 }
 
 static int snap_alloc_virtual_functions(struct snap_pci *pf)
 {
-	int ret, i;
+	int i;
 
 	pf->vfs = calloc(pf->num_vfs, sizeof(struct snap_pci));
 	if (!pf->vfs)
@@ -541,7 +543,7 @@ static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
  */
 int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj)
 {
-	int ret;
+	int ret = -EINVAL;
 
 	if (snap_obj->obj) {
 		ret = mlx5dv_devx_obj_destroy(snap_obj->obj);
@@ -742,12 +744,12 @@ static int snap_set_flow_table_root(struct snap_device *sdev,
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(set_flow_table_root_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(set_flow_table_root_out)] = {0};
-	int ret;
 
 	DEVX_SET(set_flow_table_root_in, in, opcode,
 		 MLX5_CMD_OP_SET_FLOW_TABLE_ROOT);
 	DEVX_SET(set_flow_table_root_in, in, table_type, ft->table_type);
 	DEVX_SET(set_flow_table_root_in, in, table_id, ft->table_id);
+
 	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
 					 sizeof(out), 0);
 }
@@ -873,7 +875,7 @@ out_free:
 static int snap_reset_tx_steering(struct snap_device *sdev)
 {
 	struct mlx5_snap_flow_group *fg, *next;
-	int ret;
+	int ret = 0;
 
 	pthread_mutex_lock(&sdev->mdev.tx->lock);
 	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.tx->fg_list, entry, next) {
@@ -917,7 +919,7 @@ out_err:
 static int snap_reset_rx_steering(struct snap_device *sdev)
 {
 	struct mlx5_snap_flow_group *fg, *next;
-	int ret;
+	int ret = 0;
 
 	pthread_mutex_lock(&sdev->mdev.rx->lock);
 	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.rx->fg_list, entry, next) {

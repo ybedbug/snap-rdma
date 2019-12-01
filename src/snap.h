@@ -40,6 +40,8 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <pthread.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <infiniband/verbs.h>
 
