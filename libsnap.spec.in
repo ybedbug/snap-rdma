@@ -1,0 +1,38 @@
+Name:	libsnap
+Version:	1.0
+Release:	1
+Summary:	Software-defined Network Accelerated Processing (SNAP) user-space library based on RDMA
+
+License:	Proprietary
+URL:	https://github.com/Mellanox/snap-rdma
+Source0:	%{name}-%{version}.tar.gz
+
+BuildRequires:	automake autoconf make gcc
+Requires:	librdmacm >= 46mlnx2-1.46361
+
+%description
+Library that assists in common tasks when interacting with the emulating hardware
+in order to present a SNAP device to an external host or a VM.
+
+%prep
+%setup -q
+
+%build
+./autogen.sh
+%configure %{?configure_options}
+make %{?_smp_mflags}
+
+%install
+rm -rf $RPM_BUILD_ROOT
+%make_install
+
+%files
+%defattr(-,root,root)
+%{_includedir}/*
+%{_libdir}/*
+
+%doc README.md AUTHORS COPYING NEWS
+
+%changelog
+* Thu Nov 28 2019 Max Gurtovoy <maxg@mellanox.com> [0.1]
+- created initial spec file for libsnap
