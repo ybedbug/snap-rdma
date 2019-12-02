@@ -41,7 +41,6 @@
 #include <linux/types.h>
 
 #include "snap.h"
-#include "mlx5_ifc.h"
 
 struct snap_nvme_device;
 struct snap_nvme_cq;

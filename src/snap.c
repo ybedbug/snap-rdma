@@ -1,6 +1,8 @@
 #include "snap.h"
 #include "snap_nvme.h"
 
+#include "mlx5_ifc.h"
+
 #define SNAP_INITIALIZE_HCA_RETRY_CNT 100
 #define SNAP_TEARDOWN_HCA_RETRY_CNT 5
 #define SNAP_GENERAL_CMD_USEC_WAIT 50000

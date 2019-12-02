@@ -40,8 +40,6 @@
 #include <pthread.h>
 #include <linux/types.h>
 
-#include "mlx5_ifc.h"
-
 #define SNAP_FT_ROOT_LEVEL 5
 #define SNAP_FT_LOG_SIZE 10
 
@@ -77,7 +75,7 @@ struct mlx5_snap_pci {
 
 struct mlx5_snap_devx_obj {
 	struct mlx5dv_devx_obj		*obj;
-	u32				obj_id;
+	uint32_t			obj_id;
 	struct snap_device		*sdev;
 
 	/* destructor for tunneld objects */

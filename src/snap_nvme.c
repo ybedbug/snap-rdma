@@ -1,5 +1,7 @@
 #include "snap_nvme.h"
 
+#include "mlx5_ifc.h"
+
 #define NVME_DB_STRIDE 3
 #define NVME_CQ_LOG_ENTRY_SIZE 4
 #define NVME_SQ_LOG_ENTRY_SIZE 6
