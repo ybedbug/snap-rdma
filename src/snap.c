@@ -116,6 +116,7 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf)
 		vf->sctx = pf->sctx;
 		vf->mpci.vhca_id = pf->mpci.vfs_base_vhca_id + i;
 
+		vf->plugged = true;
 		vf->id = i;
 		vf->pci_number = pf->pci_number;
 		vf->num_vfs = 0;
@@ -221,6 +222,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 
 		pf->type = pf_type;
 		pf->sctx = sctx;
+		pf->plugged = true;
 		pf->id = i;
 		pf->pci_number = DEVX_GET(query_emulated_functions_info_out,
 					  out,
@@ -1350,6 +1352,9 @@ out_err:
 static struct mlx5_snap_devx_obj*
 snap_create_device_emulation(struct snap_device *sdev)
 {
+	if (!sdev->pci->plugged)
+		return NULL;
+
 	switch (sdev->pci->type) {
 	case SNAP_NVME_PF:
 	case SNAP_NVME_VF:

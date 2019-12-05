@@ -89,6 +89,7 @@ struct snap_device_attr {
 struct snap_pci {
 	struct snap_context	*sctx;
 	enum snap_pci_type	type;
+	bool			plugged;
 	int			id;
 	int			pci_number;
 
