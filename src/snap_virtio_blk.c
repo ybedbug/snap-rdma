@@ -80,3 +80,103 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
 
 	return ret;
 }
+
+/**
+ * snap_virtio_blk_create_queue() - Create a new Virtio block snap queue object
+ * @sdev:       snap device
+ * @attr:       attributes for the queue creation
+ *
+ * Create a Virtio block snap queue object with the given attributes.
+ *
+ * Return: Returns snap_virtio_blk_queue in case of success, NULL otherwise and
+ * errno will be set to indicate the failure reason.
+ */
+struct snap_virtio_blk_queue*
+snap_virtio_blk_create_queue(struct snap_device *sdev,
+	struct snap_virtio_blk_queue_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct snap_virtio_blk_device *vbdev;
+	uint8_t *virtq_in;
+	struct snap_virtio_blk_queue *vbq;
+	int virtq_type, ev_mode;
+
+	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
+
+	if (attr->type == SNAP_VIRTQ_SPLIT_MODE) {
+		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
+	} else if (attr->type == SNAP_VIRTQ_PACKED_MODE) {
+		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_PACKED;
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->ev_mode == SNAP_VIRTQ_NO_MSIX_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX;
+	} else if (attr->ev_mode == SNAP_VIRTQ_CQ_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ;
+	} else if (attr->ev_mode == SNAP_VIRTQ_MSIX_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX;
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->idx > vbdev->vdev.num_queues) {
+		errno = EINVAL;
+		goto out;
+	}
+
+	vbq = &vbdev->virtqs[attr->idx];
+	vbq->virtq.idx = attr->idx;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, MLX5_OBJ_TYPE_VIRTIO_BLK_Q);
+
+	virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(virtio_blk_q, virtq_in, virtqc.device_emulation_id,
+		 sdev->pci->mpci.vhca_id);
+	DEVX_SET(virtio_blk_q, virtq_in, virtqc.virtio_q_type, virtq_type);
+	DEVX_SET(virtio_blk_q, virtq_in, virtqc.event_mode, ev_mode);
+	DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_index, attr->idx);
+	vbq->virtq.virtq = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				      sdev->mdev.vtunnel,
+				      DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
+				      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
+	if (!vbq->virtq.virtq) {
+		errno = ENODEV;
+		goto out;
+	}
+
+	if (sdev->mdev.vtunnel) {
+		void *dtor = vbq->virtq.virtq->dtor_in;
+
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, opcode,
+			 MLX5_CMD_OP_DESTROY_GENERAL_OBJECT);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_type,
+			 MLX5_OBJ_TYPE_VIRTIO_BLK_Q);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_id,
+			 vbq->virtq.virtq->obj_id);
+	}
+
+	return vbq;
+out:
+	return NULL;
+}
+
+/**
+ * snap_virtio_blk_destroy_queue() - Destroy Virtio block queue object
+ * @vbq:       Virtio block queue
+ *
+ * Destroy and free a snap virtio block queue context.
+ *
+ * Return: Returns 0 on success.
+ */
+int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
+{
+	return snap_devx_obj_destroy(vbq->virtq.virtq);
+}

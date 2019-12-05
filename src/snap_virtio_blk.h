@@ -38,6 +38,13 @@
 
 struct snap_virtio_blk_device;
 
+struct snap_virtio_blk_queue_attr {
+	enum snap_virtq_type		type;
+	enum snap_virtq_event_mode	ev_mode;
+	uint16_t			idx;
+	uint16_t			size;
+};
+
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
 
@@ -48,5 +55,12 @@ struct snap_virtio_blk_device {
 	struct snap_virtio_device		vdev;
 	struct snap_virtio_blk_queue		*virtqs;
 };
+
+int snap_virtio_blk_init_device(struct snap_device *sdev);
+int snap_virtio_blk_teardown_device(struct snap_device *sdev);
+struct snap_virtio_blk_queue*
+snap_virtio_blk_create_queue(struct snap_device *sdev,
+	struct snap_virtio_blk_queue_attr *attr);
+int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq);
 
 #endif

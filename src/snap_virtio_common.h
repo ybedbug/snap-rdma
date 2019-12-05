@@ -51,7 +51,7 @@ enum snap_virtq_event_mode {
 };
 
 struct snap_virtio_queue {
-	uint32_t				id;
+	uint32_t				idx;
 	struct mlx5_snap_devx_obj		*virtq;
 };
 
