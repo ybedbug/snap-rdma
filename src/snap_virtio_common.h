@@ -30,23 +30,34 @@
  * SOFTWARE.
  */
 
-#ifndef SNAP_VIRTIO_BLK_H
-#define SNAP_VIRTIO_BLK_H
+#ifndef SNAP_VIRTIO_COMMON_H
+#define SNAP_VIRTIO_COMMON_H
 
-#include "snap.h"
-#include "snap_virtio_common.h"
+#include <stdlib.h>
+#include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
+#include <pthread.h>
+#include <linux/types.h>
 
-struct snap_virtio_blk_device;
-
-struct snap_virtio_blk_queue {
-	struct snap_virtio_queue	virtq;
-
-	struct snap_virtio_blk_device	*vbdev;
+enum snap_virtq_type {
+	SNAP_VIRTQ_SPLIT_MODE	= 1 << 0,
+	SNAP_VIRTQ_PACKED_MODE	= 1 << 1,
 };
 
-struct snap_virtio_blk_device {
-	struct snap_virtio_device		vdev;
-	struct snap_virtio_blk_queue		*virtqs;
+enum snap_virtq_event_mode {
+	SNAP_VIRTQ_NO_MSIX_MODE	= 1 << 0,
+	SNAP_VIRTQ_CQ_MODE	= 1 << 1,
+	SNAP_VIRTQ_MSIX_MODE	= 1 << 2,
+};
+
+struct snap_virtio_queue {
+	uint32_t				id;
+	struct mlx5_snap_devx_obj		*virtq;
+};
+
+struct snap_virtio_device {
+	struct snap_device			*sdev;
+	uint32_t				num_queues;
 };
 
 #endif

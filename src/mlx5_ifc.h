@@ -1393,6 +1393,51 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 };
 
 enum {
+	MLX5_VIRTIO_QUEUE_TYPE_SPLIT = 1 << 0,
+	MLX5_VIRTIO_QUEUE_TYPE_PACKED = 1 << 1,
+};
+
+enum {
+	MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX = 1 << 0,
+	MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ = 1 << 1,
+	MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX = 1 << 2,
+};
+
+struct mlx5_ifc_virtio_emulation_cap_bits {
+	u8         desc_tunnel_offload_type[0x1];
+	u8         eth_frame_offload_type[0x1];
+	u8         virtio_version_1_0[0x1];
+	u8         tso_ivp4[0x1];
+	u8         tso_ivp6[0x1];
+	u8         tx_csum[0x1];
+	u8         rx_csum[0x1];
+	u8         reserved_at_7[0x9];
+	u8         event_mode[0x8];
+	u8         virtio_queue_type[0x8];
+
+	u8         reserved_at_20[0x13];
+	u8         log_doorbell_stride[0x5];
+	u8         reserved_at_38[0x3];
+	u8         log_doorbell_bar_size[0x5];
+
+	u8	   doorbell_bar_offset[0x40];
+
+	u8         reserved_at_100[0x8];
+	u8         max_num_virtio_queues[0x18];
+
+	u8         reserved_at_120[0x80];
+
+	u8         umem_1_buffer_param_a[0x20];
+	u8         umem_1_buffer_param_b[0x20];
+	u8         umem_2_buffer_param_a[0x20];
+	u8         umem_2_buffer_param_b[0x20];
+	u8         umem_3_buffer_param_a[0x20];
+	u8         umem_3_buffer_param_b[0x20];
+
+	u8         reserved_at_60[0x620];
+};
+
+enum {
 	MLX5_HOTPLUG_DEVICE_TYPE_NVME		= 0x0,
 	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET	= 0x1,
 	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 0x2,
@@ -1414,6 +1459,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_device_mem_cap_bits device_mem_cap;
 	struct mlx5_ifc_odp_cap_bits odp_cap;
 	struct mlx5_ifc_nvme_emulation_cap_bits nvme_emulation_cap;
+	struct mlx5_ifc_virtio_emulation_cap_bits virtio_emulation_cap;
 	struct mlx5_ifc_hotplug_cap_bits hotplug_cap;
 	u8         reserved_at_0[0x8000];
 };

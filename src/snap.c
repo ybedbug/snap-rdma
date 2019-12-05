@@ -1,5 +1,6 @@
 #include "snap.h"
 #include "snap_nvme.h"
+#include "snap_virtio_blk.h"
 
 #include "mlx5_ifc.h"
 
@@ -389,6 +390,47 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 
 }
 
+static int snap_fill_virtio_ctx(struct mlx5_snap_virtio_context *virtio,
+		uint8_t *out)
+{
+	virtio->max_emulated_virtqs = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.max_num_virtio_queues);
+	virtio->umem_1_buffer_param_a = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_1_buffer_param_a);
+	virtio->umem_1_buffer_param_b = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_1_buffer_param_b);
+	virtio->umem_2_buffer_param_a = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_2_buffer_param_a);
+	virtio->umem_2_buffer_param_b = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_2_buffer_param_b);
+	virtio->umem_3_buffer_param_a = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_3_buffer_param_a);
+	virtio->umem_3_buffer_param_b = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.umem_3_buffer_param_b);
+
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.virtio_queue_type) &
+	    MLX5_VIRTIO_QUEUE_TYPE_SPLIT)
+		virtio->supported_types |= SNAP_VIRTQ_SPLIT_MODE;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.virtio_queue_type) &
+	    MLX5_VIRTIO_QUEUE_TYPE_PACKED)
+		virtio->supported_types |= SNAP_VIRTQ_PACKED_MODE;
+
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.event_mode) &
+	    MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX)
+		virtio->event_modes |= SNAP_VIRTQ_NO_MSIX_MODE;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.event_mode) &
+	    MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ)
+		virtio->event_modes |= SNAP_VIRTQ_CQ_MODE;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.event_mode) &
+	    MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX)
+		virtio->event_modes |= SNAP_VIRTQ_MSIX_MODE;
+}
+
 static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
@@ -405,7 +447,11 @@ static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	/* TODO: save the output caps */
+	/* TODO: fix this after adding to PRM */
+	sctx->max_virtio_blk_pfs = 1;
+
+	snap_fill_virtio_ctx(&sctx->mctx.virtio_blk, out);
+
 	return 0;
 }
 
@@ -425,7 +471,11 @@ static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	/* TODO: save the output caps */
+	/* TODO: fix this after adding to PRM */
+	sctx->max_virtio_net_pfs = 1;
+
+	snap_fill_virtio_ctx(&sctx->mctx.virtio_net, out);
+
 	return 0;
 }
 

@@ -15,7 +15,7 @@
 int snap_virtio_blk_init_device(struct snap_device *sdev)
 {
 	struct snap_virtio_blk_device *vbdev;
-	int ret;
+	int ret, i;
 
 	if (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
 	    sdev->pci->type != SNAP_VIRTIO_BLK_VF)
@@ -25,21 +25,23 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 	if (!vbdev)
 		return -ENOMEM;
 
-	/* currently use hard coded value of 1 */
-	vbdev->num_queues = 1;
+	vbdev->vdev.num_queues = sdev->sctx->mctx.virtio_blk.max_emulated_virtqs;
 
-	vbdev->virtqs = calloc(vbdev->num_queues, sizeof(*vbdev->virtqs));
+	vbdev->virtqs = calloc(vbdev->vdev.num_queues, sizeof(*vbdev->virtqs));
 	if (!vbdev->virtqs) {
 		ret = -ENOMEM;
 		goto out_free;
 	}
+
+	for (i = 0; i < vbdev->vdev.num_queues; i++)
+		vbdev->virtqs[i].vbdev = vbdev;
 
 	ret = snap_init_device(sdev);
 	if (ret)
 		goto out_free_virtqs;
 
 	sdev->dd_data = vbdev;
-	vbdev->sdev = sdev;
+	vbdev->vdev.sdev = sdev;
 
 	return 0;
 
