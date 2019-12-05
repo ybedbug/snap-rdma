@@ -446,7 +446,7 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		return ret;
 
 	sctx->max_nvme_pfs = DEVX_GET(query_hca_cap_out, out,
-				 capability.nvme_emulation_cap.total_emulated_pfs);
+				 capability.nvme_emulation_cap.max_emulated_pfs);
 	sctx->mctx.nvme.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
 	sctx->mctx.nvme.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
@@ -499,7 +499,6 @@ static int snap_query_hotplug_caps(struct snap_context *sctx)
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_BLK;
 
 	return 0;
-
 }
 
 static int snap_query_emulation_caps(struct snap_context *sctx)

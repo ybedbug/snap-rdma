@@ -1378,8 +1378,8 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 	u8         nvme_offload_type_doorbell_only[0x1];
 	u8         nvme_offload_type_command_capsule[0x1];
 	u8         log_max_nvme_offload_namespaces[0x5];
-	u8         reserved_at_7[0x10];
-	u8         total_emulated_pfs[0x8];
+	u8         reserved_at_8[0x10];
+	u8         max_emulated_pfs[0x8];
 
 	u8         reserved_at_20[0x10];
 	u8         registers_size[0x10];
