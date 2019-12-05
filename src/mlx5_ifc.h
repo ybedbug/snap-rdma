@@ -3050,6 +3050,110 @@ struct mlx5_ifc_init_hca_in_bits {
 	u8	   sw_owner_id[4][0x20];
 };
 
+struct mlx5_ifc_virtio_q_bits {
+	u8         virtio_q_type[0x8];
+	u8         reserved_at_8[0x5];
+	u8         event_mode[0x3];
+	u8         queue_index[0x10];
+
+	u8         full_emulation[0x1];
+	u8         virtio_version_1_0[0x1];
+	u8         reserved_at_22[0x2];
+	u8         offload_type[0x4];
+	u8         event_cqn_or_msix[0x18];
+
+	u8         doorbell_stride_index[0x10];
+	u8         queue_size[0x10];
+
+	u8         device_emulation_id[0x20];
+
+	u8         desc_addr[0x40];
+
+	u8         used_addr[0x40];
+
+	u8         available_addr[0x40];
+
+	u8         virtio_q_mkey[0x20];
+
+	u8         reserved_at_160[0x20];
+
+	u8         umem_1_id[0x20];
+	u8         umem_1_size[0x20];
+	u8         umem_1_offset[0x40];
+
+	u8         umem_2_id[0x20];
+	u8         umem_2_size[0x20];
+	u8         umem_2_offset[0x40];
+
+	u8         umem_3_id[0x20];
+	u8         umem_3_size[0x20];
+	u8         umem_3_offset[0x40];
+
+	u8         reserved_at_2e0[0x20];
+};
+
+/* Virtio net emulation related structures */
+struct mlx5_ifc_virtio_net_q_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x40];
+
+	u8	   tso_ipv4[0x1];
+	u8	   tso_ipv6[0x1];
+	u8	   tx_csum[0x1];
+	u8	   rx_csum[0x1];
+	u8	   reserved_at_84[0x6];
+	u8	   dirty_bitmap_dump_enable[0x1];
+	u8	   vhost_log_page[0x5];
+	u8	   reserved_at_90[0xc];
+	u8	   state[0x4];
+
+	u8	   error_type[0x8];
+	u8	   tisn_or_qpn[0x18];
+
+	u8	   dirty_bitmap_mkey[0x20];
+
+	u8	   dirty_bitmap_size[0x20];
+
+	u8	   dirty_bitmap_addr[0x40];
+
+	u8	   hw_available_index[0x10];
+	u8	   hw_used_index[0x10];
+
+	u8	   reserved_at_160[0xa0];
+
+	struct mlx5_ifc_virtio_q_bits virtqc;
+};
+
+/* Virtio block emulation related structures */
+struct mlx5_ifc_virtio_blk_q_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x40];
+
+	u8	   reserved_at_80[0xa];
+	u8	   dirty_bitmap_dump_enable[0x1];
+	u8	   vhost_log_page[0x5];
+	u8	   reserved_at_90[0xc];
+	u8	   state[0x4];
+
+	u8	   error_type[0x8];
+	u8	   tisn_or_qpn[0x18];
+
+	u8	   dirty_bitmap_mkey[0x20];
+
+	u8	   dirty_bitmap_size[0x20];
+
+	u8	   dirty_bitmap_addr[0x40];
+
+	u8	   hw_available_index[0x10];
+	u8	   hw_used_index[0x10];
+
+	u8	   reserved_at_160[0xa0];
+
+	struct mlx5_ifc_virtio_q_bits virtqc;
+};
+
 /* NVMe emulation related structures */
 struct mlx5_ifc_nvme_namespace_bits {
 	u8	   modify_field_select[0x40];
