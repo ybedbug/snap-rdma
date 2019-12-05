@@ -1539,13 +1539,13 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 		errno = EINVAL;
 		goto out_free;
 	}
-
+/*
 	rc = snap_query_hotplug_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
 		goto out_free;
 	}
-
+*/
 	rc = snap_alloc_functions(sctx);
 	if (rc) {
 		errno = -rc;
