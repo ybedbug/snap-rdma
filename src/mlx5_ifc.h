@@ -1379,7 +1379,7 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 	u8         nvme_offload_type_command_capsule[0x1];
 	u8         log_max_nvme_offload_namespaces[0x5];
 	u8         reserved_at_8[0x10];
-	u8         max_emulated_pfs[0x8];
+	u8         max_emulated_devices[0x8];
 
 	u8         reserved_at_20[0x10];
 	u8         registers_size[0x10];
@@ -1422,7 +1422,7 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 
 	u8	   doorbell_bar_offset[0x40];
 
-	u8         reserved_at_100[0x8];
+	u8         max_emulated_devices[0x8];
 	u8         max_num_virtio_queues[0x18];
 
 	u8         reserved_at_120[0x80];

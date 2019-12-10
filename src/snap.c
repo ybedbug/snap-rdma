@@ -449,8 +449,8 @@ static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	/* TODO: fix this after adding to PRM */
-	sctx->max_virtio_blk_pfs = 1;
+	sctx->max_virtio_blk_pfs = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.max_emulated_devices);
 
 	snap_fill_virtio_ctx(&sctx->mctx.virtio_blk, out);
 
@@ -473,8 +473,8 @@ static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	/* TODO: fix this after adding to PRM */
-	sctx->max_virtio_net_pfs = 1;
+	sctx->max_virtio_net_pfs = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.max_emulated_devices);
 
 	snap_fill_virtio_ctx(&sctx->mctx.virtio_net, out);
 
@@ -498,7 +498,7 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		return ret;
 
 	sctx->max_nvme_pfs = DEVX_GET(query_hca_cap_out, out,
-				 capability.nvme_emulation_cap.max_emulated_pfs);
+			 capability.nvme_emulation_cap.max_emulated_devices);
 	sctx->mctx.nvme.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
 	sctx->mctx.nvme.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
