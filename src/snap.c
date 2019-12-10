@@ -1424,11 +1424,13 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	struct snap_pci *pfs;
 
 	/* Currently support only PFs emulation */
-	if (attr->type == SNAP_NVME_PF) {
+	if (attr->type == SNAP_NVME_PF && attr->pf_id < sctx->max_nvme_pfs) {
 		pfs = sctx->nvme_pfs;
-	} else if (attr->type == SNAP_VIRTIO_NET_PF) {
+	} else if (attr->type == SNAP_VIRTIO_NET_PF &&
+		   attr->pf_id < sctx->max_virtio_net_pfs) {
 		pfs = sctx->virtio_net_pfs;
-	} else if (attr->type == SNAP_VIRTIO_BLK_PF) {
+	} else if (attr->type == SNAP_VIRTIO_BLK_PF &&
+		   attr->pf_id < sctx->max_virtio_blk_pfs) {
 		pfs = sctx->virtio_blk_pfs;
 	} else {
 		errno = EINVAL;
