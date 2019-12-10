@@ -2381,28 +2381,22 @@ struct mlx5_ifc_vhca_tunnel_cmd_bits {
 	u8         op_mod[0x10];
 };
 
-struct mlx5_ifc_device_bits {
-	u8	   modify_field_select[0x40];
+struct mlx5_ifc_device_pci_parameters_bits {
+	u8	   device_id[0x10];
+	u8	   vendor_id[0x10];
 
-	u8	   reserved_at_40[0x18];
-	u8	   device_type[0x8];
+	u8	   revision_id[0x8];
+	u8	   class_code[0x18];
 
-	u8	   reserved_at_60[0x1a0];
+	u8	   subsystem_id[0x10];
+	u8	   subsystem_vendor_id[0x10];
+
+	u8	   reserved_at_60[0x10];
+	u8	   num_msix[0x10];
 };
 
-struct mlx5_ifc_virtio_device_bits {
-	u8	   device_feature[0x40];
-
-	u8	   driver_feature[0x40];
-
-	u8	   msix_config[0x10];
-	u8	   num_queues[0x10];
-
-	u8	   device_status[0x8];
-	u8	   config_generation[0x8];
-	u8	   reserved_at_116[0x10];
-
-	u8	   reserved_at_126[0x40];
+struct mlx5_ifc_nvme_initial_registers_bits {
+	u8	reserved_at_0[0x600];
 };
 
 struct mlx5_ifc_virtio_net_config_bits {
@@ -2417,34 +2411,15 @@ struct mlx5_ifc_virtio_net_config_bits {
 	u8	   reserved_at_60[0x20];
 };
 
-struct mlx5_ifc_virtio_q_layout_bits {
-	u8	   queue_size[0x10];
-	u8	   queue_msix_vector[0x10];
+struct mlx5_ifc_virtio_net_initial_registers_bits {
+	u8	device_features[0x40];
 
-	u8	   queue_enable[0x10];
-	u8	   queue_notify_off[0x10];
+	u8	reserved_at_40[0x10];
+	u8	queue_size[0x10];
 
-	u8	   queue_desc[0x40];
-
-	u8	   queue_driver[0x40];
-
-	u8	   queue_device[0x40];
-};
-
-struct mlx5_ifc_virtio_net_device_emulation_bits {
-	u8	   modify_field_select[0x40];
-
-	u8	   arm[0x1];
-	u8	   reserved_at_41[0xf];
-	u8	   vhca_id[0x10];
-
-	u8	   reserved_at_60[0x20];
-
-	struct mlx5_ifc_virtio_device_bits virtio_device;
+	u8	reserved_at_60[0x20];
 
 	struct mlx5_ifc_virtio_net_config_bits virtio_net_config;
-
-	struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
 };
 
 struct mlx5_ifc_virtio_blk_config_bits {
@@ -2493,11 +2468,96 @@ struct mlx5_ifc_virtio_blk_config_bits {
 	u8	   reserved_at_240[0x20];
 };
 
+struct mlx5_ifc_virtio_blk_initial_registers_bits {
+	u8	device_features[0x40];
+
+	u8	num_queues[0x10];
+	u8	queue_size[0x10];
+
+	u8	reserved_at_60[0x20];
+
+	struct mlx5_ifc_virtio_blk_config_bits virtio_blk_config;
+};
+
+union mlx5_ifc_initial_registers_layout_bits {
+	struct mlx5_ifc_nvme_initial_registers_bits nvme;
+	struct mlx5_ifc_virtio_net_initial_registers_bits virtio_net;
+	struct mlx5_ifc_virtio_blk_initial_registers_bits virtio_blk;
+	u8	reserved_at_0[0x600];
+};
+
+struct mlx5_ifc_device_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x17];
+	u8	   initial_registers_valid[0x1];
+	u8	   device_type[0x8];
+
+	u8	   reserved_at_60[0x20];
+
+	struct mlx5_ifc_device_pci_parameters_bits pci_params;
+
+	u8	   reserved_at_e0[0x100];
+
+	union mlx5_ifc_initial_registers_layout_bits initial_regs;
+};
+
+struct mlx5_ifc_virtio_device_bits {
+	u8	   device_feature[0x40];
+
+	u8	   driver_feature[0x40];
+
+	u8	   msix_config[0x10];
+	u8	   num_queues[0x10];
+
+	u8	   device_status[0x8];
+	u8	   config_generation[0x8];
+	u8	   reserved_at_116[0x10];
+
+	u8	   notify_off_multiplier[0x20];
+
+	u8	   reserved_at_146[0x20];
+
+	struct mlx5_ifc_device_pci_parameters_bits pci_params;
+};
+
+struct mlx5_ifc_virtio_q_layout_bits {
+	u8	   queue_size[0x10];
+	u8	   queue_msix_vector[0x10];
+
+	u8	   queue_enable[0x10];
+	u8	   queue_notify_off[0x10];
+
+	u8	   queue_desc[0x40];
+
+	u8	   queue_driver[0x40];
+
+	u8	   queue_device[0x40];
+};
+
+struct mlx5_ifc_virtio_net_device_emulation_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   arm[0x1];
+	u8	   enabled[0x1];
+	u8	   reserved_at_42[0xe];
+	u8	   vhca_id[0x10];
+
+	u8	   reserved_at_60[0x20];
+
+	struct mlx5_ifc_virtio_device_bits virtio_device;
+
+	struct mlx5_ifc_virtio_net_config_bits virtio_net_config;
+
+	struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
+};
+
 struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
 	u8	   arm[0x1];
-	u8	   reserved_at_41[0xf];
+	u8	   enabled[0x1];
+	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];
 
 	u8	   reserved_at_60[0x20];
@@ -2516,14 +2576,14 @@ struct mlx5_ifc_nvme_device_emulation_bits {
 	u8	   vhca_id[0x10];
 
 	u8	   enabled[0x1];
-	u8	   reserved_at_61[0x1f];
+	u8	   resources_on_emulation_manager[0x1];
+	u8	   reserved_at_62[0x1e];
 
 	u8	   counter_set_id[0x20];
 
-	u8	   vendor_id[0x10];
-	u8	   subsystem_vendor_id[0x10];
+	u8	   reserved_at_a0[0x60];
 
-	u8	   reserved_at_c0[0xc0];
+	struct mlx5_ifc_device_pci_parameters_bits pci_params;
 
 	u8	   register_data[0][0x20];
 };
@@ -3138,7 +3198,7 @@ struct mlx5_ifc_virtio_blk_q_bits {
 	u8	   state[0x4];
 
 	u8	   error_type[0x8];
-	u8	   tisn_or_qpn[0x18];
+	u8	   qpn[0x18];
 
 	u8	   dirty_bitmap_mkey[0x20];
 
