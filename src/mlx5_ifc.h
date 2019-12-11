@@ -3110,6 +3110,13 @@ struct mlx5_ifc_init_hca_in_bits {
 	u8	   sw_owner_id[4][0x20];
 };
 
+enum {
+	MLX5_VIRTIO_Q_STATE_INIT	= 0x0,
+	MLX5_VIRTIO_Q_STATE_RDY		= 0x1,
+	MLX5_VIRTIO_Q_STATE_SUSPEND	= 0x2,
+	MLX5_VIRTIO_Q_STATE_ERR		= 0x3,
+};
+
 struct mlx5_ifc_virtio_q_bits {
 	u8         virtio_q_type[0x8];
 	u8         reserved_at_8[0x5];
@@ -3288,7 +3295,11 @@ struct mlx5_ifc_nvme_sq_bits {
 
 	u8	   nvme_doorbell_offset[0x20];
 
-	u8	   reserved_at_140[0x60];
+	u8	   counter_set_id[0x20];
+
+	u8	   reserved_at_160[0x20];
+
+	u8	   emulated_device_dma_mkey[0x20];
 
 	u8	   nvme_cq_id[0x20];
 
