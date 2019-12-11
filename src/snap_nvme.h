@@ -70,6 +70,8 @@ struct snap_nvme_sq_attr {
 	uint32_t			doorbell_offset;
 	uint16_t			queue_depth;
 	uint64_t			base_addr;
+	uint32_t			qpn;
+	uint32_t			emulated_device_dma_mkey;
 	struct snap_nvme_cq		*cq;
 };
 
@@ -126,5 +128,7 @@ int snap_nvme_destroy_cq(struct snap_nvme_cq *cq);
 struct snap_nvme_sq*
 snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr);
 int snap_nvme_destroy_sq(struct snap_nvme_sq *sq);
+int snap_nvme_query_sq(struct snap_nvme_sq *sq,
+	struct snap_nvme_sq_attr *attr);
 
 #endif

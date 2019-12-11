@@ -371,6 +371,43 @@ int snap_nvme_destroy_cq(struct snap_nvme_cq *cq)
 }
 
 /**
+ * snap_nvme_query_sq() - Query an NVMe snap SQ object
+ * @sq:         snap NVMe SQ
+ * @attr:       attributes for the SQ query (output)
+ *
+ * Query an NVMe snap SQ object.
+ *
+ * Return: 0 on success, and attr is filled with the query result.
+ */
+int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		    DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
+	struct snap_device *sdev = sq->sq->sdev;
+	uint8_t *out_sq;
+	int ret;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_NVME_SQ);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, sq->sq->obj_id);
+
+	ret = snap_devx_obj_query(sq->sq, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		return ret;
+
+	out_sq = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	attr->queue_depth = DEVX_GET(nvme_sq, out_sq, nvme_num_of_entries);
+	attr->emulated_device_dma_mkey = DEVX_GET(nvme_sq, out_sq,
+						  emulated_device_dma_mkey);
+	attr->doorbell_offset = DEVX_GET(nvme_sq, out_sq, nvme_doorbell_offset);
+
+	return 0;
+}
+
+/**
  * snap_nvme_create_sq() - Create a new NVMe snap SQ object
  * @sdev:       snap device
  * @attr:       attributes for the SQ creation
@@ -423,12 +460,12 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
 		 NVME_DB_BASE + attr->doorbell_offset);
 	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
+	DEVX_SET(nvme_sq, sq_in, qpn, attr->qpn);
 	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
 	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size, NVME_SQ_LOG_ENTRY_SIZE);
 
 	//DEVX_SET(nvme_sq, sq_in, log_nvme_page_size, attr->log_nvme_page_size);
 	//DEVX_SET(nvme_sq, sq_in, max_transaction_size, attr->max_transcation_size);
-
 
 	sq->sq = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
 				      sdev->mdev.vtunnel,
