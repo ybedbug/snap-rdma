@@ -8,6 +8,69 @@
 #define NVME_DB_BASE 0x1000
 
 /**
+ * snap_nvme_query_device() - Query an NVMe snap device
+ * @sdev:       snap device
+ * @attr:       NVMe snap device attr container (output)
+ *
+ * Query an NVMe snap device. Attr argument must have enough space for the
+ * output data.
+ *
+ * Return: Returns 0 in case of success and attr is filled.
+ */
+int snap_nvme_query_device(struct snap_device *sdev,
+	struct snap_nvme_device_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_device_emulation)] = {0};
+	uint8_t *out;
+	struct snap_context *sctx = sdev->sctx;
+	uint8_t *device_emulation_in;
+	uint8_t *device_emulation_out;
+	int ret, out_size;
+
+	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
+		return -EINVAL;
+
+	if (attr->bar_size > sctx->mctx.nvme.reg_size)
+		return -EINVAL;
+
+	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_device_emulation) + attr->bar_size;
+	out = calloc(1, out_size);
+	if (!out)
+		return -ENOMEM;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
+		 sdev->mdev.device_emulation->obj_id);
+
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(nvme_device_emulation, device_emulation_in, vhca_id,
+		 sdev->pci->mpci.vhca_id);
+
+	ret = mlx5dv_devx_obj_query(sdev->mdev.device_emulation->obj, in,
+				    sizeof(in), out, out_size);
+	if (ret)
+		goto out_free;
+
+	device_emulation_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	if (attr->bar_size)
+		memcpy(attr->bar,
+		       DEVX_ADDR_OF(nvme_device_emulation,
+				    device_emulation_out, register_data),
+		       attr->bar_size);
+
+	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
+				 enabled);
+out_free:
+	free(out);
+	return ret;
+}
+
+/**
  * snap_nvme_init_device() - Initialize a new snap device with NVMe
  *                           characteristics
  * @sdev:       snap device
