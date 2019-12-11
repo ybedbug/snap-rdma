@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Mellanox Technologies, Inc.  All rights reserved.
+ * Copyright (c) 2019 Mellanox Technologies, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,13 +42,22 @@ struct snap_virtio_blk_queue_attr {
 	enum snap_virtq_type		type;
 	enum snap_virtq_event_mode	ev_mode;
 	uint16_t			idx;
-	uint16_t			size;
+	uint32_t			qpn;
+
+	struct snap_virtio_queue_attr   vattr;
 };
 
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
 
 	struct snap_virtio_blk_device	*vbdev;
+};
+
+struct snap_virtio_blk_device_attr {
+	struct snap_virtio_blk_queue_attr	*q_attrs;
+	unsigned int				queues;
+
+	bool					enabled;
 };
 
 struct snap_virtio_blk_device {
@@ -58,6 +67,8 @@ struct snap_virtio_blk_device {
 
 int snap_virtio_blk_init_device(struct snap_device *sdev);
 int snap_virtio_blk_teardown_device(struct snap_device *sdev);
+int snap_virtio_blk_query_device(struct snap_device *sdev,
+	struct snap_virtio_blk_device_attr *attr);
 struct snap_virtio_blk_queue*
 snap_virtio_blk_create_queue(struct snap_device *sdev,
 	struct snap_virtio_blk_queue_attr *attr);

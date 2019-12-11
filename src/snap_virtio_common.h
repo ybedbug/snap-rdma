@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Mellanox Technologies, Inc.  All rights reserved.
+ * Copyright (c) 2019 Mellanox Technologies, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -48,6 +48,16 @@ enum snap_virtq_event_mode {
 	SNAP_VIRTQ_NO_MSIX_MODE	= 1 << 0,
 	SNAP_VIRTQ_CQ_MODE	= 1 << 1,
 	SNAP_VIRTQ_MSIX_MODE	= 1 << 2,
+};
+
+struct snap_virtio_queue_attr {
+	uint16_t			size;
+	uint16_t			msix_vector;
+	uint16_t			enable;
+	uint16_t			notify_off;
+	uint64_t			desc;
+	uint64_t			driver;
+	uint64_t			device;
 };
 
 struct snap_virtio_queue {

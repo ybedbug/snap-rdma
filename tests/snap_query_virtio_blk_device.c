@@ -22,7 +22,6 @@ int main(int argc, char **argv)
 		struct snap_device_attr attr = {};
 		struct snap_context *sctx;
 		struct snap_device *sdev;
-		int j;
 
 		sctx = snap_open(list[i]);
 		if (!sctx) {
@@ -36,31 +35,18 @@ int main(int argc, char **argv)
 		attr.pf_id = 0;
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
-			ret = snap_virtio_blk_init_device(sdev);
-			if (!ret) {
-				fprintf(stdout, "created Virtio blk dev for pf %d. Creating 4 queues\n",
-					attr.pf_id);
-				fflush(stdout);
-				for (j = 0; j < 4; j++) {
-					struct snap_virtio_blk_queue_attr attr = {};
-					struct snap_virtio_blk_queue *vbq;
+			struct snap_virtio_blk_device_attr blk_attr = {};
+			struct snap_virtio_blk_queue_attr q_attrs[4];
 
-					attr.type = j % 2 ? SNAP_VIRTQ_SPLIT_MODE : SNAP_VIRTQ_PACKED_MODE;
-					attr.ev_mode = SNAP_VIRTQ_NO_MSIX_MODE;
-					attr.idx = j;
-					attr.qpn = (j + 1) * 0xbeaf;
-					attr.vattr.size = 64;
-					vbq = snap_virtio_blk_create_queue(sdev, &attr);
-					if (vbq) {
-						snap_virtio_blk_destroy_queue(vbq);
-					} else {
-						fprintf(stderr, "failed to create Virtio blk queue id=%d err=%d\n", j, errno);
-						fflush(stderr);
-					}
-				}
-				snap_virtio_blk_teardown_device(sdev);
+			blk_attr.queues = 4;
+			blk_attr.q_attrs = q_attrs;
+			ret = snap_virtio_blk_query_device(sdev, &blk_attr);
+			if (!ret) {
+				fprintf(stdout, "queried Virtio blk dev enabled=%d for pf=%d\n",
+					blk_attr.enabled, attr.pf_id);
+				fflush(stdout);
 			} else {
-				fprintf(stderr, "failed to create Virtio blk dev for pf %d ret=%d\n",
+				fprintf(stderr, "failed to query Virtio blk dev for pf %d ret=%d\n",
 					attr.pf_id, ret);
 				fflush(stderr);
 			}
