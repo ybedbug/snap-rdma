@@ -65,6 +65,12 @@ int main(int argc, char **argv)
 						sq_attr.cq = cq;
 						sq = snap_nvme_create_sq(sdev, &sq_attr);
 						if (sq) {
+							memset(&sq_attr, 0, sizeof(sq_attr));
+							if (!snap_nvme_query_sq(sq, &sq_attr)) {
+								fprintf(stdout, "Query NVMe sq id=%d, depth=%d\n", j,
+									sq_attr.queue_depth);
+								fflush(stdout);
+							}
 							snap_nvme_destroy_sq(sq);
 						} else {
 							fprintf(stderr, "failed to create NVMe sq id=%d, err=%d\n", j, errno);
