@@ -8,7 +8,25 @@
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
-	int ret = 0, i, dev_count;
+	int ret = 0, i, dev_count, opt, num_queues = 10;
+	enum snap_nvme_queue_type q_type = SNAP_NVME_SQE_MODE;
+
+	while ((opt = getopt(argc, argv, "n:t:")) != -1) {
+		switch (opt) {
+		case 'n':
+			num_queues = atoi(optarg);
+			break;
+		case 't':
+			if (!strcmp(optarg, "sqe"))
+				q_type = SNAP_NVME_SQE_MODE;
+			else if (!strcmp(optarg, "cc"))
+				q_type = SNAP_NVME_CC_MODE;
+			break;
+		default:
+			printf("Usage: snap_create_destroy_nvme_cq -n <num> -t <type>\n");
+			exit(1);
+		}
+	}
 
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
@@ -38,14 +56,14 @@ int main(int argc, char **argv)
 		if (sdev) {
 			ret = snap_nvme_init_device(sdev);
 			if (!ret) {
-				fprintf(stdout, "created NVMe dev for pf %d. creating 16 cqs\n",
-					attr.pf_id);
+				fprintf(stdout, "created NVMe dev for pf %d. creating %d cqs type %d\n",
+					attr.pf_id, num_queues, q_type);
 				fflush(stdout);
-				for (j = 1; j < 17; j++) {
+				for (j = 1; j < num_queues + 1; j++) {
 					struct snap_nvme_cq_attr cq_attr = {};
 					struct snap_nvme_cq *cq;
 
-					cq_attr.type = j % 2 ? SNAP_NVME_SQE_MODE : SNAP_NVME_CC_MODE;
+					cq_attr.type = q_type;
 					cq_attr.id = j;
 					cq_attr.doorbell_offset = 4 + j * 8;
 					cq_attr.msix = j;
@@ -55,6 +73,8 @@ int main(int argc, char **argv)
 					cq_attr.cq_max_count = j * 8;
 					cq = snap_nvme_create_cq(sdev, &cq_attr);
 					if (cq) {
+						fprintf(stdout, "NVMe cq id=%d created !\n", j);
+						fflush(stdout);
 						snap_nvme_destroy_cq(cq);
 					} else {
 						fprintf(stderr, "failed to create NVMe cq id=%d\n", j);
