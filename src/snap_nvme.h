@@ -64,6 +64,17 @@ enum snap_nvme_queue_type {
 	SNAP_NVME_CC_MODE	= 1 << 1,
 };
 
+enum snap_nvme_sq_modify {
+	SNAP_NVME_SQ_MOD_QPN	= 1 << 0,
+	SNAP_NVME_SQ_MOD_STATE	= 1 << 1,
+};
+
+enum snap_nvme_sq_state {
+	SNAP_NVME_SQ_STATE_INIT	= 1 << 0,
+	SNAP_NVME_SQ_STATE_RDY	= 1 << 1,
+	SNAP_NVME_SQ_STATE_ERR	= 1 << 2,
+};
+
 struct snap_nvme_sq_attr {
 	enum snap_nvme_queue_type	type;
 	uint32_t			id;
@@ -73,6 +84,7 @@ struct snap_nvme_sq_attr {
 	uint32_t			qpn;
 	uint32_t			emulated_device_dma_mkey;
 	struct snap_nvme_cq		*cq;
+	enum snap_nvme_sq_state		state;
 };
 
 struct snap_nvme_sq {

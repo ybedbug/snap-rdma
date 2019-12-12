@@ -609,6 +609,30 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 }
 
 /*
+ * snap_devx_obj_modify() - Modify a snap devx object
+ * @snap_obj:      snap object to modify
+ * @in:            input cmd buffer
+ * @inlen:         input cmd buffer length
+ * @out:           output cmd buffer
+ * @outlen:        output cmd buffer length
+ *
+ * Modify a snap devx object using a given input command. In case of a tunneled
+ * object, The command will be send using a vhca tunnel mechanism.
+ *
+ * Return: 0 on success and out pointer will be filled with the response.
+ */
+int snap_devx_obj_modify(struct mlx5_snap_devx_obj *snap_obj, void *in,
+			 size_t inlen, void *out, size_t outlen)
+{
+	if (snap_obj->vtunnel)
+		return snap_general_tunneled_cmd(snap_obj->sdev, in, inlen,
+						 out, outlen, 0);
+	else
+		return mlx5dv_devx_obj_modify(snap_obj->obj, in, inlen, out,
+					      outlen);
+}
+
+/*
  * snap_devx_obj_destroy() - Destroy a snap devx object
  * @snap_obj:      snap devx object
  *
