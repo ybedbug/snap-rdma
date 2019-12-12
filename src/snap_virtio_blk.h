@@ -54,10 +54,12 @@ struct snap_virtio_blk_queue {
 };
 
 struct snap_virtio_blk_device_attr {
+	struct snap_virtio_device_attr		vattr;
 	struct snap_virtio_blk_queue_attr	*q_attrs;
 	unsigned int				queues;
 
 	bool					enabled;
+	uint64_t				capacity;
 };
 
 struct snap_virtio_blk_device {

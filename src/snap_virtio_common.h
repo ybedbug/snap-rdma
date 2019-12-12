@@ -65,9 +65,21 @@ struct snap_virtio_queue {
 	struct mlx5_snap_devx_obj		*virtq;
 };
 
+struct snap_virtio_device_attr {
+	uint64_t			device_feature;
+	uint64_t			driver_feature;
+	uint16_t			msix_config;
+	uint8_t				status;
+};
+
 struct snap_virtio_device {
 	struct snap_device			*sdev;
 	uint32_t				num_queues;
 };
+
+void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
+	void *q_configuration);
+void snap_virtio_get_device_attr(struct snap_virtio_device_attr *vattr,
+	void *device_configuration);
 
 #endif

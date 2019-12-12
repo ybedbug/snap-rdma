@@ -54,34 +54,22 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 		goto out_free;
 
 	device_emulation_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
-	if (attr->queues) {
-		for (i = 0; i < attr->queues; i++) {
-			struct snap_virtio_blk_queue_attr *q_attr = &attr->q_attrs[i];
 
-			q_attr->vattr.size = DEVX_GET(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_size);
-			q_attr->vattr.msix_vector = DEVX_GET(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_msix_vector);
-			q_attr->vattr.enable = DEVX_GET(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_enable);
-			q_attr->vattr.notify_off = DEVX_GET(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_notify_off);
-			q_attr->vattr.desc = DEVX_GET64(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_desc);
-			q_attr->vattr.driver = DEVX_GET64(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_driver);
-			q_attr->vattr.device = DEVX_GET64(virtio_blk_device_emulation,
-					      device_emulation_out,
-					      virtio_q_configuration[i].queue_device);
-		}
+	snap_virtio_get_device_attr(&attr->vattr,
+				    DEVX_ADDR_OF(virtio_blk_device_emulation,
+						 device_emulation_out,
+						 virtio_device));
+	if (attr->queues) {
+		for (i = 0; i < attr->queues; i++)
+			snap_virtio_get_queue_attr(&attr->q_attrs[i].vattr,
+						   DEVX_ADDR_OF(virtio_blk_device_emulation,
+								device_emulation_out,
+								virtio_q_configuration[i]));
 	}
 
+	attr->capacity = DEVX_GET64(virtio_blk_device_emulation,
+				    device_emulation_out,
+				    virtio_blk_config.capacity);
 	attr->enabled = DEVX_GET(virtio_blk_device_emulation,
 				 device_emulation_out, enabled);
 out_free:
