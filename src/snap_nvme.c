@@ -308,7 +308,7 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 		goto out;
 	}
 
-	if (attr->id > ndev->num_queues) {
+	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
 		goto out;
 	}
@@ -442,7 +442,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 		goto out;
 	}
 
-	if (attr->id > ndev->num_queues) {
+	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
 		goto out;
 	}
