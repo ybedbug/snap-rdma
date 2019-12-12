@@ -200,7 +200,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 		goto out;
 	}
 
-	if (attr->idx > vbdev->vdev.num_queues) {
+	if (attr->idx >= vbdev->vdev.num_queues) {
 		errno = EINVAL;
 		goto out;
 	}
