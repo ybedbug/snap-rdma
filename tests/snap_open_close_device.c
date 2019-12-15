@@ -52,7 +52,30 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
-	int ret = 0, i, dev_count;
+	int ret = 0, i, opt, dev_count, dev_type = 0;
+
+	while ((opt = getopt(argc, argv, "t:")) != -1) {
+		switch (opt) {
+		case 't':
+			if (!strcmp(optarg, "all"))
+				dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
+			else if (!strcmp(optarg, "nvme"))
+				dev_type = SNAP_NVME;
+			else if (!strcmp(optarg, "virtio_blk"))
+				dev_type = SNAP_VIRTIO_BLK;
+			else if (!strcmp(optarg, "virtio_net"))
+				dev_type = SNAP_VIRTIO_NET;
+			else
+				printf("Unknown type %s. Using default\n", optarg);
+			break;
+		default:
+			printf("Usage: snap_open_close_device -t <type: all, nvme, virtio_blk, virtio_net>\n");
+			exit(1);
+		}
+	}
+
+	if (!dev_type)
+		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
@@ -73,11 +96,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (sctx->emulation_caps & SNAP_NVME)
+		if (sctx->emulation_caps & SNAP_NVME & dev_type)
 			snap_open_close_pf_helper(sctx, SNAP_NVME);
-		if (sctx->emulation_caps & SNAP_VIRTIO_BLK)
+		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
 			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK);
-		if (sctx->emulation_caps & SNAP_VIRTIO_NET)
+		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
 			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET);
 
 		snap_close(sctx);

@@ -8,7 +8,23 @@
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
-	int ret = 0, i, dev_count;
+	int ret = 0, i, dev_count, opt, num_namespaces = 10, lba = 9, md;
+
+	while ((opt = getopt(argc, argv, "n:l:m:")) != -1) {
+		switch (opt) {
+		case 'n':
+			num_namespaces = atoi(optarg);
+			break;
+		case 'l':
+			lba = atoi(optarg);
+		case 'm':
+			md = atoi(optarg);
+			break;
+		default:
+			printf("Usage: snap_create_destroy_nvme_namespace -n <num> -l <lba_shift> -m <md size>\n");
+			exit(1);
+		}
+	}
 
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
@@ -38,17 +54,17 @@ int main(int argc, char **argv)
 		if (sdev) {
 			ret = snap_nvme_init_device(sdev);
 			if (!ret) {
-				fprintf(stdout, "created NVMe dev for pf %d. creating 100 namespaces\n",
-					attr.pf_id);
+				fprintf(stdout, "created NVMe dev for pf %d. creating %d namespaces lba=%d md=%d\n",
+					attr.pf_id, num_namespaces, lba, md);
 				fflush(stdout);
-				for (j = 1; j < 101; j++) {
+				for (j = 1; j < num_namespaces + 1; j++) {
 					struct snap_nvme_namespace_attr ns_attr = {};
 					struct snap_nvme_namespace *ns;
 
 					ns_attr.src_nsid = j;
 					ns_attr.dst_nsid = j;
-					ns_attr.lba_size = 9;
-					ns_attr.md_size = 8;
+					ns_attr.lba_size = lba;
+					ns_attr.md_size = md;
 					ns = snap_nvme_create_namespace(sdev, &ns_attr);
 					if (ns) {
 						snap_nvme_destroy_namespace(ns);
