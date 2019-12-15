@@ -8,40 +8,60 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 	enum snap_emulation_type type)
 {
 	struct snap_device *sdev;
-	int max_pfs, i;
+	int i;
+	struct snap_pfs_ctx *pfs;
 	struct snap_pci *spfs;
 	enum snap_pci_type ptype;
 
 	if (type == SNAP_NVME) {
-		max_pfs = sctx->max_nvme_pfs;
-		spfs = sctx->nvme_pfs;
+		pfs = &sctx->nvme_pfs;
 		ptype = SNAP_NVME_PF;
 	} else if (type == SNAP_VIRTIO_NET) {
-		max_pfs = sctx->max_virtio_net_pfs;
-		spfs = sctx->virtio_net_pfs;
+		pfs = &sctx->virtio_net_pfs;
 		ptype = SNAP_VIRTIO_NET_PF;
 	} else if (type == SNAP_VIRTIO_BLK) {
-		max_pfs = sctx->max_virtio_blk_pfs;
-		spfs = sctx->virtio_blk_pfs;
+		pfs = &sctx->virtio_blk_pfs;
 		ptype = SNAP_VIRTIO_BLK_PF;
 	} else {
 		return -EINVAL;
 	}
 
-	for (i = 0; i < max_pfs; i++) {
+	for (i = 0; i < pfs->max_pfs; i++) {
 		struct snap_device_attr attr = {};
 		struct snap_device *sdev;
+		struct snap_pci *hotplug = NULL;
 
 		attr.type = ptype;
-		attr.pf_id = spfs[i].id;
+		attr.pf_id = pfs->pfs[i].id;
+		if (!pfs->pfs[i].plugged) {
+			struct snap_hotplug_attr hp_attr = {};
+
+			fprintf(stdout, "SNAP PF %d is not plugged. trying to hotplug\n", attr.pf_id);
+			fflush(stdout);
+			hp_attr.type = type;
+			hp_attr.num_msix = 4;
+			hotplug = snap_hotplug_pf(sctx, &hp_attr, attr.pf_id);
+			if (!hotplug) {
+				fprintf(stderr, "failed to hotplug SNAP pf %d\n", attr.pf_id);
+				fflush(stderr);
+				continue;
+			}
+		} else {
+			fprintf(stdout, "SNAP PF %d is plugged. trying to create device\n", attr.pf_id);
+			fflush(stdout);
+		}
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
 			fprintf(stdout, "SNAP device created: type=%d pf_id=%d\n", type, attr.pf_id);
 			fflush(stdout);
 			snap_close_device(sdev);
+			if (hotplug)
+				snap_hotunplug_pf(hotplug);
 		} else {
 			fprintf(stderr, "failed to create SNAP device: type=%d pf_id=%d\n", type, attr.pf_id);
 			fflush(stderr);
+			if (hotplug)
+				snap_hotunplug_pf(hotplug);
 			return -EINVAL;
 		}
 	}

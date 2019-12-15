@@ -79,6 +79,7 @@ enum snap_emulation_type {
 };
 
 struct snap_context;
+struct snap_hotplug_device;
 
 struct snap_device_attr {
 	enum snap_pci_type	type;
@@ -87,17 +88,18 @@ struct snap_device_attr {
 };
 
 struct snap_pci {
-	struct snap_context	*sctx;
-	enum snap_pci_type	type;
-	bool			plugged;
-	int			id;
-	int			pci_number;
+	struct snap_context		*sctx;
+	enum snap_pci_type		type;
+	bool				plugged;
+	int				id;
+	int				pci_number;
 
-	int			num_vfs;
-	struct snap_pci		*vfs;// VFs array for PF
-	struct snap_pci		*parent;//parent PF for VFs
+	int				num_vfs;
+	struct snap_pci			*vfs;// VFs array for PF
+	struct snap_pci			*parent;//parent PF for VFs
 
-	struct mlx5_snap_pci	mpci;
+	struct mlx5_snap_pci		mpci;
+	struct snap_hotplug_device	*hotplug;
 };
 
 struct snap_device {
@@ -111,31 +113,54 @@ struct snap_device {
 	void				*dd_data;
 };
 
+struct snap_hotplug_attr {
+	enum snap_emulation_type	type;
+	uint16_t			device_id;
+	uint16_t			vendor_id;
+	uint8_t				revision_id;
+	uint32_t			class_code;
+	uint16_t			subsystem_id;
+	uint16_t			subsystem_vendor_id;
+	uint16_t			num_msix;
+
+};
+
+struct snap_hotplug_device {
+	struct mlx5_snap_devx_obj		*hotplug;
+	enum snap_emulation_type		type;
+	struct snap_pci				*pf;
+
+	TAILQ_ENTRY(snap_hotplug_device)	entry;
+};
+
 struct snap_hotplug_context {
 	int		supported_types;//mask of snap_emulation_type
 	uint8_t		max_devices;
 	uint8_t		log_max_bar_size;
 };
 
+struct snap_pfs_ctx {
+	enum snap_emulation_type		type;
+	int					max_pfs;
+	struct snap_pci				*pfs;
+};
+
 struct snap_context {
-	struct ibv_context		*context;
-	int				emulation_caps; //mask for supported snap_emulation_types
-	struct mlx5_snap_context	mctx;
+	struct ibv_context			*context;
+	int					emulation_caps; //mask for supported snap_emulation_types
+	struct mlx5_snap_context		mctx;
 
-	int				max_nvme_pfs;
-	struct snap_pci			*nvme_pfs;
+	struct snap_pfs_ctx			nvme_pfs;
+	struct snap_pfs_ctx			virtio_net_pfs;
+	struct snap_pfs_ctx			virtio_blk_pfs;
 
-	int				max_virtio_net_pfs;
-	struct snap_pci			*virtio_net_pfs;
+	bool					hotplug_supported;
+	struct snap_hotplug_context		hotplug;
 
-	int				max_virtio_blk_pfs;
-	struct snap_pci			*virtio_blk_pfs;
-
-	bool				hotplug_supported;
-	struct snap_hotplug_context	hotplug;
-
-	pthread_mutex_t			lock;
-	TAILQ_HEAD(, snap_device)	device_list;
+	pthread_mutex_t				lock;
+	TAILQ_HEAD(, snap_device)		device_list;
+	pthread_mutex_t				hotplug_lock;
+	TAILQ_HEAD(, snap_hotplug_device)	hotplug_device_list;
 };
 
 void snap_close_device(struct snap_device *sdev);
@@ -145,7 +170,12 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 struct snap_context *snap_open(struct ibv_device *ibdev);
 void snap_close(struct snap_context *sctx);
 
-int snap_get_pf_list(struct snap_context *sctx, enum snap_pci_type type,
+int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		struct snap_pci **pfs);
+
+struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
+					    struct snap_hotplug_attr *attr,
+					    unsigned int pf_idx);
+void snap_hotunplug_pf(struct snap_pci *pf);
 
 #endif

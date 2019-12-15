@@ -127,70 +127,53 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf)
 }
 
 static void _snap_free_functions(struct snap_context *sctx,
-		enum snap_emulation_type type)
+		struct snap_pfs_ctx *pfs)
 {
-	int i, max_pfs;
-	struct snap_pci *pfs;
+	int i;
 
-	if (type == SNAP_NVME) {
-		max_pfs = sctx->max_nvme_pfs;
-		pfs = sctx->nvme_pfs;
-	} else if (type == SNAP_VIRTIO_NET) {
-		max_pfs = sctx->max_virtio_net_pfs;
-		pfs = sctx->virtio_net_pfs;
-	} else if (type == SNAP_VIRTIO_BLK) {
-		max_pfs = sctx->max_virtio_blk_pfs;
-		pfs = sctx->virtio_blk_pfs;
-	} else {
-		return;
+	for (i = 0; i < pfs->max_pfs; i++) {
+		if (pfs->pfs[i].num_vfs)
+			snap_free_virtual_functions(&pfs->pfs[i]);
 	}
 
-	for (i = 0; i < max_pfs; i++) {
-		if (pfs[i].num_vfs)
-			snap_free_virtual_functions(&pfs[i]);
-	}
-	free(pfs);
+	free(pfs->pfs);
 }
 
 static void snap_free_functions(struct snap_context *sctx)
 {
-	if (sctx->max_virtio_blk_pfs)
-		_snap_free_functions(sctx, SNAP_VIRTIO_BLK);
-	if (sctx->max_virtio_net_pfs)
-		_snap_free_functions(sctx, SNAP_VIRTIO_NET);
-	if (sctx->max_nvme_pfs)
-		_snap_free_functions(sctx, SNAP_NVME);
+	if (sctx->virtio_blk_pfs.max_pfs)
+		_snap_free_functions(sctx, &sctx->virtio_blk_pfs);
+	if (sctx->virtio_net_pfs.max_pfs)
+		_snap_free_functions(sctx, &sctx->virtio_net_pfs);
+	if (sctx->nvme_pfs.max_pfs)
+		_snap_free_functions(sctx, &sctx->nvme_pfs);
 }
 
 static int _snap_alloc_functions(struct snap_context *sctx,
-		enum snap_emulation_type type)
+		struct snap_pfs_ctx *pfs_ctx)
 {
 	struct ibv_context *context = sctx->context;
 	uint8_t in[DEVX_ST_SZ_BYTES(query_emulated_functions_info_in)] = {0};
 	uint8_t *out;
-	struct snap_pci *pfs;
-	int i, j, opmod, max_pfs;
+	int i, j, opmod;
 	int ret, output_size, num_emulated_pfs;
 	enum snap_pci_type pf_type;
 
-	if (type == SNAP_NVME) {
-		max_pfs = sctx->max_nvme_pfs;
+	if (pfs_ctx->type == SNAP_NVME) {
 		opmod = MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_DEVICE;
 		pf_type = SNAP_NVME_PF;
-	} else if (type == SNAP_VIRTIO_NET) {
-		max_pfs = sctx->max_virtio_net_pfs;
+	} else if (pfs_ctx->type == SNAP_VIRTIO_NET) {
 		opmod = MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_DEVICE;
 		pf_type = SNAP_VIRTIO_NET_PF;
-	} else if (type == SNAP_VIRTIO_BLK) {
-		max_pfs = sctx->max_virtio_blk_pfs;
+	} else if (pfs_ctx->type == SNAP_VIRTIO_BLK) {
 		opmod = MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_DEVICE;
 		pf_type = SNAP_VIRTIO_BLK_PF;
 	} else {
 		return -EINVAL;
 	}
 
-	pfs = calloc(max_pfs, sizeof(struct snap_pci));
-	if (!pfs)
+	pfs_ctx->pfs = calloc(pfs_ctx->max_pfs, sizeof(struct snap_pci));
+	if (!pfs_ctx->pfs)
 		return -ENOMEM;
 
 	DEVX_SET(query_emulated_functions_info_in, in, opcode,
@@ -198,7 +181,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 	DEVX_SET(query_emulated_functions_info_in, in, op_mod, opmod);
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
-		      DEVX_ST_SZ_BYTES(emulated_pf_info) * max_pfs;
+		      DEVX_ST_SZ_BYTES(emulated_pf_info) * (pfs_ctx->max_pfs);
 	out = calloc(1, output_size);
 	if (!out) {
 		ret = -ENOMEM;
@@ -212,57 +195,52 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 
 	num_emulated_pfs = DEVX_GET(query_emulated_functions_info_out, out,
 				    num_emulated_pfs);
-	if (num_emulated_pfs > max_pfs) {
+	if (num_emulated_pfs > pfs_ctx->max_pfs) {
 		ret = -EINVAL;
 		goto out_free;
 	}
 
-	for (i = 0; i < num_emulated_pfs; i++) {
-		struct snap_pci *pf = &pfs[i];
+	for (i = 0; i < pfs_ctx->max_pfs; i++) {
+		struct snap_pci *pf = &pfs_ctx->pfs[i];
 
 		pf->type = pf_type;
 		pf->sctx = sctx;
-		pf->plugged = true;
 		pf->id = i;
-		pf->pci_number = DEVX_GET(query_emulated_functions_info_out,
-					  out,
-					  emulated_pf_info[i].pf_pci_number);
-		pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
-					    out,
-					    emulated_pf_info[i].pf_vhca_id);
-		pf->mpci.vfs_base_vhca_id = DEVX_GET(query_emulated_functions_info_out,
-						out,
-						emulated_pf_info[i].vfs_base_vhca_id);
-		pf->num_vfs = DEVX_GET(query_emulated_functions_info_out,
-					    out,
-					    emulated_pf_info[i].num_of_vfs);
-		if (pf->num_vfs) {
-			ret = snap_alloc_virtual_functions(pf);
-			if (ret)
-				goto free_vfs;
+		if (i < num_emulated_pfs) {
+			pf->plugged = true;
+			pf->pci_number = DEVX_GET(query_emulated_functions_info_out,
+						  out,
+						  emulated_pf_info[i].pf_pci_number);
+			pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
+						    out,
+						    emulated_pf_info[i].pf_vhca_id);
+			pf->mpci.vfs_base_vhca_id = DEVX_GET(query_emulated_functions_info_out,
+							     out,
+							     emulated_pf_info[i].vfs_base_vhca_id);
+			pf->num_vfs = DEVX_GET(query_emulated_functions_info_out,
+					       out,
+					       emulated_pf_info[i].num_of_vfs);
+			if (pf->num_vfs) {
+				ret = snap_alloc_virtual_functions(pf);
+				if (ret)
+					goto free_vfs;
+			}
 		}
 	}
 
 	free(out);
 
-	if (type == SNAP_NVME)
-		sctx->nvme_pfs = pfs;
-	else if (type == SNAP_VIRTIO_NET)
-		sctx->virtio_net_pfs = pfs;
-	else if (type == SNAP_VIRTIO_BLK)
-		sctx->virtio_blk_pfs = pfs;
-
 	return 0;
 
 free_vfs:
 	for (j = 0; j < i; j++) {
-		if (pfs[j].num_vfs)
-			snap_free_virtual_functions(&pfs[j]);
+		if (pfs_ctx->pfs[j].num_vfs)
+			snap_free_virtual_functions(&pfs_ctx->pfs[j]);
 	}
 out_free:
 	free(out);
 out_free_pfs:
-	free(pfs);
+	free(pfs_ctx->pfs);
 	return ret;
 }
 
@@ -270,18 +248,18 @@ static int snap_alloc_functions(struct snap_context *sctx)
 {
 	int ret;
 
-	if (sctx->max_nvme_pfs) {
-		ret = _snap_alloc_functions(sctx, SNAP_NVME);
+	if (sctx->nvme_pfs.max_pfs) {
+		ret = _snap_alloc_functions(sctx, &sctx->nvme_pfs);
 		if (ret)
 			goto out_err;
 	}
-	if (sctx->max_virtio_net_pfs) {
-		ret = _snap_alloc_functions(sctx, SNAP_VIRTIO_NET);
+	if (sctx->virtio_net_pfs.max_pfs) {
+		ret = _snap_alloc_functions(sctx, &sctx->virtio_net_pfs);
 		if (ret)
 			goto out_err_nvme;
 	}
-	if (sctx->max_virtio_blk_pfs) {
-		ret = _snap_alloc_functions(sctx, SNAP_VIRTIO_BLK);
+	if (sctx->virtio_blk_pfs.max_pfs) {
+		ret = _snap_alloc_functions(sctx, &sctx->virtio_blk_pfs);
 		if (ret)
 			goto out_err_net;
 	}
@@ -289,11 +267,11 @@ static int snap_alloc_functions(struct snap_context *sctx)
 	return 0;
 
 out_err_net:
-	if (sctx->max_virtio_net_pfs)
-		_snap_free_functions(sctx, SNAP_VIRTIO_NET);
+	if (sctx->virtio_net_pfs.max_pfs)
+		_snap_free_functions(sctx, &sctx->virtio_net_pfs);
 out_err_nvme:
-	if (sctx->max_nvme_pfs)
-		_snap_free_functions(sctx, SNAP_NVME);
+	if (sctx->nvme_pfs.max_pfs)
+		_snap_free_functions(sctx, &sctx->nvme_pfs);
 out_err:
 	return ret;
 }
@@ -449,7 +427,8 @@ static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	sctx->max_virtio_blk_pfs = DEVX_GET(query_hca_cap_out,
+	sctx->virtio_blk_pfs.type = SNAP_VIRTIO_BLK;
+	sctx->virtio_blk_pfs.max_pfs = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_emulated_devices);
 
 	snap_fill_virtio_ctx(&sctx->mctx.virtio_blk, out);
@@ -473,7 +452,8 @@ static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	sctx->max_virtio_net_pfs = DEVX_GET(query_hca_cap_out,
+	sctx->virtio_net_pfs.type = SNAP_VIRTIO_NET;
+	sctx->virtio_net_pfs.max_pfs = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_emulated_devices);
 
 	snap_fill_virtio_ctx(&sctx->mctx.virtio_net, out);
@@ -497,7 +477,8 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
-	sctx->max_nvme_pfs = DEVX_GET(query_hca_cap_out, out,
+	sctx->nvme_pfs.type = SNAP_NVME;
+	sctx->nvme_pfs.max_pfs = DEVX_GET(query_hca_cap_out, out,
 			 capability.nvme_emulation_cap.max_emulated_devices);
 	sctx->mctx.nvme.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
@@ -1226,7 +1207,7 @@ static void snap_destroy_device_object(struct mlx5_snap_devx_obj *device)
 
 static struct mlx5_snap_devx_obj*
 snap_create_device_object(struct snap_context *sctx,
-		enum snap_emulation_type type)
+		struct snap_hotplug_attr *attr)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(device)] = {0};
@@ -1235,9 +1216,16 @@ snap_create_device_object(struct snap_context *sctx,
 	uint8_t *device_in, device_type;
 	struct mlx5_snap_devx_obj *device;
 
-	device = calloc(1, sizeof(*device));
-	if (!device)
+	if (!(sctx->hotplug.supported_types & attr->type)) {
+		errno = ENOTSUP;
 		goto out_err;
+	}
+
+	device = calloc(1, sizeof(*device));
+	if (!device) {
+		errno = ENOMEM;
+		goto out_err;
+	}
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
@@ -1245,16 +1233,24 @@ snap_create_device_object(struct snap_context *sctx,
 		 MLX5_OBJ_TYPE_DEVICE);
 
 	device_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	if (type == SNAP_NVME)
+	if (attr->type == SNAP_NVME)
 		device_type = MLX5_HOTPLUG_DEVICE_TYPE_NVME;
-	else if (type == SNAP_VIRTIO_NET)
+	else if (attr->type == SNAP_VIRTIO_NET)
 		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET;
-	else if (type == SNAP_VIRTIO_BLK)
+	else if (attr->type == SNAP_VIRTIO_BLK)
 		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK;
 	else
 		goto out_free;
 
 	DEVX_SET(device, device_in, device_type, device_type);
+	DEVX_SET(device, device_in, pci_params.device_id, attr->device_id);
+	DEVX_SET(device, device_in, pci_params.vendor_id, attr->vendor_id);
+	DEVX_SET(device, device_in, pci_params.revision_id, attr->revision_id);
+	DEVX_SET(device, device_in, pci_params.class_code, attr->class_code);
+	DEVX_SET(device, device_in, pci_params.subsystem_id, attr->subsystem_id);
+	DEVX_SET(device, device_in, pci_params.subsystem_vendor_id,
+		 attr->subsystem_vendor_id);
+	DEVX_SET(device, device_in, pci_params.num_msix, attr->num_msix);
 
 	device->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
 					     sizeof(out));
@@ -1429,29 +1425,109 @@ snap_create_device_emulation(struct snap_device *sdev)
  *
  * Return: Returns an actual number of filled snap pci devices.
  */
-int snap_get_pf_list(struct snap_context *sctx, enum snap_pci_type type,
+int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		struct snap_pci **pfs)
 {
-	int i, max_pfs;
-	struct snap_pci *spfs;
+	struct snap_pfs_ctx *pfs_ctx;
+	int i;
 
-	if (type == SNAP_NVME_PF) {
-		max_pfs = sctx->max_nvme_pfs;
-		spfs = sctx->nvme_pfs;
-	} else if (type == SNAP_VIRTIO_NET_PF) {
-		max_pfs = sctx->max_virtio_net_pfs;
-		spfs = sctx->virtio_net_pfs;
-	} else if (type == SNAP_VIRTIO_BLK_PF) {
-		max_pfs = sctx->max_virtio_blk_pfs;
-		spfs = sctx->virtio_blk_pfs;
-	} else {
+	if (type == SNAP_NVME)
+		pfs_ctx = &sctx->nvme_pfs;
+	else if (type == SNAP_VIRTIO_NET)
+		pfs_ctx = &sctx->virtio_net_pfs;
+	else if (type == SNAP_VIRTIO_BLK)
+		pfs_ctx = &sctx->virtio_blk_pfs;
+	else
 		return 0;
-	}
 
-	for (i = 0; i < max_pfs; i++)
-		pfs[i] = &spfs[i];
+	for (i = 0; i < pfs_ctx->max_pfs; i++)
+		pfs[i] = &pfs_ctx->pfs[i];
 
 	return i;
+}
+
+/**
+ * snap_hotunplug_pf() - Unplug a snap physical PCI function from host
+ * @pf:        snap physical PCI function
+ *
+ * Unplug a previously hot-plugged snap physical PCI function from the host.
+ */
+void snap_hotunplug_pf(struct snap_pci *pf)
+{
+	if (!pf->plugged)
+		return;
+
+	if (!pf->hotplug)
+		return;
+
+	snap_destroy_device_object(pf->hotplug->hotplug);
+	free(pf->hotplug);
+
+	pf->plugged = false;
+	pf->hotplug = NULL;
+}
+
+/**
+ * snap_hotplug_pf() - Plug a snap PCI function from a given snap context
+ * @sctx:       snap context
+ * @attr:       snap hotplug device attributes
+ * @pf_idx:     PF index in the snap context (according to relevant type)
+ *
+ * Hotplugs a physical PCI function that will be seen to the host according
+ * to the requested attributes and pf index.
+ *
+ * Return: On success, return snap PCI device. NULL otherwise and errno will be
+ * set to indicate the failure reason.
+ */
+struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
+				 struct snap_hotplug_attr *attr,
+				 unsigned int pf_idx)
+{
+	struct snap_hotplug_device *hotplug;
+	struct snap_pci *pf;
+
+	if (attr->type == SNAP_NVME && pf_idx < sctx->nvme_pfs.max_pfs) {
+		pf = &sctx->nvme_pfs.pfs[pf_idx];
+	} else if (attr->type == SNAP_VIRTIO_NET &&
+		 pf_idx < sctx->virtio_net_pfs.max_pfs) {
+		pf = &sctx->virtio_net_pfs.pfs[pf_idx];
+	} else if (attr->type == SNAP_VIRTIO_BLK &&
+		 pf_idx < sctx->virtio_blk_pfs.max_pfs) {
+		pf = &sctx->virtio_blk_pfs.pfs[pf_idx];
+	} else {
+		errno = ENODEV;
+		goto out_err;
+	}
+
+	if (pf->plugged) {
+		errno = EINVAL;
+		goto out_err;
+	}
+
+	hotplug = calloc(1, sizeof(*hotplug));
+	if (!hotplug) {
+		errno = ENOMEM;
+		goto out_err;
+	}
+
+	hotplug->hotplug = snap_create_device_object(sctx, attr);
+	if (!hotplug->hotplug) {
+		errno = ENOMEM;
+		goto out_free;
+	}
+
+	pf->plugged = true;
+	pf->hotplug = hotplug;
+
+	/* TODO: link between vhca_id to hotplug device (PRM gap) */
+	//pf->mpci.vhca_id = pf_idx + 100;
+
+	return pf;
+
+out_free:
+	free(hotplug);
+out_err:
+	return NULL;
 }
 
 /**
@@ -1469,17 +1545,18 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 				     struct snap_device_attr *attr)
 {
 	struct snap_device *sdev;
-	struct snap_pci *pfs;
+	struct snap_pfs_ctx *pfs;
 
 	/* Currently support only PFs emulation */
-	if (attr->type == SNAP_NVME_PF && attr->pf_id < sctx->max_nvme_pfs) {
-		pfs = sctx->nvme_pfs;
+	if (attr->type == SNAP_NVME_PF &&
+	    attr->pf_id < sctx->nvme_pfs.max_pfs) {
+		pfs = &sctx->nvme_pfs;
 	} else if (attr->type == SNAP_VIRTIO_NET_PF &&
-		   attr->pf_id < sctx->max_virtio_net_pfs) {
-		pfs = sctx->virtio_net_pfs;
+		   attr->pf_id < sctx->virtio_net_pfs.max_pfs) {
+		pfs = &sctx->virtio_net_pfs;
 	} else if (attr->type == SNAP_VIRTIO_BLK_PF &&
-		   attr->pf_id < sctx->max_virtio_blk_pfs) {
-		pfs = sctx->virtio_blk_pfs;
+		   attr->pf_id < sctx->virtio_blk_pfs.max_pfs) {
+		pfs = &sctx->virtio_blk_pfs;
 	} else {
 		errno = EINVAL;
 		goto out_err;
@@ -1492,7 +1569,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	}
 
 	sdev->sctx = sctx;
-	sdev->pci = &pfs[attr->pf_id];
+	sdev->pci = &pfs->pfs[attr->pf_id];
 	sdev->mdev.device_emulation = snap_create_device_emulation(sdev);
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
@@ -1507,6 +1584,9 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 			goto out_free_device_emulation;
 		}
 	}
+
+	if (sdev->pci->hotplug)
+		sdev->pci->hotplug->hotplug->sdev = sdev;
 
 	pthread_mutex_lock(&sctx->lock);
 	TAILQ_INSERT_HEAD(&sctx->device_list, sdev, entry);
@@ -1594,13 +1674,13 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 		errno = EINVAL;
 		goto out_free;
 	}
-/*
+
 	rc = snap_query_hotplug_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
 		goto out_free;
 	}
-*/
+
 	rc = snap_alloc_functions(sctx);
 	if (rc) {
 		errno = -rc;
@@ -1615,8 +1695,18 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 
 	TAILQ_INIT(&sctx->device_list);
 
+	rc = pthread_mutex_init(&sctx->hotplug_lock, NULL);
+	if (rc) {
+		errno = ENOMEM;
+		goto out_free_mutex;
+	}
+
+	TAILQ_INIT(&sctx->hotplug_device_list);
+
 	return sctx;
 
+out_free_mutex:
+	pthread_mutex_destroy(&sctx->lock);
 out_free_pfs:
 	snap_free_functions(sctx);
 out_free:
@@ -1637,6 +1727,7 @@ void snap_close(struct snap_context *sctx)
 {
 	struct ibv_context *context = sctx->context;
 
+	pthread_mutex_destroy(&sctx->hotplug_lock);
 	pthread_mutex_destroy(&sctx->lock);
 	snap_free_functions(sctx);
 	free(sctx);
