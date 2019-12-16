@@ -191,8 +191,8 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 	if (attr->ev_mode == SNAP_VIRTQ_NO_MSIX_MODE) {
 		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX;
-	} else if (attr->ev_mode == SNAP_VIRTQ_CQ_MODE) {
-		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ;
+	} else if (attr->ev_mode == SNAP_VIRTQ_QP_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_QP;
 	} else if (attr->ev_mode == SNAP_VIRTQ_MSIX_MODE) {
 		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX;
 	} else {

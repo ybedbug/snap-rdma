@@ -403,8 +403,8 @@ static int snap_fill_virtio_ctx(struct mlx5_snap_virtio_context *virtio,
 		virtio->event_modes |= SNAP_VIRTQ_NO_MSIX_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.event_mode) &
-	    MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ)
-		virtio->event_modes |= SNAP_VIRTQ_CQ_MODE;
+	    MLX5_VIRTIO_QUEUE_EVENT_MODE_QP)
+		virtio->event_modes |= SNAP_VIRTQ_QP_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.event_mode) &
 	    MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX)

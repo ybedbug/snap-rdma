@@ -25,8 +25,8 @@ int main(int argc, char **argv)
 		case 'e':
 			if (!strcmp(optarg, "no_msix"))
 				ev_mode = SNAP_VIRTQ_NO_MSIX_MODE;
-			else if (!strcmp(optarg, "cq"))
-				ev_mode = SNAP_VIRTQ_CQ_MODE;
+			else if (!strcmp(optarg, "qp"))
+				ev_mode = SNAP_VIRTQ_QP_MODE;
 			else if (!strcmp(optarg, "msix"))
 				ev_mode = SNAP_VIRTQ_MSIX_MODE;
 			break;

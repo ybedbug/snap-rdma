@@ -46,7 +46,7 @@ enum snap_virtq_type {
 
 enum snap_virtq_event_mode {
 	SNAP_VIRTQ_NO_MSIX_MODE	= 1 << 0,
-	SNAP_VIRTQ_CQ_MODE	= 1 << 1,
+	SNAP_VIRTQ_QP_MODE	= 1 << 1,
 	SNAP_VIRTQ_MSIX_MODE	= 1 << 2,
 };
 

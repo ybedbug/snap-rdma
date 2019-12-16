@@ -1399,7 +1399,7 @@ enum {
 
 enum {
 	MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX = 1 << 0,
-	MLX5_VIRTIO_QUEUE_EVENT_MODE_CQ = 1 << 1,
+	MLX5_VIRTIO_QUEUE_EVENT_MODE_QP = 1 << 1,
 	MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX = 1 << 2,
 };
 
@@ -2504,7 +2504,7 @@ struct mlx5_ifc_device_bits {
 
 	u8	   reserved_at_e0[0x100];
 
-	union mlx5_ifc_initial_registers_layout_bits initial_regs;
+	union mlx5_ifc_initial_registers_layout_bits emulation_initial_regs;
 };
 
 struct mlx5_ifc_virtio_device_bits {
@@ -3168,7 +3168,10 @@ struct mlx5_ifc_virtio_q_bits {
 struct mlx5_ifc_virtio_net_q_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   reserved_at_40[0x40];
+	u8	   reserved_at_40[0x20];
+
+	u8	   qpn_vhca_id[0x10];
+	u8	   reserved_at_70[0x10];
 
 	u8	   tso_ipv4[0x1];
 	u8	   tso_ipv6[0x1];
@@ -3201,7 +3204,10 @@ struct mlx5_ifc_virtio_net_q_bits {
 struct mlx5_ifc_virtio_blk_q_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   reserved_at_40[0x40];
+	u8	   reserved_at_40[0x20];
+
+	u8	   qpn_vhca_id[0x10];
+	u8	   reserved_at_70[0x10];
 
 	u8	   reserved_at_80[0xa];
 	u8	   dirty_bitmap_dump_enable[0x1];
