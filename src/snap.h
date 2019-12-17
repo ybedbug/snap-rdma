@@ -64,6 +64,7 @@
 #define snap_max(a,b) (((a)>(b))?(a):(b))
 
 enum snap_pci_type {
+	SNAP_NONE_PF		= 0,
 	SNAP_NVME_PF		= 1 << 0,
 	SNAP_NVME_VF		= 1 << 1,
 	SNAP_VIRTIO_NET_PF	= 1 << 2,
