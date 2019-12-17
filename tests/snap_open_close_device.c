@@ -38,6 +38,12 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 
 			fprintf(stdout, "SNAP PF %d is not plugged. trying to hotplug\n", attr.pf_id);
 			fflush(stdout);
+			if (type == SNAP_VIRTIO_NET)
+				hp_attr.device_id = 0x1000;
+			else if (type == SNAP_VIRTIO_BLK)
+				hp_attr.device_id = 0x1001;
+			else if (type == SNAP_NVME)
+				hp_attr.device_id = 0x6001;
 			hp_attr.type = type;
 			hp_attr.num_msix = 4;
 			hotplug = snap_hotplug_pf(sctx, &hp_attr, attr.pf_id);
