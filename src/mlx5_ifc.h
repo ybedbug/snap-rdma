@@ -2498,7 +2498,8 @@ struct mlx5_ifc_device_bits {
 	u8	   initial_registers_valid[0x1];
 	u8	   device_type[0x8];
 
-	u8	   reserved_at_60[0x20];
+	u8	   reserved_at_60[0x10];
+	u8	   vhca_id[0x10];
 
 	struct mlx5_ifc_device_pci_parameters_bits pci_params;
 
