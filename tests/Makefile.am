@@ -4,12 +4,11 @@ bin_PROGRAMS = \
 		snap_open_close \
 		snap_open_close_device \
 		snap_query_pfs \
-		snap_init_teardown_nvme_device \
+		snap_init_teardown_device \
 		snap_query_nvme_device \
 		snap_create_destroy_nvme_namespace \
 		snap_create_destroy_nvme_cq \
 		snap_create_destroy_nvme_sq \
-		snap_init_teardown_virtio_blk_device \
 		snap_query_virtio_blk_device \
 		snap_create_destroy_virtio_blk_queue
 
@@ -25,9 +24,9 @@ snap_query_pfs_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_query_pfs_SOURCES = snap_query_pfs.c
 snap_query_pfs_LDADD = $(top_builddir)/src/libsnap.la
 
-snap_init_teardown_nvme_device_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
-snap_init_teardown_nvme_device_SOURCES = snap_init_teardown_nvme_device.c
-snap_init_teardown_nvme_device_LDADD = $(top_builddir)/src/libsnap.la
+snap_init_teardown_device_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
+snap_init_teardown_device_SOURCES = snap_init_teardown_device.c
+snap_init_teardown_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_nvme_device_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_query_nvme_device_SOURCES = snap_query_nvme_device.c
@@ -44,10 +43,6 @@ snap_create_destroy_nvme_cq_LDADD = $(top_builddir)/src/libsnap.la
 snap_create_destroy_nvme_sq_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_create_destroy_nvme_sq_SOURCES = snap_create_destroy_nvme_sq.c
 snap_create_destroy_nvme_sq_LDADD = $(top_builddir)/src/libsnap.la
-
-snap_init_teardown_virtio_blk_device_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
-snap_init_teardown_virtio_blk_device_SOURCES = snap_init_teardown_virtio_blk_device.c
-snap_init_teardown_virtio_blk_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_virtio_blk_device_CFLAGS = $(BASE_CFLAGS) -I$(top_builddir)/src
 snap_query_virtio_blk_device_SOURCES = snap_query_virtio_blk_device.c
