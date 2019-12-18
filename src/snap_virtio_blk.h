@@ -39,9 +39,6 @@
 struct snap_virtio_blk_device;
 
 struct snap_virtio_blk_queue_attr {
-	enum snap_virtq_type		type;
-	enum snap_virtq_event_mode	ev_mode;
-	uint16_t			idx;
 	uint32_t			qpn;
 
 	struct snap_virtio_queue_attr   vattr;
@@ -58,7 +55,6 @@ struct snap_virtio_blk_device_attr {
 	struct snap_virtio_blk_queue_attr	*q_attrs;
 	unsigned int				queues;
 
-	bool					enabled;
 	uint64_t				capacity;
 };
 

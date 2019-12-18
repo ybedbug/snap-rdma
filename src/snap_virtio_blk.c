@@ -15,17 +15,10 @@
 int snap_virtio_blk_query_device(struct snap_device *sdev,
 	struct snap_virtio_blk_device_attr *attr)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
 	uint8_t *out;
 	struct snap_context *sctx = sdev->sctx;
-	uint8_t *device_emulation_in;
 	uint8_t *device_emulation_out;
 	int i, ret, out_size;
-
-	if (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
-	    sdev->pci->type != SNAP_VIRTIO_BLK_VF)
-		return -EINVAL;
 
 	if (attr->queues > sctx->mctx.virtio_blk.max_emulated_virtqs)
 		return -EINVAL;
@@ -37,19 +30,7 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	if (!out)
 		return -ENOMEM;
 
-	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
-		 sdev->mdev.device_emulation->obj_id);
-
-	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	DEVX_SET(virtio_blk_device_emulation, device_emulation_in, vhca_id,
-		 sdev->pci->mpci.vhca_id);
-
-	ret = mlx5dv_devx_obj_query(sdev->mdev.device_emulation->obj, in,
-				    sizeof(in), out, out_size);
+	ret = snap_virtio_query_device(sdev, SNAP_VIRTIO_BLK, out, out_size);
 	if (ret)
 		goto out_free;
 
@@ -70,8 +51,8 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	attr->capacity = DEVX_GET64(virtio_blk_device_emulation,
 				    device_emulation_out,
 				    virtio_blk_config.capacity);
-	attr->enabled = DEVX_GET(virtio_blk_device_emulation,
-				 device_emulation_out, enabled);
+	attr->vattr.enabled = DEVX_GET(virtio_blk_device_emulation,
+				       device_emulation_out, enabled);
 out_free:
 	free(out);
 	return ret;
@@ -180,33 +161,33 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
 
-	if (attr->type == SNAP_VIRTQ_SPLIT_MODE) {
+	if (attr->vattr.type == SNAP_VIRTQ_SPLIT_MODE) {
 		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
-	} else if (attr->type == SNAP_VIRTQ_PACKED_MODE) {
+	} else if (attr->vattr.type == SNAP_VIRTQ_PACKED_MODE) {
 		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_PACKED;
 	} else {
 		errno = EINVAL;
 		goto out;
 	}
 
-	if (attr->ev_mode == SNAP_VIRTQ_NO_MSIX_MODE) {
+	if (attr->vattr.ev_mode == SNAP_VIRTQ_NO_MSIX_MODE) {
 		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX;
-	} else if (attr->ev_mode == SNAP_VIRTQ_QP_MODE) {
+	} else if (attr->vattr.ev_mode == SNAP_VIRTQ_QP_MODE) {
 		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_QP;
-	} else if (attr->ev_mode == SNAP_VIRTQ_MSIX_MODE) {
+	} else if (attr->vattr.ev_mode == SNAP_VIRTQ_MSIX_MODE) {
 		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX;
 	} else {
 		errno = EINVAL;
 		goto out;
 	}
 
-	if (attr->idx >= vbdev->vdev.num_queues) {
+	if (attr->vattr.idx >= vbdev->vdev.num_queues) {
 		errno = EINVAL;
 		goto out;
 	}
 
-	vbq = &vbdev->virtqs[attr->idx];
-	vbq->virtq.idx = attr->idx;
+	vbq = &vbdev->virtqs[attr->vattr.idx];
+	vbq->virtq.idx = attr->vattr.idx;
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
@@ -218,7 +199,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 		 sdev->pci->mpci.vhca_id);
 	DEVX_SET(virtio_blk_q, virtq_in, virtqc.virtio_q_type, virtq_type);
 	DEVX_SET(virtio_blk_q, virtq_in, virtqc.event_mode, ev_mode);
-	DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_index, attr->idx);
+	DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_index, attr->vattr.idx);
 	DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_size, attr->vattr.size);
 	vbq->virtq.virtq = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
 				      sdev->mdev.vtunnel,

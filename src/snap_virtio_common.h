@@ -51,6 +51,9 @@ enum snap_virtq_event_mode {
 };
 
 struct snap_virtio_queue_attr {
+	enum snap_virtq_type		type;
+	enum snap_virtq_event_mode	ev_mode;
+	uint16_t			idx;
 	uint16_t			size;
 	uint16_t			msix_vector;
 	uint16_t			enable;
@@ -70,6 +73,7 @@ struct snap_virtio_device_attr {
 	uint64_t			driver_feature;
 	uint16_t			msix_config;
 	uint8_t				status;
+	bool				enabled;
 };
 
 struct snap_virtio_device {
@@ -81,5 +85,7 @@ void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 	void *q_configuration);
 void snap_virtio_get_device_attr(struct snap_virtio_device_attr *vattr,
 	void *device_configuration);
+int snap_virtio_query_device(struct snap_device *sdev,
+	enum snap_emulation_type type, uint8_t *out, int outlen);
 
 #endif

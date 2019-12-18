@@ -30,18 +30,30 @@
  * SOFTWARE.
  */
 
-#ifndef SNAP_VIRTIO_BLK_H
-#define SNAP_VIRTIO_BLK_H
+#ifndef SNAP_VIRTIO_NET_H
+#define SNAP_VIRTIO_NET_H
 
 #include "snap.h"
 #include "snap_virtio_common.h"
 
 struct snap_virtio_net_device;
 
+struct snap_virtio_net_queue_attr {
+	uint32_t			tisn_or_qpn;
+
+	struct snap_virtio_queue_attr   vattr;
+};
+
 struct snap_virtio_net_queue {
 	struct snap_virtio_queue	virtq;
 
 	struct snap_virtio_net_device	*vndev;
+};
+
+struct snap_virtio_net_device_attr {
+	struct snap_virtio_device_attr		vattr;
+	struct snap_virtio_net_queue_attr	*q_attrs;
+	unsigned int				queues;
 };
 
 struct snap_virtio_net_device {
@@ -51,5 +63,11 @@ struct snap_virtio_net_device {
 
 int snap_virtio_net_init_device(struct snap_device *sdev);
 int snap_virtio_net_teardown_device(struct snap_device *sdev);
+int snap_virtio_net_query_device(struct snap_device *sdev,
+	struct snap_virtio_net_device_attr *attr);
+struct snap_virtio_net_queue*
+snap_virtio_net_create_queue(struct snap_device *sdev,
+	struct snap_virtio_net_queue_attr *attr);
+int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq);
 
 #endif
