@@ -127,7 +127,7 @@ struct snap_hotplug_attr {
 };
 
 struct snap_hotplug_device {
-	struct mlx5_snap_devx_obj		*hotplug;
+	struct mlx5_snap_devx_obj		*obj;
 	enum snap_emulation_type		type;
 	struct snap_pci				*pf;
 
