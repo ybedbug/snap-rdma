@@ -7,6 +7,8 @@
 #define NVME_SQ_LOG_ENTRY_SIZE 6
 #define NVME_DB_BASE 0x1000
 
+int snap_nvme_query_sq(struct snap_nvme_sq *sq,
+		       struct snap_nvme_sq_attr *attr);
 /**
  * snap_nvme_query_device() - Query an NVMe snap device
  * @sdev:       snap device
@@ -373,32 +375,14 @@ int snap_nvme_destroy_cq(struct snap_nvme_cq *cq)
 static int snap_nvme_get_modifiable_sq_fields(struct snap_nvme_sq *sq,
 		uint64_t *allowed)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
-	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-		    DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
-	uint8_t *out_sq;
-	uint64_t dev_allowed;
+	struct snap_nvme_sq_attr attr = {};
 	int ret;
 
-	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_NVME_SQ);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, sq->sq->obj_id);
-
-	ret = snap_devx_obj_query(sq->sq, in, sizeof(in), out, sizeof(out));
+	ret = snap_nvme_query_sq(sq, &attr);
 	if (ret)
 		return ret;
 
-	*allowed = 0;
-	out_sq = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
-	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
-	if (dev_allowed) {
-		if (dev_allowed & MLX5_NVME_SQ_MODIFY_QPN)
-			*allowed |= SNAP_NVME_SQ_MOD_QPN;
-		if (dev_allowed & MLX5_NVME_SQ_MODIFY_STATE)
-			*allowed |= SNAP_NVME_SQ_MOD_STATE;
-	}
+	*allowed = attr.modifiable_fields;
 
 	return 0;
 }
@@ -416,12 +400,11 @@ static int snap_nvme_get_modifiable_sq_fields(struct snap_nvme_sq *sq,
 int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 		struct snap_nvme_sq_attr *attr)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
-	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-		    DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *sq_in;
-	uint8_t *out_sq;
 	uint64_t allowed_mask, fields_to_modify = 0;
 	int ret;
 
@@ -443,6 +426,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	if (mask & SNAP_NVME_SQ_MOD_QPN) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qpn);
+		// TODO: Update qpn_vhca_id as well
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
@@ -470,6 +454,7 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 		    DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
 	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *out_sq;
+	uint64_t dev_allowed;
 	int ret;
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -487,6 +472,15 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	attr->emulated_device_dma_mkey = DEVX_GET(nvme_sq, out_sq,
 						  emulated_device_dma_mkey);
 	attr->doorbell_offset = DEVX_GET(nvme_sq, out_sq, nvme_doorbell_offset);
+	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
+	if (dev_allowed) {
+		if (dev_allowed & MLX5_NVME_SQ_MODIFY_QPN)
+			attr->modifiable_fields = SNAP_NVME_SQ_MOD_QPN;
+		if (dev_allowed & MLX5_NVME_SQ_MODIFY_STATE)
+			attr->modifiable_fields |= SNAP_NVME_SQ_MOD_STATE;
+	} else {
+		attr->modifiable_fields = 0;
+	}
 
 	return 0;
 }
