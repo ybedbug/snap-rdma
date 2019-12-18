@@ -55,6 +55,7 @@ struct snap_virtio_blk_device_attr {
 	struct snap_virtio_blk_queue_attr	*q_attrs;
 	unsigned int				queues;
 
+	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
 	uint64_t				capacity;
 };
 

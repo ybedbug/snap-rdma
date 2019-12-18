@@ -1443,6 +1443,10 @@ enum {
 	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 0x2,
 };
 
+enum {
+	MLX5_VIRTIO_DEVICE_MODIFY_STATUS = 1 << 0,
+};
+
 struct mlx5_ifc_hotplug_cap_bits {
 	u8         hotplug_device_types_supported[0x10];
 	u8         log_max_bar_size[0x8];
@@ -2544,7 +2548,7 @@ struct mlx5_ifc_virtio_q_layout_bits {
 struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   arm[0x1];
+	u8	   reserved_at_40[0x1];
 	u8	   enabled[0x1];
 	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];
@@ -2561,7 +2565,7 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   arm[0x1];
+	u8	   reserved_at_40[0x1];
 	u8	   enabled[0x1];
 	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];

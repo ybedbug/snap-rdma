@@ -68,6 +68,10 @@ struct snap_virtio_queue {
 	struct mlx5_snap_devx_obj		*virtq;
 };
 
+enum snap_virtio_dev_modify {
+	SNAP_VIRTIO_MOD_DEV_STATUS = 1 << 0,
+};
+
 struct snap_virtio_device_attr {
 	uint64_t			device_feature;
 	uint64_t			driver_feature;
