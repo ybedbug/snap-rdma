@@ -1564,41 +1564,42 @@ void snap_hotunplug_pf(struct snap_pci *pf)
  * snap_hotplug_pf() - Plug a snap PCI function from a given snap context
  * @sctx:       snap context
  * @attr:       snap hotplug device attributes
- * @pf_idx:     PF index in the snap context (according to relevant type)
  *
  * Hotplugs a physical PCI function that will be seen to the host according
- * to the requested attributes and pf index.
+ * to the requested attributes.
  *
  * Return: On success, return snap PCI device. NULL otherwise and errno will be
  * set to indicate the failure reason.
  */
 struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
-				 struct snap_hotplug_attr *attr,
-				 unsigned int pf_idx)
+				 struct snap_hotplug_attr *attr)
 {
 	uint8_t *out;
+	struct snap_pfs_ctx *pfs_ctx;
 	struct snap_hotplug_device *hotplug;
-	struct snap_pci *pf;
-	int ret, output_size, max_pfs;
+	struct snap_pci *pf = NULL;
+	int ret, output_size, i;
 
-	if (attr->type == SNAP_NVME && pf_idx < sctx->nvme_pfs.max_pfs) {
-		pf = &sctx->nvme_pfs.pfs[pf_idx];
-		max_pfs = sctx->nvme_pfs.max_pfs;
-	} else if (attr->type == SNAP_VIRTIO_NET &&
-		 pf_idx < sctx->virtio_net_pfs.max_pfs) {
-		pf = &sctx->virtio_net_pfs.pfs[pf_idx];
-		max_pfs = sctx->virtio_net_pfs.max_pfs;
-	} else if (attr->type == SNAP_VIRTIO_BLK &&
-		 pf_idx < sctx->virtio_blk_pfs.max_pfs) {
-		pf = &sctx->virtio_blk_pfs.pfs[pf_idx];
-		max_pfs = sctx->virtio_blk_pfs.max_pfs;
+	if (attr->type == SNAP_NVME) {
+		pfs_ctx = &sctx->nvme_pfs;
+	} else if (attr->type == SNAP_VIRTIO_NET) {
+		pfs_ctx = &sctx->virtio_net_pfs;
+	} else if (attr->type == SNAP_VIRTIO_BLK) {
+		pfs_ctx = &sctx->virtio_blk_pfs;
 	} else {
-		errno = ENODEV;
+		errno = EINVAL;
 		goto out_err;
 	}
 
-	if (pf->plugged) {
-		errno = EINVAL;
+	for (i = 0; i < pfs_ctx->max_pfs; i++) {
+		if (!pfs_ctx->pfs[i].plugged) {
+			pf = &pfs_ctx->pfs[i];
+			break;
+		}
+	}
+
+	if (!pf) {
+		errno = ENODEV;
 		goto out_err;
 	}
 
@@ -1622,7 +1623,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto destroy_hotplug;
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
-		      DEVX_ST_SZ_BYTES(emulated_pf_info) * max_pfs;
+		      DEVX_ST_SZ_BYTES(emulated_pf_info) * (pfs_ctx->max_pfs);
 	out = calloc(1, output_size);
 	if (!out) {
 		errno = ENOMEM;

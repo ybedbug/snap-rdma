@@ -46,11 +46,13 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 				hp_attr.device_id = 0x6001;
 			hp_attr.type = type;
 			hp_attr.num_msix = 4;
-			hotplug = snap_hotplug_pf(sctx, &hp_attr, attr.pf_id);
+			hotplug = snap_hotplug_pf(sctx, &hp_attr);
 			if (!hotplug) {
 				fprintf(stderr, "failed to hotplug SNAP pf %d\n", attr.pf_id);
 				fflush(stderr);
 				continue;
+			} else {
+				attr.pf_id = hotplug->id;
 			}
 		} else {
 			fprintf(stdout, "SNAP PF %d is plugged. trying to create device\n", attr.pf_id);

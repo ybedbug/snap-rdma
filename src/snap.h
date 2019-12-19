@@ -175,8 +175,7 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		struct snap_pci **pfs);
 
 struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
-					    struct snap_hotplug_attr *attr,
-					    unsigned int pf_idx);
+		struct snap_hotplug_attr *attr);
 void snap_hotunplug_pf(struct snap_pci *pf);
 
 #endif
