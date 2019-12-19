@@ -96,7 +96,7 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev,
 /**
  * snap_virtio_blk_modify_device() - Modify Virtio blk snap device
  * @sdev:       snap device
- * @mask:       selected params to modify (mask of enum snap_nvme_sq_modify)
+ * @mask:       selected params to modify (mask of enum snap_virtio_dev_modify)
  * @attr:       attributes for the blk device modify
  *
  * Modify Virtio blk snap device object according to a given mask.
@@ -106,11 +106,7 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev,
 int snap_virtio_blk_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_blk_device_attr *attr)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
-	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
-	uint8_t *device_emulation_in;
-	uint64_t allowed_mask, fields_to_modify = 0;
+	uint64_t allowed_mask;
 	int ret;
 
 	ret = snap_virtio_blk_get_modifiable_device_fields(sdev,
@@ -118,29 +114,8 @@ int snap_virtio_blk_modify_device(struct snap_device *sdev, uint64_t mask,
 	if (ret)
 		return ret;
 
-	//we'll modify only allowed fields
-	if (mask & ~allowed_mask)
-		return -EINVAL;
-
-	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-		 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
-		 sdev->mdev.device_emulation->obj_id);
-
-	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	if (mask & SNAP_VIRTIO_MOD_DEV_STATUS) {
-		fields_to_modify |=  MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
-		DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
-			 virtio_device.device_status, attr->vattr.status);
-	}
-
-	DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
-		   modify_field_select, fields_to_modify);
-
-	return snap_devx_obj_modify(sdev->mdev.device_emulation->obj, in, sizeof(in),
-				    out, sizeof(out));
+	return snap_virtio_modify_device(sdev, SNAP_VIRTIO_BLK, mask,
+					 allowed_mask, &attr->vattr);
 }
 
 /**

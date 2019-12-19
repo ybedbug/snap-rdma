@@ -71,6 +71,8 @@ int snap_virtio_blk_init_device(struct snap_device *sdev);
 int snap_virtio_blk_teardown_device(struct snap_device *sdev);
 int snap_virtio_blk_query_device(struct snap_device *sdev,
 	struct snap_virtio_blk_device_attr *attr);
+int snap_virtio_blk_modify_device(struct snap_device *sdev, uint64_t mask,
+		struct snap_virtio_blk_device_attr *attr);
 struct snap_virtio_blk_queue*
 snap_virtio_blk_create_queue(struct snap_device *sdev,
 	struct snap_virtio_blk_queue_attr *attr);

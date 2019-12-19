@@ -54,6 +54,8 @@ struct snap_virtio_net_device_attr {
 	struct snap_virtio_device_attr		vattr;
 	struct snap_virtio_net_queue_attr	*q_attrs;
 	unsigned int				queues;
+
+	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
 };
 
 struct snap_virtio_net_device {
@@ -65,6 +67,8 @@ int snap_virtio_net_init_device(struct snap_device *sdev);
 int snap_virtio_net_teardown_device(struct snap_device *sdev);
 int snap_virtio_net_query_device(struct snap_device *sdev,
 	struct snap_virtio_net_device_attr *attr);
+int snap_virtio_net_modify_device(struct snap_device *sdev, uint64_t mask,
+		struct snap_virtio_net_device_attr *attr);
 struct snap_virtio_net_queue*
 snap_virtio_net_create_queue(struct snap_device *sdev,
 	struct snap_virtio_net_queue_attr *attr);

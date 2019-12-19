@@ -19,6 +19,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_out;
 	int i, ret, out_size;
+	uint64_t dev_allowed;
 
 	if (attr->queues > sctx->mctx.virtio_net.max_emulated_virtqs)
 		return -EINVAL;
@@ -50,9 +51,59 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 
 	attr->vattr.enabled = DEVX_GET(virtio_net_device_emulation,
 				       device_emulation_out, enabled);
+	dev_allowed = DEVX_GET64(virtio_net_device_emulation,
+				 device_emulation_out, modify_field_select);
+	if (dev_allowed) {
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_STATUS)
+			attr->modifiable_fields = SNAP_VIRTIO_MOD_DEV_STATUS;
+	} else {
+		attr->modifiable_fields = 0;
+	}
+
 out_free:
 	free(out);
 	return ret;
+}
+
+static int
+snap_virtio_net_get_modifiable_device_fields(struct snap_device *sdev,
+		uint64_t *allowed)
+{
+	struct snap_virtio_net_device_attr attr = {};
+	int ret;
+
+	ret = snap_virtio_net_query_device(sdev, &attr);
+	if (ret)
+		return ret;
+
+	*allowed = attr.modifiable_fields;
+
+	return 0;
+}
+
+/**
+ * snap_virtio_net_modify_device() - Modify Virtio net snap device
+ * @sdev:       snap device
+ * @mask:       selected params to modify (mask of enum snap_virtio_dev_modify)
+ * @attr:       attributes for the net device modify
+ *
+ * Modify Virtio net snap device object according to a given mask.
+ *
+ * Return: 0 on success.
+ */
+int snap_virtio_net_modify_device(struct snap_device *sdev, uint64_t mask,
+		struct snap_virtio_net_device_attr *attr)
+{
+	uint64_t allowed_mask;
+	int ret;
+
+	ret = snap_virtio_net_get_modifiable_device_fields(sdev,
+							   &allowed_mask);
+	if (ret)
+		return ret;
+
+	return snap_virtio_modify_device(sdev, SNAP_VIRTIO_NET, mask,
+					 allowed_mask, &attr->vattr);
 }
 
 /**

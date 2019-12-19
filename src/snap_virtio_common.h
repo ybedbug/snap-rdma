@@ -92,5 +92,9 @@ void snap_virtio_get_device_attr(struct snap_virtio_device_attr *vattr,
 	void *device_configuration);
 int snap_virtio_query_device(struct snap_device *sdev,
 	enum snap_emulation_type type, uint8_t *out, int outlen);
+int snap_virtio_modify_device(struct snap_device *sdev,
+		enum snap_emulation_type type,
+		uint64_t mask, uint64_t allowed_mask,
+		struct snap_virtio_device_attr *attr);
 
 #endif
