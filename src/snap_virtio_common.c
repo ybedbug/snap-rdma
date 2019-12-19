@@ -30,6 +30,8 @@ void snap_virtio_get_device_attr(struct snap_virtio_device_attr *vattr,
 					 driver_feature);
 	vattr->msix_config = DEVX_GET(virtio_device, device_configuration,
 				      msix_config);
+	vattr->max_queues = DEVX_GET(virtio_device, device_configuration,
+				     num_queues);
 	vattr->status = DEVX_GET(virtio_device, device_configuration,
 				 device_status);
 }

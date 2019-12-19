@@ -76,6 +76,7 @@ struct snap_virtio_device_attr {
 	uint64_t			device_feature;
 	uint64_t			driver_feature;
 	uint16_t			msix_config;
+	uint16_t			max_queues;
 	uint8_t				status;
 	bool				enabled;
 };
