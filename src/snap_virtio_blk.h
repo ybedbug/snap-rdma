@@ -57,6 +57,9 @@ struct snap_virtio_blk_device_attr {
 
 	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
 	uint64_t				capacity;
+	uint32_t				size_max;
+	uint32_t				seg_max;
+	uint32_t				blk_size;
 };
 
 struct snap_virtio_blk_device {

@@ -52,6 +52,15 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	attr->capacity = DEVX_GET64(virtio_blk_device_emulation,
 				    device_emulation_out,
 				    virtio_blk_config.capacity);
+	attr->size_max = DEVX_GET(virtio_blk_device_emulation,
+				  device_emulation_out,
+				  virtio_blk_config.size_max);
+	attr->seg_max = DEVX_GET(virtio_blk_device_emulation,
+				 device_emulation_out,
+				 virtio_blk_config.seg_max);
+	attr->blk_size = DEVX_GET(virtio_blk_device_emulation,
+				  device_emulation_out,
+				  virtio_blk_config.blk_size);
 	attr->vattr.enabled = DEVX_GET(virtio_blk_device_emulation,
 				       device_emulation_out, enabled);
 	dev_allowed = DEVX_GET64(virtio_blk_device_emulation,
