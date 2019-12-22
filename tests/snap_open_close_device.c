@@ -5,7 +5,7 @@
 #include "snap.h"
 
 static int snap_open_close_pf_helper(struct snap_context *sctx,
-	enum snap_emulation_type type)
+	enum snap_emulation_type type, bool ev)
 {
 	struct snap_device *sdev;
 	int i;
@@ -31,6 +31,8 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 		struct snap_device *sdev;
 		struct snap_pci *hotplug = NULL;
 
+		if (ev)
+			attr.flags = SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
 		attr.type = ptype;
 		attr.pf_id = pfs->pfs[i].id;
 		if (!pfs->pfs[i].plugged) {
@@ -60,7 +62,8 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 		}
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
-			fprintf(stdout, "SNAP device created: type=%d pf_id=%d\n", type, attr.pf_id);
+			fprintf(stdout, "SNAP device created: type=%d pf_id=%d fd=%d\n",
+				type, attr.pf_id, snap_device_get_fd(sdev));
 			fflush(stdout);
 			snap_close_device(sdev);
 			if (hotplug)
@@ -80,10 +83,14 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
+	bool ev = false;
 	int ret = 0, i, opt, dev_count, dev_type = 0;
 
-	while ((opt = getopt(argc, argv, "t:")) != -1) {
+	while ((opt = getopt(argc, argv, "et:")) != -1) {
 		switch (opt) {
+		case 'e':
+			ev = true;
+			break;
 		case 't':
 			if (!strcmp(optarg, "all"))
 				dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
@@ -125,11 +132,11 @@ int main(int argc, char **argv)
 		}
 
 		if (sctx->emulation_caps & SNAP_NVME & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_NVME);
+			snap_open_close_pf_helper(sctx, SNAP_NVME, ev);
 		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK);
+			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK, ev);
 		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET);
+			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET, ev);
 
 		snap_close(sctx);
 	}
