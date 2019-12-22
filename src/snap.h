@@ -79,13 +79,30 @@ enum snap_emulation_type {
 	SNAP_VIRTIO_BLK	= 1 << 2,
 };
 
+enum snap_device_attr_flags {
+	SNAP_DEVICE_FLAGS_EVENT_CHANNEL = 1 << 0,
+};
+
 struct snap_context;
 struct snap_hotplug_device;
+
+enum snap_event_type {
+	SNAP_EVENT_NVME_DEVICE_CHANGE,
+	SNAP_EVENT_NVME_SQ_CHANGE,
+	SNAP_EVENT_VIRTIO_NET_DEVICE_CHANGE,
+	SNAP_EVENT_VIRTIO_BLK_DEVICE_CHANGE,
+};
+
+struct snap_event {
+	enum snap_event_type		type;
+	void				*obj;
+};
 
 struct snap_device_attr {
 	enum snap_pci_type	type;
 	int			pf_id;
 	int			vf_id;
+	uint32_t		flags; /* Use enum snap_device_attr_flags */
 };
 
 struct snap_pci {
@@ -177,5 +194,9 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		struct snap_hotplug_attr *attr);
 void snap_hotunplug_pf(struct snap_pci *pf);
+
+int snap_device_get_fd(struct snap_device *sdev);
+int snap_device_get_events(struct snap_device *sdev, int num_events,
+			   struct snap_event *events);
 
 #endif

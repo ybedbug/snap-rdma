@@ -48,6 +48,8 @@ enum mlx5_snap_flow_group_type {
 	SNAP_FG_MISS	= 1 << 1,
 };
 
+struct snap_event;
+
 struct mlx5_snap_device;
 struct mlx5_snap_flow_group;
 struct mlx5_snap_flow_table_entry;
@@ -96,6 +98,7 @@ struct mlx5_snap_devx_obj {
 	struct mlx5dv_devx_obj		*obj;
 	uint32_t			obj_id;
 	struct snap_device		*sdev;
+	int (*consume_event)(struct mlx5_snap_devx_obj*, struct snap_event*);
 
 	/* destructor for tunneld objects */
 	struct mlx5_snap_devx_obj	*vtunnel;
@@ -141,10 +144,11 @@ struct mlx5_snap_flow_table_entry {
 };
 
 struct mlx5_snap_device {
-	struct mlx5_snap_devx_obj	*device_emulation;
-	struct mlx5_snap_devx_obj	*vtunnel;
-	struct mlx5_snap_flow_table	*tx;
-	struct mlx5_snap_flow_table	*rx;
+	struct mlx5_snap_devx_obj		*device_emulation;
+	struct mlx5_snap_devx_obj		*vtunnel;
+	struct mlx5_snap_flow_table		*tx;
+	struct mlx5_snap_flow_table		*rx;
+	struct mlx5dv_devx_event_channel	*channel;
 };
 
 /* The following functions are to be used by NVMe/VirtIO libraries only */

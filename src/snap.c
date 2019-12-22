@@ -1218,6 +1218,130 @@ int snap_teardown_device(struct snap_device *sdev)
 	return snap_disable_hca(sdev);
 }
 
+/*
+ * snap_device_get_fd() - Return the fd channel for device events. This fd is
+ *                        valid only if the device was opened with
+ *                        SNAP_DEVICE_FLAGS_EVENT_CHANNEL flag.
+ * @sdev:       snap device
+ *
+ * Return: Returns fd on success and -1 otherwise.
+ */
+int snap_device_get_fd(struct snap_device *sdev)
+{
+	if (sdev->mdev.channel)
+		return sdev->mdev.channel->fd;
+	else
+		return -1;
+}
+
+/*
+ * snap_device_get_events() - Process an event that was raised by device's
+ *                            fd. Valid only if the device was opened with
+ *                            SNAP_DEVICE_FLAGS_EVENT_CHANNEL flag.
+ * @sdev:       snap device
+ * @num_events: Maximum number of events to be read from the device event
+ *              channel.
+ * @events:     [out] Array of size num_events that will be filled.
+ *
+ * Return: Returns the numbers of events that were read from the event channel.
+ *         Negative value indicates a failure.
+ */
+int snap_device_get_events(struct snap_device *sdev, int num_events,
+			   struct snap_event *events)
+{
+	int i;
+
+	if (!sdev->mdev.channel)
+		return -EINVAL;
+
+	for (i = 0; i < num_events; i++) {
+		struct mlx5dv_devx_async_event_hdr event_data = {};
+		struct mlx5_snap_devx_obj *event_obj;
+		struct snap_event *sevent;
+		ssize_t bytes;
+		int ret;
+
+		sevent = &events[i];
+		bytes = mlx5dv_devx_get_event(sdev->mdev.channel, &event_data,
+					      sizeof(event_data));
+		if (bytes == 0)
+			break;
+		else if (bytes == -1)
+			return -errno;
+
+		event_obj = (struct mlx5_snap_devx_obj *)event_data.cookie;
+		if (!event_obj)
+			return -EINVAL;
+
+		ret = event_obj->consume_event(event_obj, sevent);
+		if (ret)
+			return ret;
+	}
+
+	return i;
+}
+
+static int snap_consume_device_emulation_event(struct mlx5_snap_devx_obj *obj,
+		struct snap_event *sevent)
+{
+	struct snap_device *sdev = obj->sdev;
+
+	sevent->obj = sdev;
+
+	switch (sdev->pci->type) {
+	case SNAP_NVME_PF:
+	case SNAP_NVME_VF:
+		sevent->type = SNAP_EVENT_NVME_DEVICE_CHANGE;
+		break;
+	case SNAP_VIRTIO_NET_PF:
+	case SNAP_VIRTIO_NET_VF:
+		sevent->type = SNAP_EVENT_VIRTIO_NET_DEVICE_CHANGE;
+		break;
+	case SNAP_VIRTIO_BLK_PF:
+	case SNAP_VIRTIO_BLK_VF:
+		sevent->type = SNAP_EVENT_VIRTIO_BLK_DEVICE_CHANGE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static struct mlx5dv_devx_event_channel*
+snap_create_event_channel(struct snap_device *sdev)
+{
+	struct mlx5dv_devx_event_channel *channel;
+	uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
+	int ret;
+
+	channel = mlx5dv_devx_create_event_channel(sdev->sctx->context,
+		MLX5DV_DEVX_CREATE_EVENT_CHANNEL_FLAGS_OMIT_EV_DATA);
+	if (!channel)
+		return NULL;
+
+	ret = mlx5dv_devx_subscribe_devx_event(channel,
+		sdev->mdev.device_emulation->obj,
+		sizeof(ev_type), &ev_type,
+		(uint64_t)sdev->mdev.device_emulation);
+	if (ret)
+		goto destroy_channel;
+
+	sdev->mdev.device_emulation->consume_event = snap_consume_device_emulation_event;
+
+	return channel;
+
+destroy_channel:
+	mlx5dv_devx_destroy_event_channel(channel);
+	return NULL;
+}
+
+static void
+snap_destroy_event_channel(struct mlx5dv_devx_event_channel *channel)
+{
+	mlx5dv_devx_destroy_event_channel(channel);
+}
+
 static struct mlx5_snap_devx_obj*
 snap_create_vhca_tunnel(struct snap_device *sdev)
 {
@@ -1717,6 +1841,14 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		}
 	}
 
+	if (attr->flags & SNAP_DEVICE_FLAGS_EVENT_CHANNEL) {
+		sdev->mdev.channel = snap_create_event_channel(sdev);
+		if (!sdev->mdev.channel) {
+			errno = EINVAL;
+			goto out_free_tunnel;
+		}
+	}
+
 	if (sdev->pci->hotplug)
 		sdev->pci->hotplug->obj->sdev = sdev;
 
@@ -1726,6 +1858,9 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 
 	return sdev;
 
+out_free_tunnel:
+	if (sdev->mdev.vtunnel)
+		snap_destroy_vhca_tunnel(sdev);
 out_free_device_emulation:
 	snap_destroy_device_emulation(sdev);
 out_free:
@@ -1748,6 +1883,8 @@ void snap_close_device(struct snap_device *sdev)
 	TAILQ_REMOVE(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
+	if (sdev->mdev.channel)
+		snap_destroy_event_channel(sdev->mdev.channel);
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
 	snap_destroy_device_emulation(sdev);
