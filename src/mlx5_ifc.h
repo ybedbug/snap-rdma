@@ -78,6 +78,10 @@ enum {
 	MLX5_CMD_OP_QUERY_EMULATED_FUNCTIONS_INFO = 0xb03,
 };
 
+enum mlx5_event {
+	MLX5_EVENT_TYPE_OBJECT_CHANGE = 0x27,
+};
+
 struct mlx5_ifc_atomic_caps_bits {
 	u8         reserved_at_0[0x40];
 
