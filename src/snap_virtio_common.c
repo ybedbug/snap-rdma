@@ -1,4 +1,6 @@
 #include "snap.h"
+#include "snap_virtio_net.h"
+#include "snap_virtio_blk.h"
 #include "snap_virtio_common.h"
 
 #include "mlx5_ifc.h"
@@ -155,4 +157,105 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 	return snap_devx_obj_modify(sdev->mdev.device_emulation->obj, in, inlen,
 				    out, sizeof(out));
+}
+
+struct mlx5_snap_devx_obj*
+snap_virtio_create_queue(struct snap_device *sdev,
+	struct snap_virtio_queue_attr *vattr)
+{
+	uint8_t in_blk[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		       DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
+	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		       DEVX_ST_SZ_BYTES(virtio_net_q)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	uint8_t *in;
+	uint8_t *virtq_in;
+	uint16_t obj_type;
+	struct mlx5_snap_devx_obj *virtq;
+	int virtq_type, ev_mode, inlen;
+
+	if (vattr->type == SNAP_VIRTQ_SPLIT_MODE) {
+		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
+	} else if (vattr->type == SNAP_VIRTQ_PACKED_MODE) {
+		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_PACKED;
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (vattr->ev_mode == SNAP_VIRTQ_NO_MSIX_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX;
+	} else if (vattr->ev_mode == SNAP_VIRTQ_QP_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_QP;
+	} else if (vattr->ev_mode == SNAP_VIRTQ_MSIX_MODE) {
+		ev_mode = MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX;
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	if (sdev->pci->type == SNAP_VIRTIO_BLK_PF ||
+	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
+		struct snap_virtio_blk_queue_attr *attr;
+
+		attr = to_blk_queue_attr(vattr);
+		in = in_blk;
+		inlen = sizeof(in_blk);
+		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+		obj_type = MLX5_OBJ_TYPE_VIRTIO_BLK_Q;
+		DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qpn);
+		DEVX_SET(virtio_blk_q, virtq_in, virtqc.device_emulation_id,
+			 sdev->pci->mpci.vhca_id);
+		DEVX_SET(virtio_blk_q, virtq_in, virtqc.virtio_q_type, virtq_type);
+		DEVX_SET(virtio_blk_q, virtq_in, virtqc.event_mode, ev_mode);
+		DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_index, vattr->idx);
+		DEVX_SET(virtio_blk_q, virtq_in, virtqc.queue_size, vattr->size);
+	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
+		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
+		struct snap_virtio_net_queue_attr *attr;
+
+		attr = to_net_queue_attr(vattr);
+		in = in_net;
+		inlen = sizeof(in_net);
+		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+		obj_type = MLX5_OBJ_TYPE_VIRTIO_NET_Q;
+		DEVX_SET(virtio_net_q, virtq_in, tisn_or_qpn, attr->tisn_or_qpn);
+		DEVX_SET(virtio_net_q, virtq_in, virtqc.device_emulation_id,
+			 sdev->pci->mpci.vhca_id);
+		DEVX_SET(virtio_net_q, virtq_in, virtqc.virtio_q_type, virtq_type);
+		DEVX_SET(virtio_net_q, virtq_in, virtqc.event_mode, ev_mode);
+		DEVX_SET(virtio_net_q, virtq_in, virtqc.queue_index, vattr->idx);
+		DEVX_SET(virtio_net_q, virtq_in, virtqc.queue_size, vattr->size);
+	} else {
+		errno = EINVAL;
+		goto out;
+	}
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, obj_type);
+
+	virtq = snap_devx_obj_create(sdev, in, inlen, out, sizeof(out),
+				     sdev->mdev.vtunnel,
+				     DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
+				     DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
+	if (!virtq) {
+		errno = ENODEV;
+		goto out;
+	}
+
+	if (sdev->mdev.vtunnel) {
+		void *dtor = virtq->dtor_in;
+
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, opcode,
+			 MLX5_CMD_OP_DESTROY_GENERAL_OBJECT);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_type, obj_type);
+		DEVX_SET(general_obj_in_cmd_hdr, dtor, obj_id, virtq->obj_id);
+	}
+
+	return virtq;
+out:
+	return NULL;
 }

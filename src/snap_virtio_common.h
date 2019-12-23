@@ -97,4 +97,8 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		uint64_t mask, uint64_t allowed_mask,
 		struct snap_virtio_device_attr *attr);
 
+struct mlx5_snap_devx_obj*
+snap_virtio_create_queue(struct snap_device *sdev,
+	struct snap_virtio_queue_attr *attr);
+
 #endif

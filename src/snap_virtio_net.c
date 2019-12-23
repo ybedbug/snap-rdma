@@ -210,6 +210,10 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 	}
 
 	vnq = &vndev->virtqs[attr->vattr.idx];
+	vnq->virtq.virtq = snap_virtio_create_queue(sdev, &attr->vattr);
+	if (!vnq->virtq.virtq)
+		goto out;
+
 	vnq->virtq.idx = attr->vattr.idx;
 
 	return vnq;
@@ -227,5 +231,5 @@ out:
  */
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 {
-	return 0;
+	return snap_devx_obj_destroy(vnq->virtq.virtq);
 }
