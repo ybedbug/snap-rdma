@@ -1419,7 +1419,8 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8         event_mode[0x8];
 	u8         virtio_queue_type[0x8];
 
-	u8         reserved_at_20[0x13];
+	u8         max_tunnel_desc[0x10];
+	u8         reserved_at_30[0x3];
 	u8         log_doorbell_stride[0x5];
 	u8         reserved_at_38[0x3];
 	u8         log_doorbell_bar_size[0x5];
@@ -3157,7 +3158,8 @@ struct mlx5_ifc_virtio_q_bits {
 
 	u8         virtio_q_mkey[0x20];
 
-	u8         reserved_at_160[0x20];
+	u8         max_tunnel_desc[0x10];
+	u8         reserved_at_170[0x10];
 
 	u8         umem_1_id[0x20];
 	u8         umem_1_size[0x20];
