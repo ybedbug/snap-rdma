@@ -2222,6 +2222,7 @@ enum {
 	MLX5_OBJ_TYPE_NVME_SQ = 0x0007,
 	MLX5_OBJ_TYPE_NVME_CQ = 0x0009,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
+	MLX5_OBJ_TYPE_VIRTIO_NET_Q = 0x000d,
 	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
 	MLX5_OBJ_TYPE_NVME_NAMESPACE = 0x000f,
 	MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS = 0x0010,
@@ -3141,7 +3142,7 @@ struct mlx5_ifc_virtio_q_bits {
 	u8         virtio_version_1_0[0x1];
 	u8         reserved_at_22[0x2];
 	u8         offload_type[0x4];
-	u8         event_cqn_or_msix[0x18];
+	u8         event_qpn_or_msix[0x18];
 
 	u8         doorbell_stride_index[0x10];
 	u8         queue_size[0x10];
