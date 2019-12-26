@@ -168,6 +168,35 @@ out_free:
 	return ret;
 }
 
+static int snap_consume_virtio_blk_queue_event(struct mlx5_snap_devx_obj *obj,
+		struct snap_event *sevent)
+{
+	struct snap_device *sdev = obj->sdev;
+	struct snap_virtio_blk_device *vbdev;
+	struct snap_virtio_blk_queue *vbq = NULL;
+	int i;
+
+	if (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
+	    sdev->pci->type != SNAP_VIRTIO_BLK_VF)
+		return -EINVAL;
+
+	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
+	for (i = 0; i < vbdev->vdev.num_queues; i++) {
+		if (vbdev->virtqs[i].virtq.virtq == obj) {
+			vbq = &vbdev->virtqs[i];
+			break;
+		}
+	}
+
+	if (!vbq)
+		return -EINVAL;
+
+	sevent->type = SNAP_EVENT_VIRTIO_BLK_QUEUE_CHANGE;
+	sevent->obj = vbq;
+
+	return 0;
+}
+
 /**
  * snap_virtio_blk_teardown_device() - Teardown Virtio block specifics from a
  *                                     snap device
@@ -213,6 +242,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
+	int ret;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
 
@@ -227,9 +257,25 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 	if (!vbq->virtq.virtq)
 		goto out;
 
+	if (sdev->mdev.channel) {
+		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
+
+		ret = mlx5dv_devx_subscribe_devx_event(sdev->mdev.channel,
+			vbq->virtq.virtq->obj,
+			sizeof(ev_type), &ev_type,
+			(uint64_t)vbq->virtq.virtq);
+		if (ret)
+			goto destroy_queue;
+
+		vbq->virtq.virtq->consume_event = snap_consume_virtio_blk_queue_event;
+	}
+
 	vbq->virtq.idx = attr->vattr.idx;
 
 	return vbq;
+
+destroy_queue:
+	snap_devx_obj_destroy(vbq->virtq.virtq);
 out:
 	return NULL;
 }
@@ -244,5 +290,7 @@ out:
  */
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 {
+	vbq->virtq.virtq->consume_event = NULL;
+
 	return snap_devx_obj_destroy(vbq->virtq.virtq);
 }

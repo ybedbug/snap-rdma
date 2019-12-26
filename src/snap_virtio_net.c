@@ -156,6 +156,35 @@ out_free:
 	return ret;
 }
 
+static int snap_consume_virtio_net_queue_event(struct mlx5_snap_devx_obj *obj,
+		struct snap_event *sevent)
+{
+	struct snap_device *sdev = obj->sdev;
+	struct snap_virtio_net_device *vndev;
+	struct snap_virtio_net_queue *vnq = NULL;
+	int i;
+
+	if (sdev->pci->type != SNAP_VIRTIO_NET_PF &&
+	    sdev->pci->type != SNAP_VIRTIO_NET_VF)
+		return -EINVAL;
+
+	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
+	for (i = 0; i < vndev->vdev.num_queues; i++) {
+		if (vndev->virtqs[i].virtq.virtq == obj) {
+			vnq = &vndev->virtqs[i];
+			break;
+		}
+	}
+
+	if (!vnq)
+		return -EINVAL;
+
+	sevent->type = SNAP_EVENT_VIRTIO_NET_QUEUE_CHANGE;
+	sevent->obj = vnq;
+
+	return 0;
+}
+
 /**
  * snap_virtio_net_teardown_device() - Teardown Virtio net specifics from a
  *                                     snap device
@@ -201,6 +230,7 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_net_device *vndev;
 	struct snap_virtio_net_queue *vnq;
+	int ret;
 
 	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
 
@@ -214,9 +244,25 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 	if (!vnq->virtq.virtq)
 		goto out;
 
+	if (sdev->mdev.channel) {
+		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
+
+		ret = mlx5dv_devx_subscribe_devx_event(sdev->mdev.channel,
+			vnq->virtq.virtq->obj,
+			sizeof(ev_type), &ev_type,
+			(uint64_t)vnq->virtq.virtq);
+		if (ret)
+			goto destroy_queue;
+
+		vnq->virtq.virtq->consume_event = snap_consume_virtio_net_queue_event;
+	}
+
 	vnq->virtq.idx = attr->vattr.idx;
 
 	return vnq;
+
+destroy_queue:
+	snap_devx_obj_destroy(vnq->virtq.virtq);
 out:
 	return NULL;
 }
@@ -231,5 +277,7 @@ out:
  */
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 {
+	vnq->virtq.virtq->consume_event = NULL;
+
 	return snap_devx_obj_destroy(vnq->virtq.virtq);
 }
