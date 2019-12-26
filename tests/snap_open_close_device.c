@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_open_close_device -t <type: all, nvme, virtio_blk, virtio_net>\n");
+			printf("Usage: snap_open_close_device -t <type: all, nvme, virtio_blk, virtio_net> [-e (event_channel)]\n");
 			exit(1);
 		}
 	}

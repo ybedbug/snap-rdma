@@ -10,12 +10,14 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 		enum snap_emulation_type type, int num_queues,
 		enum snap_virtq_type q_type,
 		enum snap_virtq_event_mode ev_mode,
-		char *name)
+		char *name, bool ev)
 {
 	struct snap_device_attr attr = {};
 	struct snap_device *sdev;
 	int j, ret;
 
+	if (ev)
+		attr.flags = SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
 	attr.pf_id = 0;
 	if (type == SNAP_VIRTIO_BLK) {
 		attr.type = SNAP_VIRTIO_BLK_PF;
@@ -102,12 +104,16 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
+	bool ev = false;
 	int ret = 0, i, dev_count, opt, num_queues = 4, dev_type = 0;
 	enum snap_virtq_type q_type = SNAP_VIRTQ_SPLIT_MODE;
 	enum snap_virtq_event_mode ev_mode = SNAP_VIRTQ_NO_MSIX_MODE;
 
-	while ((opt = getopt(argc, argv, "n:t:e:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "n:t:e:d:v")) != -1) {
 		switch (opt) {
+		case 'v':
+			ev = true;
+			break;
 		case 'n':
 			num_queues = atoi(optarg);
 			break;
@@ -135,7 +141,7 @@ int main(int argc, char **argv)
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_create_destroy_virtio_blk_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type>\n");
+			printf("Usage: snap_create_destroy_virtio_blk_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel)]\n");
 			exit(1);
 		}
 	}
@@ -165,11 +171,11 @@ int main(int argc, char **argv)
 		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
 			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_BLK,
 							 num_queues, q_type,
-							 ev_mode, list[i]->name);
+							 ev_mode, list[i]->name, ev);
 		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
 			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_NET,
 							 num_queues, q_type,
-							 ev_mode, list[i]->name);
+							 ev_mode, list[i]->name, ev);
 
 		snap_close(sctx);
 	}
