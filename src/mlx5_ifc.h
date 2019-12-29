@@ -3176,6 +3176,10 @@ struct mlx5_ifc_virtio_q_bits {
 	u8         reserved_at_2e0[0x20];
 };
 
+enum {
+	MLX5_VIRTIO_NET_Q_MODIFY_STATE = 1 << 0,
+};
+
 /* Virtio net emulation related structures */
 struct mlx5_ifc_virtio_net_q_bits {
 	u8	   modify_field_select[0x40];
@@ -3210,6 +3214,10 @@ struct mlx5_ifc_virtio_net_q_bits {
 	u8	   reserved_at_160[0xa0];
 
 	struct mlx5_ifc_virtio_q_bits virtqc;
+};
+
+enum {
+	MLX5_VIRTIO_BLK_Q_MODIFY_STATE = 1 << 0,
 };
 
 /* Virtio block emulation related structures */
