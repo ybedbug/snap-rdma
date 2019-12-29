@@ -159,5 +159,9 @@ snap_devx_obj_create(struct snap_device *sdev, void *in, size_t inlen,
 		void *out, size_t outlen, struct mlx5_snap_devx_obj *vtunnel,
 		size_t dtor_inlen, size_t dtor_outlen);
 int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj);
+int snap_devx_obj_modify(struct mlx5_snap_devx_obj *snap_obj, void *in,
+			 size_t inlen, void *out, size_t outlen);
+int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
+			size_t inlen, void *out, size_t outlen);
 
 #endif
