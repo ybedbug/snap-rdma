@@ -215,6 +215,21 @@ int snap_virtio_net_teardown_device(struct snap_device *sdev)
 }
 
 /**
+ * snap_virtio_net_query_queue() - Query a Virtio net queue object
+ * @vbq:        snap Virtio net queue
+ * @attr:       attributes for the queue query (output)
+ *
+ * Query a Virtio net snap queue object.
+ *
+ * Return: 0 on success, and attr is filled with the query result.
+ */
+int snap_virtio_net_query_queue(struct snap_virtio_net_queue *vnq,
+		struct snap_virtio_net_queue_attr *attr)
+{
+	return snap_virtio_query_queue(&vnq->virtq, &attr->vattr);
+}
+
+/**
  * snap_virtio_net_create_queue() - Create a new Virtio net snap queue object
  * @sdev:       snap device
  * @attr:       attributes for the queue creation

@@ -38,8 +38,16 @@
 
 struct snap_virtio_blk_device;
 
+enum snap_virtio_blk_queue_modify {
+	SNAP_VIRTIO_BLK_QUEUE_MOD_STATE	= 1 << 0,
+};
+
 struct snap_virtio_blk_queue_attr {
+	uint64_t			modifiable_fields;//mask of snap_virtio_blk_queue_modify
 	uint32_t			qpn;
+	uint8_t				state;
+	uint16_t			hw_available_index;
+	uint8_t				hw_used_index;
 
 	struct snap_virtio_queue_attr   vattr;
 };
@@ -77,6 +85,8 @@ struct snap_virtio_blk_queue*
 snap_virtio_blk_create_queue(struct snap_device *sdev,
 	struct snap_virtio_blk_queue_attr *attr);
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq);
+int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
+		struct snap_virtio_blk_queue_attr *attr);
 
 static inline struct snap_virtio_blk_queue_attr*
 to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)

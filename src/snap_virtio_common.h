@@ -61,6 +61,7 @@ struct snap_virtio_queue_attr {
 	uint64_t			desc;
 	uint64_t			driver;
 	uint64_t			device;
+	uint32_t			dma_mkey;
 };
 
 struct snap_virtio_queue {
@@ -100,5 +101,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *attr);
+int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
+	struct snap_virtio_queue_attr *vattr);
 
 #endif

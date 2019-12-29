@@ -38,8 +38,16 @@
 
 struct snap_virtio_net_device;
 
+enum snap_virtio_net_queue_modify {
+	SNAP_VIRTIO_NET_QUEUE_MOD_STATE	= 1 << 0,
+};
+
 struct snap_virtio_net_queue_attr {
+	uint64_t			modifiable_fields;//mask of snap_virtio_net_queue_modify
 	uint32_t			tisn_or_qpn;
+	uint8_t				state;
+	uint16_t			hw_available_index;
+	uint8_t				hw_used_index;
 
 	struct snap_virtio_queue_attr   vattr;
 };
@@ -73,6 +81,8 @@ struct snap_virtio_net_queue*
 snap_virtio_net_create_queue(struct snap_device *sdev,
 	struct snap_virtio_net_queue_attr *attr);
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq);
+int snap_virtio_net_query_queue(struct snap_virtio_net_queue *vnq,
+		struct snap_virtio_net_queue_attr *attr);
 
 static inline struct snap_virtio_net_queue_attr*
 to_net_queue_attr(struct snap_virtio_queue_attr *vattr)
