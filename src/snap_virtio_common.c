@@ -155,7 +155,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		 sdev->mdev.device_emulation->obj_id);
 
 
-	return snap_devx_obj_modify(sdev->mdev.device_emulation->obj, in, inlen,
+	return snap_devx_obj_modify(sdev->mdev.device_emulation, in, inlen,
 				    out, sizeof(out));
 }
 
