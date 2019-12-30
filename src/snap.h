@@ -133,6 +133,51 @@ struct snap_device {
 	void				*dd_data;
 };
 
+struct snap_nvme_registers {
+	uint8_t			regs[0x50];
+};
+
+struct snap_virtio_net_registers {
+	uint64_t	device_features;
+	uint16_t	queue_size;
+
+	uint64_t	mac;
+	uint16_t	status;
+	uint16_t	max_queues;
+	uint16_t	mtu;
+};
+
+struct snap_virtio_blk_registers {
+	uint64_t	device_features;
+	uint16_t	max_queues;
+	uint16_t	queue_size;
+
+	uint64_t	capacity;
+	uint32_t	size_max;
+	uint32_t	seg_max;
+	uint16_t	cylinders;
+	uint8_t		heads;
+	uint8_t		sectors;
+	uint32_t	blk_size;
+	uint8_t		physical_blk_exp;
+	uint8_t		alignment_offset;
+	uint16_t	min_io_size;
+	uint32_t	opt_io_size;
+	uint8_t		writeback;
+	uint32_t	max_discard_sectors;
+	uint32_t	max_discard_seg;
+	uint32_t	discard_sector_alignment;
+	uint32_t	max_write_zeroes_sectors;
+	uint32_t	max_write_zeroes_segs;
+	uint8_t		write_zeroes_may_unmap;
+};
+
+union snap_device_registers {
+	struct snap_nvme_registers nvme;
+	struct snap_virtio_net_registers virtio_net;
+	struct snap_virtio_blk_registers virtio_blk;
+};
+
 struct snap_hotplug_attr {
 	enum snap_emulation_type	type;
 	uint16_t			device_id;
@@ -142,6 +187,8 @@ struct snap_hotplug_attr {
 	uint16_t			subsystem_id;
 	uint16_t			subsystem_vendor_id;
 	uint16_t			num_msix;
+
+	union snap_device_registers	regs;
 
 };
 
