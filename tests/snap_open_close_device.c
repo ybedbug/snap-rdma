@@ -40,12 +40,22 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 
 			fprintf(stdout, "SNAP PF %d is not plugged. trying to hotplug\n", attr.pf_id);
 			fflush(stdout);
-			if (type == SNAP_VIRTIO_NET)
+			if (type == SNAP_VIRTIO_NET) {
 				hp_attr.device_id = 0x1000;
-			else if (type == SNAP_VIRTIO_BLK)
+				hp_attr.regs.virtio_net.mac = 0x1100deadbeaf;
+				hp_attr.regs.virtio_net.max_queues = 4;
+				hp_attr.regs.virtio_net.queue_size = 16;
+				hp_attr.regs.virtio_net.mtu = 1500;
+			} else if (type == SNAP_VIRTIO_BLK) {
 				hp_attr.device_id = 0x1001;
-			else if (type == SNAP_NVME)
+				hp_attr.regs.virtio_blk.max_queues = 4;
+				hp_attr.regs.virtio_blk.queue_size = 16;
+				hp_attr.regs.virtio_blk.capacity = 0x8000;
+				hp_attr.regs.virtio_blk.size_max = 1024;
+				hp_attr.regs.virtio_blk.seg_max = 512;
+			} else if (type == SNAP_NVME) {
 				hp_attr.device_id = 0x6001;
+			}
 			hp_attr.type = type;
 			hp_attr.num_msix = 4;
 			hotplug = snap_hotplug_pf(sctx, &hp_attr);
