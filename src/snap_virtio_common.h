@@ -50,6 +50,15 @@ enum snap_virtq_event_mode {
 	SNAP_VIRTQ_MSIX_MODE	= 1 << 2,
 };
 
+enum snap_virtio_features {
+	SNAP_VIRTIO_NET_F_CSUM		= 1ULL << 0,
+	SNAP_VIRTIO_NET_F_GUEST_CSUM	= 1ULL << 1,
+	SNAP_VIRTIO_NET_F_HOST_TSO4	= 1ULL << 11,
+	SNAP_VIRTIO_NET_F_HOST_TSO6	= 1ULL << 12,
+	SNAP_VIRTIO_NET_F_CTRL_VQ	= 1ULL << 17,
+	SNAP_VIRTIO_F_VERSION_1		= 1ULL << 32,
+};
+
 struct snap_virtio_queue_attr {
 	enum snap_virtq_type		type;
 	enum snap_virtq_event_mode	ev_mode;

@@ -1411,8 +1411,8 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8         desc_tunnel_offload_type[0x1];
 	u8         eth_frame_offload_type[0x1];
 	u8         virtio_version_1_0[0x1];
-	u8         tso_ivp4[0x1];
-	u8         tso_ivp6[0x1];
+	u8         tso_ipv4[0x1];
+	u8         tso_ipv6[0x1];
 	u8         tx_csum[0x1];
 	u8         rx_csum[0x1];
 	u8         reserved_at_7[0x9];

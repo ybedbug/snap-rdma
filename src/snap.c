@@ -1,6 +1,7 @@
 #include "snap.h"
 #include "snap_nvme.h"
 #include "snap_virtio_blk.h"
+#include "snap_virtio_net.h"
 
 #include "mlx5_ifc.h"
 
@@ -466,6 +467,25 @@ static int snap_fill_virtio_ctx(struct mlx5_snap_virtio_context *virtio,
 		     capability.virtio_emulation_cap.event_mode) &
 	    MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX)
 		virtio->event_modes |= SNAP_VIRTQ_MSIX_MODE;
+
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.virtio_version_1_0))
+		virtio->features |= SNAP_VIRTIO_F_VERSION_1;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.tso_ipv4))
+		virtio->features |= SNAP_VIRTIO_NET_F_HOST_TSO4;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.tso_ipv6))
+		virtio->features |= SNAP_VIRTIO_NET_F_HOST_TSO6;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.tx_csum))
+		virtio->features |= SNAP_VIRTIO_NET_F_CSUM;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.rx_csum))
+		virtio->features |= SNAP_VIRTIO_NET_F_GUEST_CSUM;
+	if (DEVX_GET(query_hca_cap_out, out,
+		     capability.virtio_emulation_cap.desc_tunnel_offload_type))
+		virtio->features |= SNAP_VIRTIO_NET_F_CTRL_VQ;
 }
 
 static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)

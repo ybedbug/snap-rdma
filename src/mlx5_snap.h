@@ -64,7 +64,8 @@ struct mlx5_snap_nvme_context {
 
 struct mlx5_snap_virtio_context {
 	int		supported_types;//mask of snap_virtq_type
-	int		event_modes;//mask of snap_virtq_event_type
+	int		event_modes;//mask of snap_virtq_event_mode
+	uint64_t	features; //mask of snap_virtio_features
 	uint32_t	max_emulated_virtqs;
 
 	/*
