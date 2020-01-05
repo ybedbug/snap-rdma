@@ -428,7 +428,7 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 
 }
 
-static int snap_fill_virtio_ctx(struct mlx5_snap_virtio_context *virtio,
+static int snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		uint8_t *out)
 {
 	virtio->max_emulated_virtqs = DEVX_GET(query_hca_cap_out,
@@ -508,7 +508,7 @@ static int snap_query_virtio_blk_emulation_caps(struct snap_context *sctx)
 	sctx->virtio_blk_pfs.max_pfs = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_emulated_devices);
 
-	snap_fill_virtio_ctx(&sctx->mctx.virtio_blk, out);
+	snap_fill_virtio_caps(&sctx->virtio_blk_caps, out);
 
 	return 0;
 }
@@ -533,7 +533,7 @@ static int snap_query_virtio_net_emulation_caps(struct snap_context *sctx)
 	sctx->virtio_net_pfs.max_pfs = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_emulated_devices);
 
-	snap_fill_virtio_ctx(&sctx->mctx.virtio_net, out);
+	snap_fill_virtio_caps(&sctx->virtio_net_caps, out);
 
 	return 0;
 }
@@ -557,20 +557,20 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 	sctx->nvme_pfs.type = SNAP_NVME;
 	sctx->nvme_pfs.max_pfs = DEVX_GET(query_hca_cap_out, out,
 			 capability.nvme_emulation_cap.max_emulated_devices);
-	sctx->mctx.nvme.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->nvme_caps.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
-	sctx->mctx.nvme.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->nvme_caps.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_cq);
-	sctx->mctx.nvme.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
+	sctx->nvme_caps.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_sq);
-	sctx->mctx.nvme.reg_size = DEVX_GET(query_hca_cap_out, out,
+	sctx->nvme_caps.reg_size = DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.registers_size);
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.nvme_emulation_cap.nvme_offload_type_sqe))
-		sctx->mctx.nvme.supported_types |= SNAP_NVME_SQE_MODE;
+		sctx->nvme_caps.supported_types |= SNAP_NVME_SQE_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.nvme_emulation_cap.nvme_offload_type_command_capsule))
-		sctx->mctx.nvme.supported_types |= SNAP_NVME_CC_MODE;
+		sctx->nvme_caps.supported_types |= SNAP_NVME_CC_MODE;
 
 	return 0;
 

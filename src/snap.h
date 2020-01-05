@@ -212,14 +212,43 @@ struct snap_pfs_ctx {
 	struct snap_pci				*pfs;
 };
 
+struct snap_nvme_caps {
+	int		supported_types;//mask of snap_nvme_queue_type
+	uint32_t	max_nvme_namespaces;
+	uint32_t	max_emulated_nvme_cqs;
+	uint32_t	max_emulated_nvme_sqs;
+	uint16_t	reg_size;
+};
+
+struct snap_virtio_caps {
+	int		supported_types;//mask of snap_virtq_type
+	int		event_modes;//mask of snap_virtq_event_mode
+	uint64_t	features; //mask of snap_virtio_features
+	uint32_t	max_emulated_virtqs;
+
+	/*
+	 * According to PRM for each created virtq, one must provide 3 UMEMs:
+	 * UMEM_i = umem_i_buffer_param_a * virtq_i_size + umem_i_buffer_param_b
+	 */
+	uint32_t	umem_1_buffer_param_a;
+	uint32_t	umem_1_buffer_param_b;
+	uint32_t	umem_2_buffer_param_a;
+	uint32_t	umem_2_buffer_param_b;
+	uint32_t	umem_3_buffer_param_a;
+	uint32_t	umem_3_buffer_param_b;
+};
+
 struct snap_context {
 	struct ibv_context			*context;
 	int					emulation_caps; //mask for supported snap_emulation_types
 	struct mlx5_snap_context		mctx;
 
 	struct snap_pfs_ctx			nvme_pfs;
+	struct snap_nvme_caps			nvme_caps;
 	struct snap_pfs_ctx			virtio_net_pfs;
+	struct snap_virtio_caps			virtio_net_caps;
 	struct snap_pfs_ctx			virtio_blk_pfs;
+	struct snap_virtio_caps			virtio_blk_caps;
 
 	bool					hotplug_supported;
 	struct snap_hotplug_context		hotplug;

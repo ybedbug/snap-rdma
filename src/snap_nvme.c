@@ -33,7 +33,7 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
 		return -EINVAL;
 
-	if (attr->bar_size > sctx->mctx.nvme.reg_size)
+	if (attr->bar_size > sctx->nvme_caps.reg_size)
 		return -EINVAL;
 
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
@@ -98,8 +98,8 @@ int snap_nvme_init_device(struct snap_device *sdev)
 	 * Admin queue is calculated in num_queues. Also Keep 1:1 mapping for
 	 * NVMe SQs/CQs.
 	 */
-	ndev->num_queues = snap_min(sdev->sctx->mctx.nvme.max_emulated_nvme_cqs,
-				    sdev->sctx->mctx.nvme.max_emulated_nvme_sqs);
+	ndev->num_queues = snap_min(sdev->sctx->nvme_caps.max_emulated_nvme_cqs,
+				    sdev->sctx->nvme_caps.max_emulated_nvme_sqs);
 
 	ndev->cqs = calloc(ndev->num_queues, sizeof(*ndev->cqs));
 	if (!ndev->cqs) {

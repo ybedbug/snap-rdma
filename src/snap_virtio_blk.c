@@ -21,7 +21,7 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	int i, ret, out_size;
 	uint64_t dev_allowed;
 
-	if (attr->queues > sctx->mctx.virtio_blk.max_emulated_virtqs)
+	if (attr->queues > sctx->virtio_blk_caps.max_emulated_virtqs)
 		return -EINVAL;
 
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
@@ -141,7 +141,7 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 	if (!vbdev)
 		return -ENOMEM;
 
-	vbdev->vdev.num_queues = sdev->sctx->mctx.virtio_blk.max_emulated_virtqs;
+	vbdev->vdev.num_queues = sdev->sctx->virtio_blk_caps.max_emulated_virtqs;
 
 	vbdev->virtqs = calloc(vbdev->vdev.num_queues, sizeof(*vbdev->virtqs));
 	if (!vbdev->virtqs) {

@@ -21,7 +21,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	int i, ret, out_size;
 	uint64_t dev_allowed;
 
-	if (attr->queues > sctx->mctx.virtio_net.max_emulated_virtqs)
+	if (attr->queues > sctx->virtio_net_caps.max_emulated_virtqs)
 		return -EINVAL;
 
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
@@ -129,7 +129,7 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 	if (!vndev)
 		return -ENOMEM;
 
-	vndev->vdev.num_queues = sdev->sctx->mctx.virtio_net.max_emulated_virtqs;
+	vndev->vdev.num_queues = sdev->sctx->virtio_net_caps.max_emulated_virtqs;
 
 	vndev->virtqs = calloc(vndev->vdev.num_queues, sizeof(*vndev->virtqs));
 	if (!vndev->virtqs) {
