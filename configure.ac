@@ -29,6 +29,7 @@ AC_PREFIX_DEFAULT(/usr/local/snap)
 
 AC_CONFIG_FILES([Makefile
 		 src/Makefile
+		 ctrl/Makefile
 		 tests/Makefile])
 
 AC_OUTPUT

@@ -10,7 +10,8 @@ bin_PROGRAMS = \
 		snap_create_destroy_nvme_cq \
 		snap_create_destroy_nvme_sq \
 		snap_query_virtio_device \
-		snap_create_destroy_virtio_queue
+		snap_create_destroy_virtio_queue \
+		snap_create_destroy_virtio_ctrl
 
 snap_open_close_CFLAGS = $(BASE_CFLAGS) -I$(top_srcdir)/src
 snap_open_close_SOURCES = snap_open_close.c
@@ -51,3 +52,8 @@ snap_query_virtio_device_LDADD = $(top_builddir)/src/libsnap.la
 snap_create_destroy_virtio_queue_CFLAGS = $(BASE_CFLAGS) -I$(top_srcdir)/src
 snap_create_destroy_virtio_queue_SOURCES = snap_create_destroy_virtio_queue.c
 snap_create_destroy_virtio_queue_LDADD = $(top_builddir)/src/libsnap.la
+
+snap_create_destroy_virtio_ctrl_CFLAGS = $(BASE_CFLAGS) -I$(top_srcdir)/src -I$(top_srcdir)/ctrl
+snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c
+snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
+                                        $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
