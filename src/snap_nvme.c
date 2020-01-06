@@ -67,6 +67,27 @@ int snap_nvme_query_device(struct snap_device *sdev,
 
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
+	attr->pci_attr.device_id = DEVX_GET(nvme_device_emulation,
+					    device_emulation_out,
+					    pci_params.device_id);
+	attr->pci_attr.vendor_id = DEVX_GET(nvme_device_emulation,
+					    device_emulation_out,
+					    pci_params.vendor_id);
+	attr->pci_attr.revision_id = DEVX_GET(nvme_device_emulation,
+					      device_emulation_out,
+					      pci_params.revision_id);
+	attr->pci_attr.class_code = DEVX_GET(nvme_device_emulation,
+					     device_emulation_out,
+					     pci_params.class_code);
+	attr->pci_attr.subsystem_id = DEVX_GET(nvme_device_emulation,
+					       device_emulation_out,
+					       pci_params.subsystem_id);
+	attr->pci_attr.subsystem_vendor_id = DEVX_GET(nvme_device_emulation,
+						      device_emulation_out,
+						      pci_params.subsystem_vendor_id);
+	attr->pci_attr.num_msix = DEVX_GET(nvme_device_emulation,
+					   device_emulation_out,
+					   pci_params.num_msix);
 out_free:
 	free(out);
 	return ret;

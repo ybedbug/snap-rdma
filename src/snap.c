@@ -1526,14 +1526,14 @@ snap_create_device_object(struct snap_context *sctx,
 	}
 
 	DEVX_SET(device, device_in, device_type, device_type);
-	DEVX_SET(device, device_in, pci_params.device_id, attr->device_id);
-	DEVX_SET(device, device_in, pci_params.vendor_id, attr->vendor_id);
-	DEVX_SET(device, device_in, pci_params.revision_id, attr->revision_id);
-	DEVX_SET(device, device_in, pci_params.class_code, attr->class_code);
-	DEVX_SET(device, device_in, pci_params.subsystem_id, attr->subsystem_id);
+	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
+	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
+	DEVX_SET(device, device_in, pci_params.revision_id, attr->pci_attr.revision_id);
+	DEVX_SET(device, device_in, pci_params.class_code, attr->pci_attr.class_code);
+	DEVX_SET(device, device_in, pci_params.subsystem_id, attr->pci_attr.subsystem_id);
 	DEVX_SET(device, device_in, pci_params.subsystem_vendor_id,
-		 attr->subsystem_vendor_id);
-	DEVX_SET(device, device_in, pci_params.num_msix, attr->num_msix);
+		 attr->pci_attr.subsystem_vendor_id);
+	DEVX_SET(device, device_in, pci_params.num_msix, attr->pci_attr.num_msix);
 
 	device->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
 					     sizeof(out));

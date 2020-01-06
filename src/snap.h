@@ -178,8 +178,7 @@ union snap_device_registers {
 	struct snap_virtio_blk_registers virtio_blk;
 };
 
-struct snap_hotplug_attr {
-	enum snap_emulation_type	type;
+struct snap_pci_attr {
 	uint16_t			device_id;
 	uint16_t			vendor_id;
 	uint8_t				revision_id;
@@ -187,7 +186,11 @@ struct snap_hotplug_attr {
 	uint16_t			subsystem_id;
 	uint16_t			subsystem_vendor_id;
 	uint16_t			num_msix;
+};
 
+struct snap_hotplug_attr {
+	enum snap_emulation_type	type;
+	struct snap_pci_attr		pci_attr;
 	union snap_device_registers	regs;
 
 };
