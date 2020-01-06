@@ -36,6 +36,20 @@ void snap_virtio_get_device_attr(struct snap_virtio_device_attr *vattr,
 				     num_queues);
 	vattr->status = DEVX_GET(virtio_device, device_configuration,
 				 device_status);
+	vattr->pci_attr.device_id = DEVX_GET(virtio_device, device_configuration,
+					     pci_params.device_id);
+	vattr->pci_attr.vendor_id = DEVX_GET(virtio_device, device_configuration,
+					     pci_params.vendor_id);
+	vattr->pci_attr.revision_id = DEVX_GET(virtio_device, device_configuration,
+					       pci_params.revision_id);
+	vattr->pci_attr.class_code = DEVX_GET(virtio_device, device_configuration,
+					      pci_params.class_code);
+	vattr->pci_attr.subsystem_id = DEVX_GET(virtio_device, device_configuration,
+						pci_params.subsystem_id);
+	vattr->pci_attr.subsystem_vendor_id = DEVX_GET(virtio_device, device_configuration,
+						       pci_params.subsystem_vendor_id);
+	vattr->pci_attr.num_msix = DEVX_GET(virtio_device, device_configuration,
+					    pci_params.num_msix);
 }
 
 int snap_virtio_query_device(struct snap_device *sdev,

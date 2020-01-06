@@ -89,6 +89,7 @@ struct snap_virtio_device_attr {
 	uint16_t			max_queues;
 	uint8_t				status;
 	bool				enabled;
+	struct snap_pci_attr		pci_attr;
 };
 
 struct snap_virtio_device {
