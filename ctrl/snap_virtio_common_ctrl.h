@@ -13,13 +13,16 @@ enum snap_virtio_ctrl_type {
 
 struct snap_virtio_ctrl_attr {
 	enum snap_virtio_ctrl_type type;
+	int pf_id;
 };
 
 struct snap_virtio_ctrl {
 	enum snap_virtio_ctrl_type type;
+	struct snap_device *sdev;
 };
 
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
+			  struct snap_context *sctx,
 			  const struct snap_virtio_ctrl_attr *attr);
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl);
 #endif

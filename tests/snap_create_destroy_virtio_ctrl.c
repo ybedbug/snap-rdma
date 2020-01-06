@@ -14,15 +14,77 @@ void signal_handler(int dummy)
 	keep_running = 0;
 }
 
+static struct snap_context *get_snap_context(int pf_id)
+{
+	struct snap_context *ctx, *found = NULL;
+	struct ibv_device **ibv_list;
+	struct snap_pci **pf_list;
+	int ibv_list_sz, pf_list_sz;
+	int i, j;
+
+	ibv_list = ibv_get_device_list(&ibv_list_sz);
+	if (!ibv_list) {
+		printf("Failed to get IB device list\n");
+		return NULL;
+	}
+
+	for (i = 0; i < ibv_list_sz; i++) {
+		ctx = snap_open(ibv_list[i]);
+		if (!ctx) {
+			printf("Failed to open snap ctx for %s. continue\n",
+				ibv_list[i]->name);
+			continue;
+		}
+
+		if (!(ctx->emulation_caps & SNAP_VIRTIO_BLK)) {
+			snap_close(ctx);
+			continue;
+		}
+
+		pf_list = calloc(ctx->virtio_blk_pfs.max_pfs,
+				sizeof(*pf_list));
+		if (!pf_list) {
+			printf("Failed to create pf list for %s. continue\n",
+				ibv_list[i]->name);
+			snap_close(ctx);
+			continue;
+		}
+
+		pf_list_sz = snap_get_pf_list(ctx, SNAP_VIRTIO_BLK, pf_list);
+		for (j = 0; j < pf_list_sz; j++) {
+			if (pf_list[j]->plugged && pf_list[j]->id == pf_id) {
+				found = ctx;
+				break;
+			}
+		}
+		free(pf_list);
+
+		if (found)
+			break;
+		else
+			snap_close(ctx);
+	}
+
+	ibv_free_device_list(ibv_list);
+	return found;
+}
+
+static void put_snap_context(struct snap_context *ctx)
+{
+	snap_close(ctx);
+}
+
 int main(int argc, char **argv)
 {
 	struct sigaction act;
-	int ret, opt;
+	int ret = 0, opt;
 	struct snap_virtio_blk_ctrl *blk_ctrl = NULL;
 	struct snap_virtio_net_ctrl *net_ctrl = NULL;
 	struct snap_virtio_blk_ctrl_attr blk_attr = {};
 	struct snap_virtio_net_ctrl_attr net_attr = {};
 	enum snap_virtio_ctrl_type type;
+	int pf_id = 0;
+	struct snap_context *sctx = NULL;
 
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = signal_handler;
@@ -30,7 +92,7 @@ int main(int argc, char **argv)
 	sigaction(SIGPIPE, &act, 0);
 	sigaction(SIGTERM, &act, 0);
 
-	while ((opt = getopt(argc, argv, "t:")) != -1) {
+	while ((opt = getopt(argc, argv, "t:f:")) != -1) {
 		switch (opt) {
 		case 't':
 			if (!strcmp(optarg, "blk")) {
@@ -42,20 +104,40 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 			break;
+		case 'f':
+			pf_id = strtol(optarg, NULL, 0);
+			break;
 		default:
-			printf("Usage: %s -t <ctrl_type>\n");
+			printf("Usage: snap_create_destroy_virtio_ctrl "
+				"-t <ctrl_type> "
+				"-f <pf_id>\n");
 			exit(1);
 		}
 	}
 
+	sctx = get_snap_context(pf_id);
+	if (!sctx) {
+		printf("Failed to get snap context for PF %d\n", pf_id);
+		ret = -ENODEV;
+		goto err;
+	}
+
 	if (type == SNAP_VIRTIO_BLK_CTRL) {
-		blk_ctrl = snap_virtio_blk_ctrl_open(&blk_attr);
-		if (!blk_ctrl)
-			return -ENODEV;
+		blk_attr.common.pf_id = pf_id;
+		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr);
+		if (!blk_ctrl) {
+			printf("Failed to create virtio-blk controller\n");
+			ret = -ENODEV;
+			goto put_sctx;
+		}
 	} else {
-		net_ctrl = snap_virtio_net_ctrl_open(&net_attr);
-		if (!net_ctrl)
-			return -ENODEV;
+		net_attr.common.pf_id = pf_id;
+		net_ctrl = snap_virtio_net_ctrl_open(sctx, &net_attr);
+		if (!net_ctrl) {
+			printf("Failed to create virtio-net controller\n");
+			ret = -ENODEV;
+			goto put_sctx;
+		}
 	}
 	printf("virtio controller of type %d opened successfully\n", type);
 
@@ -72,6 +154,8 @@ int main(int argc, char **argv)
 	else
 		snap_virtio_net_ctrl_close(net_ctrl);
 	printf("virtio controller closed\n");
-
-	return 0;
+put_sctx:
+	put_snap_context(sctx);
+err:
+	return ret;
 }

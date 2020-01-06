@@ -15,7 +15,8 @@ struct snap_virtio_blk_ctrl {
 };
 
 struct snap_virtio_blk_ctrl*
-snap_virtio_blk_ctrl_open(struct snap_virtio_blk_ctrl_attr *attr);
+snap_virtio_blk_ctrl_open(struct snap_context *sctx,
+			  struct snap_virtio_blk_ctrl_attr *attr);
 void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl);
 #endif

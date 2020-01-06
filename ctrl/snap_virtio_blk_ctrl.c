@@ -11,7 +11,8 @@
  *         errno will be set to indicate the failure reason.
  */
 struct snap_virtio_blk_ctrl*
-snap_virtio_blk_ctrl_open(struct snap_virtio_blk_ctrl_attr *attr)
+snap_virtio_blk_ctrl_open(struct snap_context *sctx,
+			  struct snap_virtio_blk_ctrl_attr *attr)
 {
 	struct snap_virtio_blk_ctrl *ctrl;
 	int ret;
@@ -23,7 +24,7 @@ snap_virtio_blk_ctrl_open(struct snap_virtio_blk_ctrl_attr *attr)
 	}
 
 	attr->common.type = SNAP_VIRTIO_BLK_CTRL;
-	ret = snap_virtio_ctrl_open(&ctrl->common, &attr->common);
+	ret = snap_virtio_ctrl_open(&ctrl->common, sctx, &attr->common);
 	if (ret) {
 		errno = ENODEV;
 		goto free_ctrl;
