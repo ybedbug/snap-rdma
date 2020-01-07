@@ -36,10 +36,7 @@ int main(int argc, char **argv)
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
 			struct snap_nvme_device_attr nvme_attr = {};
-			uint8_t bar[80];
 
-			nvme_attr.bar_size = 80;
-			nvme_attr.bar = bar;
 			ret = snap_nvme_query_device(sdev, &nvme_attr);
 			if (!ret) {
 				fprintf(stdout, "queried NVMe dev enabled=%d for pf=%d\n",

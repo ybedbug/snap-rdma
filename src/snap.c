@@ -86,8 +86,42 @@ static int snap_teardown_hca(struct snap_device *sdev)
 					 SNAP_TEARDOWN_HCA_RETRY_CNT);
 }
 
+static void snap_free_pci_bar(struct snap_pci *pci)
+{
+	if (pci->bar.data) {
+		free(pci->bar.data);
+		pci->bar.size = 0;
+	}
+}
+
+static int snap_alloc_pci_bar(struct snap_pci *pci)
+{
+	switch (pci->type) {
+	case SNAP_NVME_PF:
+	case SNAP_NVME_VF:
+		pci->bar.data = calloc(1, pci->sctx->nvme_caps.reg_size);
+		if (!pci->bar.data)
+			return -ENOMEM;
+		pci->bar.size = pci->sctx->nvme_caps.reg_size;
+		break;
+	case SNAP_VIRTIO_NET_PF:
+	case SNAP_VIRTIO_NET_VF:
+	case SNAP_VIRTIO_BLK_PF:
+	case SNAP_VIRTIO_BLK_VF:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void snap_free_virtual_functions(struct snap_pci *pf)
 {
+	int i;
+
+	for (i = 0; i < pf->num_vfs ; i++)
+		snap_free_pci_bar(&pf->vfs[i]);
 	free(pf->vfs);
 }
 
@@ -120,7 +154,7 @@ snap_emulation_type_to_pf_type(enum snap_emulation_type type)
 
 static int snap_alloc_virtual_functions(struct snap_pci *pf)
 {
-	int i;
+	int i, j, ret;
 
 	pf->vfs = calloc(pf->num_vfs, sizeof(struct snap_pci));
 	if (!pf->vfs)
@@ -138,9 +172,18 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf)
 		vf->pci_number = pf->pci_number;
 		vf->num_vfs = 0;
 		vf->parent = pf;
+		ret = snap_alloc_pci_bar(vf);
+		if (ret)
+			goto free_vfs;
 	}
 
 	return 0;
+
+free_vfs:
+	for (j = 0; j < i; j++)
+		snap_free_pci_bar(&pf->vfs[j]);
+	free(pf->vfs);
+	return ret;
 }
 
 static void _snap_free_functions(struct snap_context *sctx,
@@ -151,6 +194,7 @@ static void _snap_free_functions(struct snap_context *sctx,
 	for (i = 0; i < pfs->max_pfs; i++) {
 		if (pfs->pfs[i].plugged && pfs->pfs[i].num_vfs)
 			snap_free_virtual_functions(&pfs->pfs[i]);
+		snap_free_pci_bar(&pfs->pfs[i]);
 	}
 
 	free(pfs->pfs);
@@ -273,15 +317,23 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		pf->sctx = sctx;
 		pf->id = i;
 		pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+		ret = snap_alloc_pci_bar(pf);
+		if (ret)
+			goto free_vfs;
+
 		if (i < num_emulated_pfs) {
 			pf->plugged = true;
 			ret = snap_pf_get_pci_info(pf, out);
-			if (ret)
+			if (ret) {
+				snap_free_pci_bar(pf);
 				goto free_vfs;
+			}
 			if (pf->num_vfs) {
 				ret = snap_alloc_virtual_functions(pf);
-				if (ret)
+				if (ret) {
+					snap_free_pci_bar(pf);
 					goto free_vfs;
+				}
 			}
 		}
 	}
@@ -294,6 +346,7 @@ free_vfs:
 	for (j = 0; j < i; j++) {
 		if (pfs_ctx->pfs[j].num_vfs)
 			snap_free_virtual_functions(&pfs_ctx->pfs[j]);
+		snap_free_pci_bar(&pfs_ctx->pfs[j]);
 	}
 out_free:
 	free(out);
@@ -1552,6 +1605,56 @@ out_err:
 	return NULL;
 }
 
+void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
+		void *pci_params_out)
+{
+	pci_attr->device_id = DEVX_GET(device_pci_parameters,
+				       pci_params_out, device_id);
+	pci_attr->vendor_id = DEVX_GET(device_pci_parameters,
+				       pci_params_out, vendor_id);
+	pci_attr->revision_id = DEVX_GET(device_pci_parameters,
+					 pci_params_out, revision_id);
+	pci_attr->class_code = DEVX_GET(device_pci_parameters,
+					pci_params_out, class_code);
+	pci_attr->subsystem_id = DEVX_GET(device_pci_parameters,
+					  pci_params_out, subsystem_id);
+	pci_attr->subsystem_vendor_id = DEVX_GET(device_pci_parameters,
+						 pci_params_out,
+						 subsystem_vendor_id);
+	pci_attr->num_msix = DEVX_GET(device_pci_parameters,
+				      pci_params_out, num_msix);
+}
+
+static int snap_query_device_emulation(struct snap_device *sdev)
+{
+	struct snap_nvme_device_attr nvme_attr = {};
+	struct snap_virtio_net_device_attr net_attr = {};
+	struct snap_virtio_blk_device_attr blk_attr = {};
+	int ret;
+
+	if (!sdev->pci->plugged)
+		return ENODEV;
+
+	switch (sdev->pci->type) {
+	case SNAP_NVME_PF:
+	case SNAP_NVME_VF:
+		ret = snap_nvme_query_device(sdev, &nvme_attr);
+		break;
+	case SNAP_VIRTIO_NET_PF:
+	case SNAP_VIRTIO_NET_VF:
+		ret = snap_virtio_net_query_device(sdev, &net_attr);
+		break;
+	case SNAP_VIRTIO_BLK_PF:
+	case SNAP_VIRTIO_BLK_VF:
+		ret = snap_virtio_blk_query_device(sdev, &blk_attr);
+		break;
+	default:
+		return EINVAL;
+	}
+
+	return ret;
+}
+
 static void snap_destroy_device_emulation(struct snap_device *sdev)
 {
 	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation->obj);
@@ -1904,6 +2007,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 {
 	struct snap_device *sdev;
 	struct snap_pfs_ctx *pfs;
+	int ret;
 
 	/* Currently support only PFs emulation */
 	if (attr->type == SNAP_NVME_PF &&
@@ -1932,6 +2036,12 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
 		goto out_free;
+	}
+
+	ret = snap_query_device_emulation(sdev);
+	if (ret) {
+		errno = ret;
+		goto out_free_device_emulation;
 	}
 
 	/* This should be done only for BF-1 */

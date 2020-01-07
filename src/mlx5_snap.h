@@ -49,6 +49,7 @@ enum mlx5_snap_flow_group_type {
 };
 
 struct snap_event;
+struct snap_pci_attr pci_attr;
 
 struct mlx5_snap_device;
 struct mlx5_snap_flow_group;
@@ -135,5 +136,7 @@ int snap_devx_obj_modify(struct mlx5_snap_devx_obj *snap_obj, void *in,
 			 size_t inlen, void *out, size_t outlen);
 int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 			size_t inlen, void *out, size_t outlen);
+void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
+		void *pci_params_out);
 
 #endif

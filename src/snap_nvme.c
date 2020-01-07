@@ -33,11 +33,8 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
 		return -EINVAL;
 
-	if (attr->bar_size > sctx->nvme_caps.reg_size)
-		return -EINVAL;
-
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(nvme_device_emulation) + attr->bar_size;
+		   DEVX_ST_SZ_BYTES(nvme_device_emulation) + sdev->pci->bar.size;
 	out = calloc(1, out_size);
 	if (!out)
 		return -ENOMEM;
@@ -59,35 +56,19 @@ int snap_nvme_query_device(struct snap_device *sdev,
 		goto out_free;
 
 	device_emulation_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
-	if (attr->bar_size)
-		memcpy(attr->bar,
-		       DEVX_ADDR_OF(nvme_device_emulation,
-				    device_emulation_out, register_data),
-		       attr->bar_size);
+	/* save the most updated bar value for each query */
+	memcpy(sdev->pci->bar.data,
+	       DEVX_ADDR_OF(nvme_device_emulation, device_emulation_out,
+			    register_data),
+	       sdev->pci->bar.size);
+
+	snap_get_pci_attr(&sdev->pci->pci_attr,
+			  DEVX_ADDR_OF(nvme_device_emulation,
+				       device_emulation_out,
+				       pci_params));
 
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
-	attr->pci_attr.device_id = DEVX_GET(nvme_device_emulation,
-					    device_emulation_out,
-					    pci_params.device_id);
-	attr->pci_attr.vendor_id = DEVX_GET(nvme_device_emulation,
-					    device_emulation_out,
-					    pci_params.vendor_id);
-	attr->pci_attr.revision_id = DEVX_GET(nvme_device_emulation,
-					      device_emulation_out,
-					      pci_params.revision_id);
-	attr->pci_attr.class_code = DEVX_GET(nvme_device_emulation,
-					     device_emulation_out,
-					     pci_params.class_code);
-	attr->pci_attr.subsystem_id = DEVX_GET(nvme_device_emulation,
-					       device_emulation_out,
-					       pci_params.subsystem_id);
-	attr->pci_attr.subsystem_vendor_id = DEVX_GET(nvme_device_emulation,
-						      device_emulation_out,
-						      pci_params.subsystem_vendor_id);
-	attr->pci_attr.num_msix = DEVX_GET(nvme_device_emulation,
-					   device_emulation_out,
-					   pci_params.num_msix);
 out_free:
 	free(out);
 	return ret;

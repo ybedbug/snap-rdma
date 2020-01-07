@@ -110,10 +110,6 @@ struct snap_nvme_cq {
 };
 
 struct snap_nvme_device_attr {
-	void					*bar;
-	unsigned int				bar_size;
-
-	struct snap_pci_attr			pci_attr;
 	bool					enabled;
 };
 

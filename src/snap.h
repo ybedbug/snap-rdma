@@ -107,9 +107,26 @@ struct snap_device_attr {
 	uint32_t		flags; /* Use enum snap_device_attr_flags */
 };
 
+struct snap_pci_bar {
+	void				*data;
+	unsigned int			size;
+};
+
+struct snap_pci_attr {
+	uint16_t			device_id;
+	uint16_t			vendor_id;
+	uint8_t				revision_id;
+	uint32_t			class_code;
+	uint16_t			subsystem_id;
+	uint16_t			subsystem_vendor_id;
+	uint16_t			num_msix;
+};
+
 struct snap_pci {
 	struct snap_context		*sctx;
 	enum snap_pci_type		type;
+	struct snap_pci_attr		pci_attr;
+	struct snap_pci_bar		bar;
 	bool				plugged;
 	int				id;
 	int				pci_number;
@@ -176,16 +193,6 @@ union snap_device_registers {
 	struct snap_nvme_registers nvme;
 	struct snap_virtio_net_registers virtio_net;
 	struct snap_virtio_blk_registers virtio_blk;
-};
-
-struct snap_pci_attr {
-	uint16_t			device_id;
-	uint16_t			vendor_id;
-	uint8_t				revision_id;
-	uint32_t			class_code;
-	uint16_t			subsystem_id;
-	uint16_t			subsystem_vendor_id;
-	uint16_t			num_msix;
 };
 
 struct snap_hotplug_attr {

@@ -37,10 +37,11 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 
 	device_emulation_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 
-	snap_virtio_get_device_attr(&attr->vattr,
+	snap_virtio_get_device_attr(sdev, &attr->vattr,
 				    DEVX_ADDR_OF(virtio_blk_device_emulation,
 						 device_emulation_out,
 						 virtio_device));
+
 	if (attr->queues) {
 		for (i = 0; i < attr->queues; i++)
 			snap_virtio_get_queue_attr(&attr->q_attrs[i].vattr,
