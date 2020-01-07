@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include "snap_virtio_common_ctrl.h"
+#include "snap_virtio_blk.h"
 
 struct snap_virtio_blk_ctrl_attr {
 	struct snap_virtio_ctrl_attr common;

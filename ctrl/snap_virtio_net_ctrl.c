@@ -1,6 +1,62 @@
 #include "snap_virtio_net_ctrl.h"
 
 
+static struct snap_virtio_device_attr*
+snap_virtio_net_ctrl_bar_create(struct snap_virtio_ctrl *vctrl)
+{
+	struct snap_virtio_net_device_attr *vnbar;
+
+	vnbar = calloc(1, sizeof(*vnbar));
+	if (!vnbar)
+		goto err;
+
+	/* Allocate queue attributes slots on bar */
+	vnbar->queues = vctrl->num_queues;
+	vnbar->q_attrs = calloc(vnbar->queues, sizeof(*vnbar->q_attrs));
+	if (!vnbar->q_attrs)
+		goto free_vnbar;
+
+	return &vnbar->vattr;
+
+free_vnbar:
+	free(vnbar);
+err:
+	return NULL;
+}
+
+static void snap_virtio_net_ctrl_bar_destroy(struct snap_virtio_device_attr *vbar)
+{
+	struct snap_virtio_net_device_attr *vnbar = to_net_device_attr(vbar);
+
+	free(vnbar->q_attrs);
+	free(vnbar);
+}
+
+static void snap_virtio_net_ctrl_bar_copy(struct snap_virtio_device_attr *vorig,
+					  struct snap_virtio_device_attr *vcopy)
+{
+	struct snap_virtio_net_device_attr *vnorig = to_net_device_attr(vorig);
+	struct snap_virtio_net_device_attr *vncopy = to_net_device_attr(vcopy);
+
+	memcpy(vncopy->q_attrs, vnorig->q_attrs,
+	       vncopy->queues * sizeof(*vncopy->q_attrs));
+}
+
+static int snap_virtio_net_ctrl_bar_update(struct snap_virtio_ctrl *vctrl,
+					   struct snap_virtio_device_attr *vbar)
+{
+	struct snap_virtio_net_device_attr *vnbar = to_net_device_attr(vbar);
+
+	return snap_virtio_net_query_device(vctrl->sdev, vnbar);
+}
+
+static struct snap_virtio_ctrl_bar_ops snap_virtio_net_ctrl_bar_ops = {
+	.create = snap_virtio_net_ctrl_bar_create,
+	.destroy = snap_virtio_net_ctrl_bar_destroy,
+	.copy = snap_virtio_net_ctrl_bar_copy,
+	.update = snap_virtio_net_ctrl_bar_update,
+};
+
 /**
  * snap_virtio_net_ctrl_open() - Create a new virtio-net controller
  * @attr:       virtio-net controller attributes
@@ -24,7 +80,9 @@ snap_virtio_net_ctrl_open(struct snap_context *sctx,
 	}
 
 	attr->common.type = SNAP_VIRTIO_NET_CTRL;
-	ret = snap_virtio_ctrl_open(&ctrl->common, sctx, &attr->common);
+	ret = snap_virtio_ctrl_open(&ctrl->common,
+				    &snap_virtio_net_ctrl_bar_ops,
+				    sctx, &attr->common);
 	if (ret) {
 		errno = ENODEV;
 		goto free_ctrl;
@@ -68,4 +126,5 @@ void snap_virtio_net_ctrl_close(struct snap_virtio_net_ctrl *ctrl)
  */
 void snap_virtio_net_ctrl_progress(struct snap_virtio_net_ctrl *ctrl)
 {
+	snap_virtio_ctrl_progress(&ctrl->common);
 }
