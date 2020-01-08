@@ -493,6 +493,7 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	attr->emulated_device_dma_mkey = DEVX_GET(nvme_sq, out_sq,
 						  emulated_device_dma_mkey);
 	attr->doorbell_offset = DEVX_GET(nvme_sq, out_sq, nvme_doorbell_offset);
+	attr->state = DEVX_GET(nvme_sq, out_sq, network_state);
 	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
 	if (dev_allowed) {
 		if (dev_allowed & MLX5_NVME_SQ_MODIFY_QPN)
