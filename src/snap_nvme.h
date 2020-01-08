@@ -144,5 +144,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr);
 int snap_nvme_destroy_sq(struct snap_nvme_sq *sq);
 int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 	struct snap_nvme_sq_attr *attr);
+int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
+	struct snap_nvme_sq_attr *attr);
 
 #endif
