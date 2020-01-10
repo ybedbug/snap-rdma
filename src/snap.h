@@ -235,6 +235,7 @@ struct snap_virtio_caps {
 	int		event_modes;//mask of snap_virtq_event_mode
 	uint64_t	features; //mask of snap_virtio_features
 	uint32_t	max_emulated_virtqs;
+	uint16_t	max_tunnel_desc;
 
 	/*
 	 * According to PRM for each created virtq, one must provide 3 UMEMs:
