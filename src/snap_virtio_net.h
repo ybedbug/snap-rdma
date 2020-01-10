@@ -43,12 +43,18 @@ enum snap_virtio_net_queue_modify {
 };
 
 struct snap_virtio_net_queue_attr {
-	uint64_t			modifiable_fields;//mask of snap_virtio_net_queue_modify
+	uint8_t				state; /* query and modify */
+	/* create: */
+	uint16_t			vhca_id;
 	uint32_t			tisn_or_qpn;
-	uint8_t				state;
+	bool				tso_ipv4;
+	bool				tso_ipv6;
+	bool				tx_csum;
+	bool				rx_csum;
+	/* query result: */
+	uint64_t			modifiable_fields;//mask of snap_virtio_net_queue_modify
 	uint16_t			hw_available_index;
 	uint8_t				hw_used_index;
-
 	struct snap_virtio_queue_attr   vattr;
 };
 

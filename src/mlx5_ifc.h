@@ -3139,6 +3139,11 @@ enum {
 	MLX5_VIRTIO_Q_STATE_ERR		= 0x3,
 };
 
+enum {
+	MLX5_VIRTIO_Q_OFFLOAD_TYPE_ETH_FRAME	= 0x0,
+	MLX5_VIRTIO_Q_OFFLOAD_TYPE_DESC_TUNNEL	= 0x1,
+};
+
 struct mlx5_ifc_virtio_q_bits {
 	u8         virtio_q_type[0x8];
 	u8         reserved_at_8[0x5];
@@ -3192,7 +3197,7 @@ struct mlx5_ifc_virtio_net_q_bits {
 
 	u8	   reserved_at_40[0x20];
 
-	u8	   qpn_vhca_id[0x10];
+	u8	   tisn_or_qpn_vhca_id[0x10];
 	u8	   reserved_at_70[0x10];
 
 	u8	   tso_ipv4[0x1];
