@@ -30,8 +30,14 @@ snap_virtio_net_ctrl_open(struct snap_context *sctx,
 		goto free_ctrl;
 	}
 
+	ret = snap_virtio_net_init_device(ctrl->common.sdev);
+	if (ret)
+		goto close_ctrl;
+
 	return ctrl;
 
+close_ctrl:
+	snap_virtio_ctrl_close(&ctrl->common);
 free_ctrl:
 	free(ctrl);
 err:
@@ -46,6 +52,7 @@ err:
  */
 void snap_virtio_net_ctrl_close(struct snap_virtio_net_ctrl *ctrl)
 {
+	snap_virtio_net_teardown_device(ctrl->common.sdev);
 	snap_virtio_ctrl_close(&ctrl->common);
 	free(ctrl);
 }
