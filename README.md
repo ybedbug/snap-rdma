@@ -27,4 +27,28 @@ Libraries are installed by default at /usr/local/lib.
 
 # Tests
 
-TBD
+The library has googletest based unit test suite. To build library with the
+tests and googletest installed in the /usr/local/gtest do:
+
+    ./configure --with-gtest=/usr/local/gtest
+    make
+
+To run tests do
+
+    make test
+
+or run
+
+    tests/gtest_snap_rdma
+
+To see advanced gtest option like test filtering, etc run
+
+    tests/gtest_snap_rdma --help
+
+To build and install gtest in the /usr/local/gtest do:
+
+    git clone https://github.com/google/googletest
+    cd googletest
+    cmake -DBUILD_GMOCK=0 -DCMAKE_INSTALL_PREFIX=/usr/local/gtest
+    make
+    make install

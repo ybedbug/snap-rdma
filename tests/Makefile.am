@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-bin_PROGRAMS = \
+noinst_PROGRAMS = \
 		snap_open_close \
 		snap_open_close_device \
 		snap_query_pfs \
@@ -57,3 +57,16 @@ snap_create_destroy_virtio_ctrl_CFLAGS = $(BASE_CFLAGS) -I$(top_srcdir)/src -I$(
 snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c
 snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
+
+if HAVE_GTEST
+noinst_PROGRAMS += gtest_snap_rdma
+
+gtest_snap_rdma_CXXFLAGS = $(BASE_CFLAGS) \
+			   -I$(top_srcdir)/src \
+			   $(GTEST_CXXFLAGS)
+
+gtest_snap_rdma_SOURCES = gtest_example.cc
+gtest_snap_rdma_LDFLAGS = $(GTEST_LDFLAGS) -lgtest_main
+gtest_snap_rdma_LDADD = \
+			$(top_builddir)/src/libsnap.la
+endif
