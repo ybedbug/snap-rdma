@@ -428,11 +428,21 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	if (mask & SNAP_NVME_SQ_MOD_QPN) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qpn);
-		// TODO: Update qpn_vhca_id as well
+		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, attr->qpn_vhca_id);
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
-		DEVX_SET(nvme_sq, sq_in, network_state, attr->state);
+		if (attr->state == SNAP_NVME_SQ_STATE_INIT)
+			DEVX_SET(nvme_sq, sq_in, network_state,
+				 MLX5_NVME_SQ_STATE_INIT);
+		else if (attr->state == SNAP_NVME_SQ_STATE_RDY)
+			DEVX_SET(nvme_sq, sq_in, network_state,
+				 MLX5_NVME_SQ_STATE_RDY);
+		else if (attr->state == SNAP_NVME_SQ_STATE_ERR)
+			DEVX_SET(nvme_sq, sq_in, network_state,
+				 MLX5_NVME_SQ_STATE_ERR);
+		else
+			return -EINVAL;
 	}
 
 	DEVX_SET64(nvme_sq, sq_in, modify_field_select, fields_to_modify);
