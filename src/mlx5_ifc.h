@@ -2241,6 +2241,12 @@ enum {
 };
 
 enum {
+	MLX5_NVME_SQ_STATE_INIT	= 0x0,
+	MLX5_NVME_SQ_STATE_RDY	= 0x1,
+	MLX5_NVME_SQ_STATE_ERR	= 0x2,
+};
+
+enum {
 	MLX5_NVME_SQ_MODIFY_QPN = 1 << 0,
 	MLX5_NVME_SQ_MODIFY_STATE = 1 << 1,
 };
