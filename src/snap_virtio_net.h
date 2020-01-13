@@ -65,6 +65,10 @@ struct snap_virtio_net_queue {
 };
 
 struct snap_virtio_net_device_attr {
+	uint64_t				mac;
+	uint16_t				status;
+	uint16_t				max_queue_pairs;
+	uint16_t				mtu;
 	struct snap_virtio_device_attr		vattr;
 	struct snap_virtio_net_queue_attr	*q_attrs;
 	unsigned int				queues;

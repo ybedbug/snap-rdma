@@ -59,6 +59,16 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	} else {
 		attr->modifiable_fields = 0;
 	}
+	attr->mtu = DEVX_GET(virtio_net_device_emulation,
+			     device_emulation_out, virtio_net_config.mtu);
+	attr->status = DEVX_GET(virtio_net_device_emulation,
+				device_emulation_out, virtio_net_config.status);
+	attr->max_queue_pairs = DEVX_GET(virtio_net_device_emulation,
+					 device_emulation_out, virtio_net_config.max_virtqueue_pairs);
+	attr->mac = (uint64_t)DEVX_GET(virtio_net_device_emulation,
+				       device_emulation_out, virtio_net_config.mac_47_16) << 16;
+	attr->mac |= DEVX_GET(virtio_net_device_emulation,
+			      device_emulation_out, virtio_net_config.mac_15_0);
 
 out_free:
 	free(out);
