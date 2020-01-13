@@ -3306,8 +3306,7 @@ struct mlx5_ifc_nvme_sq_bits {
 
 	u8	   device_emulation_id[0x20];
 
-	u8	   reserved_at_60[0x8];
-	u8	   pd[0x18];
+	u8	   reserved_at_60[0x20];
 
 	u8	   network_state[0x4];
 	u8	   offload_type[0x4];
