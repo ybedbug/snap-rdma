@@ -1,16 +1,40 @@
 #include <stdio.h>
 
 #include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
 
 #include "snap.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
+#include "mlx5_ifc.h"
+
+struct snap_sf {
+	struct ibv_context *context;
+	uint16_t vhca_id;
+	struct ibv_pd *pd;
+	struct ibv_cq *cq;
+};
+
+static struct ibv_qp *snap_create_qp(struct snap_sf *sf)
+{
+	struct ibv_qp_init_attr qp_attr = {};
+
+	qp_attr.qp_type = IBV_QPT_RC;
+	qp_attr.send_cq = sf->cq;
+	qp_attr.recv_cq = sf->cq;
+	qp_attr.cap.max_send_sge = 1;
+	qp_attr.cap.max_recv_sge = 1;
+	qp_attr.cap.max_send_wr = 16;
+	qp_attr.cap.max_recv_wr = 16;
+
+	return ibv_create_qp(sf->pd, &qp_attr);
+}
 
 static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 		enum snap_emulation_type type, int num_queues,
 		enum snap_virtq_type q_type,
 		enum snap_virtq_event_mode ev_mode,
-		char *name, bool ev)
+		char *name, bool ev, struct snap_sf *sf)
 {
 	struct snap_device_attr attr = {};
 	struct snap_device *sdev;
@@ -31,19 +55,49 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 				for (j = 0; j < num_queues; j++) {
 					struct snap_virtio_blk_queue_attr battr = {};
 					struct snap_virtio_blk_queue *vbq;
+					struct ibv_qp *qp = NULL;
 
 					battr.vattr.type = q_type;
 					battr.vattr.ev_mode = ev_mode;
 					battr.vattr.idx = j;
 					battr.vattr.size = 16;
-					battr.qpn = (j + 1) * 0xbeaf;
+					battr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
+					battr.vattr.full_emulation = true;
+					battr.vattr.virtio_version_1_0 = true;
+					battr.vattr.max_tunnel_desc = 1;
+					if (sf && sf->context && sf->cq && sf->pd) {
+						qp = snap_create_qp(sf);
+						if (!qp)
+							break;
+						battr.qpn = qp->qp_num;
+						battr.qpn_vhca_id = sf->vhca_id;
+						fprintf(stdout, "created QP with qpn 0x%x. Creating virtq on vhca_id 0x%x\n",
+							battr.qpn, battr.qpn_vhca_id);
+						fflush(stdout);
+
+					} else {
+						/* choose hard-coded values and expect to fail */
+						battr.qpn = (j + 1) * 0xbeaf;
+						battr.qpn_vhca_id = 0xff;
+					}
 					vbq = snap_virtio_blk_create_queue(sdev, &battr);
 					if (vbq) {
+						memset(&battr, 0, sizeof(battr));
+						if (!snap_virtio_blk_query_queue(vbq, &battr)) {
+							fprintf(stdout, "Query virtio blk queue idx=0x%x, depth=%d, state=0x%x\n",
+								battr.vattr.idx, battr.vattr.size, battr.vattr.state);
+							fflush(stdout);
+						} else {
+							fprintf(stderr, "Failed to Query virtio blk queue id=0x%x\n", j);
+							fflush(stderr);
+						}
 						snap_virtio_blk_destroy_queue(vbq);
 					} else {
 						fprintf(stderr, "failed to create Virtio blk queue id=%d err=%d\n", j, errno);
 						fflush(stderr);
 					}
+					if (qp)
+						ibv_destroy_qp(qp);
 				}
 				snap_virtio_blk_teardown_device(sdev);
 			} else {
@@ -101,6 +155,38 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 	return 0;
 }
 
+static int init_snap_sf(struct snap_sf *sf)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+
+	ret = mlx5dv_devx_general_cmd(sf->context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return -1;
+
+	sf->vhca_id = DEVX_GET(query_hca_cap_out, out,
+			       capability.cmd_hca_cap.vhca_id);
+	sf->pd = ibv_alloc_pd(sf->context);
+	if (!sf->pd)
+		return -1;
+
+	sf->cq = ibv_create_cq(sf->context, 1024, NULL, NULL, 0);
+	if (!sf->cq)
+		goto dealloc_pd;
+
+	return 0;
+
+dealloc_pd:
+	ibv_dealloc_pd(sf->pd);
+	return -1;
+}
+
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
@@ -108,9 +194,19 @@ int main(int argc, char **argv)
 	int ret = 0, i, dev_count, opt, num_queues = 4, dev_type = 0;
 	enum snap_virtq_type q_type = SNAP_VIRTQ_SPLIT_MODE;
 	enum snap_virtq_event_mode ev_mode = SNAP_VIRTQ_NO_MSIX_MODE;
+	char dev_name[64] = {0};
+	struct snap_sf sf;
 
-	while ((opt = getopt(argc, argv, "n:t:e:d:v")) != -1) {
+	sf.context = NULL;
+	sf.vhca_id = -1;
+	sf.pd = NULL;
+	sf.cq = NULL;
+
+	while ((opt = getopt(argc, argv, "s:n:t:e:d:v")) != -1) {
 		switch (opt) {
+		case 's':
+			strcpy(dev_name, optarg);
+			break;
 		case 'v':
 			ev = true;
 			break;
@@ -141,7 +237,7 @@ int main(int argc, char **argv)
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_create_destroy_virtio_blk_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel)]\n");
+			printf("Usage: snap_create_destroy_virtio_blk_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel) -s (SF)]\n");
 			exit(1);
 		}
 	}
@@ -157,6 +253,33 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
+	/* Create SF */
+	if (dev_name[0]) {
+		for (i = 0; i < dev_count; i++) {
+			if (strcmp(dev_name, list[i]->name) == 0) {
+				sf.context = ibv_open_device(list[i]);
+				if (!sf.context) {
+					fprintf(stderr, "failed to create sf for %s err=%d. exiting\n",
+						list[i]->name, errno);
+					fflush(stderr);
+					goto out_free_list;
+				} else {
+					ret = init_snap_sf(&sf);
+					if (ret) {
+						fprintf(stderr, "failed to init sf for %s err=%d. exiting\n",
+							list[i]->name, errno);
+						fflush(stderr);
+						goto out_free_sf;
+					} else {
+						fprintf(stdout, "SF created for %s with vhca_id %d.\n",
+							list[i]->name, sf.vhca_id);
+						fflush(stdout);
+					}
+					break;
+				}
+			}
+		}
+	}
 	for (i = 0; i < dev_count; i++) {
 		struct snap_context *sctx;
 
@@ -171,15 +294,23 @@ int main(int argc, char **argv)
 		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
 			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_BLK,
 							 num_queues, q_type,
-							 ev_mode, list[i]->name, ev);
+							 ev_mode, list[i]->name, ev, &sf);
 		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
 			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_NET,
 							 num_queues, q_type,
-							 ev_mode, list[i]->name, ev);
+							 ev_mode, list[i]->name, ev, &sf);
 
 		snap_close(sctx);
 	}
 
+	if (sf.cq)
+		ibv_destroy_cq(sf.cq);
+	if (sf.pd)
+		ibv_dealloc_pd(sf.pd);
+out_free_sf:
+	if (sf.context)
+		ibv_close_device(sf.context);
+out_free_list:
 	ibv_free_device_list(list);
 out:
 	return ret;
