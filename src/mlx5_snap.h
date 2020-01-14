@@ -49,7 +49,7 @@ enum mlx5_snap_flow_group_type {
 };
 
 struct snap_event;
-struct snap_pci_attr pci_attr;
+struct snap_pci_attr;
 
 struct mlx5_snap_device;
 struct mlx5_snap_flow_group;
