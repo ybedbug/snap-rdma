@@ -63,6 +63,20 @@
 #define snap_min(a,b) (((a)<(b))?(a):(b))
 #define snap_max(a,b) (((a)>(b))?(a):(b))
 
+#define snap_likely(x) __builtin_expect(!!(x), 1)
+#define snap_unlikely(x) __builtin_expect(!!(x), 0)
+
+#ifndef SNAP_DEBUG
+#define SNAP_DEBUG 0
+#endif
+
+#define snap_debug(fmt, ...) \
+	do { if (SNAP_DEBUG) \
+		printf("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
+	} while (0)
+
+#define snap_error printf
+
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
 	SNAP_NVME_PF		= 1 << 0,

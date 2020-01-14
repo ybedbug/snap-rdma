@@ -30,6 +30,21 @@ m4_include([m4/gtest.m4])
 
 AC_PREFIX_DEFAULT(/usr/local/snap)
 
+# debug mode
+
+#BASE_CFLAGS="-g -O2 -Wall -Werror"
+BASE_CFLAGS="-g -O2"
+
+AC_ARG_ENABLE(debug,
+	      AC_HELP_STRING([--enable-debug], [Enable debug mode build]),
+	      [],
+	      [enable_debug=no])
+AS_IF([test "x$enable_debug" = xyes],
+      [dbg=1],
+      [dbg=0])
+BASE_CFLAGS="-DSNAP_DEBUG=$dbg $BASE_CFLAGS"
+AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS])
+
 AC_CONFIG_FILES([Makefile
 		 src/Makefile
 		 ctrl/Makefile
