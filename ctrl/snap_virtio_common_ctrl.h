@@ -61,6 +61,17 @@ struct snap_virtio_ctrl_attr {
 	int pf_id;
 };
 
+struct snap_virtio_ctrl_queue {
+	struct snap_virtio_ctrl *ctrl;
+	int index;
+};
+
+struct snap_virtio_queue_ops {
+	struct snap_virtio_ctrl_queue *(*create)(struct snap_virtio_ctrl *ctrl,
+						 int index);
+	void (*destroy)(struct snap_virtio_ctrl_queue *queue);
+};
+
 struct snap_virtio_ctrl_bar_ops {
 	struct snap_virtio_device_attr *(*create)(struct snap_virtio_ctrl *ctrl);
 	void (*destroy)(struct snap_virtio_device_attr *ctrl);
@@ -70,6 +81,8 @@ struct snap_virtio_ctrl_bar_ops {
 		      struct snap_virtio_device_attr *attr);
 	int (*modify)(struct snap_virtio_ctrl *ctrl,
 		      uint64_t mask, struct snap_virtio_device_attr *attr);
+	struct snap_virtio_queue_attr *(*get_queue_attr)(
+			struct snap_virtio_device_attr *vbar, int index);
 };
 
 struct snap_virtio_ctrl {
@@ -78,6 +91,8 @@ struct snap_virtio_ctrl {
 	pthread_mutex_t state_lock;
 	struct snap_device *sdev;
 	size_t num_queues;
+	struct snap_virtio_ctrl_queue **queues;
+	struct snap_virtio_queue_ops *q_ops;
 	struct snap_virtio_ctrl_bar_ops *bar_ops;
 	struct snap_virtio_device_attr *bar_curr;
 	struct snap_virtio_device_attr *bar_prev;
@@ -88,6 +103,7 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
+			  struct snap_virtio_queue_ops *q_ops,
 			  struct snap_context *sctx,
 			  const struct snap_virtio_ctrl_attr *attr);
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl);

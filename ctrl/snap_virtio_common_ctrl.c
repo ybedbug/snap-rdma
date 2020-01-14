@@ -75,6 +75,13 @@ static inline int snap_virtio_ctrl_bar_modify(struct snap_virtio_ctrl *ctrl,
 	return ctrl->bar_ops->modify(ctrl, mask, bar);
 }
 
+static inline struct snap_virtio_queue_attr*
+to_virtio_queue_attr(struct snap_virtio_ctrl *ctrl,
+		     struct snap_virtio_device_attr *vbar, int index)
+{
+	return ctrl->bar_ops->get_queue_attr(vbar, index);
+}
+
 static int snap_virtio_ctrl_bars_init(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
@@ -105,6 +112,27 @@ static int snap_virtio_ctrl_bars_teardown(struct snap_virtio_ctrl *ctrl)
 	snap_virtio_ctrl_bar_destroy(ctrl, ctrl->bar_curr);
 }
 
+static struct snap_virtio_ctrl_queue*
+snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
+{
+	struct snap_virtio_ctrl_queue *vq;
+
+	vq = ctrl->q_ops->create(ctrl, index);
+	if (!vq)
+		return NULL;
+
+	vq->ctrl = ctrl;
+	vq->index = index;
+	return vq;
+}
+
+static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_ctrl *ctrl = vq->ctrl;
+
+	ctrl->q_ops->destroy(vq);
+}
+
 static inline bool snap_virtio_ctrl_needs_reset(struct snap_virtio_ctrl *ctrl)
 {
 	/*
@@ -132,19 +160,47 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 {
+	int ret = 0;
+	int i;
+	const struct snap_virtio_queue_attr *vq;
+
 	pthread_mutex_lock(&ctrl->state_lock);
-	ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
+		goto out;
+
+	for (i = 0; i < ctrl->num_queues; i++) {
+		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
+
+		if (vq->enable) {
+			ctrl->queues[i] = snap_virtio_ctrl_queue_create(ctrl, i);
+			if (!ctrl->queues[i]) {
+				ret = -ENOMEM;
+				break;
+			}
+		}
+	}
+
+	if (!ret)
+		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+out:
 	pthread_mutex_unlock(&ctrl->state_lock);
-	return 0;
+	return ret;
 }
 
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 {
-	int ret = 0;
+	int i, ret = 0;
 
 	pthread_mutex_lock(&ctrl->state_lock);
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STOPPED)
 		goto out;
+
+	for (i = 0; i < ctrl->num_queues; i++) {
+		if (ctrl->queues[i]) {
+			snap_virtio_ctrl_queue_destroy(ctrl->queues[i]);
+			ctrl->queues[i] = NULL;
+		}
+	}
 
 	if (SNAP_VIRTIO_CTRL_RST_DETECTED(ctrl)) {
 		/*
@@ -185,6 +241,7 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
+			  struct snap_virtio_queue_ops *q_ops,
 			  struct snap_context *sctx,
 			  const struct snap_virtio_ctrl_attr *attr)
 {
@@ -225,9 +282,18 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	if (ret)
 		goto teardown_bars;
 
+	ctrl->q_ops = q_ops;
+	ctrl->queues = calloc(ctrl->num_queues, sizeof(*ctrl->queues));
+	if (!ctrl->queues) {
+		ret = -ENOMEM;
+		goto mutex_destroy;
+	}
+
 	ctrl->type = attr->type;
 	return 0;
 
+mutex_destroy:
+	pthread_mutex_destroy(&ctrl->state_lock);
 teardown_bars:
 	snap_virtio_ctrl_bars_teardown(ctrl);
 close_device:
@@ -238,6 +304,7 @@ err:
 
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 {
+	free(ctrl->queues);
 	pthread_mutex_destroy(&ctrl->state_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);
 	snap_close_device(ctrl->sdev);

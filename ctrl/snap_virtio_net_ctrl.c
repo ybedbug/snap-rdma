@@ -71,12 +71,48 @@ snap_virtio_net_ctrl_bar_add_status(struct snap_virtio_net_ctrl *ctrl,
 					     SNAP_VIRTIO_MOD_DEV_STATUS, bar);
 }
 
+static struct snap_virtio_queue_attr*
+snap_virtio_net_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
+					int index)
+{
+	struct snap_virtio_net_device_attr *vnbar = to_net_device_attr(vbar);
+
+	return &vnbar->q_attrs[index].vattr;
+}
+
 static struct snap_virtio_ctrl_bar_ops snap_virtio_net_ctrl_bar_ops = {
 	.create = snap_virtio_net_ctrl_bar_create,
 	.destroy = snap_virtio_net_ctrl_bar_destroy,
 	.copy = snap_virtio_net_ctrl_bar_copy,
 	.update = snap_virtio_net_ctrl_bar_update,
 	.modify = snap_virtio_net_ctrl_bar_modify,
+	.get_queue_attr = snap_virtio_net_ctrl_bar_get_queue_attr,
+};
+
+static struct snap_virtio_ctrl_queue*
+snap_virtio_net_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
+{
+	struct snap_virtio_net_ctrl_queue *vnq;
+
+	vnq = calloc(1, sizeof(*vnq));
+	if (!vnq)
+		return NULL;
+
+	vnq->attr = &to_net_device_attr(vctrl->bar_curr)->q_attrs[index];
+	return &vnq->common;
+}
+
+static void snap_virtio_net_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_net_ctrl_queue *vnq = container_of(vq,
+					struct snap_virtio_net_ctrl_queue, common);
+
+	free(vnq);
+}
+
+static struct snap_virtio_queue_ops snap_virtio_net_queue_ops = {
+	.create = snap_virtio_net_ctrl_queue_create,
+	.destroy = snap_virtio_net_ctrl_queue_destroy,
 };
 
 /**
@@ -105,6 +141,7 @@ snap_virtio_net_ctrl_open(struct snap_context *sctx,
 	attr->common.type = SNAP_VIRTIO_NET_CTRL;
 	ret = snap_virtio_ctrl_open(&ctrl->common,
 				    &snap_virtio_net_ctrl_bar_ops,
+				    &snap_virtio_net_queue_ops,
 				    sctx, &attr->common);
 	if (ret) {
 		errno = ENODEV;
