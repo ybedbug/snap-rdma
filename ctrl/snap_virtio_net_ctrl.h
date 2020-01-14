@@ -57,5 +57,6 @@ snap_virtio_net_ctrl_open(struct snap_context *sctx,
 			  struct snap_virtio_net_ctrl_attr *attr);
 void snap_virtio_net_ctrl_close(struct snap_virtio_net_ctrl *ctrl);
 void snap_virtio_net_ctrl_progress(struct snap_virtio_net_ctrl *ctrl);
+void snap_virtio_net_ctrl_io_progress(struct snap_virtio_net_ctrl *ctrl);
 
 #endif

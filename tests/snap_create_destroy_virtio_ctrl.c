@@ -155,10 +155,13 @@ int main(int argc, char **argv)
 	printf("virtio controller of type %d opened successfully\n", type);
 
 	while (keep_running) {
-		if (type == SNAP_VIRTIO_BLK_CTRL)
+		if (type == SNAP_VIRTIO_BLK_CTRL) {
 			snap_virtio_blk_ctrl_progress(blk_ctrl);
-		else
+			snap_virtio_blk_ctrl_io_progress(blk_ctrl);
+		} else {
 			snap_virtio_net_ctrl_progress(net_ctrl);
+			snap_virtio_net_ctrl_io_progress(net_ctrl);
+		}
 		usleep(200 * 1000);
 	}
 

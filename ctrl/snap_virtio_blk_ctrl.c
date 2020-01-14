@@ -115,9 +115,15 @@ static void snap_virtio_blk_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq
 	free(vbq);
 }
 
+static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+{
+	//TODO: virtq implementation
+}
+
 static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.create = snap_virtio_blk_ctrl_queue_create,
 	.destroy = snap_virtio_blk_ctrl_queue_destroy,
+	.progress = snap_virtio_blk_ctrl_queue_progress,
 };
 
 /**
@@ -203,4 +209,17 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl)
 {
 	snap_virtio_ctrl_progress(&ctrl->common);
+}
+
+
+/**
+ * snap_virtio_blk_ctrl_io_progress() - single-threaded IO requests handling
+ * @ctrl:       controller instance
+ *
+ * Looks for any IO requests from host recieved on any QPs, and handles
+ * them based on the request's parameters.
+ */
+void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
+{
+	snap_virtio_ctrl_io_progress(&ctrl->common);
 }

@@ -40,6 +40,7 @@
 #include "snap_virtio_common.h"
 
 struct snap_virtio_ctrl;
+struct snap_virtio_ctrl_queue;
 
 enum snap_virtio_ctrl_type {
 	SNAP_VIRTIO_BLK_CTRL,
@@ -96,12 +97,14 @@ struct snap_virtio_ctrl_attr {
 struct snap_virtio_ctrl_queue {
 	struct snap_virtio_ctrl *ctrl;
 	int index;
+	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
 };
 
 struct snap_virtio_queue_ops {
 	struct snap_virtio_ctrl_queue *(*create)(struct snap_virtio_ctrl *ctrl,
 						 int index);
 	void (*destroy)(struct snap_virtio_ctrl_queue *queue);
+	void (*progress)(struct snap_virtio_ctrl_queue *queue);
 };
 
 struct snap_virtio_ctrl_bar_ops {
@@ -124,6 +127,8 @@ struct snap_virtio_ctrl {
 	struct snap_device *sdev;
 	size_t num_queues;
 	struct snap_virtio_ctrl_queue **queues;
+	pthread_spinlock_t live_queues_lock;
+	TAILQ_HEAD(, snap_virtio_ctrl_queue) live_queues;
 	struct snap_virtio_queue_ops *q_ops;
 	struct snap_virtio_ctrl_bar_ops *bar_ops;
 	struct snap_virtio_device_attr *bar_curr;
@@ -133,6 +138,7 @@ struct snap_virtio_ctrl {
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
+void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
 			  struct snap_virtio_queue_ops *q_ops,

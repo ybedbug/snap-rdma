@@ -62,5 +62,6 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			  void *bdev);
 void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl);
+void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl);
 
 #endif

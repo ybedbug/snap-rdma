@@ -123,6 +123,10 @@ snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
 
 	vq->ctrl = ctrl;
 	vq->index = index;
+	pthread_spin_lock(&ctrl->live_queues_lock);
+	TAILQ_INSERT_HEAD(&ctrl->live_queues, vq, entry);
+	pthread_spin_unlock(&ctrl->live_queues_lock);
+
 	return vq;
 }
 
@@ -130,7 +134,18 @@ static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_ctrl *ctrl = vq->ctrl;
 
+	pthread_spin_lock(&ctrl->live_queues_lock);
+	TAILQ_REMOVE(&ctrl->live_queues, vq, entry);
+	pthread_spin_unlock(&ctrl->live_queues_lock);
+
 	ctrl->q_ops->destroy(vq);
+}
+
+static void snap_virtio_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_ctrl *ctrl = vq->ctrl;
+
+	ctrl->q_ops->progress(vq);
 }
 
 static inline bool snap_virtio_ctrl_needs_reset(struct snap_virtio_ctrl *ctrl)
@@ -239,6 +254,16 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 	snap_virtio_ctrl_bar_copy(ctrl, ctrl->bar_curr, ctrl->bar_prev);
 }
 
+void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl)
+{
+	struct snap_virtio_ctrl_queue *vq;
+
+	pthread_spin_lock(&ctrl->live_queues_lock);
+	TAILQ_FOREACH(vq, &ctrl->live_queues, entry)
+		snap_virtio_ctrl_queue_progress(vq);
+	pthread_spin_unlock(&ctrl->live_queues_lock);
+}
+
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
 			  struct snap_virtio_queue_ops *q_ops,
@@ -289,9 +314,16 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto mutex_destroy;
 	}
 
+	TAILQ_INIT(&ctrl->live_queues);
+	ret = pthread_spin_init(&ctrl->live_queues_lock, 0);
+	if (ret)
+		goto free_queues;
+
 	ctrl->type = attr->type;
 	return 0;
 
+free_queues:
+	free(ctrl->queues);
 mutex_destroy:
 	pthread_mutex_destroy(&ctrl->state_lock);
 teardown_bars:
@@ -304,6 +336,9 @@ err:
 
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 {
+	if (!TAILQ_EMPTY(&ctrl->live_queues))
+		snap_warn("Closing ctrl with queues still active");
+	pthread_spin_destroy(&ctrl->live_queues_lock);
 	free(ctrl->queues);
 	pthread_mutex_destroy(&ctrl->state_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);
