@@ -39,6 +39,8 @@
 #include <pthread.h>
 #include <linux/types.h>
 
+#define SNAP_VIRTIO_UMEM_ALIGN 4096
+
 enum snap_virtq_type {
 	SNAP_VIRTQ_SPLIT_MODE	= 1 << 0,
 	SNAP_VIRTQ_PACKED_MODE	= 1 << 1,
@@ -87,25 +89,23 @@ struct snap_virtio_queue_attr {
 	uint64_t			desc;
 	uint64_t			driver;
 	uint64_t			device;
-	uint32_t			umem_1_id;
-	uint32_t			umem_1_offset;
-	uint32_t			umem_2_id;
-	uint32_t			umem_2_offset;
-	uint32_t			umem_3_id;
-	uint32_t			umem_3_offset;
 
 	enum snap_virtq_state		state; /* query and modify */
 
 	/* Query: */
 	uint32_t			dma_mkey;
-	uint32_t			umem_1_size;
-	uint32_t			umem_2_size;
-	uint32_t			umem_3_size;
+};
+
+struct snap_virtio_umem {
+	void			*buf;
+	int			size;
+	struct mlx5dv_devx_umem *devx_umem;
 };
 
 struct snap_virtio_queue {
 	uint32_t				idx;
 	struct mlx5_snap_devx_obj		*virtq;
+	struct snap_virtio_umem			umem[3];
 };
 
 enum snap_virtio_dev_modify {
@@ -140,8 +140,13 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
-	struct snap_virtio_queue_attr *attr);
+	struct snap_virtio_queue_attr *attr, struct snap_virtio_umem *umem);
 int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	struct snap_virtio_queue_attr *vattr);
 
+int snap_virtio_init_virtq_umem(struct snap_context *sctx,
+				struct snap_virtio_caps *virtio,
+				struct snap_virtio_queue *virtq,
+				int depth);
+void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq);
 #endif

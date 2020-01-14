@@ -95,4 +95,10 @@ to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)
 			vattr);
 }
 
+static inline struct snap_virtio_blk_queue*
+to_blk_queue(struct snap_virtio_queue *virtq)
+{
+    return container_of(virtq, struct snap_virtio_blk_queue, virtq);
+}
+
 #endif

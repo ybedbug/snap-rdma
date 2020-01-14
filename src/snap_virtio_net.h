@@ -100,4 +100,10 @@ to_net_queue_attr(struct snap_virtio_queue_attr *vattr)
 			vattr);
 }
 
+static inline struct snap_virtio_net_queue*
+to_net_queue(struct snap_virtio_queue *virtq)
+{
+    return container_of(virtq, struct snap_virtio_net_queue, virtq);
+}
+
 #endif
