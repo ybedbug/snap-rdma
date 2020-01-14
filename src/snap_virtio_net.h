@@ -43,7 +43,6 @@ enum snap_virtio_net_queue_modify {
 };
 
 struct snap_virtio_net_queue_attr {
-	uint8_t				state; /* query and modify */
 	/* create: */
 	uint16_t			vhca_id;
 	uint32_t			tisn_or_qpn;

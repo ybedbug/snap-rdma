@@ -55,6 +55,13 @@ enum snap_virtq_offload_type {
 	SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL	= 1 << 1,
 };
 
+enum snap_virtq_state {
+	SNAP_VIRTQ_STATE_INIT		= 1 << 0,
+	SNAP_VIRTQ_STATE_RDY		= 1 << 1,
+	SNAP_VIRTQ_STATE_SUSPEND	= 1 << 2,
+	SNAP_VIRTQ_STATE_ERR		= 1 << 3,
+};
+
 enum snap_virtio_features {
 	SNAP_VIRTIO_NET_F_CSUM		= 1ULL << 0,
 	SNAP_VIRTIO_NET_F_GUEST_CSUM	= 1ULL << 1,
@@ -80,18 +87,20 @@ struct snap_virtio_queue_attr {
 	uint64_t			desc;
 	uint64_t			driver;
 	uint64_t			device;
-	/* Query: */
-	uint32_t			dma_mkey;
-	uint32_t			umem_1_size;
-	uint32_t			umem_2_size;
-	uint32_t			umem_3_size;
-	/* Modify: */
 	uint32_t			umem_1_id;
 	uint32_t			umem_1_offset;
 	uint32_t			umem_2_id;
 	uint32_t			umem_2_offset;
 	uint32_t			umem_3_id;
 	uint32_t			umem_3_offset;
+
+	enum snap_virtq_state		state; /* query and modify */
+
+	/* Query: */
+	uint32_t			dma_mkey;
+	uint32_t			umem_1_size;
+	uint32_t			umem_2_size;
+	uint32_t			umem_3_size;
 };
 
 struct snap_virtio_queue {

@@ -219,7 +219,10 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_BLK_Q;
-		DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qpn);
+		if (attr->qpn) {
+			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qpn);
+			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, attr->qpn_vhca_id);
+		}
 		DEVX_SET(virtio_blk_q, virtq_in, virtqc.device_emulation_id,
 			 sdev->pci->mpci.vhca_id);
 		DEVX_SET(virtio_blk_q, virtq_in, virtqc.virtio_q_type, virtq_type);
@@ -301,6 +304,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 			DEVX_ST_SZ_BYTES(virtio_net_q)] = {0};
 	uint8_t *out;
 	uint8_t *virtq_out;
+	uint8_t state;
 	uint64_t dev_allowed;
 	int ret, outlen;
 	struct snap_device *sdev = virtq->virtq->sdev;
@@ -343,7 +347,18 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->umem_2_size = DEVX_GET(virtio_blk_q, virtq_out, virtqc.umem_2_size);
 		vattr->umem_3_size = DEVX_GET(virtio_blk_q, virtq_out, virtqc.umem_3_size);
 
-		attr->qpn = DEVX_GET(virtio_blk_q, virtq_out, qpn);
+		state = DEVX_GET(virtio_blk_q, virtq_out, state);
+		if (state == MLX5_VIRTIO_Q_STATE_INIT)
+			vattr->state = SNAP_VIRTQ_STATE_INIT;
+		else if (state == MLX5_VIRTIO_Q_STATE_RDY)
+			vattr->state = SNAP_VIRTQ_STATE_RDY;
+		else if (state == MLX5_VIRTIO_Q_STATE_SUSPEND)
+			vattr->state = SNAP_VIRTQ_STATE_SUSPEND;
+		else if (state == MLX5_VIRTIO_Q_STATE_ERR)
+			vattr->state = SNAP_VIRTQ_STATE_ERR;
+		else
+			return -EINVAL;
+
 		attr->hw_available_index = DEVX_GET(virtio_blk_q, virtq_out, hw_available_index);
 		attr->hw_used_index = DEVX_GET(virtio_blk_q, virtq_out, hw_used_index);
 		dev_allowed = DEVX_GET64(virtio_blk_q, virtq_out, modify_field_select);
@@ -362,6 +377,18 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->umem_1_size = DEVX_GET(virtio_net_q, virtq_out, virtqc.umem_1_size);
 		vattr->umem_2_size = DEVX_GET(virtio_net_q, virtq_out, virtqc.umem_2_size);
 		vattr->umem_3_size = DEVX_GET(virtio_net_q, virtq_out, virtqc.umem_3_size);
+
+		state = DEVX_GET(virtio_blk_q, virtq_out, state);
+		if (state == MLX5_VIRTIO_Q_STATE_INIT)
+			vattr->state = SNAP_VIRTQ_STATE_INIT;
+		else if (state == MLX5_VIRTIO_Q_STATE_RDY)
+			vattr->state = SNAP_VIRTQ_STATE_RDY;
+		else if (state == MLX5_VIRTIO_Q_STATE_SUSPEND)
+			vattr->state = SNAP_VIRTQ_STATE_SUSPEND;
+		else if (state == MLX5_VIRTIO_Q_STATE_ERR)
+			vattr->state = SNAP_VIRTQ_STATE_ERR;
+		else
+			return -EINVAL;
 
 		attr->hw_available_index = DEVX_GET(virtio_net_q, virtq_out, hw_available_index);
 		attr->hw_used_index = DEVX_GET(virtio_net_q, virtq_out, hw_used_index);
