@@ -503,24 +503,24 @@ static int snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
-	    MLX5_VIRTIO_QUEUE_TYPE_SPLIT)
+	    MLX5_VIRTIO_QUEUE_CAP_TYPE_SPLIT)
 		virtio->supported_types |= SNAP_VIRTQ_SPLIT_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
-	    MLX5_VIRTIO_QUEUE_TYPE_PACKED)
+	    MLX5_VIRTIO_QUEUE_CAP_TYPE_PACKED)
 		virtio->supported_types |= SNAP_VIRTQ_PACKED_MODE;
 
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.event_mode) &
-	    MLX5_VIRTIO_QUEUE_EVENT_MODE_NO_MSIX)
+	    MLX5_VIRTIO_QUEUE_CAP_EVENT_MODE_NO_MSIX)
 		virtio->event_modes |= SNAP_VIRTQ_NO_MSIX_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.event_mode) &
-	    MLX5_VIRTIO_QUEUE_EVENT_MODE_QP)
+	    MLX5_VIRTIO_QUEUE_CAP_EVENT_MODE_QP)
 		virtio->event_modes |= SNAP_VIRTQ_QP_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.event_mode) &
-	    MLX5_VIRTIO_QUEUE_EVENT_MODE_MSIX)
+	    MLX5_VIRTIO_QUEUE_CAP_EVENT_MODE_MSIX)
 		virtio->event_modes |= SNAP_VIRTQ_MSIX_MODE;
 
 	if (DEVX_GET(query_hca_cap_out, out,
