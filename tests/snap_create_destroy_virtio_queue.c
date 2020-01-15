@@ -64,7 +64,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 					battr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
 					battr.vattr.full_emulation = true;
 					battr.vattr.virtio_version_1_0 = true;
-					battr.vattr.max_tunnel_desc = 1;
+					battr.vattr.max_tunnel_desc = 4;
 					if (sf && sf->context && sf->cq && sf->pd) {
 						qp = snap_create_qp(sf);
 						if (!qp)
@@ -74,7 +74,6 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 						fprintf(stdout, "created QP with qpn 0x%x. Creating virtq on vhca_id 0x%x\n",
 							battr.qpn, battr.qpn_vhca_id);
 						fflush(stdout);
-
 					} else {
 						/* choose hard-coded values and expect to fail */
 						battr.qpn = (j + 1) * 0xbeaf;
