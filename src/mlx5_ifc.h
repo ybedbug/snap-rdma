@@ -3195,7 +3195,7 @@ struct mlx5_ifc_virtio_q_bits {
 	u8         umem_3_size[0x20];
 	u8         umem_3_offset[0x40];
 
-	u8         reserved_at_2e0[0x20];
+	u8         reserved_at_2e0[0x100];
 };
 
 enum {
