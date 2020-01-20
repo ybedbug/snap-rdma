@@ -108,4 +108,10 @@ to_net_queue(struct snap_virtio_queue *virtq)
     return container_of(virtq, struct snap_virtio_net_queue, virtq);
 }
 
+static inline struct snap_virtio_net_device_attr*
+to_net_device_attr(struct snap_virtio_device_attr *vattr)
+{
+	return container_of(vattr, struct snap_virtio_net_device_attr, vattr);
+}
+
 #endif
