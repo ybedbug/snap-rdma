@@ -323,3 +323,43 @@ int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 
 	return ret;
 }
+
+static int
+snap_virtio_net_get_modifiable_virtq_fields(struct snap_virtio_net_queue *vnq,
+		uint64_t *allowed)
+{
+	struct snap_virtio_net_queue_attr attr = {};
+	int ret;
+
+	ret = snap_virtio_net_query_queue(vnq, &attr);
+	if (ret)
+		return ret;
+
+	*allowed = attr.modifiable_fields;
+
+	return 0;
+}
+
+/**
+ * snap_virtio_net_modify_queue() - Modify a Virtio net queue object
+ * @vnq:        snap Virtio net queue
+ * @mask:       selected params to modify (mask of enum
+ *              snap_virtio_net_queue_modify)
+ * @attr:       attributes for the virtq modify
+ *
+ * Modify a Virtio net queue snap object according to a given mask.
+ *
+ * Return: 0 on success.
+ */
+int snap_virtio_net_modify_queue(struct snap_virtio_net_queue *vnq,
+		uint64_t mask, struct snap_virtio_net_queue_attr *attr)
+{
+	uint64_t allowed_mask = 0;
+	int ret;
+
+	ret = snap_virtio_net_get_modifiable_virtq_fields(vnq, &allowed_mask);
+	if (ret)
+		return ret;
+
+	return snap_virtio_modify_queue(&vnq->virtq, mask, allowed_mask, &attr->vattr);
+}

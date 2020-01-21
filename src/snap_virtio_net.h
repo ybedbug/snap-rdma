@@ -92,6 +92,8 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq);
 int snap_virtio_net_query_queue(struct snap_virtio_net_queue *vnq,
 		struct snap_virtio_net_queue_attr *attr);
+int snap_virtio_net_modify_queue(struct snap_virtio_net_queue *vnq,
+		uint64_t mask, struct snap_virtio_net_queue_attr *attr);
 
 static inline struct snap_virtio_net_queue_attr*
 to_net_queue_attr(struct snap_virtio_queue_attr *vattr)
