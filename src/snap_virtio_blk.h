@@ -87,6 +87,8 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq);
 int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
 		struct snap_virtio_blk_queue_attr *attr);
+int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
+		uint64_t mask, struct snap_virtio_blk_queue_attr *attr);
 
 static inline struct snap_virtio_blk_queue_attr*
 to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)

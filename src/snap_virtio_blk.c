@@ -326,3 +326,43 @@ int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 
 	return ret;
 }
+
+static int
+snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq,
+		uint64_t *allowed)
+{
+	struct snap_virtio_blk_queue_attr attr = {};
+	int ret;
+
+	ret = snap_virtio_blk_query_queue(vbq, &attr);
+	if (ret)
+		return ret;
+
+	*allowed = attr.modifiable_fields;
+
+	return 0;
+}
+
+/**
+ * snap_virtio_blk_modify_queue() - Modify a Virtio blk queue object
+ * @vbq:        snap Virtio blk queue
+ * @mask:       selected params to modify (mask of enum
+ *              snap_virtio_blk_queue_modify)
+ * @attr:       attributes for the virtq modify
+ *
+ * Modify a Virtio blk queue snap object according to a given mask.
+ *
+ * Return: 0 on success.
+ */
+int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
+		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
+{
+	uint64_t allowed_mask = 0;
+	int ret;
+
+	ret = snap_virtio_blk_get_modifiable_virtq_fields(vbq, &allowed_mask);
+	if (ret)
+		return ret;
+
+	return snap_virtio_modify_queue(&vbq->virtq, mask, allowed_mask, &attr->vattr);
+}
