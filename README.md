@@ -52,3 +52,27 @@ To build and install gtest in the /usr/local/gtest do:
     cmake -DBUILD_GMOCK=0 -DCMAKE_INSTALL_PREFIX=/usr/local/gtest
     make
     make install
+
+# Documentation
+
+The library uses kernel-doc for the in place documentation.
+See https://www.kernel.org/doc/html/latest/doc-guide/kernel-doc.html for details.
+
+To build a stand alone documentation linuxdoc toolchain can be used. For more
+details see https://return42.github.io/linuxdoc/kernel-doc-intro.html
+
+Linuxdoc tools produce a reST text output which in turn can be converted to the
+variety of formrats (html, pdf, man pages etc...) using Sphinx.
+See http://www.sphinx-doc.org
+
+Example of extracting kernel-doc comments and creating html output:
+
+    kernel-autodoc --force src /tmp/snap-docs/
+    kernel-autodoc --force ctrl /tmp/snap-docs/
+    sphinx-build -b html -C  -Dmaster_doc=index -Dhtml_theme=classic /tmp/snap-docs/ /var/www/snap-docs-html/
+
+Linuxdoc also has a syntax checker which can be used to check documentation for
+errors:
+
+    kernel-lintdoc ctrl
+    kernel-lintdoc src
