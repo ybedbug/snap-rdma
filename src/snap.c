@@ -405,10 +405,8 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		return ret;
 
 	sctx->emulation_caps = 0;
-	general_obj_types = DEVX_GET(query_hca_cap_out, out,
-				     capability.cmd_hca_cap.general_obj_types);
-	//TODO: remove this after FW bug fixed
-	general_obj_types = 0xffffffffffffffff;
+	general_obj_types = DEVX_GET64(query_hca_cap_out, out,
+				       capability.cmd_hca_cap.general_obj_types);
 	if (DEVX_GET(query_hca_cap_out, out,
 		capability.cmd_hca_cap.nvme_device_emulation_manager) &&
 	    general_obj_types & (1 << MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION))
