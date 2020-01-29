@@ -324,6 +324,44 @@ TEST_F(SnapDmaTest, send_completion) {
 	snap_dma_q_destroy(q);
 }
 
+TEST_F(SnapDmaTest, flush) {
+	struct snap_dma_q *q;
+	int rc;
+	char cqe[m_dma_q_attr.tx_elem_size];
+	struct ibv_recv_wr rx_wr, *bad_wr;
+	struct ibv_sge rx_sge;
+
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	rx_sge.addr = (uintptr_t)m_rbuf;
+	rx_sge.length = m_dma_q_attr.tx_elem_size;
+	rx_sge.lkey = m_rmr->lkey;
+	rx_wr.next = NULL;
+	rx_wr.sg_list = &rx_sge;
+	rx_wr.num_sge = 1;
+	rc = ibv_post_recv(q->fw_qp.qp, &rx_wr, &bad_wr);
+	ASSERT_EQ(0, rc);
+
+	rc = snap_dma_q_flush(q);
+	/* no outstanding requests */
+	ASSERT_EQ(0, rc);
+
+	rc = snap_dma_q_read(q, m_lbuf, m_bsize, m_lmr->lkey,
+			(uintptr_t)m_rbuf, m_rmr->lkey, NULL);
+	ASSERT_EQ(0, rc);
+	rc = snap_dma_q_write(q, m_lbuf, m_bsize, m_lmr->lkey,
+			(uintptr_t)m_rbuf, m_rmr->lkey, NULL);
+	ASSERT_EQ(0, rc);
+	rc = snap_dma_q_send_completion(q, cqe, sizeof(cqe));
+	ASSERT_EQ(0, rc);
+	rc = snap_dma_q_flush(q);
+	/* 3 outstanding requests */
+	ASSERT_EQ(3, rc);
+
+	snap_dma_q_destroy(q);
+}
+
 TEST_F(SnapDmaTest, rx_callback) {
 	struct snap_dma_q *q;
 	char *sqe = m_rbuf;

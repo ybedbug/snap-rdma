@@ -88,6 +88,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	int i, rc;
 
 	q->tx_available = attr->tx_qsize;
+	q->tx_qsize = attr->tx_qsize;
 	q->rx_elem_size = attr->rx_elem_size;
 	q->tx_elem_size = attr->tx_elem_size;
 
@@ -649,6 +650,29 @@ int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
 
 	q->tx_available--;
 	return 0;
+}
+
+/**
+ * snap_dma_q_flush - wait for outstanding operations to complete
+ * @q:   dma queue
+ *
+ * The function waits until all outstanding operations started with
+ * mlx_dma_q_read(), mlx_dma_q_write() or mlx_dma_q_send_completion() are
+ * finished. The function does not progress receive operation.
+ *
+ * The purpose of this function is to facilitate blocking mode dma
+ * and completion operations.
+ *
+ * Return: number of completed operations or -errno.
+ */
+int snap_dma_q_flush(struct snap_dma_q *q)
+{
+	int n;
+
+	n = 0;
+	while (q->tx_available < q->tx_qsize)
+		n += snap_dma_q_progress_tx(q);
+	return n;
 }
 
 /**
