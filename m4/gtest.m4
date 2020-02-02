@@ -35,8 +35,8 @@ AS_IF([test "x$gtest_app" == xyes],
            gtest_libs="-L$with_gtest/lib$libsuff"])
         CXXFLAGS="$gtest_incl $CXXFLAGS"
         CPPFLAGS="$gtest_incl $CPFLAGS"
-	
-        AC_CHECK_HEADER([gtest/gtest.h], 
+
+        AC_CHECK_HEADER([gtest/gtest.h],
 		[
 		AC_SUBST(GTEST_LDFLAGS,  ["$gtest_libs -lgtest"])
 		AC_SUBST(GTEST_DIR,      ["$with_gtest"])

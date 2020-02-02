@@ -93,9 +93,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	q->tx_elem_size = attr->tx_elem_size;
 
 	init_attr.cap.max_send_wr = attr->tx_qsize;
-	/* Need more space in rx queue in order to avoid 
-	 * memcpy() on rx data
-	 */
+	/* Need more space in rx queue in order to avoid memcpy() on rx data */
 	init_attr.cap.max_recv_wr = 2 * attr->rx_qsize;
 	/* we must be able to send CQEs inline */
 	init_attr.cap.max_inline_data = attr->tx_elem_size;

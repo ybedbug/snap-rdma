@@ -15,4 +15,3 @@ GTEST_REPORT_DIR ?= .
 test:
 	tests/gtest_snap_rdma --gtest_output="xml:$(GTEST_REPORT_DIR)/testAll.xml"
 endif
-
