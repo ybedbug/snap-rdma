@@ -226,7 +226,7 @@ int snap_virtio_net_teardown_device(struct snap_device *sdev)
 
 /**
  * snap_virtio_net_query_queue() - Query a Virtio net queue object
- * @vbq:        snap Virtio net queue
+ * @vnq:        snap Virtio net queue
  * @attr:       attributes for the queue query (output)
  *
  * Query a Virtio net snap queue object.

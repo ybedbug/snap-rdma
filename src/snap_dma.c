@@ -282,7 +282,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 }
 
 /**
- * snap_dma_q_create - create DMA queue
+ * snap_dma_q_create() - Create DMA queue
  * @pd:    protection domain to create qps
  * @attr:  dma queue creation attributes
  *
@@ -344,7 +344,7 @@ free_q:
 }
 
 /**
- * snap_dma_q_destroy - destroy DMA queue
+ * snap_dma_q_destroy() - Destroy DMA queue
  *
  * @q: dma queue
  */
@@ -441,7 +441,7 @@ static inline int snap_dma_q_progress_tx(struct snap_dma_q *q)
 }
 
 /**
- * snap_dma_q_progress - progress dma queue
+ * snap_dma_q_progress() - Progress dma queue
  * @q: dma queue
  *
  * The function progresses both send and receive operations on the given dma
@@ -469,7 +469,7 @@ int snap_dma_q_progress(struct snap_dma_q *q)
 }
 
 /**
- * snap_dma_q_arm - request notification
+ * snap_dma_q_arm() - Request notification
  * @q: dma queue
  *
  * The function 'arms' dma queue to report send and receive events over its
@@ -531,7 +531,7 @@ static inline int do_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 }
 
 /**
- * snap_dma_q_write - DMA write to the host memory
+ * snap_dma_q_write() - DMA write to the host memory
  * @q:            dma queue
  * @src_buf:      where to get/put data
  * @len:          data length
@@ -562,7 +562,7 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 }
 
 /**
- * snap_dma_q_read - DMA read to the host memory
+ * snap_dma_q_read() - DMA read to the host memory
  * @q:            dma queue
  * @dst_buf:      where to get/put data
  * @len:          data length
@@ -593,7 +593,7 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 }
 
 /**
- * snap_dma_q_send_completion - send completion to the host
+ * snap_dma_q_send_completion() - Send completion to the host
  * @q:       dma queue to
  * @src_buf: local buffer to copy the completion data from.
  * @len:     the length of completion. E.x. 16 bytes for the NVME. It
@@ -651,7 +651,7 @@ int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
 }
 
 /**
- * snap_dma_q_flush - wait for outstanding operations to complete
+ * snap_dma_q_flush() - Wait for outstanding operations to complete
  * @q:   dma queue
  *
  * The function waits until all outstanding operations started with
@@ -674,7 +674,7 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 }
 
 /**
- * snap_dma_q_get_fw_qpnum - get FW qp number
+ * snap_dma_q_get_fw_qpnum() - Get FW qp number
  * @q:   dma queue
  *
  * The qp number that can be used by the FW emulation objects

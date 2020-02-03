@@ -59,6 +59,7 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 
 /**
  * snap_virtio_blk_ctrl_open() - Create a new virtio-blk controller
+ * @sctx:       snap context to open new controller
  * @attr:       virtio-blk controller attributes
  *
  * Allocates a new virtio-blk controller based on the requested attributes.
@@ -104,7 +105,7 @@ err:
 
 /**
  * snap_virtio_blk_ctrl_close() - Destroy a virtio-blk controller
- * @sdev:       virtio-blk controller to close
+ * @ctrl:       virtio-blk controller to close
  *
  * Destroy and free virtio-blk controller.
  */

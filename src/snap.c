@@ -695,7 +695,7 @@ static void snap_destroy_vhca_tunnel(struct snap_device *sdev)
 	sdev->mdev.vtunnel = NULL;
 }
 
-/*
+/**
  * snap_devx_obj_query() - Query a snap devx object
  * @snap_obj:      snap object to query
  * @in:            input cmd buffer
@@ -719,7 +719,7 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 					     outlen);
 }
 
-/*
+/**
  * snap_devx_obj_modify() - Modify a snap devx object
  * @snap_obj:      snap object to modify
  * @in:            input cmd buffer
@@ -743,7 +743,7 @@ int snap_devx_obj_modify(struct mlx5_snap_devx_obj *snap_obj, void *in,
 					      outlen);
 }
 
-/*
+/**
  * snap_devx_obj_destroy() - Destroy a snap devx object
  * @snap_obj:      snap devx object
  *
@@ -774,7 +774,7 @@ int snap_devx_obj_destroy(struct mlx5_snap_devx_obj *snap_obj)
 	return ret;
 }
 
-/*
+/**
  * snap_devx_obj_create() - Create a devx object for snap
  * @sdev:          snap device
  * @in:            input cmd buffer
@@ -1229,7 +1229,7 @@ reset_tx:
 	return ret;
 }
 
-/*
+/**
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
  *
@@ -1265,7 +1265,7 @@ out_disable:
 	return ret;
 }
 
-/*
+/**
  * snap_teardown_device() - Teardown all the resources for the given device
  *                          that were initialized by snap_init_device
  * @sdev:       snap device
@@ -1291,7 +1291,7 @@ int snap_teardown_device(struct snap_device *sdev)
 	return snap_disable_hca(sdev);
 }
 
-/*
+/**
  * snap_device_get_fd() - Return the fd channel for device events. This fd is
  *                        valid only if the device was opened with
  *                        SNAP_DEVICE_FLAGS_EVENT_CHANNEL flag.

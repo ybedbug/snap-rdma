@@ -59,6 +59,7 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_net_ctrl_bar_ops = {
 
 /**
  * snap_virtio_net_ctrl_open() - Create a new virtio-net controller
+ * @sctx:       snap context to open a new controller
  * @attr:       virtio-net controller attributes
  *
  * Allocates a new virtio-net controller based on the requested attributes.
@@ -104,7 +105,7 @@ err:
 
 /**
  * snap_virtio_net_ctrl_close() - Destroy a virtio-net controller
- * @sdev:       virtio-net controller to close
+ * @ctrl:       virtio-net controller to close
  *
  * Destroy and free virtio-net controller.
  */
