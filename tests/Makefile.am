@@ -57,8 +57,17 @@ snap_create_destroy_virtio_queue_CFLAGS = $(LOCAL_CFLAGS)
 snap_create_destroy_virtio_queue_SOURCES = snap_create_destroy_virtio_queue.c
 snap_create_destroy_virtio_queue_LDADD = $(top_builddir)/src/libsnap.la
 
-snap_create_destroy_virtio_ctrl_CFLAGS = $(LOCAL_CFLAGS) -I$(top_srcdir)/ctrl
-snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c
+#cant use $(top_srcdir) here because of bug in configure which does not parse
+#variables to make foo.Po files. TODO: consider changing blk to .la
+BLK_FILES = ../blk/snap_null_blk_dev.c \
+	    ../blk/snap_blk_dev.c \
+	    ../blk/snap_blk_dev.h
+
+snap_create_destroy_virtio_ctrl_CFLAGS = $(LOCAL_CFLAGS) \
+					 -I$(top_srcdir)/ctrl \
+					 -I$(top_srcdir)/blk
+snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c \
+					  $(BLK_FILES)
 snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
 

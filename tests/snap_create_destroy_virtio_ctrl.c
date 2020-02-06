@@ -6,6 +6,7 @@
 #include "snap.h"
 #include "snap_virtio_blk_ctrl.h"
 #include "snap_virtio_net_ctrl.h"
+#include "snap_blk_dev.h"
 
 static bool keep_running = true;
 
@@ -81,7 +82,9 @@ int main(int argc, char **argv)
 	struct snap_virtio_blk_ctrl *blk_ctrl = NULL;
 	struct snap_virtio_net_ctrl *net_ctrl = NULL;
 	struct snap_virtio_blk_ctrl_attr blk_attr = {};
+	struct snap_blk_dev_attrs bdev_attrs = {0};
 	struct snap_virtio_net_ctrl_attr net_attr = {};
+	struct snap_blk_dev *bdev;
 	enum snap_virtio_ctrl_type type;
 	int pf_id = 0;
 	struct snap_context *sctx = NULL;
@@ -123,12 +126,22 @@ int main(int argc, char **argv)
 	}
 
 	if (type == SNAP_VIRTIO_BLK_CTRL) {
+		bdev_attrs.type = SNAP_BLOCK_DEVICE_NULL;
+		bdev_attrs.size_b = 20;
+		bdev_attrs.blk_size = 9;
+		bdev = snap_blk_dev_open("null_blk", &bdev_attrs);
+		if (!bdev) {
+		    printf("Failed to open null block device\n");
+		    goto put_sctx;
+		}
+
 		blk_attr.common.pf_id = pf_id;
-		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr);
+		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr, &bdev->ops,
+						     bdev);
 		if (!blk_ctrl) {
 			printf("Failed to create virtio-blk controller\n");
 			ret = -ENODEV;
-			goto put_sctx;
+			goto close_blk;
 		}
 	} else {
 		net_attr.common.pf_id = pf_id;
@@ -154,6 +167,9 @@ int main(int argc, char **argv)
 	else
 		snap_virtio_net_ctrl_close(net_ctrl);
 	printf("virtio controller closed\n");
+close_blk:
+	if (type == SNAP_VIRTIO_BLK_CTRL)
+		snap_blk_dev_close(bdev);
 put_sctx:
 	put_snap_context(sctx);
 err:

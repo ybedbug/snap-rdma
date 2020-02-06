@@ -124,6 +124,8 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
  * snap_virtio_blk_ctrl_open() - Create a new virtio-blk controller
  * @sctx:       snap context to open new controller
  * @attr:       virtio-blk controller attributes
+ * @bdev_ops:   operations on backend block device
+ * @bdev:       backend block device
  *
  * Allocates a new virtio-blk controller based on the requested attributes.
  *
@@ -132,7 +134,9 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
  */
 struct snap_virtio_blk_ctrl*
 snap_virtio_blk_ctrl_open(struct snap_context *sctx,
-			  struct snap_virtio_blk_ctrl_attr *attr)
+			  struct snap_virtio_blk_ctrl_attr *attr,
+			  struct snap_bdev_ops *bdev_ops,
+			  void *bdev)
 {
 	struct snap_virtio_blk_ctrl *ctrl;
 	int ret;
@@ -142,6 +146,9 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 		errno = ENOMEM;
 		goto err;
 	}
+
+	ctrl->bdev_ops = bdev_ops;
+	ctrl->bdev = bdev;
 
 	attr->common.type = SNAP_VIRTIO_BLK_CTRL;
 	ret = snap_virtio_ctrl_open(&ctrl->common,
