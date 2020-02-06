@@ -55,7 +55,9 @@ enum {
 	MLX5_CMD_OP_RTS2RTS_QP = 0x505,
 	MLX5_CMD_OP_CREATE_TIR = 0x900,
 	MLX5_CMD_OP_QUERY_ESW_VPORT_CONTEXT = 0x752,
+	MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT = 0x754,
 	MLX5_CMD_OP_QUERY_ROCE_ADDRESS = 0x760,
+	MLX5_CMD_OP_SET_ROCE_ADDRESS = 0x761,
 	MLX5_CMD_OP_SET_FLOW_TABLE_ROOT = 0x92f,
 	MLX5_CMD_OP_CREATE_FLOW_TABLE = 0x930,
 	MLX5_CMD_OP_DESTROY_FLOW_TABLE = 0x931,
@@ -1561,6 +1563,88 @@ enum {
 	MLX5_SET_HCA_CAP_OP_MOD_HOTPLUG                     = 0x18 << 1,
 };
 
+struct mlx5_ifc_mac_address_layout_bits {
+	u8         reserved_at_0[0x10];
+	u8         mac_addr_47_32[0x10];
+
+	u8         mac_addr_31_0[0x20];
+};
+
+struct mlx5_ifc_nic_vport_context_bits {
+	u8         reserved_at_0[0x5];
+	u8         min_wqe_inline_mode[0x3];
+	u8         reserved_at_8[0x15];
+	u8         disable_mc_local_lb[0x1];
+	u8         disable_uc_local_lb[0x1];
+	u8         roce_en[0x1];
+
+	u8         arm_change_event[0x1];
+	u8         reserved_at_21[0x1a];
+	u8         event_on_mtu[0x1];
+	u8         event_on_promisc_change[0x1];
+	u8         event_on_vlan_change[0x1];
+	u8         event_on_mc_address_change[0x1];
+	u8         event_on_uc_address_change[0x1];
+
+	u8         reserved_at_40[0xc];
+
+	u8         affiliation_criteria[0x4];
+	u8         affiliated_vhca_id[0x10];
+
+	u8         reserved_at_60[0xd0];
+
+	u8         mtu[0x10];
+
+	u8         system_image_guid[0x40];
+	u8         port_guid[0x40];
+	u8         node_guid[0x40];
+
+	u8         reserved_at_200[0x140];
+	u8         qkey_violation_counter[0x10];
+	u8         reserved_at_350[0x430];
+
+	u8         promisc_uc[0x1];
+	u8         promisc_mc[0x1];
+	u8         promisc_all[0x1];
+	u8         reserved_at_783[0x2];
+	u8         allowed_list_type[0x3];
+	u8         reserved_at_788[0xc];
+	u8         allowed_list_size[0xc];
+
+	struct mlx5_ifc_mac_address_layout_bits permanent_address;
+
+	u8         reserved_at_7e0[0x20];
+
+	u8         current_uc_mac_address[0][0x40];
+};
+
+struct mlx5_ifc_query_nic_vport_context_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+
+	struct mlx5_ifc_nic_vport_context_bits nic_vport_context;
+};
+
+struct mlx5_ifc_query_nic_vport_context_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         other_vport[0x1];
+	u8         reserved_at_41[0xf];
+	u8         vport_number[0x10];
+
+	u8         reserved_at_60[0x5];
+	u8         allowed_list_type[0x3];
+	u8         reserved_at_68[0x18];
+};
+
 enum {
 	MLX5_MKC_ACCESS_MODE_KLMS  = 0x2,
 };
@@ -2265,6 +2349,10 @@ enum {
 enum {
 	MLX5_NVME_CQ_OFFLOAD_TYPE_SQE = 0x0,
 	MLX5_NVME_CQ_OFFLOAD_TYPE_CC = 0x2,
+};
+
+enum {
+	MLX5_NVME_DEVICE_MODIFY_BAR = 1 << 0,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
@@ -3022,6 +3110,31 @@ struct mlx5_ifc_roce_addr_layout_bits {
 	u8         roce_version[0x8];
 
 	u8         reserved_at_e0[0x20];
+};
+
+struct mlx5_ifc_set_roce_address_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_set_roce_address_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         roce_address_index[0x10];
+	u8         reserved_at_50[0xc];
+	u8         vhca_port_num[0x4];
+
+	u8         reserved_at_60[0x20];
+
+	struct mlx5_ifc_roce_addr_layout_bits roce_address;
 };
 
 struct mlx5_ifc_query_roce_address_out_bits {
