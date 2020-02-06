@@ -28,6 +28,7 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_in;
 	uint8_t *device_emulation_out;
+	uint64_t dev_allowed;
 	int ret, out_size;
 
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
@@ -69,9 +70,91 @@ int snap_nvme_query_device(struct snap_device *sdev,
 
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
+	dev_allowed = DEVX_GET64(nvme_device_emulation, device_emulation_out,
+				 modify_field_select);
+	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR)
+		attr->modifiable_fields = SNAP_NVME_DEV_MOD_BAR;
+	else
+		attr->modifiable_fields = 0;
 out_free:
 	free(out);
 	return ret;
+}
+
+static int
+snap_nvme_get_modifiable_device_fields(struct snap_device *sdev,
+		uint64_t *allowed)
+{
+	struct snap_nvme_device_attr attr = {};
+	int ret;
+
+	ret = snap_nvme_query_device(sdev, &attr);
+	if (ret)
+		return ret;
+
+	*allowed = attr.modifiable_fields;
+
+	return 0;
+}
+
+/**
+ * snap_nvme_modify_device() - Modify NVMe snap device
+ * @sdev:       snap device
+ * @mask:       selected params to modify (mask of enum snap_nvme_device_modify)
+ * @attr:       attributes for the NVMe device modify
+ *
+ * Modify NVMe snap device object according to a given mask.
+ *
+ * Return: 0 on success.
+ */
+int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
+		struct snap_nvme_device_attr *attr)
+{
+	uint8_t *in;
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
+	uint8_t *device_emulation_in;
+	uint64_t allowed_mask;
+	int ret, in_size;
+
+	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
+		return -EINVAL;
+
+	ret = snap_nvme_get_modifiable_device_fields(sdev, &allowed_mask);
+	if (ret)
+		return ret;
+
+	/* we'll modify only allowed fields */
+	if (mask & ~allowed_mask)
+		return -EINVAL;
+
+	in_size = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		  DEVX_ST_SZ_BYTES(nvme_device_emulation) +
+		  sdev->pci->bar.size;
+	in = calloc(1, in_size);
+	if (!in)
+		return -ENOMEM;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
+		 sdev->mdev.device_emulation->obj_id);
+
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(nvme_device_emulation, device_emulation_in, vhca_id,
+		 sdev->pci->mpci.vhca_id);
+
+	memcpy(DEVX_ADDR_OF(nvme_device_emulation, device_emulation_in,
+			    register_data), attr->bar.regs,
+	       sdev->pci->bar.size);
+
+	if (mask & SNAP_NVME_DEV_MOD_BAR)
+		DEVX_SET64(nvme_device_emulation, device_emulation_in,
+			   modify_field_select, MLX5_NVME_DEVICE_MODIFY_BAR);
+
+	return mlx5dv_devx_obj_modify(sdev->mdev.device_emulation->obj, in,
+				      in_size, out, sizeof(out));
 }
 
 /**

@@ -110,8 +110,14 @@ struct snap_nvme_cq {
 	struct mlx5_snap_devx_obj		*cq;
 };
 
+enum snap_nvme_device_modify {
+	SNAP_NVME_DEV_MOD_BAR	= 1 << 0,
+};
+
 struct snap_nvme_device_attr {
 	bool					enabled;
+	struct snap_nvme_registers		bar;
+	uint64_t				modifiable_fields;//mask of snap_nvme_device_modify
 };
 
 struct snap_nvme_device {
@@ -129,6 +135,9 @@ int snap_nvme_init_device(struct snap_device *sdev);
 int snap_nvme_teardown_device(struct snap_device *sdev);
 int snap_nvme_query_device(struct snap_device *sdev,
 	struct snap_nvme_device_attr *attr);
+int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
+		struct snap_nvme_device_attr *attr);
+
 struct snap_nvme_namespace*
 snap_nvme_create_namespace(struct snap_device *sdev,
 		struct snap_nvme_namespace_attr *attr);
