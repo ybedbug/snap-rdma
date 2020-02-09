@@ -2058,12 +2058,27 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		goto out_err;
 	}
 
+	ret = pthread_mutex_init(&sdev->mdev.rdma_lock, NULL);
+	if (ret) {
+		errno = ENOMEM;
+		goto out_free;
+	}
+
+	/*
+	 * RDMA address should be set for emulated functions on BF-1 only (due
+	 * to special steering model). Set this address as soon as possible
+	 * (when getting an association to the first QP for emulated queue).
+	 * For BF-2, we can use many RDMA interfaces for traffic since we have
+	 * the cross-gvmi mkey enabled.
+	 */
+	sdev->mdev.rdma_dev_users = 0;
+
 	sdev->sctx = sctx;
 	sdev->pci = &pfs->pfs[attr->pf_id];
 	sdev->mdev.device_emulation = snap_create_device_emulation(sdev);
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
-		goto out_free;
+		goto out_free_mutex;
 	}
 
 	ret = snap_query_device_emulation(sdev);
@@ -2103,6 +2118,8 @@ out_free_tunnel:
 		snap_destroy_vhca_tunnel(sdev);
 out_free_device_emulation:
 	snap_destroy_device_emulation(sdev);
+out_free_mutex:
+	pthread_mutex_destroy(&sdev->mdev.rdma_lock);
 out_free:
 	free(sdev);
 out_err:
@@ -2128,6 +2145,7 @@ void snap_close_device(struct snap_device *sdev)
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
 	snap_destroy_device_emulation(sdev);
+	pthread_mutex_destroy(&sdev->mdev.rdma_lock);
 	free(sdev);
 }
 

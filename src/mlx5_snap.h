@@ -122,6 +122,12 @@ struct mlx5_snap_device {
 	struct mlx5_snap_flow_table		*tx;
 	struct mlx5_snap_flow_table		*rx;
 	struct mlx5dv_devx_event_channel	*channel;
+
+
+	/* for BF-1 usage only */
+	pthread_mutex_t				rdma_lock;
+	struct ibv_context			*rdma_dev;
+	unsigned int				rdma_dev_users;
 };
 
 /* The following functions are to be used by NVMe/VirtIO libraries only */
