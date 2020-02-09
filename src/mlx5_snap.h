@@ -138,5 +138,6 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 			size_t inlen, void *out, size_t outlen);
 void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
 		void *pci_params_out);
+int snap_get_qp_vhca_id(struct ibv_qp *qp);
 
 #endif

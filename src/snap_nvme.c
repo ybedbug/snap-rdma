@@ -510,8 +510,13 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	sq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	if (mask & SNAP_NVME_SQ_MOD_QPN) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
-		DEVX_SET(nvme_sq, sq_in, qpn, attr->qpn);
-		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, attr->qpn_vhca_id);
+		if (!attr->qp)
+			return -EINVAL;
+		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+		ret = snap_get_qp_vhca_id(attr->qp);
+		if (ret < 0)
+			return -EINVAL;
+		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, ret);
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
@@ -634,7 +639,17 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
 		 NVME_DB_BASE + attr->doorbell_offset);
 	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
-	DEVX_SET(nvme_sq, sq_in, qpn, attr->qpn);
+	if (attr->qp) {
+		int vhca_id;
+
+		vhca_id = snap_get_qp_vhca_id(attr->qp);
+		if (vhca_id < 0) {
+			errno = EINVAL;
+			goto out;
+		}
+		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, vhca_id);
+		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+	}
 	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
 	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size, NVME_SQ_LOG_ENTRY_SIZE);
 

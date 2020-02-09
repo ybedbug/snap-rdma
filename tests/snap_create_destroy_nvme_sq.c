@@ -5,6 +5,21 @@
 #include "snap.h"
 #include "snap_nvme.h"
 
+static struct ibv_qp *snap_create_qp(struct ibv_pd *pd, struct ibv_cq *cq)
+{
+	struct ibv_qp_init_attr qp_attr = {};
+
+	qp_attr.qp_type = IBV_QPT_RC;
+	qp_attr.send_cq = cq;
+	qp_attr.recv_cq = cq;
+	qp_attr.cap.max_send_sge = 1;
+	qp_attr.cap.max_recv_sge = 1;
+	qp_attr.cap.max_send_wr = 16;
+	qp_attr.cap.max_recv_wr = 16;
+
+	return ibv_create_qp(pd, &qp_attr);
+}
+
 int main(int argc, char **argv)
 {
 	struct ibv_device **list;
@@ -49,6 +64,8 @@ int main(int argc, char **argv)
 	for (i = 0; i < dev_count; i++) {
 		struct snap_device_attr attr = {};
 		struct snap_context *sctx;
+		struct ibv_cq *ibcq;
+		struct ibv_pd *pd;
 		struct snap_device *sdev;
 		int j;
 
@@ -60,6 +77,18 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		ibcq = ibv_create_cq(sctx->context, 1024, NULL, NULL, 0);
+		if (!ibcq) {
+			snap_close(sctx);
+			continue;
+		}
+
+		pd = ibv_alloc_pd(sctx->context);
+		if (!pd) {
+			ibv_destroy_cq(ibcq);
+			snap_close(sctx);
+			continue;
+		}
 		attr.type = SNAP_NVME_PF;
 		attr.pf_id = 0;
 		sdev = snap_open_device(sctx, &attr);
@@ -91,6 +120,13 @@ int main(int argc, char **argv)
 						sq_attr.queue_depth = depth;
 						sq_attr.base_addr = 0xbeefdead * j;
 						sq_attr.cq = cq;
+						sq_attr.qp = snap_create_qp(pd, ibcq);
+						if (!sq_attr.qp) {
+							fprintf(stderr, "NVMe sq id=%d fail to create QP\n", j);
+							fflush(stderr);
+							snap_nvme_destroy_cq(cq);
+							continue;
+						}
 						sq = snap_nvme_create_sq(sdev, &sq_attr);
 						if (sq) {
 							fprintf(stdout, "NVMe sq id=%d created !\n", j);
@@ -126,6 +162,7 @@ int main(int argc, char **argv)
 							fprintf(stderr, "failed to create NVMe sq id=%d, err=%d\n", j, errno);
 							fflush(stderr);
 						}
+						ibv_destroy_qp(sq_attr.qp);
 						snap_nvme_destroy_cq(cq);
 					} else {
 						fprintf(stderr, "failed to create NVMe cq id=%d\n", j);
@@ -144,7 +181,8 @@ int main(int argc, char **argv)
 				attr.pf_id, list[i]->name);
 			fflush(stderr);
 		}
-
+		ibv_dealloc_pd(pd);
+		ibv_destroy_cq(ibcq);
 		snap_close(sctx);
 	}
 

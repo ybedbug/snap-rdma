@@ -1292,6 +1292,34 @@ int snap_teardown_device(struct snap_device *sdev)
 }
 
 /**
+ * snap_get_qp_vhca_id() - Return the vhca id for a given QP. This id will be
+ *                         used for modifying and creating emulation queues
+ *                         that are associated with this QP.
+ * @qp:    QP that will be associated to snap emulation queue.
+ *
+ * Return: Returns QPs vhca id on success and -1 otherwise.
+ */
+int snap_get_qp_vhca_id(struct ibv_qp *qp)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	struct ibv_context *context = qp->context;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return -1;
+
+	return DEVX_GET(query_hca_cap_out, out,
+			capability.cmd_hca_cap.vhca_id);
+}
+
+/**
  * snap_device_get_fd() - Return the fd channel for device events. This fd is
  *                        valid only if the device was opened with
  *                        SNAP_DEVICE_FLAGS_EVENT_CHANNEL flag.
