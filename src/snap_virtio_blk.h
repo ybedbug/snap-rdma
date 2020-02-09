@@ -44,8 +44,7 @@ enum snap_virtio_blk_queue_modify {
 
 struct snap_virtio_blk_queue_attr {
 	uint64_t			modifiable_fields;//mask of snap_virtio_blk_queue_modify
-	uint32_t			qpn;
-	uint16_t			qpn_vhca_id;
+	struct ibv_qp			*qp;
 	uint16_t			hw_available_index;
 	uint8_t				hw_used_index;
 

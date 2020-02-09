@@ -15,19 +15,19 @@ struct snap_sf {
 	struct ibv_cq *cq;
 };
 
-static struct ibv_qp *snap_create_qp(struct snap_sf *sf)
+static struct ibv_qp *snap_create_qp(struct ibv_pd *pd, struct ibv_cq *cq)
 {
 	struct ibv_qp_init_attr qp_attr = {};
 
 	qp_attr.qp_type = IBV_QPT_RC;
-	qp_attr.send_cq = sf->cq;
-	qp_attr.recv_cq = sf->cq;
+	qp_attr.send_cq = cq;
+	qp_attr.recv_cq = cq;
 	qp_attr.cap.max_send_sge = 1;
 	qp_attr.cap.max_recv_sge = 1;
 	qp_attr.cap.max_send_wr = 16;
 	qp_attr.cap.max_recv_wr = 16;
 
-	return ibv_create_qp(sf->pd, &qp_attr);
+	return ibv_create_qp(pd, &qp_attr);
 }
 
 static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
@@ -38,7 +38,19 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 {
 	struct snap_device_attr attr = {};
 	struct snap_device *sdev;
+	struct ibv_cq *ibcq;
+	struct ibv_pd *ibpd;
 	int j, ret;
+
+	ibcq = ibv_create_cq(sctx->context, 1024, NULL, NULL, 0);
+	if (!ibcq)
+		return -1;
+
+	ibpd = ibv_alloc_pd(sctx->context);
+	if (!ibpd) {
+		ibv_destroy_cq(ibcq);
+		return -1;
+	}
 
 	if (ev)
 		attr.flags = SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
@@ -66,19 +78,15 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 					battr.vattr.virtio_version_1_0 = true;
 					battr.vattr.max_tunnel_desc = 4;
 					if (sf && sf->context && sf->cq && sf->pd) {
-						qp = snap_create_qp(sf);
+						qp = snap_create_qp(sf->pd, sf->cq);
 						if (!qp)
 							break;
-						battr.qpn = qp->qp_num;
-						battr.qpn_vhca_id = sf->vhca_id;
-						fprintf(stdout, "created QP with qpn 0x%x. Creating virtq on vhca_id 0x%x\n",
-							battr.qpn, battr.qpn_vhca_id);
-						fflush(stdout);
 					} else {
-						/* choose hard-coded values and expect to fail */
-						battr.qpn = (j + 1) * 0xbeaf;
-						battr.qpn_vhca_id = 0xff;
+						qp = snap_create_qp(ibpd, ibcq);
+						if (!qp)
+							break;
 					}
+					battr.qp = qp;
 					vbq = snap_virtio_blk_create_queue(sdev, &battr);
 					if (vbq) {
 						memset(&battr, 0, sizeof(battr));
@@ -136,7 +144,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 						fflush(stderr);
 					}
 				}
-				snap_virtio_blk_teardown_device(sdev);
+				snap_virtio_net_teardown_device(sdev);
 			} else {
 				fprintf(stderr, "failed to init Virtio net dev for pf %d ret=%d\n",
 					attr.pf_id, ret);
@@ -150,6 +158,9 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 		}
 
 	}
+
+	ibv_dealloc_pd(ibpd);
+	ibv_destroy_cq(ibcq);
 
 	return 0;
 }
@@ -236,7 +247,7 @@ int main(int argc, char **argv)
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_create_destroy_virtio_blk_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel) -s (SF)]\n");
+			printf("Usage: snap_create_destroy_virtio_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel) -s (SF)]\n");
 			exit(1);
 		}
 	}

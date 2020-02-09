@@ -213,6 +213,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	if (sdev->pci->type == SNAP_VIRTIO_BLK_PF ||
 	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
 		struct snap_virtio_blk_queue_attr *attr;
+		int vhca_id;
 
 		attr = to_blk_queue_attr(vattr);
 		in = in_blk;
@@ -221,9 +222,14 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		virtq_ctx = DEVX_ADDR_OF(virtio_blk_q, virtq_in, virtqc);
 
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_BLK_Q;
-		if (attr->qpn) {
-			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qpn);
-			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, attr->qpn_vhca_id);
+		if (attr->qp) {
+			vhca_id = snap_get_qp_vhca_id(attr->qp);
+			if (vhca_id < 0) {
+				errno = EINVAL;
+				goto out;
+			}
+			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qp->qp_num);
+			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vhca_id);
 		}
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
