@@ -90,4 +90,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 void blk_virtq_destroy(struct blk_virtq_ctx *q);
 int blk_virtq_progress(struct blk_virtq_ctx *q);
 
+/* debug */
+struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx);
+int set_dma_mkey(struct blk_virtq_ctx *ctx, uint32_t mkey);
 #endif
