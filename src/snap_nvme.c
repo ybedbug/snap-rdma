@@ -512,30 +512,58 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
 		if (!attr->qp)
 			return -EINVAL;
-		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+
+		/*
+		 * we might change the QP for this NVMe SQ, so rdma_dev could
+		 * be different from the previous.
+		 */
+		if (sq->rdma_dev) {
+			snap_put_rdma_dev(sdev, sq->rdma_dev);
+			sq->rdma_dev = NULL;
+		}
+
+		sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
+		if (!sq->rdma_dev)
+			return -ENODEV;
+
 		ret = snap_get_qp_vhca_id(attr->qp);
-		if (ret < 0)
-			return -EINVAL;
+		if (ret < 0) {
+			ret = -EINVAL;
+			goto out_put_dev;
+		}
+		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
 		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, ret);
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
-		if (attr->state == SNAP_NVME_SQ_STATE_INIT)
+		if (attr->state == SNAP_NVME_SQ_STATE_INIT) {
 			DEVX_SET(nvme_sq, sq_in, network_state,
 				 MLX5_NVME_SQ_STATE_INIT);
-		else if (attr->state == SNAP_NVME_SQ_STATE_RDY)
+		} else if (attr->state == SNAP_NVME_SQ_STATE_RDY) {
 			DEVX_SET(nvme_sq, sq_in, network_state,
 				 MLX5_NVME_SQ_STATE_RDY);
-		else if (attr->state == SNAP_NVME_SQ_STATE_ERR)
+		} else if (attr->state == SNAP_NVME_SQ_STATE_ERR) {
 			DEVX_SET(nvme_sq, sq_in, network_state,
 				 MLX5_NVME_SQ_STATE_ERR);
-		else
-			return -EINVAL;
+		} else {
+			ret = -EINVAL;
+			goto out_put_dev;
+		}
 	}
 
 	DEVX_SET64(nvme_sq, sq_in, modify_field_select, fields_to_modify);
 
-	return snap_devx_obj_modify(sq->sq, in, sizeof(in), out, sizeof(out));
+	ret = snap_devx_obj_modify(sq->sq, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		goto out_put_dev;
+
+	return 0;
+
+out_put_dev:
+	if (mask & SNAP_NVME_SQ_MOD_QPN)
+		snap_put_rdma_dev(sdev, sq->rdma_dev);
+
+	return ret;
 }
 
 /**
@@ -642,10 +670,16 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	if (attr->qp) {
 		int vhca_id;
 
+		sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
+		if (!sq->rdma_dev) {
+			errno = EINVAL;
+			goto out;
+		}
+
 		vhca_id = snap_get_qp_vhca_id(attr->qp);
 		if (vhca_id < 0) {
 			errno = EINVAL;
-			goto out;
+			goto out_put_dev;
 		}
 		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, vhca_id);
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
@@ -662,7 +696,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 				      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
 	if (!sq->sq) {
 		errno = ENODEV;
-		goto out;
+		goto out_put_dev;
 	}
 
 	if (sdev->mdev.vtunnel) {
@@ -679,6 +713,11 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 
 	return sq;
 
+out_put_dev:
+	if (attr->qp) {
+		snap_put_rdma_dev(sdev, sq->rdma_dev);
+		sq->rdma_dev = NULL;
+	}
 out:
 	return NULL;
 }
@@ -693,5 +732,10 @@ out:
  */
 int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 {
-	return snap_devx_obj_destroy(sq->sq);
+	struct snap_device *sdev = sq->sq->sdev;
+	int ret;
+
+	ret = snap_devx_obj_destroy(sq->sq);
+	snap_put_rdma_dev(sdev, sq->rdma_dev);
+	sq->rdma_dev = NULL;
 }

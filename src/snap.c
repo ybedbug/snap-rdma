@@ -1291,6 +1291,110 @@ int snap_teardown_device(struct snap_device *sdev)
 	return snap_disable_hca(sdev);
 }
 
+static int snap_set_device_address(struct snap_device *sdev,
+		struct ibv_context *context)
+{
+	uint8_t qin[DEVX_ST_SZ_BYTES(query_roce_address_in)] = {0};
+	uint8_t qout[DEVX_ST_SZ_BYTES(query_roce_address_out)] = {0};
+	uint8_t in[DEVX_ST_SZ_BYTES(set_roce_address_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(set_roce_address_out)] = {0};
+	int ret;
+
+	/*
+	 * Set the emulated function ("host function") address according to
+	 * the networing function address (gid index 0 used for loopback
+	 * address).
+	 */
+	DEVX_SET(query_roce_address_in, qin, opcode,
+		 MLX5_CMD_OP_QUERY_ROCE_ADDRESS);
+	DEVX_SET(query_roce_address_in, qin, roce_address_index, 0);
+
+	ret = mlx5dv_devx_general_cmd(context, qin, sizeof(qin), qout,
+				      sizeof(qout));
+	if (ret)
+		return ret;
+
+	DEVX_SET(set_roce_address_in, in, opcode,
+		 MLX5_CMD_OP_SET_ROCE_ADDRESS);
+	DEVX_SET(set_roce_address_in, in, roce_address_index, 0);
+	DEVX_SET(set_roce_address_in, in, vhca_port_num, 0);
+
+	memcpy(DEVX_ADDR_OF(set_roce_address_in, in, roce_address),
+	       DEVX_ADDR_OF(query_roce_address_out, qout, roce_address),
+	       DEVX_ST_SZ_BYTES(roce_addr_layout));
+
+	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
+					 sizeof(out), 0);
+}
+
+/**
+ * snap_put_rdma_dev() - Decrease the reference count for sdev RDMA networking
+ *                       device in case of a match to the given context.
+ *                       Only valid for BF-1 (for BF-2 and above, this function
+ *                       doesn't relevant).
+ * @sdev:    snap device
+ * @context: ibv_context that will be associated to snap snap device.
+ */
+void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context)
+{
+	if (!context)
+		return;
+
+	pthread_mutex_lock(&sdev->mdev.rdma_lock);
+	/* For BF-1 only */
+	if (sdev->mdev.vtunnel) {
+		if (context->device == sdev->mdev.rdma_dev->device) {
+			if (--sdev->mdev.rdma_dev_users == 0)
+				sdev->mdev.rdma_dev = NULL;
+		}
+	}
+	pthread_mutex_unlock(&sdev->mdev.rdma_lock);
+}
+
+/**
+ * snap_find_get_rdma_dev() - Find the RDMA networking device and increase its
+ *                            reference count if matches to the given context.
+ * @sdev:    snap device
+ * @context: ibv_context that will be associated to snap snap device.
+ *
+ * For BF-1, by design, only 1 RDMA device allowed to be associated to the snap
+ * device (because of the steering rules), and it's address used to set the
+ * address of the emulated snap function. For BF-2 and above, multiple RDMA
+ * device can be used as networking devices.
+ *
+ * Return: The given ibv_context in case it can be associated to sdev for RDMA
+ * networking on success and NULL otherwise.
+ */
+struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
+		struct ibv_context *context)
+{
+	struct ibv_context *rdma = NULL;
+	int ret;
+
+	pthread_mutex_lock(&sdev->mdev.rdma_lock);
+	/* For BF-1 only */
+	if (sdev->mdev.vtunnel) {
+		if (sdev->mdev.rdma_dev) {
+			/* In case there is no match - fail */
+			if (context->device != sdev->mdev.rdma_dev->device)
+				goto out;
+		} else {
+			/* set sdev address according to context address */
+			ret = snap_set_device_address(sdev, context);
+			if (ret)
+				goto out;
+
+			sdev->mdev.rdma_dev = context;
+		}
+		sdev->mdev.rdma_dev_users++;
+	}
+
+	rdma = context;
+out:
+	pthread_mutex_unlock(&sdev->mdev.rdma_lock);
+	return rdma;
+}
+
 /**
  * snap_get_qp_vhca_id() - Return the vhca id for a given QP. This id will be
  *                         used for modifying and creating emulation queues

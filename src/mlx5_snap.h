@@ -145,5 +145,8 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
 		void *pci_params_out);
 int snap_get_qp_vhca_id(struct ibv_qp *qp);
+void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context);
+struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
+		struct ibv_context *context);
 
 #endif

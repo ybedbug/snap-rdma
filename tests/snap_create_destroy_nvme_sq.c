@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 				q_type = SNAP_NVME_CC_MODE;
 			break;
 		default:
-			printf("Usage: snap_create_destroy_nvme_sq -n <num> -t <type> [mq]\n");
+			printf("Usage: snap_create_destroy_nvme_sq -n <num> -t <type> [m(odify) q(uery)]\n");
 			exit(1);
 		}
 	}
@@ -103,6 +103,7 @@ int main(int argc, char **argv)
 					struct snap_nvme_cq *cq;
 					struct snap_nvme_sq_attr sq_attr = {};
 					struct snap_nvme_sq *sq;
+					struct ibv_qp *ibqp;
 
 					cq_attr.type = q_type;
 					cq_attr.id = j;
@@ -120,7 +121,7 @@ int main(int argc, char **argv)
 						sq_attr.queue_depth = depth;
 						sq_attr.base_addr = 0xbeefdead * j;
 						sq_attr.cq = cq;
-						sq_attr.qp = snap_create_qp(pd, ibcq);
+						sq_attr.qp = ibqp = snap_create_qp(pd, ibcq);
 						if (!sq_attr.qp) {
 							fprintf(stderr, "NVMe sq id=%d fail to create QP\n", j);
 							fflush(stderr);
@@ -129,7 +130,7 @@ int main(int argc, char **argv)
 						}
 						sq = snap_nvme_create_sq(sdev, &sq_attr);
 						if (sq) {
-							fprintf(stdout, "NVMe sq id=%d created !\n", j);
+							fprintf(stdout, "NVMe sq id=%d created with qpn=0x%x !\n", j, ibqp->qp_num);
 							fflush(stdout);
 							if (query) {
 								memset(&sq_attr, 0, sizeof(sq_attr));
@@ -143,26 +144,40 @@ int main(int argc, char **argv)
 								}
 							}
 							if (modify) {
+								uint64_t mask;
+
 								memset(&sq_attr, 0, sizeof(sq_attr));
-								sq_attr.state = SNAP_NVME_SQ_STATE_ERR;
-								if (!snap_nvme_modify_sq(sq,
-											 SNAP_NVME_SQ_MOD_STATE,
-											 &sq_attr)) {
-									fprintf(stdout, "Modify NVMe sq id=%d, to state=%d\n", j,
-										sq_attr.state);
+								/* modify qpn/state separately */
+								if (j % 2) {
+									sq_attr.qp = snap_create_qp(pd, ibcq);
+									if (!sq_attr.qp) {
+										fprintf(stderr, "NVMe sq id=%d fail to create QP for modify\n", j);
+										fflush(stderr);
+									} else {
+										mask = SNAP_NVME_SQ_MOD_QPN;
+										fprintf(stdout, "NVMe sq id=%d modify to qpn=0x%x !\n", j, sq_attr.qp->qp_num);
+										fflush(stdout);
+									}
+								} else {
+									mask = SNAP_NVME_SQ_MOD_STATE;
+									sq_attr.state = SNAP_NVME_SQ_STATE_ERR;
+								}
+								if (!snap_nvme_modify_sq(sq, mask, &sq_attr)) {
+									fprintf(stdout, "Modify NVMe sq id=%d, mask=%d\n", j, mask);
 									fflush(stdout);
 								} else {
-									fprintf(stderr, "Failed to Modify NVMe sq id=%d, to state=%d\n", j,
-										sq_attr.state);
+									fprintf(stderr, "Failed to Modify NVMe sq id=%d, mask=%d\n", j, mask);
 									fflush(stderr);
 								}
+								if (sq_attr.qp)
+									ibv_destroy_qp(sq_attr.qp);
 							}
 							snap_nvme_destroy_sq(sq);
 						} else {
 							fprintf(stderr, "failed to create NVMe sq id=%d, err=%d\n", j, errno);
 							fflush(stderr);
 						}
-						ibv_destroy_qp(sq_attr.qp);
+						ibv_destroy_qp(ibqp);
 						snap_nvme_destroy_cq(cq);
 					} else {
 						fprintf(stderr, "failed to create NVMe cq id=%d\n", j);
