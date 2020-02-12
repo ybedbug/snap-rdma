@@ -125,7 +125,24 @@ struct blk_virtq_cmd {
 	uint32_t total_in_len;
 };
 
+/**
+ * enum blk_sw_virtq_state - state of sw virtq
+ * @BLK_SW_VIRTQ_RUNNING:	Queue receives and operates commands
+ * @BLK_SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
+ * 				commands already received
+ * @BLK_SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
+ * 				commands to operate
+ *
+ * This is the state of the sw virtq (as opposed to VIRTQ_BLK_Q PRM FW object)
+ */
+enum blk_sw_virtq_state {
+	BLK_SW_VIRTQ_RUNNING,
+	BLK_SW_VIRTQ_FLUSHING,
+	BLK_SW_VIRTQ_SUSPENDED,
+};
+
 struct blk_virtq_priv {
+	volatile enum blk_sw_virtq_state swq_state;
 	struct blk_virtq_ctx vq_ctx;
 	struct virtq_bdev *blk_dev;
 	struct ibv_pd *pd;
@@ -810,6 +827,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
+	vq_priv->swq_state = BLK_SW_VIRTQ_RUNNING;
 
 	vq_priv->cmd_arr = alloc_blk_virtq_cmd_arr(attr->size_max,
 						   attr->seg_max, vq_priv);
@@ -890,9 +908,8 @@ err:
  * blk_virtq_destroy() - Destroyes blk virtq object
  * @q: queue to be destryoed
  *
- * Context: Destroy should be called only after queue was flushed and
- * 	    blk_virtq_progress() will not be called during destruction.
- * 	    ToDo: queue flush interface.
+ * Context: 1. Destroy should be called only when queue is in suspended state.
+ * 	    2. blk_virtq_progress() should not be called during destruction.
  *
  * Return: void
  */
@@ -901,6 +918,10 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 	struct blk_virtq_priv *vq_priv = q->priv;
 
 	snap_debug("destroying queue %d\n", q->idx);
+
+	if (vq_priv->swq_state != BLK_SW_VIRTQ_SUSPENDED)
+		snap_error("Error destroying queue %d while not in suspended"
+			   " state\n", q->idx);
 
 	if (snap_virtio_blk_destroy_queue(vq_priv->snap_vbq))
 		snap_error("error destroying blk_virtq\n");
@@ -922,11 +943,61 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->priv;
 
+	if (priv->swq_state == BLK_SW_VIRTQ_FLUSHING && priv->cmd_cntr == 0) {
+		priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
+		return 0;
+	}
+
 	return snap_dma_q_progress(priv->dma_q);
 }
 
-struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
+/**
+ * blk_virtq_suspend() - Request moving queue to suspend state
+ * @q:	queue to move to suspend state
+ *
+ * When suspend is requested the queue stops receiving new commands
+ * and moves to FLUSHING state. Once all commands already fetched are
+ * finished, the queue moves to SUSPENDED state.
+ *
+ * Context: Function is not thread safe with regard to blk_virtq_progress
+ * and blk_virtq_is_suspended. If called from a different thread than
+ * thread calling progress/is_suspended then application must take care of
+ * proper locking
+ *
+ * Return: 0 on success, else error code
+ */
+int blk_virtq_suspend(struct blk_virtq_ctx *q)
 {
+	struct blk_virtq_priv *priv = q->priv;
+
+	if (priv->swq_state != BLK_SW_VIRTQ_RUNNING) {
+		snap_debug("Suspend for queue %d was already requested\n",
+			   q->idx);
+		return -EBUSY;
+	}
+
+	priv->swq_state = BLK_SW_VIRTQ_FLUSHING;
+	return 0;
+}
+
+/**
+ * blk_virtq_is_suspended() - api for checking if queue in suspended state
+ * @q:		queue to check
+ *
+ * Context: Function is not thread safe with regard to blk_virtq_progress
+ * and blk_virtq_suspend. If called from a different thread than
+ * thread calling progress/suspend then application must take care of
+ * proper locking
+ *
+ * Return: True when queue suspended, and False for not suspended
+ */
+bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
+{
+	struct blk_virtq_priv *priv = q->priv;
+	return priv->swq_state == BLK_SW_VIRTQ_SUSPENDED;
+}
+
+struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx) {
 	struct blk_virtq_priv *vpriv = ctx->priv;
 	return vpriv->dma_q;
 }

@@ -89,6 +89,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 				       struct blk_virtq_create_attr *attr);
 void blk_virtq_destroy(struct blk_virtq_ctx *q);
 int blk_virtq_progress(struct blk_virtq_ctx *q);
+int blk_virtq_suspend(struct blk_virtq_ctx *q);
+bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);
 
 /* debug */
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx);
