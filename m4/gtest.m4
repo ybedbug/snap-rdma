@@ -24,6 +24,7 @@ AC_LANG_PUSH([C++])
 dnl Check that we can find GTEST headers, setup GTEST_LDFLAGS and GTEST_CXXFLAGS
 dnl assume that if there is a valid gtest.h then there is a valid lib
 dnl TODO: improve check by trying to compile and run simple unit test
+dnl gnu++11 used to enable compiling c files which include 'typeof' keyword
 
 AS_IF([test "x$gtest_app" == xyes],
         [
@@ -31,7 +32,7 @@ AS_IF([test "x$gtest_app" == xyes],
         save_CPPFLAGS="$CPPFLAGS"
         AS_IF([test x/usr == "x$with_gtest"],
           [],
-          [gtest_incl="-std=c++11 -I$with_gtest/include"
+          [gtest_incl="-std=gnu++11 -I$with_gtest/include"
            gtest_libs="-L$with_gtest/lib$libsuff"])
         CXXFLAGS="$gtest_incl $CXXFLAGS"
         CPPFLAGS="$gtest_incl $CPFLAGS"
