@@ -4,6 +4,8 @@
 
 #include "snap.h"
 #include "snap_nvme.h"
+#include "snap_virtio_blk.h"
+#include "snap_virtio_net.h"
 
 static int snap_init_teardown_helper(struct snap_context *sctx,
 		enum snap_pci_type type)
