@@ -159,7 +159,7 @@ struct snap_dma_q *SnapDmaTest::create_queue()
 
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
 	if (q)
-		EXPECT_TRUE(q->fw_qp.qp->qp_num == snap_dma_q_get_fw_qpnum(q));
+		EXPECT_TRUE(q->fw_qp.qp->qp_num == snap_dma_q_get_fw_qp(q)->qp_num);
 	return q;
 }
 
@@ -469,7 +469,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	ASSERT_TRUE(q);
 
 	memset(&sq_attr, 0, sizeof(sq_attr));
-	sq_attr.qpn = snap_dma_q_get_fw_qpnum(q);
+	sq_attr.qp = snap_dma_q_get_fw_qp(q);
 	sq_attr.state = SNAP_NVME_SQ_STATE_RDY;
 
 	// not working yet

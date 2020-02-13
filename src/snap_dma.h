@@ -180,7 +180,7 @@ int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len);
 int snap_dma_q_progress(struct snap_dma_q *q);
 int snap_dma_q_flush(struct snap_dma_q *q);
 int snap_dma_q_arm(struct snap_dma_q *q);
-uint32_t snap_dma_q_get_fw_qpnum(struct snap_dma_q *q);
+struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
 
 /**
  * snap_dma_q_ctx - get queue context

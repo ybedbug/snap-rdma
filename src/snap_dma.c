@@ -674,15 +674,15 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 }
 
 /**
- * snap_dma_q_get_fw_qpnum() - Get FW qp number
+ * snap_dma_q_get_fw_qp() - Get FW qp
  * @q:   dma queue
  *
- * The qp number that can be used by the FW emulation objects
+ * The function returns qp that can be used by the FW emulation objects
  * See snap_dma_q_create() for the detailed explanation
  *
- * Return: fw qp number
+ * Return: fw qp
  */
-uint32_t snap_dma_q_get_fw_qpnum(struct snap_dma_q *q)
+struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
 {
-	return q->fw_qp.qp->qp_num;
+	return q->fw_qp.qp;
 }
