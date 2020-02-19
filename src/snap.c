@@ -1894,6 +1894,9 @@ snap_create_nvme_device_emulation(struct snap_device *sdev)
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	DEVX_SET(nvme_device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
+	DEVX_SET(nvme_device_emulation, device_emulation_in,
+		 resources_on_emulation_manager,
+		 sdev->sctx->mctx.need_tunnel ? 0 : 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
