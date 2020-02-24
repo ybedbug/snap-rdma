@@ -179,6 +179,7 @@ int snap_nvme_init_device(struct snap_device *sdev)
 	if (!ndev)
 		return -ENOMEM;
 
+	ndev->db_base = NVME_DB_BASE;
 	/*
 	 * Admin queue is calculated in num_queues. Also Keep 1:1 mapping for
 	 * NVMe SQs/CQs.
@@ -410,7 +411,7 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	DEVX_SET(nvme_cq, cq_in, device_emulation_id, sdev->pci->mpci.vhca_id);
 	DEVX_SET(nvme_cq, cq_in, offload_type, offload_type);
 	DEVX_SET(nvme_cq, cq_in, nvme_doorbell_offset,
-		 NVME_DB_BASE + attr->doorbell_offset);
+		 ndev->db_base + attr->doorbell_offset);
 	DEVX_SET(nvme_cq, cq_in, msix_vector, attr->msix);
 	DEVX_SET(nvme_cq, cq_in, nvme_num_of_entries, attr->queue_depth);
 	DEVX_SET64(nvme_cq, cq_in, nvme_base_addr, attr->base_addr);
@@ -665,7 +666,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	DEVX_SET(nvme_sq, sq_in, offload_type, offload_type);
 	DEVX_SET(nvme_sq, sq_in, nvme_num_of_entries, attr->queue_depth);
 	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
-		 NVME_DB_BASE + attr->doorbell_offset);
+		 ndev->db_base + attr->doorbell_offset);
 	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
 	if (attr->qp) {
 		int vhca_id;

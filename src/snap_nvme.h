@@ -123,6 +123,7 @@ struct snap_nvme_device_attr {
 struct snap_nvme_device {
 	struct snap_device			*sdev;
 	uint32_t				num_queues;
+	uint32_t				db_base;
 
 	pthread_mutex_t				lock;
 	TAILQ_HEAD(, snap_nvme_namespace)	ns_list;
