@@ -1,31 +1,6 @@
 #ifndef TEST_SNAP_DMA_H
 #define TEST_SNAP_DMA_H
 
-/* Physically continuous memory block */
-class pmem_block {
-	public:
-	char     *va_base;
-	uintptr_t pa_base;
-	size_t    blk_size;
-
-	virtual int alloc(size_t size);
-	virtual void free(void);
-	void dump();
-	static void dma_init();
-	static void dma_destroy();
-	static uintptr_t virt_to_phys(uintptr_t vaddr);
-
-	private:
-	static void *heap_base;
-	static void *heap_top;
-	static void *heap_end;
-	static const int  HUGE_PAGE_SIZE  = 2*1024*1024;
-	static const int  SMALL_PAGE_SIZE = 4096;
-
-	static void *dma_page_alloc();
-	static void *dma_page_free();
-};
-
 class SnapDmaTest : public ::testing::Test {
 	virtual void SetUp();
 	virtual void TearDown();

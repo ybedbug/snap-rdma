@@ -16,6 +16,7 @@ extern "C" {
 #include "snap.h"
 #include "snap_nvme.h"
 #include "snap_dma.h"
+#include "host_uio.h"
 };
 
 #include "gtest/gtest.h"
@@ -426,6 +427,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	 * the CX6 DX
 	 */
 	SKIP_TEST_R("Under construction");
+	ASSERT_EQ(0, host_uio_dma_init());
 	/* open snap ctx */
 	dev_list = ibv_get_device_list(&n_dev);
 	ASSERT_TRUE(dev_list);
@@ -489,164 +491,22 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	xgvmi_rkey = sq_attr.emulated_device_dma_mkey;
 	ASSERT_NE(0, xgvmi_rkey);
 
-	pmem_block hmem;
+	void *va;
+	uintptr_t pa;
 
-	ASSERT_EQ(0, hmem.alloc(m_bsize));
+	va = host_uio_dma_alloc(m_bsize, &pa);
+	ASSERT_TRUE(va);
+
 	/* read data. */
-	dma_xfer_test(q, true, false, hmem.va_base, (void *)hmem.pa_base,
-			xgvmi_rkey, m_bsize);
-	dma_xfer_test(q, false, false, hmem.va_base, (void *)hmem.pa_base,
-			xgvmi_rkey, m_bsize);
+	dma_xfer_test(q, true, true, va, (void *)pa, xgvmi_rkey, m_bsize);
+	dma_xfer_test(q, false, true, va, (void *)pa, xgvmi_rkey, m_bsize);
 
+	host_uio_dma_free(va);
 	snap_dma_q_destroy(q);
 	snap_nvme_destroy_sq(sq);
 	snap_nvme_destroy_cq(cq);
 	snap_nvme_teardown_device(sdev);
 	snap_close_device(sdev);
 	snap_close(sctx);
-}
-
-/* quick & dirty heap pages allocator, no error
- * checking and free.
- */
-void *pmem_block::heap_base = MAP_FAILED;
-void *pmem_block::heap_top = NULL;
-void *pmem_block::heap_end = NULL;
-
-void pmem_block::dma_init()
-{
-	heap_base = mmap(NULL, HUGE_PAGE_SIZE,
-			PROT_READ|PROT_WRITE,
-			MAP_PRIVATE|MAP_ANONYMOUS|MAP_LOCKED|
-			/* MAP_HUGE_2MB is used in *conjunction* with MAP_HUGETLB
-			 * to select alternative hugetlb page sizes */
-#ifdef MAP_HUGE_2MB
-			MAP_HUGETLB|MAP_HUGE_2MB,
-#else
-			MAP_HUGETLB,
-#endif
-			-1, 0);
-	if (heap_base == MAP_FAILED) {
-		printf("Huge page allocation failed errno (%d) %m\n"
-				"Check that hugepages are configured and 'ulimit -l'\n", errno);
-		FAIL();
-	}
-	heap_top = heap_base;
-	heap_end = (char *)heap_base + HUGE_PAGE_SIZE;
-}
-
-void pmem_block::dma_destroy()
-{
-	if (heap_base == MAP_FAILED)
-		return;
-	munmap(heap_base, HUGE_PAGE_SIZE);
-	heap_base = heap_top = heap_end = NULL;
-}
-
-void *pmem_block::dma_page_alloc()
-{
-	void *page;
-
-	if (heap_base == MAP_FAILED)
-		dma_init();
-
-	page = heap_top;
-	heap_top = (char *)heap_top + SMALL_PAGE_SIZE;
-	if (heap_top > heap_end) {
-		printf("Out of DMA memory");
-		return NULL;
-	}
-	return page;
-}
-
-void pmem_block::free()
-{
-	if (!va_base)
-		return;
-
-	va_base = NULL;
-}
-
-int pmem_block::alloc(size_t size)
-{
-	va_base = NULL;
-	blk_size = size;
-	if (size > SMALL_PAGE_SIZE) {
-		printf("block of size %d cannot be physically contiguos\n",
-				(int)size);
-		return -EINVAL;
-	}
-
-	va_base = (char *)dma_page_alloc();
-	if (!va_base)
-		return -ENOMEM;
-
-	pa_base = virt_to_phys((uintptr_t)va_base);
-	if (pa_base == (uintptr_t)(-1)) {
-		printf("cannot find phys address of the %p\n", va_base);
-		return -EINVAL;
-	}
-	memset(va_base, 0, size);
-	return 0;
-}
-
-void pmem_block::dump() {
-	printf("va %p curr_pa 0x%llx real_pa 0x%llx\n",
-			va_base, (unsigned long long)pa_base,
-			(unsigned long long)virt_to_phys((uintptr_t)va_base));
-}
-
-uintptr_t pmem_block::virt_to_phys(uintptr_t address)
-{
-	static const char *pagemap_file = "/proc/self/pagemap";
-	const size_t page_size = sysconf(_SC_PAGESIZE);
-	uint64_t entry, pfn;
-	ssize_t offset, ret;
-	uintptr_t pa;
-	int fd;
-
-	/* See https://www.kernel.org/doc/Documentation/vm/pagemap.txt */
-	fd = open(pagemap_file, O_RDONLY);
-	if (fd < 0) {
-		printf("failed to open %s: %m\n", pagemap_file);
-		pa = -1;
-		goto out;
-	}
-
-	offset = (address / page_size) * sizeof(entry);
-	ret = lseek(fd, offset, SEEK_SET);
-	if (ret != offset) {
-		printf("failed to seek in %s to offset %zu: %m\n",
-				pagemap_file, offset);
-		pa = -1;
-		goto out_close;
-	}
-
-	ret = read(fd, &entry, sizeof(entry));
-	if (ret != sizeof(entry)) {
-		printf("read from %s at offset %zu returned %ld: %m\n",
-				pagemap_file, offset, ret);
-		pa = -1;
-		goto out_close;
-	}
-
-	if (entry & (1ULL << 63)) {
-		pfn = entry & ((1ULL << 54) - 1);
-		if (!pfn) {
-			printf("%p got pfn zero. Check CAP_SYS_ADMIN permissions\n",
-					(void *)address);
-			pa = -1;
-			goto out_close;
-		}
-		pa = (pfn * page_size) | (address & (page_size - 1));
-	} else {
-		printf("%p is not present: %s\n", (void *)address,
-				entry & (1ULL << 62) ? "swapped" : "oops");
-		pa = -1; /* Page not present */
-	}
-
-out_close:
-	close(fd);
-out:
-	return pa;
+	host_uio_dma_destroy();
 }

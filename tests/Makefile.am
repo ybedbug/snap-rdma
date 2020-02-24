@@ -60,16 +60,23 @@ snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c
 snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
 
+UIO_FILES = host_uio.h host_uio.c
+
 if HAVE_GTEST
 noinst_PROGRAMS += gtest_snap_rdma
 
 gtest_snap_rdma_CXXFLAGS = $(LOCAL_CFLAGS) \
-			   $(GTEST_CXXFLAGS)
+			   $(GTEST_CXXFLAGS) \
+			   -I$(top_srcdir)/src
+gtest_snap_rdma_CFLAGS = $(LOCAL_CFLAGS) \
+			 -I$(top_srcdir)/src
 gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  test_snap_dma.h \
 			  test_snap_dma.cc \
 			  tests_common.h \
-			  tests_common.cc
+			  tests_common.cc \
+			  $(UIO_FILES)
+
 gtest_snap_rdma_LDFLAGS = $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
 gtest_snap_rdma_LDADD = \
 			$(top_builddir)/src/libsnap.la
