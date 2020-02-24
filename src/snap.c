@@ -1229,6 +1229,43 @@ reset_tx:
 	return ret;
 }
 
+static int snap_destroy_pd(struct mlx5_snap_devx_obj *pd)
+{
+	return snap_devx_obj_destroy(pd);
+}
+
+static struct mlx5_snap_devx_obj*
+snap_create_pd(struct snap_device *sdev, uint32_t *pd_id)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(alloc_pd_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(alloc_pd_out)] = {0};
+	struct mlx5_snap_devx_obj *pd;
+
+	DEVX_SET(alloc_pd_in, in, opcode, MLX5_CMD_OP_ALLOC_PD);
+
+	pd = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				  sdev->mdev.vtunnel,
+				  DEVX_ST_SZ_BYTES(dealloc_pd_in),
+				  DEVX_ST_SZ_BYTES(dealloc_pd_out));
+	if (!pd)
+		goto out_err;
+
+	*pd_id = DEVX_GET(alloc_pd_out, out, pd);
+	if (sdev->mdev.vtunnel) {
+		void *dtor = pd->dtor_in;
+
+		DEVX_SET(dealloc_pd_in, dtor, opcode,
+			 MLX5_CMD_OP_DEALLOC_PD);
+		DEVX_SET(dealloc_pd_in, dtor, pd, *pd_id);
+	}
+
+	return pd;
+
+out_err:
+	return NULL;
+}
+
+
 /**
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
@@ -1256,8 +1293,17 @@ int snap_init_device(struct snap_device *sdev)
 	if (ret)
 		goto out_teardown;
 
+	sdev->mdev.tunneled_pd = snap_create_pd(sdev,
+						&sdev->mdev.pd_id);
+	if (!sdev->mdev.tunneled_pd) {
+		errno = EINVAL;
+		goto out_reset_steering;
+	}
+
 	return 0;
 
+out_reset_steering:
+	snap_reset_steering(sdev);
 out_teardown:
 	snap_teardown_hca(sdev);
 out_disable:
@@ -1281,6 +1327,9 @@ int snap_teardown_device(struct snap_device *sdev)
 	if (!sdev->mdev.vtunnel)
 		return 0;
 
+	ret = snap_destroy_pd(sdev->mdev.tunneled_pd);
+	if (ret)
+		return ret;
 	ret = snap_reset_steering(sdev);
 	if (ret)
 		return ret;

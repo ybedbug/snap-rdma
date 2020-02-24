@@ -125,6 +125,8 @@ struct mlx5_snap_device {
 
 
 	/* for BF-1 usage only */
+	struct mlx5_snap_devx_obj		*tunneled_pd;
+	uint32_t				pd_id;
 	pthread_mutex_t				rdma_lock;
 	struct ibv_context			*rdma_dev;
 	unsigned int				rdma_dev_users;

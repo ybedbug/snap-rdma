@@ -58,6 +58,8 @@ enum {
 	MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT = 0x754,
 	MLX5_CMD_OP_QUERY_ROCE_ADDRESS = 0x760,
 	MLX5_CMD_OP_SET_ROCE_ADDRESS = 0x761,
+	MLX5_CMD_OP_ALLOC_PD = 0x800,
+	MLX5_CMD_OP_DEALLOC_PD = 0x801,
 	MLX5_CMD_OP_SET_FLOW_TABLE_ROOT = 0x92f,
 	MLX5_CMD_OP_CREATE_FLOW_TABLE = 0x930,
 	MLX5_CMD_OP_DESTROY_FLOW_TABLE = 0x931,
@@ -2290,6 +2292,50 @@ enum reformat_type {
 	MLX5_REFORMAT_TYPE_L2_TO_L2_TUNNEL = 0x2,
 	MLX5_REFORMAT_TYPE_L3_TUNNEL_TO_L2 = 0x3,
 	MLX5_REFORMAT_TYPE_L2_TO_L3_TUNNEL = 0x4,
+};
+
+struct mlx5_ifc_dealloc_pd_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_dealloc_pd_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         pd[0x18];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_alloc_pd_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x8];
+	u8         pd[0x18];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_alloc_pd_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
 };
 
 struct mlx5_ifc_alloc_flow_counter_in_bits {
