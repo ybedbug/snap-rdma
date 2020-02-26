@@ -92,6 +92,7 @@ struct snap_nvme_sq {
 	struct ibv_context			*rdma_dev;
 	uint32_t				id;
 	struct mlx5_snap_devx_obj		*sq;
+	struct mlx5_snap_devx_obj		*hw_qp;
 };
 
 struct snap_nvme_cq_attr {
