@@ -845,6 +845,290 @@ out_err:
 	return NULL;
 }
 
+static int snap_modify_qp_to_init(struct mlx5_snap_devx_obj *qp,
+				  uint32_t qp_num, struct ibv_qp_attr *qp_attr,
+				  int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rst2init_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rst2init_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
+	DEVX_SET(rst2init_qp_in, in, qpn, qp_num);
+	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
+
+	if (attr_mask & IBV_QP_PKEY_INDEX)
+	    DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
+		     qp_attr->pkey_index);
+
+	if (attr_mask & IBV_QP_PORT)
+		DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num,
+			 qp_attr->port_num);
+
+	if (attr_mask & IBV_QP_ACCESS_FLAGS) {
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_READ)
+			DEVX_SET(qpc, qpc, rre, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_WRITE)
+			DEVX_SET(qpc, qpc, rwe, 1);
+	}
+
+	return snap_devx_obj_modify(qp, in, sizeof(in), out, sizeof(out));
+}
+
+static int snap_modify_qp_to_rtr(struct mlx5_snap_devx_obj *qp,
+				 uint32_t qp_num, struct ibv_qp_attr *qp_attr,
+				 int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
+	uint8_t mac[6];
+	uint8_t gid[16];
+	int ret;
+
+	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
+	DEVX_SET(init2rtr_qp_in, in, qpn, qp_num);
+
+	/* 30 is the maximum value for Infiniband QPs*/
+	DEVX_SET(qpc, qpc, log_msg_max, 30);
+
+	/* TODO: add more attributes */
+	if (attr_mask & IBV_QP_PATH_MTU)
+		DEVX_SET(qpc, qpc, mtu, qp_attr->path_mtu);
+	if (attr_mask & IBV_QP_DEST_QPN)
+		DEVX_SET(qpc, qpc, remote_qpn, qp_attr->dest_qp_num);
+	if (attr_mask & IBV_QP_RQ_PSN)
+		DEVX_SET(qpc, qpc, next_rcv_psn, qp_attr->rq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_PKEY_INDEX)
+		DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
+			 qp_attr->pkey_index);
+	if (attr_mask & IBV_QP_PORT)
+		DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num,
+			 qp_attr->port_num);
+	if (attr_mask & IBV_QP_MAX_DEST_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_rra_max,
+			 snap_u32log2(qp_attr->max_dest_rd_atomic));
+	if (attr_mask & IBV_QP_MIN_RNR_TIMER)
+		DEVX_SET(qpc, qpc, min_rnr_nak, qp_attr->min_rnr_timer);
+	if (attr_mask & IBV_QP_AV) {
+		DEVX_SET(qpc, qpc, primary_address_path.tclass,
+			 qp_attr->ah_attr.grh.traffic_class);
+		/* set destination mac */
+		memcpy(gid, qp_attr->ah_attr.grh.dgid.raw, 16);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+		       gid,
+		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+		mac[0] = gid[8] ^ 0x02;
+		mac[1] = gid[9];
+		mac[2] = gid[10];
+		mac[3] = gid[13];
+		mac[4] = gid[14];
+		mac[5] = gid[15];
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+		       mac, 6);
+
+		DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
+			 qp_attr->ah_attr.grh.sgid_index);
+		if (qp_attr->ah_attr.sl & 0x7)
+			DEVX_SET(qpc, qpc, primary_address_path.eth_prio,
+				 qp_attr->ah_attr.sl & 0x7);
+		DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
+			 qp_attr->ah_attr.grh.hop_limit);
+	}
+
+	return snap_devx_obj_modify(qp, in, sizeof(in), out, sizeof(out));
+}
+
+static int snap_modify_qp_to_rts(struct mlx5_snap_devx_obj *qp,
+				 uint32_t qp_num, struct ibv_qp_attr *qp_attr,
+				 int attr_mask)
+{
+	uint32_t in[DEVX_ST_SZ_DW(rtr2rts_qp_in)] = {0};
+	uint32_t out[DEVX_ST_SZ_DW(rtr2rts_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rtr2rts_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
+	DEVX_SET(rtr2rts_qp_in, in, qpn, qp_num);
+
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_RETRY_CNT)
+		DEVX_SET(qpc, qpc, retry_count, qp_attr->retry_cnt);
+	if (attr_mask & IBV_QP_SQ_PSN)
+		DEVX_SET(qpc, qpc, next_send_psn, qp_attr->sq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_RNR_RETRY)
+		DEVX_SET(qpc, qpc, rnr_retry, qp_attr->rnr_retry);
+	if (attr_mask & IBV_QP_MAX_QP_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_sra_max,
+			 snap_u32log2(qp_attr->max_rd_atomic));
+
+	return snap_devx_obj_modify(qp, in, sizeof(in), out, sizeof(out));
+}
+
+static int snap_modify_qp(struct mlx5_snap_devx_obj *qp, uint32_t qp_num,
+			  struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	int ret;
+
+	/* state mask is a must for modifying QP */
+	if (!(attr_mask & IBV_QP_STATE))
+		return -EINVAL;
+
+	switch (qp_attr->qp_state) {
+	case IBV_QPS_INIT:
+		ret = snap_modify_qp_to_init(qp, qp_num, qp_attr, attr_mask);
+		break;
+	case IBV_QPS_RTR:
+		ret = snap_modify_qp_to_rtr(qp, qp_num, qp_attr, attr_mask);
+		break;
+	case IBV_QPS_RTS:
+		ret = snap_modify_qp_to_rts(qp, qp_num, qp_attr, attr_mask);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static int snap_clone_qp(struct snap_device *sdev,
+		struct mlx5_snap_devx_obj *hw_qp, struct ibv_qp *qp)
+{
+	struct ibv_qp_attr hw_qp_attr = {};
+	struct ibv_qp_attr attr = {};
+	struct ibv_qp_init_attr init_attr = {};
+	int ret, attr_mask;
+
+	attr_mask = IBV_QP_PKEY_INDEX |
+		    IBV_QP_PORT |
+		    IBV_QP_ACCESS_FLAGS |
+		    IBV_QP_PATH_MTU |
+		    IBV_QP_AV |
+		    IBV_QP_DEST_QPN |
+		    IBV_QP_RQ_PSN |
+		    IBV_QP_MAX_DEST_RD_ATOMIC |
+		    IBV_QP_MIN_RNR_TIMER |
+		    IBV_QP_TIMEOUT |
+		    IBV_QP_RETRY_CNT |
+		    IBV_QP_RNR_RETRY |
+		    IBV_QP_SQ_PSN |
+		    IBV_QP_MAX_QP_RD_ATOMIC;
+	ret = ibv_query_qp(qp, &attr, attr_mask, &init_attr);
+	if (ret)
+		return ret;
+
+	hw_qp_attr.qp_state = IBV_QPS_INIT;
+	hw_qp_attr.pkey_index = attr.pkey_index;
+	hw_qp_attr.port_num = attr.port_num;
+	hw_qp_attr.qp_access_flags = attr.qp_access_flags;
+	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+			     IBV_QP_STATE |
+			     IBV_QP_PKEY_INDEX |
+			     IBV_QP_PORT |
+			     IBV_QP_ACCESS_FLAGS);
+	if (ret)
+		return ret;
+
+	memset(&hw_qp_attr, 0, sizeof(hw_qp_attr));
+	hw_qp_attr.qp_state = IBV_QPS_RTR;
+	hw_qp_attr.path_mtu = attr.path_mtu;
+	hw_qp_attr.dest_qp_num = attr.dest_qp_num;
+	hw_qp_attr.rq_psn = attr.rq_psn;
+	hw_qp_attr.max_dest_rd_atomic = attr.max_dest_rd_atomic;
+	hw_qp_attr.min_rnr_timer = attr.min_rnr_timer;
+	memcpy(&hw_qp_attr.ah_attr, &attr.ah_attr, sizeof(attr.ah_attr));
+	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+			     IBV_QP_STATE |
+			     IBV_QP_PATH_MTU |
+			     IBV_QP_DEST_QPN |
+			     IBV_QP_RQ_PSN |
+			     IBV_QP_MAX_DEST_RD_ATOMIC |
+			     IBV_QP_MIN_RNR_TIMER |
+			     IBV_QP_AV);
+	if (ret)
+		return ret;
+
+	memset(&hw_qp_attr, 0, sizeof(hw_qp_attr));
+	hw_qp_attr.qp_state = IBV_QPS_RTS;
+	hw_qp_attr.timeout = attr.timeout;
+	hw_qp_attr.retry_cnt = attr.retry_cnt;
+	hw_qp_attr.sq_psn = attr.sq_psn;
+	hw_qp_attr.rnr_retry = attr.rnr_retry;
+	hw_qp_attr.max_rd_atomic = attr.max_rd_atomic;
+	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+			     IBV_QP_STATE |
+			     IBV_QP_TIMEOUT |
+			     IBV_QP_RETRY_CNT |
+			     IBV_QP_SQ_PSN |
+			     IBV_QP_RNR_RETRY |
+			     IBV_QP_MAX_QP_RD_ATOMIC);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+struct mlx5_snap_devx_obj *snap_create_hw_qp(struct snap_device *sdev,
+		struct ibv_qp *qp)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(create_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(create_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(create_qp_in, in, qpc);
+	void *dtor;
+	struct mlx5_snap_devx_obj *hw_qp;
+	int ret;
+
+	/* HW QP is needed only for Bluefield-1 emulation */
+	if (!sdev->mdev.vtunnel)
+		return NULL;
+
+	DEVX_SET(create_qp_in, in, opcode, MLX5_CMD_OP_CREATE_QP);
+	DEVX_SET(create_qp_in, in, input_qpn, qp->qp_num);
+
+	DEVX_SET(qpc, qpc, st, MLX5_QPC_ST_RC);
+	DEVX_SET(qpc, qpc, pd, sdev->mdev.pd_id);
+	DEVX_SET(qpc, qpc, cs_req, MLX5_REQ_SCAT_DATA32_CQE);
+	DEVX_SET(qpc, qpc, cs_res, MLX5_RES_SCAT_DATA32_CQE);
+	DEVX_SET(qpc, qpc, rq_type, MLX5_ZERO_LEN_RQ);
+	DEVX_SET(qpc, qpc, no_sq, 1);
+	DEVX_SET(qpc, qpc, fre, 1);
+
+	hw_qp = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+				     sdev->mdev.vtunnel,
+				     DEVX_ST_SZ_BYTES(destroy_qp_in),
+				     DEVX_ST_SZ_BYTES(destroy_qp_out));
+	if (!hw_qp)
+		goto out_err;
+
+	/* set destructor buffer, since this must be tunneled QP */
+	dtor = hw_qp->dtor_in;
+
+	DEVX_SET(destroy_qp_in, dtor, opcode, MLX5_CMD_OP_DESTROY_QP);
+	DEVX_SET(destroy_qp_in, dtor, qpn, qp->qp_num);
+
+	ret = snap_clone_qp(sdev, hw_qp, qp);
+	if (ret)
+		goto destroy_qp;
+
+	return hw_qp;
+
+destroy_qp:
+	snap_devx_obj_destroy(hw_qp);
+out_err:
+	return NULL;
+}
+
+int snap_destroy_hw_qp(struct mlx5_snap_devx_obj *hw_qp)
+{
+	return snap_devx_obj_destroy(hw_qp);
+}
+
 static void snap_free_flow_table_entries(struct mlx5_snap_flow_table *ft)
 {
 	free(ft->ftes);
