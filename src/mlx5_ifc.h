@@ -49,6 +49,7 @@ enum {
 	MLX5_CMD_OP_DISABLE_HCA = 0x105,
 	MLX5_CMD_OP_CREATE_MKEY = 0x200,
 	MLX5_CMD_OP_CREATE_QP = 0x500,
+	MLX5_CMD_OP_DESTROY_QP = 0x501,
 	MLX5_CMD_OP_RST2INIT_QP = 0x502,
 	MLX5_CMD_OP_INIT2RTR_QP = 0x503,
 	MLX5_CMD_OP_RTR2RTS_QP = 0x504,
@@ -3009,6 +3010,28 @@ struct mlx5_ifc_create_tir_in_bits {
 	struct mlx5_ifc_tirc_bits ctx;
 };
 
+struct mlx5_ifc_destroy_qp_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_destroy_qp_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         qpn[0x18];
+
+	u8         reserved_at_60[0x20];
+};
+
 struct mlx5_ifc_create_qp_out_bits {
 	u8         status[0x8];
 	u8         reserved_at_8[0x18];
@@ -3028,7 +3051,10 @@ struct mlx5_ifc_create_qp_in_bits {
 	u8         reserved_at_20[0x10];
 	u8         op_mod[0x10];
 
-	u8         reserved_at_40[0x40];
+	u8         reserved_at_40[0x8];
+	u8         input_qpn[0x18];
+
+	u8         reserved_at_60[0x20];
 
 	u8         opt_param_mask[0x20];
 
