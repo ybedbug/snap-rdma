@@ -1,11 +1,27 @@
+%define scm_version @PACKAGE_VERSION@
+%define scm_rev @PACKAGE_REVISION@
+%define _sha1 @GIT_SHA1@
+%define _branch @GIT_BRANCH@
+
+%define unmangled_version %{scm_version}
+%if "%{?_sha1:1}" == ""
+        %define _sha1 ""
+%endif
+%if "%{?_branch:1}" == ""
+        %define _branch "master"
+%endif
+
+%define dist .mlnx
+
 Name:	libsnap
-Version:	1.0
-Release:	1
+Version:        %{scm_version}
+Release:        %{scm_rev}%{?dist}
+
 Summary:	Software-defined Network Accelerated Processing (SNAP) user-space library based on RDMA
 
 License:	Proprietary
 URL:	https://github.com/Mellanox/snap-rdma
-Source0:	%{name}-%{version}.tar.gz
+Source0:	snap-rdma-%{version}.tar.gz
 
 BuildRequires:	automake autoconf make gcc
 Requires:	librdmacm >= 46mlnx2-1.46361
@@ -15,7 +31,7 @@ Library that assists in common tasks when interacting with the emulating hardwar
 in order to present a SNAP device to an external host or a VM.
 
 %prep
-%setup -q
+%setup -q -n snap-rdma-%{scm_version}
 
 %build
 ./autogen.sh
