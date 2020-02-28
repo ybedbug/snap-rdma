@@ -3,7 +3,6 @@ ACLOCAL_AMFLAGS=-I m4
 
 SUBDIRS = src ctrl tests
 
-# EXTRA_DIST = README.md autogen.sh
 EXTRA_DIST = libsnap.spec README.md autogen.sh
 
 if HAVE_GTEST
