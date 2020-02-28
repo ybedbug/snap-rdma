@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([snap-rdma], [0.1], [support@mellanox.com])
+AC_INIT([snap-rdma], [1.0], [support@mellanox.com])
 AC_CONFIG_SRCDIR([src/snap.h])
 AC_CONFIG_HEADERS([config.h])
 
@@ -9,6 +9,15 @@ AM_PROG_LIBTOOL
 
 # Init libtool
 LT_INIT([shared disable-static])
+
+if test -n "$ghprbPullId" ; then
+    AC_SUBST([PACKAGE_REVISION], [$(echo pr${ghprbPullId})])
+else
+    AC_SUBST([PACKAGE_REVISION], [$(echo ${BUILD_NUMBER:-1})])
+fi
+AC_SUBST([GIT_BRANCH], [$(git rev-parse --abbrev-ref HEAD)])
+AC_SUBST([GIT_SHA1], [$(git rev-parse HEAD |cut -c -8)])
+
 
 # Use C not C++
 AC_LANG([C])
@@ -48,6 +57,7 @@ AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS])
 AC_CONFIG_FILES([Makefile
 		 src/Makefile
 		 ctrl/Makefile
-		 tests/Makefile])
+		 tests/Makefile
+		 libsnap.spec])
 
 AC_OUTPUT
