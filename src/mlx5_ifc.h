@@ -3010,6 +3010,176 @@ struct mlx5_ifc_create_tir_in_bits {
 	struct mlx5_ifc_tirc_bits ctx;
 };
 
+enum {
+	MLX5_FLOW_CONTEXT_ACTION_ALLOW     = 0x1,
+	MLX5_FLOW_CONTEXT_ACTION_DROP      = 0x2,
+	MLX5_FLOW_CONTEXT_ACTION_FWD_DEST  = 0x4,
+	MLX5_FLOW_CONTEXT_ACTION_COUNT     = 0x8,
+	MLX5_FLOW_CONTEXT_ACTION_PACKET_REFORMAT = 0x10,
+	MLX5_FLOW_CONTEXT_ACTION_DECAP     = 0x20,
+	MLX5_FLOW_CONTEXT_ACTION_MOD_HDR   = 0x40,
+	MLX5_FLOW_CONTEXT_ACTION_VLAN_POP  = 0x80,
+	MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH = 0x100,
+	MLX5_FLOW_CONTEXT_ACTION_VLAN_POP_2  = 0x400,
+	MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH_2 = 0x800,
+};
+
+enum mlx5_flow_destination_type {
+        MLX5_FLOW_DESTINATION_TYPE_VPORT        = 0x0,
+        MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE   = 0x1,
+        MLX5_FLOW_DESTINATION_TYPE_TIR          = 0x2,
+        MLX5_FLOW_DESTINATION_TYPE_QP           = 0x3,
+        MLX5_FLOW_DESTINATION_TYPE_VHCA_RX      = 0x4,
+        MLX5_FLOW_DESTINATION_TYPE_VHCA_TX      = 0x5,
+
+        MLX5_FLOW_DESTINATION_TYPE_PORT         = 0x99,
+        MLX5_FLOW_DESTINATION_TYPE_COUNTER      = 0x100,
+        MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE_NUM = 0x101,
+};
+
+struct mlx5_ifc_delete_fte_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_delete_fte_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         other_vport[0x1];
+	u8         reserved_at_41[0xf];
+	u8         vport_number[0x10];
+
+	u8         reserved_at_60[0x20];
+
+	u8         table_type[0x8];
+	u8         reserved_at_88[0x18];
+
+	u8         reserved_at_a0[0x8];
+	u8         table_id[0x18];
+
+	u8         reserved_at_c0[0x40];
+
+	u8         flow_index[0x20];
+
+	u8         reserved_at_120[0xe0];
+};
+
+struct mlx5_ifc_dest_format_struct_bits {
+	u8         destination_type[0x8];
+	u8         destination_id[0x18];
+
+	u8         reserved_at_20[0x20];
+};
+
+struct mlx5_ifc_flow_counter_list_bits {
+	u8         flow_counter_id[0x20];
+
+	u8         reserved_at_20[0x20];
+};
+
+union mlx5_ifc_dest_format_struct_flow_counter_list_auto_bits {
+	struct mlx5_ifc_dest_format_struct_bits dest_format_struct;
+	struct mlx5_ifc_flow_counter_list_bits flow_counter_list;
+	u8         reserved_at_0[0x40];
+};
+
+struct mlx5_ifc_vlan_bits {
+	u8         ethtype[0x10];
+	u8         prio[0x3];
+	u8         cfi[0x1];
+	u8         vid[0xc];
+};
+
+struct mlx5_ifc_flow_context_bits {
+	struct mlx5_ifc_vlan_bits push_vlan;
+
+	u8         group_id[0x20];
+
+	u8         reserved_at_40[0x8];
+	u8         flow_tag[0x18];
+
+	u8         reserved_at_60[0x10];
+	u8         action[0x10];
+
+	u8         extended_destination[0x1];
+	u8         reserved_at_81[0x1];
+	u8         flow_source[0x2];
+	u8         reserved_at_84[0x4];
+	u8         destination_list_size[0x18];
+
+	u8         reserved_at_a0[0x8];
+	u8         flow_counter_list_size[0x18];
+
+	u8         packet_reformat_id[0x20];
+
+	u8         modify_header_id[0x20];
+
+	struct mlx5_ifc_vlan_bits push_vlan_2;
+
+	u8         reserved_at_120[0xe0];
+
+	struct mlx5_ifc_fte_match_param_bits match_value;
+
+	u8         reserved_at_1200[0x600];
+
+	union mlx5_ifc_dest_format_struct_flow_counter_list_auto_bits destination[0];
+};
+
+enum {
+	MLX5_SET_FTE_MODIFY_ENABLE_MASK_ACTION = 0x0,
+	MLX5_SET_FTE_MODIFY_ENABLE_MASK_FLOW_TAG = 0x1,
+	MLX5_SET_FTE_MODIFY_ENABLE_MASK_DESTINATION_LIST = 0x2,
+	MLX5_SET_FTE_MODIFY_ENABLE_MASK_FLOW_COUNTERS = 0x3,
+};
+
+struct mlx5_ifc_set_fte_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_set_fte_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         other_vport[0x1];
+	u8         reserved_at_41[0xf];
+	u8         vport_number[0x10];
+
+	u8         reserved_at_60[0x20];
+
+	u8         table_type[0x8];
+	u8         reserved_at_88[0x18];
+
+	u8         reserved_at_a0[0x8];
+	u8         table_id[0x18];
+
+	u8         reserved_at_c0[0x18];
+	u8         modify_enable_mask[0x8];
+
+	u8         reserved_at_e0[0x20];
+
+	u8         flow_index[0x20];
+
+	u8         reserved_at_120[0xe0];
+
+	struct mlx5_ifc_flow_context_bits flow_context;
+};
+
 struct mlx5_ifc_destroy_qp_out_bits {
 	u8         status[0x8];
 	u8         reserved_at_8[0x18];
