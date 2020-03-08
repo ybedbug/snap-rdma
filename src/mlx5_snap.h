@@ -136,19 +136,40 @@ struct mlx5_snap_flow_table_entry {
 	struct mlx5_snap_flow_group		*fg;
 };
 
+struct mlx5_snap_hw_qp {
+	struct mlx5_snap_devx_obj		*mqp;
+	struct mlx5_snap_flow_group		*fg_tx;
+	struct mlx5_snap_flow_table_entry	*fte_tx;
+	struct mlx5_snap_flow_group		*fg_rx;
+	struct mlx5_snap_flow_table_entry	*fte_rx;
+
+	struct mlx5_snap_flow_table		*rdma_ft_rx;
+	struct mlx5_snap_flow_group		*rdma_fg_rx;
+	struct mlx5dv_flow_matcher		*rdma_matcher;
+	struct ibv_flow				*rdma_flow;
+
+	struct ibv_qp 				*parent_qp;
+};
+
 struct mlx5_snap_device {
 	struct mlx5_snap_devx_obj		*device_emulation;
-	struct mlx5_snap_devx_obj		*vtunnel;
-	struct mlx5_snap_flow_table		*tx;
-	struct mlx5_snap_flow_table		*rx;
 	struct mlx5dv_devx_event_channel	*channel;
 
-
 	/* for BF-1 usage only */
+	struct mlx5_snap_devx_obj		*vtunnel;
+	struct mlx5_snap_flow_table		*tx;
+	struct mlx5_snap_flow_group		*fg_tx;
+	struct mlx5_snap_flow_table		*rx;
+	struct mlx5_snap_flow_group		*fg_rx;
+	struct mlx5_snap_flow_group		*fg_rx_miss;
 	struct mlx5_snap_devx_obj		*tunneled_pd;
 	uint32_t				pd_id;
 	pthread_mutex_t				rdma_lock;
 	struct ibv_context			*rdma_dev;
+	struct mlx5_snap_flow_table_entry	*rdma_fte_rx;
+	struct mlx5_snap_flow_table_entry	*fte_rx_miss;
+	struct mlx5_snap_flow_table		*rdma_ft_rx;
+	struct mlx5_snap_flow_group		*rdma_fg_rx;
 	unsigned int				rdma_dev_users;
 };
 
@@ -166,13 +187,13 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 			size_t inlen, void *out, size_t outlen);
 void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
 		void *pci_params_out);
-int snap_get_qp_vhca_id(struct ibv_qp *qp);
+int snap_get_dev_vhca_id(struct ibv_context *context);
 void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context);
 struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
 		struct ibv_context *context);
-struct mlx5_snap_devx_obj *snap_create_hw_qp(struct snap_device *sdev,
+struct mlx5_snap_hw_qp *snap_create_hw_qp(struct snap_device *sdev,
 		struct ibv_qp *qp);
-int snap_destroy_hw_qp(struct mlx5_snap_devx_obj *hw_qp);
+int snap_destroy_hw_qp(struct mlx5_snap_hw_qp *hw_qp);
 
 static inline uint32_t snap_u32log2(uint32_t x)
 {

@@ -62,8 +62,9 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		goto free_rx_cq;
 
 	snap_debug("created qp 0x%x tx %d rx %d tx_inline %d on pd %p\n",
-			qp->qp->qp_num, attr->cap.max_send_wr,
-			attr->cap.max_recv_wr, attr->cap.max_inline_data, pd);
+		   qp->qp->qp_num, attr->cap.max_send_wr,
+		   attr->cap.max_recv_wr, attr->cap.max_inline_data, pd);
+
 	return 0;
 
 free_rx_cq:

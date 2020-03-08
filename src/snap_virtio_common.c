@@ -223,7 +223,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_BLK_Q;
 		if (attr->qp) {
-			vhca_id = snap_get_qp_vhca_id(attr->qp);
+			vhca_id = snap_get_dev_vhca_id(attr->qp->context);
 			if (vhca_id < 0) {
 				errno = EINVAL;
 				goto out;

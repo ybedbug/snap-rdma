@@ -542,7 +542,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 				}
 				vhca_id = sdev->pci->mpci.vhca_id;
 			} else {
-				vhca_id = snap_get_qp_vhca_id(attr->qp);
+				vhca_id = snap_get_dev_vhca_id(attr->qp->context);
 			}
 			if (vhca_id < 0) {
 				ret = -EINVAL;
@@ -718,7 +718,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 			/* For Bluefield-1 use the emulated function id */
 			vhca_id = sdev->pci->mpci.vhca_id;
 		} else {
-			vhca_id = snap_get_qp_vhca_id(attr->qp);
+			vhca_id = snap_get_dev_vhca_id(attr->qp->context);
 		}
 		if (vhca_id < 0) {
 			errno = EINVAL;

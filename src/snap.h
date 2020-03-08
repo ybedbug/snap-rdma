@@ -162,6 +162,9 @@ struct snap_device {
 	struct mlx5_snap_device		mdev;
 
 	void				*dd_data;
+
+	/* for BF-1 usage only */
+	uint32_t			dma_rkey;
 };
 
 struct snap_nvme_registers {

@@ -474,7 +474,6 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 	sctx->mctx.max_ft_level = snap_min(max_ft_level_tx, max_ft_level_rx);
 	sctx->mctx.log_max_ft_size = snap_min(log_max_ft_size_tx,
 					      log_max_ft_size_rx);
-
 	return 0;
 
 }
@@ -859,8 +858,8 @@ static int snap_modify_qp_to_init(struct mlx5_snap_devx_obj *qp,
 	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
 
 	if (attr_mask & IBV_QP_PKEY_INDEX)
-	    DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
-		     qp_attr->pkey_index);
+		DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
+			 qp_attr->pkey_index);
 
 	if (attr_mask & IBV_QP_PORT)
 		DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num,
@@ -936,8 +935,11 @@ static int snap_modify_qp_to_rtr(struct mlx5_snap_devx_obj *qp,
 		if (qp_attr->ah_attr.sl & 0x7)
 			DEVX_SET(qpc, qpc, primary_address_path.eth_prio,
 				 qp_attr->ah_attr.sl & 0x7);
-		DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
-			 qp_attr->ah_attr.grh.hop_limit);
+		if (qp_attr->ah_attr.grh.hop_limit > 1)
+			DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
+				 qp_attr->ah_attr.grh.hop_limit);
+		else
+			DEVX_SET(qpc, qpc, primary_address_path.hop_limit, 64);
 	}
 
 	return snap_devx_obj_modify(qp, in, sizeof(in), out, sizeof(out));
@@ -998,12 +1000,18 @@ static int snap_modify_qp(struct mlx5_snap_devx_obj *qp, uint32_t qp_num,
 }
 
 static int snap_clone_qp(struct snap_device *sdev,
-		struct mlx5_snap_devx_obj *hw_qp, struct ibv_qp *qp)
+		struct mlx5_snap_hw_qp *hw_qp, struct ibv_qp *qp)
 {
 	struct ibv_qp_attr hw_qp_attr = {};
 	struct ibv_qp_attr attr = {};
 	struct ibv_qp_init_attr init_attr = {};
+	union ibv_gid tmp_gid;
 	int ret, attr_mask;
+
+	/* TODO: remove this WA !! works only for dma_q */
+	ret = ibv_query_gid(qp->context, 1, 0, &tmp_gid);
+	if (ret)
+		return ret;
 
 	attr_mask = IBV_QP_PKEY_INDEX |
 		    IBV_QP_PORT |
@@ -1019,6 +1027,8 @@ static int snap_clone_qp(struct snap_device *sdev,
 		    IBV_QP_RNR_RETRY |
 		    IBV_QP_SQ_PSN |
 		    IBV_QP_MAX_QP_RD_ATOMIC;
+
+
 	ret = ibv_query_qp(qp, &attr, attr_mask, &init_attr);
 	if (ret)
 		return ret;
@@ -1027,7 +1037,7 @@ static int snap_clone_qp(struct snap_device *sdev,
 	hw_qp_attr.pkey_index = attr.pkey_index;
 	hw_qp_attr.port_num = attr.port_num;
 	hw_qp_attr.qp_access_flags = attr.qp_access_flags;
-	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
 			     IBV_QP_STATE |
 			     IBV_QP_PKEY_INDEX |
 			     IBV_QP_PORT |
@@ -1042,8 +1052,12 @@ static int snap_clone_qp(struct snap_device *sdev,
 	hw_qp_attr.rq_psn = attr.rq_psn;
 	hw_qp_attr.max_dest_rd_atomic = attr.max_dest_rd_atomic;
 	hw_qp_attr.min_rnr_timer = attr.min_rnr_timer;
+
+	/* TODO: remove the below line. This is WA */
+	memcpy(attr.ah_attr.grh.dgid.raw, tmp_gid.raw, 16);
+
 	memcpy(&hw_qp_attr.ah_attr, &attr.ah_attr, sizeof(attr.ah_attr));
-	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
 			     IBV_QP_STATE |
 			     IBV_QP_PATH_MTU |
 			     IBV_QP_DEST_QPN |
@@ -1061,7 +1075,7 @@ static int snap_clone_qp(struct snap_device *sdev,
 	hw_qp_attr.sq_psn = attr.sq_psn;
 	hw_qp_attr.rnr_retry = attr.rnr_retry;
 	hw_qp_attr.max_rd_atomic = attr.max_rd_atomic;
-	ret = snap_modify_qp(hw_qp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
 			     IBV_QP_STATE |
 			     IBV_QP_TIMEOUT |
 			     IBV_QP_RETRY_CNT |
@@ -1071,21 +1085,262 @@ static int snap_clone_qp(struct snap_device *sdev,
 	if (ret)
 		return ret;
 
+	hw_qp->parent_qp = qp;
+
 	return 0;
 }
 
-struct mlx5_snap_devx_obj *snap_create_hw_qp(struct snap_device *sdev,
+static int snap_fte_reset(struct mlx5_snap_flow_table_entry *fte)
+{
+	struct mlx5_snap_flow_table *ft = fte->fg->ft;
+	int i, ret;
+
+	ret = snap_devx_obj_destroy(fte->fte);
+	if (ret)
+		return ret;
+
+	/* lock using ft lock since ftes allocated by ft */
+	pthread_mutex_lock(&ft->lock);
+	fte->fte = NULL;
+	pthread_mutex_unlock(&ft->lock);
+
+	return 0;
+}
+
+static struct mlx5_snap_flow_table_entry*
+snap_fte_init(struct snap_device *sdev, struct mlx5_snap_flow_group *fg,
+	int action, enum mlx5_flow_destination_type dest_type, uint32_t dest_id,
+	void *match, struct ibv_context *context)
+{
+	struct mlx5_snap_flow_table *ft = fg->ft;
+	struct mlx5_snap_flow_table_entry *fte = NULL;
+	uint8_t in[DEVX_ST_SZ_BYTES(set_fte_in) +
+		   DEVX_ST_SZ_BYTES(dest_format_struct)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(set_fte_out)] = {0};
+	int i;
+
+	pthread_mutex_lock(&ft->lock);
+	for (i = fg->start_idx; i < fg->end_idx + 1; i++) {
+		if (!ft->ftes[i].fte) {
+			fte = &ft->ftes[i];
+			break;
+		}
+	}
+	pthread_mutex_unlock(&ft->lock);
+
+	if (!fte)
+		goto out_err;
+
+	DEVX_SET(set_fte_in, in, opcode, MLX5_CMD_OP_SET_FLOW_TABLE_ENTRY);
+	DEVX_SET(set_fte_in, in, table_type, ft->table_type);
+	DEVX_SET(set_fte_in, in, table_id, ft->table_id);
+	DEVX_SET(set_fte_in, in, flow_index, fte->idx);
+
+	DEVX_SET(set_fte_in, in, flow_context.group_id, fg->group_id);
+	DEVX_SET(set_fte_in, in, flow_context.action, action);
+	if (action & MLX5_FLOW_CONTEXT_ACTION_FWD_DEST) {
+		void *destination;
+
+		DEVX_SET(set_fte_in, in, flow_context.destination_list_size, 1);
+
+		destination = DEVX_ADDR_OF(set_fte_in, in,
+			flow_context.destination[0].dest_format_struct);
+		DEVX_SET(dest_format_struct, destination, destination_type,
+			 dest_type);
+		DEVX_SET(dest_format_struct, destination, destination_id, dest_id);
+	}
+
+	memcpy(DEVX_ADDR_OF(set_fte_in, in, flow_context.match_value),
+	       match, DEVX_ST_SZ_BYTES(fte_match_param));
+
+	if (context && context != sdev->sctx->context) {
+		fte->fte = calloc(1, sizeof(struct mlx5_snap_devx_obj));
+		if (!fte->fte)
+			goto out_err;
+
+		fte->fte->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						       out, sizeof(out));
+                if (!fte->fte->obj) {
+			free(fte->fte);
+                        goto out_err;
+		}
+	} else {
+		fte->fte = snap_devx_obj_create(sdev, in, sizeof(in), out,
+						sizeof(out),
+						sdev->mdev.vtunnel,
+						DEVX_ST_SZ_BYTES(delete_fte_in),
+						DEVX_ST_SZ_BYTES(delete_fte_out));
+		if (!fte->fte)
+			goto out_err;
+
+		if (sdev->mdev.vtunnel) {
+			void *dtor = fte->fte->dtor_in;
+
+			DEVX_SET(delete_fte_in, dtor, opcode,
+				 MLX5_CMD_OP_DELETE_FLOW_TABLE_ENTRY);
+			DEVX_SET(delete_fte_in, dtor, table_type, ft->table_type);
+			DEVX_SET(delete_fte_in, dtor, table_id, ft->table_id);
+			DEVX_SET(delete_fte_in, dtor, flow_index, fte->idx);
+		}
+	}
+
+	fte->fg = fg;
+
+	return fte;
+
+out_err:
+	return NULL;
+}
+
+static int snap_destroy_rdma_dev_qp_flow(struct mlx5_snap_hw_qp *hw_qp)
+{
+	int ret;
+
+	ret = ibv_destroy_flow(hw_qp->rdma_flow);
+	if (ret)
+		return ret;
+
+	return mlx5dv_destroy_flow_matcher(hw_qp->rdma_matcher);
+}
+
+static int snap_create_rdma_dev_qp_flow(struct snap_device *sdev,
+		struct mlx5_snap_hw_qp *hw_qp)
+{
+	struct mlx5dv_flow_action_attr flow_attr = {0};
+	struct mlx5dv_flow_matcher_attr match_attr = {0};
+	struct ibv_context *context = sdev->mdev.rdma_dev;
+	struct mlx5dv_flow_match_parameters *value;
+	void *match_mask;
+	int ret;
+
+	match_mask = calloc(1,
+			sizeof(*value) + DEVX_ST_SZ_BYTES(fte_match_param));
+	if (!match_mask) {
+		ret = -ENOMEM;
+		goto out_err;
+	}
+
+	value = match_mask;
+	value->match_sz = DEVX_ST_SZ_BYTES(fte_match_param);
+
+	memset(value->match_buf, 0, DEVX_ST_SZ_BYTES(fte_match_param));
+	DEVX_SET(fte_match_param, value->match_buf, misc_parameters.bth_dst_qp,
+		 0xffffff);
+	match_attr.match_criteria_enable = 1 << MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS;
+	match_attr.match_mask = value;
+	match_attr.comp_mask = MLX5DV_FLOW_MATCHER_MASK_FT_TYPE;
+	match_attr.ft_type = MLX5DV_FLOW_TABLE_TYPE_RDMA_RX;
+
+	hw_qp->rdma_matcher = mlx5dv_create_flow_matcher(context, &match_attr);
+	if (!hw_qp->rdma_matcher) {
+		ret = -errno;
+		goto out_free;
+	}
+
+	/* create flow */
+	memset(value->match_buf, 0, DEVX_ST_SZ_BYTES(fte_match_param));
+	DEVX_SET(fte_match_param, value->match_buf, misc_parameters.bth_dst_qp,
+		 hw_qp->parent_qp->qp_num);
+	flow_attr.type = MLX5DV_FLOW_ACTION_DEST_DEVX;
+	flow_attr.obj = sdev->mdev.rdma_ft_rx->ft->obj;
+
+	hw_qp->rdma_flow = mlx5dv_create_flow(hw_qp->rdma_matcher, value, 1, &flow_attr);
+	if (!hw_qp->rdma_flow) {
+		ret = -errno;
+		goto out_free_matcher;
+	}
+
+	free(match_mask);
+	return 0;
+
+out_free_matcher:
+        mlx5dv_destroy_flow_matcher(hw_qp->rdma_matcher);
+out_free:
+	free(match_mask);
+out_err:
+	return ret;
+}
+
+static int snap_reset_hw_qp_steering(struct mlx5_snap_hw_qp *hw_qp)
+{
+	int ret;
+
+	ret = snap_destroy_rdma_dev_qp_flow(hw_qp);
+	if (ret)
+		return ret;
+
+	ret = snap_fte_reset(hw_qp->fte_rx);
+	if (ret)
+		return ret;
+	hw_qp->fte_rx = NULL;
+
+	ret = snap_fte_reset(hw_qp->fte_tx);
+	if (ret)
+		return ret;
+	hw_qp->fte_tx = NULL;
+
+	return 0;
+}
+
+static int snap_set_hw_qp_steering(struct snap_device *sdev,
+		struct mlx5_snap_hw_qp *hw_qp)
+{
+	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
+	uint32_t qpn = hw_qp->parent_qp->qp_num;
+	int ret;
+
+	/* TX_RDMA FT6, forward to SF */
+	DEVX_SET(fte_match_param, match, misc_parameters.source_sqn, qpn);
+	hw_qp->fte_tx = snap_fte_init(sdev, sdev->mdev.fg_tx,
+				      MLX5_FLOW_CONTEXT_ACTION_FWD_DEST,
+				      MLX5_FLOW_DESTINATION_TYPE_VHCA_TX,
+				      snap_get_dev_vhca_id(hw_qp->parent_qp->context),
+				      match, NULL);
+	if (!hw_qp->fte_tx)
+		goto out_err;
+
+	memset(match, 0, DEVX_ST_SZ_BYTES(fte_match_param));
+	DEVX_SET(fte_match_param, match, misc_parameters.bth_dst_qp, qpn);
+	hw_qp->fte_rx = snap_fte_init(sdev, sdev->mdev.fg_rx,
+				      MLX5_FLOW_CONTEXT_ACTION_ALLOW,
+				      MLX5_FLOW_DESTINATION_TYPE_QP,
+				      0,
+				      match, NULL);
+	if (!hw_qp->fte_rx)
+		goto out_reset_tx;
+
+	ret = snap_create_rdma_dev_qp_flow(sdev, hw_qp);
+	if (ret)
+		goto out_reset_rx;
+
+	return 0;
+
+out_reset_rx:
+	snap_fte_reset(hw_qp->fte_rx);
+	hw_qp->fte_rx = NULL;
+out_reset_tx:
+	snap_fte_reset(hw_qp->fte_tx);
+	hw_qp->fte_tx = NULL;
+out_err:
+	return -EINVAL;
+}
+
+struct mlx5_snap_hw_qp *snap_create_hw_qp(struct snap_device *sdev,
 		struct ibv_qp *qp)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(create_qp_out)] = {0};
 	void *qpc = DEVX_ADDR_OF(create_qp_in, in, qpc);
 	void *dtor;
-	struct mlx5_snap_devx_obj *hw_qp;
+	struct mlx5_snap_hw_qp *hw_qp;
 	int ret;
 
 	/* HW QP is needed only for Bluefield-1 emulation */
 	if (!sdev->mdev.vtunnel)
+		return NULL;
+
+	hw_qp = calloc(1, sizeof(*hw_qp));
+	if (!hw_qp)
 		return NULL;
 
 	DEVX_SET(create_qp_in, in, opcode, MLX5_CMD_OP_CREATE_QP);
@@ -1099,15 +1354,15 @@ struct mlx5_snap_devx_obj *snap_create_hw_qp(struct snap_device *sdev,
 	DEVX_SET(qpc, qpc, no_sq, 1);
 	DEVX_SET(qpc, qpc, fre, 1);
 
-	hw_qp = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
-				     sdev->mdev.vtunnel,
-				     DEVX_ST_SZ_BYTES(destroy_qp_in),
-				     DEVX_ST_SZ_BYTES(destroy_qp_out));
-	if (!hw_qp)
+	hw_qp->mqp = snap_devx_obj_create(sdev, in, sizeof(in), out,
+					  sizeof(out), sdev->mdev.vtunnel,
+					  DEVX_ST_SZ_BYTES(destroy_qp_in),
+					  DEVX_ST_SZ_BYTES(destroy_qp_out));
+	if (!hw_qp->mqp)
 		goto out_err;
 
 	/* set destructor buffer, since this must be tunneled QP */
-	dtor = hw_qp->dtor_in;
+	dtor = hw_qp->mqp->dtor_in;
 
 	DEVX_SET(destroy_qp_in, dtor, opcode, MLX5_CMD_OP_DESTROY_QP);
 	DEVX_SET(destroy_qp_in, dtor, qpn, qp->qp_num);
@@ -1116,17 +1371,29 @@ struct mlx5_snap_devx_obj *snap_create_hw_qp(struct snap_device *sdev,
 	if (ret)
 		goto destroy_qp;
 
+	ret = snap_set_hw_qp_steering(sdev, hw_qp);
+	if (ret)
+		goto reset_qp;
 	return hw_qp;
 
+reset_qp:
+	hw_qp->parent_qp = NULL;
 destroy_qp:
-	snap_devx_obj_destroy(hw_qp);
+	snap_devx_obj_destroy(hw_qp->mqp);
 out_err:
+	free(hw_qp);
 	return NULL;
 }
 
-int snap_destroy_hw_qp(struct mlx5_snap_devx_obj *hw_qp)
+int snap_destroy_hw_qp(struct mlx5_snap_hw_qp *hw_qp)
 {
-	return snap_devx_obj_destroy(hw_qp);
+	int ret;
+
+	snap_reset_hw_qp_steering(hw_qp);
+	hw_qp->parent_qp = NULL;
+	ret = snap_devx_obj_destroy(hw_qp->mqp);
+	free(hw_qp);
+	return ret;
 }
 
 static void snap_free_flow_table_entries(struct mlx5_snap_flow_table *ft)
@@ -1162,7 +1429,8 @@ static int snap_destroy_flow_table(struct mlx5_snap_flow_table *ft)
 }
 
 static struct mlx5_snap_flow_table*
-snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
+snap_create_flow_table(struct snap_device *sdev, uint32_t table_type,
+		struct ibv_context *context)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_flow_table_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(create_flow_table_out)] = {0};
@@ -1202,25 +1470,45 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type)
 
 	DEVX_SET(flow_table_context, ft_ctx, log_size, ft_log_size);
 
-	ft->ft = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
-				      sdev->mdev.vtunnel,
-				      DEVX_ST_SZ_BYTES(destroy_flow_table_in),
-				      DEVX_ST_SZ_BYTES(destroy_flow_table_out));
-	if (!ft->ft)
-		goto out_free_ftes;
+	if (context && context != sdev->sctx->context) {
+		ft->ft = calloc(1, sizeof(struct mlx5_snap_devx_obj));
+		if (!ft->ft)
+			goto out_free_ftes;
 
-	ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
-	ft->table_type = table_type;
-	ft->level = ft_level;
+		ft->ft->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						     out, sizeof(out));
+                if (!ft->ft->obj) {
+			free(ft->ft);
+			goto out_free_ftes;
+		}
 
-	if (sdev->mdev.vtunnel) {
-		void *dtor = ft->ft->dtor_in;
+		ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
+		ft->table_type = table_type;
+		ft->level = ft_level;
+	        ft->ft->vtunnel = NULL;
+	        ft->ft->sdev = NULL;
+		ft->ft->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	} else {
+		ft->ft = snap_devx_obj_create(sdev, in, sizeof(in), out,
+				sizeof(out), sdev->mdev.vtunnel,
+				DEVX_ST_SZ_BYTES(destroy_flow_table_in),
+				DEVX_ST_SZ_BYTES(destroy_flow_table_out));
+		if (!ft->ft)
+			goto out_free_ftes;
 
-		DEVX_SET(destroy_flow_table_in, dtor, opcode,
-			 MLX5_CMD_OP_DESTROY_FLOW_TABLE);
-		DEVX_SET(destroy_flow_table_in, dtor, table_type,
-			 ft->table_type);
-		DEVX_SET(destroy_flow_table_in, dtor, table_id, ft->table_id);
+		ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
+		ft->table_type = table_type;
+		ft->level = ft_level;
+
+		if (sdev->mdev.vtunnel) {
+			void *dtor = ft->ft->dtor_in;
+
+			DEVX_SET(destroy_flow_table_in, dtor, opcode,
+				 MLX5_CMD_OP_DESTROY_FLOW_TABLE);
+			DEVX_SET(destroy_flow_table_in, dtor, table_type,
+				 ft->table_type);
+			DEVX_SET(destroy_flow_table_in, dtor, table_id, ft->table_id);
+		}
 	}
 
 	return ft;
@@ -1256,7 +1544,7 @@ snap_create_root_flow_table(struct snap_device *sdev, uint32_t table_type)
 	struct mlx5_snap_flow_table *ft;
 	int ret;
 
-	ft = snap_create_flow_table(sdev, table_type);
+	ft = snap_create_flow_table(sdev, table_type, NULL);
 	if (!ft)
 		return NULL;
 
@@ -1292,7 +1580,8 @@ static struct mlx5_snap_flow_group*
 snap_create_flow_group(struct snap_device *sdev,
 		struct mlx5_snap_flow_table *ft, uint32_t start_index,
 		uint32_t end_index, uint8_t match_criteria_bits,
-		void *match_criteria, enum mlx5_snap_flow_group_type type)
+		void *match_criteria, enum mlx5_snap_flow_group_type type,
+		struct ibv_context *context)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_flow_group_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(create_flow_group_out)] = {0};
@@ -1331,25 +1620,40 @@ snap_create_flow_group(struct snap_device *sdev,
 	match = DEVX_ADDR_OF(create_flow_group_in, in, match_criteria);
 	memcpy(match, match_criteria, DEVX_ST_SZ_BYTES(fte_match_param));
 
-	fg->fg = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
-				      sdev->mdev.vtunnel,
+	if (context && context != sdev->sctx->context) {
+		fg->fg = calloc(1, sizeof(struct mlx5_snap_devx_obj));
+		if (!fg->fg)
+			goto out_free_bitmap;
+
+		fg->fg->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						     out, sizeof(out));
+                if (!fg->fg->obj) {
+			free(fg->fg);
+			goto out_free_bitmap;
+		}
+
+		fg->group_id = DEVX_GET(create_flow_group_out, out, group_id);
+	} else {
+		fg->fg = snap_devx_obj_create(sdev, in, sizeof(in), out,
+				      sizeof(out), sdev->mdev.vtunnel,
 				      DEVX_ST_SZ_BYTES(destroy_flow_group_in),
 				      DEVX_ST_SZ_BYTES(destroy_flow_group_out));
-        if (!fg->fg)
-                goto out_free_bitmap;
+	        if (!fg->fg)
+			goto out_free_bitmap;
 
-	fg->group_id = DEVX_GET(create_flow_group_out, out, group_id);
+		fg->group_id = DEVX_GET(create_flow_group_out, out, group_id);
 
-	if (sdev->mdev.vtunnel) {
-		void *dtor = fg->fg->dtor_in;
+		if (sdev->mdev.vtunnel) {
+			void *dtor = fg->fg->dtor_in;
 
-		DEVX_SET(destroy_flow_group_in, dtor, opcode,
-			 MLX5_CMD_OP_DESTROY_FLOW_GROUP);
-		DEVX_SET(destroy_flow_group_in, dtor, table_type,
-			 fg->ft->table_type);
-		DEVX_SET(destroy_flow_group_in, dtor, table_id,
-			 fg->ft->table_id);
-		DEVX_SET(destroy_flow_group_in, dtor, group_id, fg->group_id);
+			DEVX_SET(destroy_flow_group_in, dtor, opcode,
+				 MLX5_CMD_OP_DESTROY_FLOW_GROUP);
+			DEVX_SET(destroy_flow_group_in, dtor, table_type,
+				 fg->ft->table_type);
+			DEVX_SET(destroy_flow_group_in, dtor, table_id,
+				 fg->ft->table_id);
+			DEVX_SET(destroy_flow_group_in, dtor, group_id, fg->group_id);
+		}
 	}
 
 	pthread_mutex_lock(&ft->lock);
@@ -1375,6 +1679,8 @@ static int snap_reset_tx_steering(struct snap_device *sdev)
 
 	pthread_mutex_lock(&sdev->mdev.tx->lock);
 	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.tx->fg_list, entry, next) {
+		if (fg == sdev->mdev.fg_tx)
+			sdev->mdev.fg_tx = NULL;
 		ret = snap_destroy_flow_group(fg);
 		if (ret)
 			goto out_unlock;
@@ -1398,11 +1704,11 @@ static int snap_init_tx_steering(struct snap_device *sdev)
 
 	/* Flow group that matches source qpn rule (limit to 1024 QPs) */
 	DEVX_SET(fte_match_param, match, misc_parameters.source_sqn, 0xffffff);
-	fg = snap_create_flow_group(sdev, sdev->mdev.tx, 0,
+	sdev->mdev.fg_tx = snap_create_flow_group(sdev, sdev->mdev.tx, 0,
 		sdev->mdev.tx->ft_size - 1,
 		1 << MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS,
-		match, SNAP_FG_MATCH);
-	if (!fg)
+		match, SNAP_FG_MATCH, NULL);
+	if (!sdev->mdev.fg_tx)
 		goto out_err;
 
 	return 0;
@@ -1419,6 +1725,10 @@ static int snap_reset_rx_steering(struct snap_device *sdev)
 
 	pthread_mutex_lock(&sdev->mdev.rx->lock);
 	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.rx->fg_list, entry, next) {
+		if (fg == sdev->mdev.fg_rx)
+			sdev->mdev.fg_rx = NULL;
+		else if (fg == sdev->mdev.fg_rx_miss)
+			sdev->mdev.fg_rx_miss = NULL;
 		ret = snap_destroy_flow_group(fg);
 		if (ret)
 			goto out_unlock;
@@ -1434,7 +1744,6 @@ out_unlock:
 static int snap_init_rx_steering(struct snap_device *sdev)
 {
 	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
-	struct mlx5_snap_flow_group *fg, *fg_miss;
 
 	/* FT3 creation (match dest QPN, miss send to FW NIC RX ROOT) */
 	sdev->mdev.rx = snap_create_root_flow_table(sdev, FS_FT_NIC_RX_RDMA);
@@ -1443,11 +1752,11 @@ static int snap_init_rx_steering(struct snap_device *sdev)
 
 	/* Flow group that matches dst qpn rule (limit to 1023 QPs) */
 	DEVX_SET(fte_match_param, match, misc_parameters.bth_dst_qp, 0xffffff);
-	fg = snap_create_flow_group(sdev, sdev->mdev.rx, 0,
+	sdev->mdev.fg_rx = snap_create_flow_group(sdev, sdev->mdev.rx, 0,
 		sdev->mdev.rx->ft_size - 2,
 		1 << MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS,
-		match, SNAP_FG_MATCH);
-	if (!fg)
+		match, SNAP_FG_MATCH, NULL);
+	if (!sdev->mdev.fg_rx)
 		goto out_err;
 
 	/*
@@ -1466,19 +1775,19 @@ static int snap_init_rx_steering(struct snap_device *sdev)
 	 * match all).
 	 */
 	memset(match, 0, sizeof(match));
-	fg_miss = snap_create_flow_group(sdev, sdev->mdev.rx,
+	sdev->mdev.fg_rx_miss = snap_create_flow_group(sdev, sdev->mdev.rx,
 		sdev->mdev.rx->ft_size - 1,
 		sdev->mdev.rx->ft_size - 1,
-		0, match, SNAP_FG_MISS);
-	if (!fg_miss)
+		0, match, SNAP_FG_MISS, NULL);
+	if (!sdev->mdev.fg_rx_miss)
 		goto out_free_fg;
 
 	return 0;
 
 out_free_fg:
-	pthread_mutex_lock(&fg->ft->lock);
-	snap_destroy_flow_group(fg);
-	pthread_mutex_unlock(&fg->ft->lock);
+	pthread_mutex_lock(&sdev->mdev.fg_rx->ft->lock);
+	snap_destroy_flow_group(sdev->mdev.fg_rx);
+	pthread_mutex_unlock(&sdev->mdev.fg_rx->ft->lock);
 out_err:
 	snap_destroy_flow_table(sdev->mdev.rx);
 	return -ENOMEM;
@@ -1550,6 +1859,24 @@ out_err:
 }
 
 
+static int snap_query_special_context(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_special_contexts_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_special_contexts_out)] = {0};
+	int ret;
+
+	DEVX_SET(query_special_contexts_in, in, opcode,
+		 MLX5_CMD_OP_QUERY_SPECIAL_CONTEXTS);
+	ret = snap_general_tunneled_cmd(sdev, in, sizeof(in), out, sizeof(out),
+					0);
+	if (ret)
+		return ret;
+
+	sdev->dma_rkey = DEVX_GET(query_special_contexts_out, out, resd_lkey);
+
+	return 0;
+}
+
 /**
  * snap_init_device() - Initialize all the resources for the emulated device
  * @sdev:       snap device
@@ -1584,8 +1911,16 @@ int snap_init_device(struct snap_device *sdev)
 		goto out_reset_steering;
 	}
 
+	ret = snap_query_special_context(sdev);
+	if (ret) {
+		errno = ret;
+		goto out_free_pd;
+	}
+
 	return 0;
 
+out_free_pd:
+	snap_destroy_pd(sdev->mdev.tunneled_pd);
 out_reset_steering:
 	snap_reset_steering(sdev);
 out_teardown:
@@ -1660,6 +1995,89 @@ static int snap_set_device_address(struct snap_device *sdev,
 					 sizeof(out), 0);
 }
 
+static int snap_destroy_rdma_steering(struct snap_device *sdev)
+{
+	int ret;
+
+	ret = snap_fte_reset(sdev->mdev.rdma_fte_rx);
+	if (ret)
+		return ret;
+
+	sdev->mdev.rdma_fte_rx = NULL;
+
+	ret = snap_fte_reset(sdev->mdev.fte_rx_miss);
+	if (ret)
+		return ret;
+
+	sdev->mdev.fte_rx_miss = NULL;
+
+	ret = snap_destroy_flow_group(sdev->mdev.rdma_fg_rx);
+	if (ret)
+		return ret;
+
+	sdev->mdev.rdma_fg_rx = NULL;
+
+	ret = snap_destroy_flow_table(sdev->mdev.rdma_ft_rx);
+	if (ret)
+		return ret;
+
+	sdev->mdev.rdma_ft_rx = NULL;
+
+	return 0;
+}
+
+static int snap_create_rdma_steering(struct snap_device *sdev,
+		struct ibv_context *context)
+{
+	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
+	int ret;
+
+	/*
+	 * Create FT5 table that will forward everything to emulated function.
+	 */
+	sdev->mdev.rdma_ft_rx = snap_create_flow_table(sdev, FS_FT_NIC_RX_RDMA,
+						       context);
+	if (!sdev->mdev.rdma_ft_rx)
+		goto out_err;
+
+	/* zero in match and in criteria should act like match all */
+	sdev->mdev.rdma_fg_rx = snap_create_flow_group(sdev, sdev->mdev.rdma_ft_rx,
+					0, sdev->mdev.rdma_ft_rx->ft_size - 1,
+					0,  match, SNAP_FG_MATCH, context);
+	if (!sdev->mdev.rdma_fg_rx)
+		goto out_destroy_ft;
+
+	/* Now we have the vhca_id for forwarding to/from emulation PF */
+	sdev->mdev.fte_rx_miss = snap_fte_init(sdev, sdev->mdev.fg_rx_miss,
+				MLX5_FLOW_CONTEXT_ACTION_FWD_DEST,
+				MLX5_FLOW_DESTINATION_TYPE_VHCA_RX,
+				snap_get_dev_vhca_id(context),
+				match, NULL);
+	if (!sdev->mdev.fte_rx_miss)
+		goto out_destroy_fg;
+
+	sdev->mdev.rdma_fte_rx = snap_fte_init(sdev, sdev->mdev.rdma_fg_rx,
+					  MLX5_FLOW_CONTEXT_ACTION_FWD_DEST,
+					  MLX5_FLOW_DESTINATION_TYPE_VHCA_RX,
+					  sdev->pci->mpci.vhca_id, match, context);
+	if (!sdev->mdev.rdma_fte_rx)
+		goto out_destroy_fte_miss;
+
+	return 0;
+
+out_destroy_fte_miss:
+	snap_fte_reset(sdev->mdev.fte_rx_miss);
+	sdev->mdev.fte_rx_miss = NULL;
+out_destroy_fg:
+	snap_destroy_flow_group(sdev->mdev.rdma_fg_rx);
+	sdev->mdev.rdma_fg_rx = NULL;
+out_destroy_ft:
+	snap_destroy_flow_table(sdev->mdev.rdma_ft_rx);
+	sdev->mdev.rdma_ft_rx = NULL;
+out_err:
+	return -EINVAL;
+}
+
 /**
  * snap_put_rdma_dev() - Decrease the reference count for sdev RDMA networking
  *                       device in case of a match to the given context.
@@ -1677,8 +2095,10 @@ void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context)
 	/* For BF-1 only */
 	if (sdev->mdev.vtunnel) {
 		if (context->device == sdev->mdev.rdma_dev->device) {
-			if (--sdev->mdev.rdma_dev_users == 0)
+			if (--sdev->mdev.rdma_dev_users == 0) {
 				sdev->mdev.rdma_dev = NULL;
+				snap_destroy_rdma_steering(sdev);
+			}
 		}
 	}
 	pthread_mutex_unlock(&sdev->mdev.rdma_lock);
@@ -1717,8 +2137,13 @@ struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
 			if (ret)
 				goto out;
 
+			ret = snap_create_rdma_steering(sdev, context);
+			if (ret)
+				goto out;
+
 			sdev->mdev.rdma_dev = context;
 		}
+
 		sdev->mdev.rdma_dev_users++;
 	}
 
@@ -1729,18 +2154,15 @@ out:
 }
 
 /**
- * snap_get_qp_vhca_id() - Return the vhca id for a given QP. This id will be
- *                         used for modifying and creating emulation queues
- *                         that are associated with this QP.
- * @qp:    QP that will be associated to snap emulation queue.
+ * snap_get_dev_vhca_id() - Return the vhca id for a given device.
+ * @context:	Device context.
  *
- * Return: Returns QPs vhca id on success and -1 otherwise.
+ * Return: Returns vhca id for a given context on success and -1 otherwise.
  */
-int snap_get_qp_vhca_id(struct ibv_qp *qp)
+int snap_get_dev_vhca_id(struct ibv_context *context)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
-	struct ibv_context *context = qp->context;
 	int ret;
 
 	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
