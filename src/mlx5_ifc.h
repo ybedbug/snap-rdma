@@ -48,6 +48,7 @@ enum {
 	MLX5_CMD_OP_ENABLE_HCA = 0x104,
 	MLX5_CMD_OP_DISABLE_HCA = 0x105,
 	MLX5_CMD_OP_CREATE_MKEY = 0x200,
+	MLX5_CMD_OP_QUERY_SPECIAL_CONTEXTS = 0x203,
 	MLX5_CMD_OP_CREATE_QP = 0x500,
 	MLX5_CMD_OP_DESTROY_QP = 0x501,
 	MLX5_CMD_OP_RST2INIT_QP = 0x502,
@@ -3330,6 +3331,31 @@ struct mlx5_ifc_rst2init_qp_in_bits {
 	struct mlx5_ifc_qpc_bits qpc;
 
 	u8         reserved_at_800[0x80];
+};
+
+struct mlx5_ifc_query_special_contexts_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         dump_fill_mkey[0x20];
+
+	u8         resd_lkey[0x20];
+
+	u8         null_mkey[0x20];
+
+	u8         reserved_at_a0[0x60];
+};
+
+struct mlx5_ifc_query_special_contexts_in_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
 };
 
 enum roce_version {
