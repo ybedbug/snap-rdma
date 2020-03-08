@@ -492,6 +492,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *sq_in;
 	uint64_t allowed_mask, fields_to_modify = 0;
+	bool destroy_qp = false;
 	int ret;
 
 	ret = snap_nvme_get_modifiable_sq_fields(sq, &allowed_mask);
@@ -551,8 +552,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 			qp_num = attr->qp->qp_num;
 		} else if (sq->hw_qp) {
 			/* modify QP to 0 */
-			snap_destroy_hw_qp(sq->hw_qp);
-			sq->hw_qp = NULL;
+			destroy_qp = true;
 		}
 
 		DEVX_SET(nvme_sq, sq_in, qpn, qp_num);
@@ -580,6 +580,11 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	ret = snap_devx_obj_modify(sq->sq, in, sizeof(in), out, sizeof(out));
 	if (ret)
 		goto out_put_dev;
+
+	if (destroy_qp && sq->hw_qp) {
+		snap_destroy_hw_qp(sq->hw_qp);
+		sq->hw_qp = NULL;
+	}
 
 	return 0;
 
