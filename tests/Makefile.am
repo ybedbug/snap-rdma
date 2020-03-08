@@ -11,7 +11,9 @@ noinst_PROGRAMS = \
 		snap_create_destroy_nvme_sq \
 		snap_query_virtio_device \
 		snap_create_destroy_virtio_queue \
-		snap_create_destroy_virtio_ctrl
+		snap_create_destroy_virtio_ctrl \
+		snap_sample_device \
+		snap_sample_uio_driver
 
 LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
 
@@ -61,6 +63,16 @@ snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
 
 UIO_FILES = host_uio.h host_uio.c
+
+snap_sample_device_CFLAGS = $(LOCAL_CFLAGS)
+snap_sample_device_SOURCES = snap_sample_device.c \
+			     snap_sample_device.h
+snap_sample_device_LDADD  = $(top_builddir)/src/libsnap.la
+
+snap_sample_uio_driver_CFLAGS = $(LOCAL_CFLAGS)
+snap_sample_uio_driver_SOURCES = snap_sample_uio_driver.c \
+				 snap_sample_device.h \
+				 $(UIO_FILES)
 
 if HAVE_GTEST
 noinst_PROGRAMS += gtest_snap_rdma
