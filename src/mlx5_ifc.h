@@ -1449,7 +1449,7 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8         max_emulated_devices[0x8];
 	u8         max_num_virtio_queues[0x18];
 
-	u8         reserved_at_120[0x80];
+	u8         reserved_at_120[0x60];
 
 	u8         umem_1_buffer_param_a[0x20];
 	u8         umem_1_buffer_param_b[0x20];
@@ -1458,7 +1458,7 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8         umem_3_buffer_param_a[0x20];
 	u8         umem_3_buffer_param_b[0x20];
 
-	u8         reserved_at_60[0x620];
+	u8         reserved_at_60[0x600];
 };
 
 enum {
