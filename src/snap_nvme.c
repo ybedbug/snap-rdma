@@ -789,8 +789,14 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 	int ret = 0;
 
 	if (sq->hw_qp) {
-		ret = snap_destroy_hw_qp(sq->hw_qp);
-		sq->hw_qp = NULL;
+		struct snap_nvme_sq_attr sq_attr = {};
+
+		/* Modify SQ to make sure the destruction will succeed */
+		sq_attr.state = SNAP_NVME_SQ_STATE_ERR;
+		sq_attr.qp = NULL;
+		ret = snap_nvme_modify_sq(sq,
+			SNAP_NVME_SQ_MOD_QPN | SNAP_NVME_SQ_MOD_STATE,
+			&sq_attr);
 	}
 
 	if (!ret)
