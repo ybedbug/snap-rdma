@@ -9,7 +9,7 @@ int main(int argc, char **argv)
 {
 	struct ibv_device **list;
 	int ret = 0, i, dev_count, opt, num_queues = 10;
-	enum snap_nvme_queue_type q_type = SNAP_NVME_SQE_MODE;
+	enum snap_nvme_queue_type q_type = SNAP_NVME_RAW_MODE;
 
 	while ((opt = getopt(argc, argv, "n:t:")) != -1) {
 		switch (opt) {
@@ -17,13 +17,13 @@ int main(int argc, char **argv)
 			num_queues = atoi(optarg);
 			break;
 		case 't':
-			if (!strcmp(optarg, "sqe"))
-				q_type = SNAP_NVME_SQE_MODE;
-			else if (!strcmp(optarg, "cc"))
-				q_type = SNAP_NVME_CC_MODE;
+			if (!strcmp(optarg, "raw"))
+				q_type = SNAP_NVME_RAW_MODE;
+			else if (!strcmp(optarg, "nvmf"))
+				q_type = SNAP_NVME_TO_NVMF_MODE;
 			break;
 		default:
-			printf("Usage: snap_create_destroy_nvme_cq -n <num> -t <type>\n");
+			printf("Usage: snap_create_destroy_nvme_cq -n <num> -t <type: raw, nvmf>\n");
 			exit(1);
 		}
 	}

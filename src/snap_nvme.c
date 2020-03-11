@@ -382,9 +382,9 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	struct snap_nvme_cq *cq;
 	int offload_type;
 
-	if (attr->type == SNAP_NVME_SQE_MODE) {
+	if (attr->type == SNAP_NVME_RAW_MODE) {
 		offload_type = MLX5_NVME_CQ_OFFLOAD_TYPE_SQE;
-	} else if (attr->type == SNAP_NVME_CC_MODE) {
+	} else if (attr->type == SNAP_NVME_TO_NVMF_MODE) {
 		offload_type = MLX5_NVME_CQ_OFFLOAD_TYPE_CC;
 	} else {
 		errno = EINVAL;
@@ -671,9 +671,9 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	struct snap_nvme_sq *sq;
 	int offload_type;
 
-	if (attr->type == SNAP_NVME_SQE_MODE) {
+	if (attr->type == SNAP_NVME_RAW_MODE) {
 		offload_type = MLX5_NVME_SQ_OFFLOAD_TYPE_SQE;
-	} else if (attr->type == SNAP_NVME_CC_MODE) {
+	} else if (attr->type == SNAP_NVME_TO_NVMF_MODE) {
 		offload_type = MLX5_NVME_SQ_OFFLOAD_TYPE_CC;
 	} else {
 		errno = EINVAL;

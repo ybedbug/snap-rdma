@@ -619,10 +619,10 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		capability.nvme_emulation_cap.registers_size);
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.nvme_emulation_cap.nvme_offload_type_sqe))
-		sctx->nvme_caps.supported_types |= SNAP_NVME_SQE_MODE;
+		sctx->nvme_caps.supported_types |= SNAP_NVME_RAW_MODE;
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.nvme_emulation_cap.nvme_offload_type_command_capsule))
-		sctx->nvme_caps.supported_types |= SNAP_NVME_CC_MODE;
+		sctx->nvme_caps.supported_types |= SNAP_NVME_TO_NVMF_MODE;
 
 	return 0;
 

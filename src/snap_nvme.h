@@ -60,8 +60,8 @@ struct snap_nvme_namespace {
 };
 
 enum snap_nvme_queue_type {
-	SNAP_NVME_SQE_MODE	= 1 << 0,
-	SNAP_NVME_CC_MODE	= 1 << 1,
+	SNAP_NVME_RAW_MODE	= 1 << 0,
+	SNAP_NVME_TO_NVMF_MODE	= 1 << 1,
 };
 
 enum snap_nvme_sq_modify {
