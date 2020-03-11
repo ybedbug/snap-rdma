@@ -3020,6 +3020,7 @@ void snap_close_device(struct snap_device *sdev)
  */
 struct snap_context *snap_open(struct ibv_device *ibdev)
 {
+	struct mlx5dv_context_attr attrs = {};
 	struct snap_context *sctx;
 	struct ibv_context *context;
 	int rc;
@@ -3029,7 +3030,8 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 		goto out_err;
 	}
 
-	context = ibv_open_device(ibdev);
+	attrs.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
+	context = mlx5dv_open_device(ibdev, &attrs);
 	if (!context) {
 		errno = EAGAIN;
 		goto out_err;
@@ -3122,15 +3124,4 @@ void snap_close(struct snap_context *sctx)
 	free(sctx);
 	ibv_close_device(context);
 
-}
-
-/**
- * snap_init() - Library constructor
- *
- * This routine runs when a shared library is loaded, during program startup.
- * It will set low level Mellanox driver characteristics for device emulation.
- */
-static void __attribute__((constructor)) snap_init(void)
-{
-	mlx5dv_always_open_devx();
 }
