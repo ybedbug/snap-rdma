@@ -447,7 +447,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	ASSERT_TRUE(sdev);
 	ASSERT_EQ(0, snap_nvme_init_device(sdev));
 
-	cq_attr.type = SNAP_NVME_SQE_MODE;
+	cq_attr.type = SNAP_NVME_RAW_MODE;
 	cq_attr.id = 0;
 	cq_attr.doorbell_offset = 4;
 	cq_attr.msix = 0;
@@ -456,7 +456,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	cq = snap_nvme_create_cq(sdev, &cq_attr);
 	ASSERT_TRUE(cq);
 
-	sq_attr.type = SNAP_NVME_SQE_MODE;
+	sq_attr.type = SNAP_NVME_RAW_MODE;
 	sq_attr.id = 0;
 	sq_attr.doorbell_offset = 0;
 	sq_attr.queue_depth = 16;
