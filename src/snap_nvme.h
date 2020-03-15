@@ -86,6 +86,7 @@ struct snap_nvme_sq_attr {
 	uint32_t			emulated_device_dma_mkey;
 	struct snap_nvme_cq		*cq;
 	enum snap_nvme_sq_state		state;
+	uint8_t				log_entry_size;
 };
 
 struct snap_nvme_sq {
@@ -104,6 +105,7 @@ struct snap_nvme_cq_attr {
 	uint64_t			base_addr;
 	uint16_t			cq_period;
 	uint16_t			cq_max_count;
+	uint8_t				log_entry_size;
 };
 
 struct snap_nvme_cq {

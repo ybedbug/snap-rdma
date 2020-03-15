@@ -415,7 +415,9 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	DEVX_SET(nvme_cq, cq_in, msix_vector, attr->msix);
 	DEVX_SET(nvme_cq, cq_in, nvme_num_of_entries, attr->queue_depth);
 	DEVX_SET64(nvme_cq, cq_in, nvme_base_addr, attr->base_addr);
-	DEVX_SET(nvme_cq, cq_in, nvme_log_entry_size, NVME_CQ_LOG_ENTRY_SIZE);
+	DEVX_SET(nvme_cq, cq_in, nvme_log_entry_size,
+		 attr->log_entry_size ? attr->log_entry_size :
+					NVME_CQ_LOG_ENTRY_SIZE);
 	DEVX_SET(nvme_cq, cq_in, cq_period, attr->cq_period);
 	DEVX_SET(nvme_cq, cq_in, cq_max_count, attr->cq_max_count);
 	cq->cq = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
@@ -733,7 +735,9 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
 	}
 	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
-	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size, NVME_SQ_LOG_ENTRY_SIZE);
+	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size,
+		 attr->log_entry_size ? attr->log_entry_size :
+					NVME_SQ_LOG_ENTRY_SIZE);
 
 	//DEVX_SET(nvme_sq, sq_in, log_nvme_page_size, attr->log_nvme_page_size);
 	//DEVX_SET(nvme_sq, sq_in, max_transaction_size, attr->max_transcation_size);
