@@ -27,10 +27,10 @@ void snap_virtio_get_device_attr(struct snap_device *sdev,
 				 struct snap_virtio_device_attr *vattr,
 				 void *device_configuration)
 {
-	vattr->device_feature = DEVX_GET(virtio_device, device_configuration,
-					 device_feature);
-	vattr->driver_feature = DEVX_GET(virtio_device, device_configuration,
-					 driver_feature);
+	vattr->device_feature = DEVX_GET64(virtio_device, device_configuration,
+					   device_feature);
+	vattr->driver_feature = DEVX_GET64(virtio_device, device_configuration,
+					   driver_feature);
 	vattr->msix_config = DEVX_GET(virtio_device, device_configuration,
 				      msix_config);
 	vattr->max_queues = DEVX_GET(virtio_device, device_configuration,
