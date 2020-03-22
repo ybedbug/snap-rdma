@@ -76,8 +76,7 @@ out_free:
 }
 
 static int
-snap_virtio_net_get_modifiable_device_fields(struct snap_device *sdev,
-		uint64_t *allowed)
+snap_virtio_net_get_modifiable_device_fields(struct snap_device *sdev)
 {
 	struct snap_virtio_net_device_attr attr = {};
 	int ret;
@@ -86,7 +85,7 @@ snap_virtio_net_get_modifiable_device_fields(struct snap_device *sdev,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	sdev->mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -104,16 +103,16 @@ snap_virtio_net_get_modifiable_device_fields(struct snap_device *sdev,
 int snap_virtio_net_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_net_device_attr *attr)
 {
-	uint64_t allowed_mask;
 	int ret;
 
-	ret = snap_virtio_net_get_modifiable_device_fields(sdev,
-							   &allowed_mask);
-	if (ret)
-		return ret;
+	if (!sdev->mod_allowed_mask) {
+		ret = snap_virtio_net_get_modifiable_device_fields(sdev);
+		if (ret)
+			return ret;
+	}
 
 	return snap_virtio_modify_device(sdev, SNAP_VIRTIO_NET, mask,
-					 allowed_mask, &attr->vattr);
+					 &attr->vattr);
 }
 
 /**
@@ -325,8 +324,7 @@ int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 }
 
 static int
-snap_virtio_net_get_modifiable_virtq_fields(struct snap_virtio_net_queue *vnq,
-		uint64_t *allowed)
+snap_virtio_net_get_modifiable_virtq_fields(struct snap_virtio_net_queue *vnq)
 {
 	struct snap_virtio_net_queue_attr attr = {};
 	int ret;
@@ -335,7 +333,7 @@ snap_virtio_net_get_modifiable_virtq_fields(struct snap_virtio_net_queue *vnq,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	vnq->virtq.mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -354,12 +352,13 @@ snap_virtio_net_get_modifiable_virtq_fields(struct snap_virtio_net_queue *vnq,
 int snap_virtio_net_modify_queue(struct snap_virtio_net_queue *vnq,
 		uint64_t mask, struct snap_virtio_net_queue_attr *attr)
 {
-	uint64_t allowed_mask = 0;
 	int ret;
 
-	ret = snap_virtio_net_get_modifiable_virtq_fields(vnq, &allowed_mask);
-	if (ret)
-		return ret;
+	if (!vnq->virtq.mod_allowed_mask) {
+		ret = snap_virtio_net_get_modifiable_virtq_fields(vnq);
+		if (ret)
+			return ret;
+	}
 
-	return snap_virtio_modify_queue(&vnq->virtq, mask, allowed_mask, &attr->vattr);
+	return snap_virtio_modify_queue(&vnq->virtq, mask, &attr->vattr);
 }

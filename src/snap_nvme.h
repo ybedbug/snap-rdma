@@ -93,6 +93,7 @@ struct snap_nvme_sq {
 	uint32_t				id;
 	struct mlx5_snap_devx_obj		*sq;
 	struct mlx5_snap_hw_qp			*hw_qp;
+	uint64_t				mod_allowed_mask;
 };
 
 struct snap_nvme_cq_attr {

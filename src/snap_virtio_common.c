@@ -96,8 +96,7 @@ int snap_virtio_query_device(struct snap_device *sdev,
 
 int snap_virtio_modify_device(struct snap_device *sdev,
 		enum snap_emulation_type type,
-		uint64_t mask, uint64_t allowed_mask,
-		struct snap_virtio_device_attr *attr)
+		uint64_t mask, struct snap_virtio_device_attr *attr)
 {
 	uint8_t in_blk[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
@@ -121,7 +120,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		return -EINVAL;
 
 	//we'll modify only allowed fields
-	if (mask & ~allowed_mask)
+	if (mask & ~sdev->mod_allowed_mask)
 		return -EINVAL;
 
 	if (type == SNAP_VIRTIO_BLK) {
@@ -320,7 +319,7 @@ static int snap_virtio_queue_state_to_mlx_state(enum snap_virtq_state state)
 }
 
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
-	uint64_t allowed_mask, struct snap_virtio_queue_attr *vattr)
+			     struct snap_virtio_queue_attr *vattr)
 {
 	uint8_t in_blk[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 			DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
@@ -334,7 +333,7 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	int inlen, state;
 
 	/* we'll modify only allowed fields */
-	if (mask & ~allowed_mask)
+	if (mask & ~virtq->mod_allowed_mask)
 		return -EINVAL;
 
 	if (sdev->pci->type == SNAP_VIRTIO_BLK_PF ||

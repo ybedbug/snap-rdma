@@ -2526,14 +2526,20 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	case SNAP_NVME_PF:
 	case SNAP_NVME_VF:
 		ret = snap_nvme_query_device(sdev, &nvme_attr);
+		if (!ret)
+			sdev->mod_allowed_mask = nvme_attr.modifiable_fields;
 		break;
 	case SNAP_VIRTIO_NET_PF:
 	case SNAP_VIRTIO_NET_VF:
 		ret = snap_virtio_net_query_device(sdev, &net_attr);
+		if (!ret)
+			sdev->mod_allowed_mask = net_attr.modifiable_fields;
 		break;
 	case SNAP_VIRTIO_BLK_PF:
 	case SNAP_VIRTIO_BLK_VF:
 		ret = snap_virtio_blk_query_device(sdev, &blk_attr);
+		if (!ret)
+			sdev->mod_allowed_mask = blk_attr.modifiable_fields;
 		break;
 	default:
 		return EINVAL;

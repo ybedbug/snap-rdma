@@ -85,8 +85,7 @@ out_free:
 }
 
 static int
-snap_nvme_get_modifiable_device_fields(struct snap_device *sdev,
-		uint64_t *allowed)
+snap_nvme_get_modifiable_device_fields(struct snap_device *sdev)
 {
 	struct snap_nvme_device_attr attr = {};
 	int ret;
@@ -95,7 +94,7 @@ snap_nvme_get_modifiable_device_fields(struct snap_device *sdev,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	sdev->mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -116,18 +115,19 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 	uint8_t *in;
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	uint8_t *device_emulation_in;
-	uint64_t allowed_mask;
 	int ret, in_size;
 
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
 		return -EINVAL;
 
-	ret = snap_nvme_get_modifiable_device_fields(sdev, &allowed_mask);
-	if (ret)
-		return ret;
+	if (!sdev->mod_allowed_mask) {
+		ret = snap_nvme_get_modifiable_device_fields(sdev);
+		if (ret)
+			return ret;
+	}
 
 	/* we'll modify only allowed fields */
-	if (mask & ~allowed_mask)
+	if (mask & ~sdev->mod_allowed_mask)
 		return -EINVAL;
 
 	in_size = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
@@ -459,8 +459,7 @@ int snap_nvme_destroy_cq(struct snap_nvme_cq *cq)
 	return snap_devx_obj_destroy(cq->cq);
 }
 
-static int snap_nvme_get_modifiable_sq_fields(struct snap_nvme_sq *sq,
-		uint64_t *allowed)
+static int snap_nvme_get_modifiable_sq_fields(struct snap_nvme_sq *sq)
 {
 	struct snap_nvme_sq_attr attr = {};
 	int ret;
@@ -469,7 +468,7 @@ static int snap_nvme_get_modifiable_sq_fields(struct snap_nvme_sq *sq,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	sq->mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -492,16 +491,18 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *sq_in;
-	uint64_t allowed_mask, fields_to_modify = 0;
+	uint64_t fields_to_modify = 0;
 	bool destroy_qp = false;
 	int ret;
 
-	ret = snap_nvme_get_modifiable_sq_fields(sq, &allowed_mask);
-	if (ret)
-		return ret;
+	if (!sq->mod_allowed_mask) {
+		ret = snap_nvme_get_modifiable_sq_fields(sq);
+		if (ret)
+			return ret;
+	}
 
 	/* we'll modify only allowed fields */
-	if (mask & ~allowed_mask)
+	if (mask & ~sq->mod_allowed_mask)
 		return -EINVAL;
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,

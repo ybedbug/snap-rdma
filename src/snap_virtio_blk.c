@@ -79,8 +79,7 @@ out_free:
 }
 
 static int
-snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev,
-		uint64_t *allowed)
+snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev)
 {
 	struct snap_virtio_blk_device_attr attr = {};
 	int ret;
@@ -89,7 +88,7 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	sdev->mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -107,16 +106,16 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev,
 int snap_virtio_blk_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_blk_device_attr *attr)
 {
-	uint64_t allowed_mask;
 	int ret;
 
-	ret = snap_virtio_blk_get_modifiable_device_fields(sdev,
-							   &allowed_mask);
-	if (ret)
-		return ret;
+	if (!sdev->mod_allowed_mask) {
+		ret = snap_virtio_blk_get_modifiable_device_fields(sdev);
+		if (ret)
+			return ret;
+	}
 
 	return snap_virtio_modify_device(sdev, SNAP_VIRTIO_BLK, mask,
-					 allowed_mask, &attr->vattr);
+					 &attr->vattr);
 }
 
 /**
@@ -328,8 +327,7 @@ int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 }
 
 static int
-snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq,
-		uint64_t *allowed)
+snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
 {
 	struct snap_virtio_blk_queue_attr attr = {};
 	int ret;
@@ -338,7 +336,7 @@ snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq,
 	if (ret)
 		return ret;
 
-	*allowed = attr.modifiable_fields;
+	vbq->virtq.mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -360,9 +358,11 @@ int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 	uint64_t allowed_mask = 0;
 	int ret;
 
-	ret = snap_virtio_blk_get_modifiable_virtq_fields(vbq, &allowed_mask);
-	if (ret)
-		return ret;
+	if (!vbq->virtq.mod_allowed_mask) {
+		ret = snap_virtio_blk_get_modifiable_virtq_fields(vbq);
+		if (ret)
+			return ret;
+	}
 
-	return snap_virtio_modify_queue(&vbq->virtq, mask, allowed_mask, &attr->vattr);
+	return snap_virtio_modify_queue(&vbq->virtq, mask, &attr->vattr);
 }

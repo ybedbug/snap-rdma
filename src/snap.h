@@ -161,6 +161,7 @@ struct snap_device {
 
 	struct mlx5_snap_device		mdev;
 
+	uint64_t			mod_allowed_mask;
 	void				*dd_data;
 
 	/* for BF-1 usage only */
