@@ -475,7 +475,6 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 	printf("creating completion queue with base at 0x%0llx\n", cq_base);
 	cq_attr.type = SNAP_NVME_RAW_MODE;
 	cq_attr.id = 0;
-	cq_attr.doorbell_offset = SNAP_SAMPLE_DEV_CQ_DB_OFFSET;
 	cq_attr.msix = 0;
 	cq_attr.queue_depth = SNAP_SAMPLE_DEV_QUEUE_DEPTH;
 	cq_attr.base_addr = cq_base;
@@ -489,7 +488,6 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 	printf("creating submission queue with base at 0x%0llx\n", sq_base);
 	sq_attr.type = SNAP_NVME_RAW_MODE;
 	sq_attr.id = 0;
-	sq_attr.doorbell_offset = SNAP_SAMPLE_DEV_SQ_DB_OFFSET;
 	sq_attr.queue_depth = SNAP_SAMPLE_DEV_QUEUE_DEPTH;
 	sq_attr.base_addr = sq_base;
 	sq_attr.cq = ctrl->cq;

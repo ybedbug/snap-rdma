@@ -78,7 +78,6 @@ enum snap_nvme_sq_state {
 struct snap_nvme_sq_attr {
 	enum snap_nvme_queue_type	type;
 	uint32_t			id;
-	uint32_t			doorbell_offset;
 	uint16_t			queue_depth;
 	uint64_t			base_addr;
 	uint64_t			modifiable_fields;//mask of snap_nvme_sq_modify
@@ -99,7 +98,6 @@ struct snap_nvme_sq {
 struct snap_nvme_cq_attr {
 	enum snap_nvme_queue_type	type;
 	uint32_t			id;
-	uint32_t			doorbell_offset;
 	uint16_t			msix;
 	uint16_t			queue_depth;
 	uint64_t			base_addr;

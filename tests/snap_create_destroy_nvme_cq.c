@@ -65,7 +65,6 @@ int main(int argc, char **argv)
 
 					cq_attr.type = q_type;
 					cq_attr.id = j;
-					cq_attr.doorbell_offset = 4 + j * 8;
 					cq_attr.msix = j;
 					cq_attr.queue_depth = 16;
 					cq_attr.base_addr = 0xdeadbeef * j;

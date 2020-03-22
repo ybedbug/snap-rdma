@@ -451,7 +451,6 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 
 	cq_attr.type = SNAP_NVME_RAW_MODE;
 	cq_attr.id = 0;
-	cq_attr.doorbell_offset = 4;
 	cq_attr.msix = 0;
 	cq_attr.queue_depth = 16;
 	cq_attr.base_addr = 0xdeadbeef;
@@ -460,7 +459,6 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 
 	sq_attr.type = SNAP_NVME_RAW_MODE;
 	sq_attr.id = 0;
-	sq_attr.doorbell_offset = 0;
 	sq_attr.queue_depth = 16;
 	sq_attr.base_addr = 0xbeefdead;
 	sq_attr.cq = cq;

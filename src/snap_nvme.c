@@ -2,7 +2,10 @@
 
 #include "mlx5_ifc.h"
 
-#define NVME_DB_STRIDE 3
+/* doorbell stride as specified in the NVMe CAP register, stride in
+ * bytes is 2^(2 + NVME_DB_STRIDE)
+ */
+#define NVME_DB_STRIDE 0
 #define NVME_CQ_LOG_ENTRY_SIZE 4
 #define NVME_SQ_LOG_ENTRY_SIZE 6
 #define NVME_DB_BASE 0x1000
@@ -391,11 +394,6 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 		goto out;
 	}
 
-	if (attr->id != attr->doorbell_offset >> NVME_DB_STRIDE) {
-		errno = EINVAL;
-		goto out;
-	}
-
 	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
 		goto out;
@@ -410,8 +408,9 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	cq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	DEVX_SET(nvme_cq, cq_in, device_emulation_id, sdev->pci->mpci.vhca_id);
 	DEVX_SET(nvme_cq, cq_in, offload_type, offload_type);
+	/* Calculate doorbell offset as described in the NVMe spec 3.1.17 */
 	DEVX_SET(nvme_cq, cq_in, nvme_doorbell_offset,
-		 ndev->db_base + attr->doorbell_offset);
+		 ndev->db_base + (2 * attr->id + 1) * (4 << NVME_DB_STRIDE));
 	DEVX_SET(nvme_cq, cq_in, msix_vector, attr->msix);
 	DEVX_SET(nvme_cq, cq_in, nvme_num_of_entries, attr->queue_depth);
 	DEVX_SET64(nvme_cq, cq_in, nvme_base_addr, attr->base_addr);
@@ -637,7 +636,6 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	attr->queue_depth = DEVX_GET(nvme_sq, out_sq, nvme_num_of_entries);
 	attr->emulated_device_dma_mkey = DEVX_GET(nvme_sq, out_sq,
 						  emulated_device_dma_mkey);
-	attr->doorbell_offset = DEVX_GET(nvme_sq, out_sq, nvme_doorbell_offset);
 	attr->state = DEVX_GET(nvme_sq, out_sq, network_state);
 	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
 	if (dev_allowed) {
@@ -682,11 +680,6 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 		goto out;
 	}
 
-	if (attr->id != attr->doorbell_offset >> NVME_DB_STRIDE) {
-		errno = EINVAL;
-		goto out;
-	}
-
 	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
 		goto out;
@@ -702,8 +695,9 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	DEVX_SET(nvme_sq, sq_in, device_emulation_id, sdev->pci->mpci.vhca_id);
 	DEVX_SET(nvme_sq, sq_in, offload_type, offload_type);
 	DEVX_SET(nvme_sq, sq_in, nvme_num_of_entries, attr->queue_depth);
+	/* Calculate doorbell offset as described in the NVMe spec 3.1.16 */
 	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
-		 ndev->db_base + attr->doorbell_offset);
+		 ndev->db_base + 2 * attr->id * (4 << NVME_DB_STRIDE));
 	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
 	if (attr->qp) {
 		int vhca_id;

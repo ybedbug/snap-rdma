@@ -107,7 +107,6 @@ int main(int argc, char **argv)
 
 					cq_attr.type = q_type;
 					cq_attr.id = j;
-					cq_attr.doorbell_offset = 4 + j * 8;
 					cq_attr.msix = j;
 					cq_attr.queue_depth = depth;
 					cq_attr.base_addr = 0xdeadbeef * j;
@@ -117,7 +116,6 @@ int main(int argc, char **argv)
 					if (cq) {
 						sq_attr.type = q_type;
 						sq_attr.id = j;
-						sq_attr.doorbell_offset = j * 8;
 						sq_attr.queue_depth = depth;
 						sq_attr.base_addr = 0xbeefdead * j;
 						sq_attr.cq = cq;
