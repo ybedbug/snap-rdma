@@ -126,6 +126,7 @@ struct snap_virtio_ctrl {
 	pthread_mutex_t state_lock;
 	struct snap_device *sdev;
 	size_t num_queues;
+	size_t enabled_queues;
 	struct snap_virtio_ctrl_queue **queues;
 	pthread_spinlock_t live_queues_lock;
 	TAILQ_HEAD(, snap_virtio_ctrl_queue) live_queues;
