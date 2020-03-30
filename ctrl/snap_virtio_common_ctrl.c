@@ -65,6 +65,8 @@ static inline void snap_virtio_ctrl_bar_copy(struct snap_virtio_ctrl *ctrl,
 static inline int snap_virtio_ctrl_bar_update(struct snap_virtio_ctrl *ctrl,
 					struct snap_virtio_device_attr *bar)
 {
+	snap_virtio_ctrl_bar_copy(ctrl, ctrl->bar_curr, ctrl->bar_prev);
+
 	return ctrl->bar_ops->update(ctrl, bar);
 }
 
@@ -161,22 +163,41 @@ static inline bool snap_virtio_ctrl_needs_reset(struct snap_virtio_ctrl *ctrl)
 	       SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl);
 }
 
+static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
+{
+	if (ctrl->bar_cbs->validate)
+		return ctrl->bar_cbs->validate(ctrl->cb_ctx);
+
+	return 0;
+}
+
+static int snap_virtio_ctrl_device_error(struct snap_virtio_ctrl *ctrl)
+{
+	ctrl->bar_curr->status |= SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET;
+	return snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_DEV_STATUS,
+					   ctrl->bar_curr);
+}
+
 static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 
-	if (snap_virtio_ctrl_needs_reset(ctrl))
+	if (snap_virtio_ctrl_needs_reset(ctrl)) {
 		ret = snap_virtio_ctrl_stop(ctrl);
-	else if (SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
-		ret = snap_virtio_ctrl_start(ctrl);
-
+	} else {
+		ret = snap_virtio_ctrl_validate(ctrl);
+		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
+			ret = snap_virtio_ctrl_start(ctrl);
+	}
+	if (ret)
+		snap_virtio_ctrl_device_error(ctrl);
 	return ret;
 }
 
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
-	int i;
+	int i, j;
 	const struct snap_virtio_queue_attr *vq;
 
 	pthread_mutex_lock(&ctrl->state_lock);
@@ -190,13 +211,26 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 			ctrl->queues[i] = snap_virtio_ctrl_queue_create(ctrl, i);
 			if (!ctrl->queues[i]) {
 				ret = -ENOMEM;
-				break;
+				goto vq_cleanup;
 			}
 		}
 	}
 
-	if (!ret)
-		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	if (ctrl->bar_cbs->start) {
+		ret = ctrl->bar_cbs->start(ctrl->cb_ctx);
+		if (ret) {
+			snap_virtio_ctrl_device_error(ctrl);
+			goto vq_cleanup;
+		}
+	}
+	ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	goto out;
+
+vq_cleanup:
+	for (j = 0; j < i; j++)
+		if (ctrl->queues[j])
+			snap_virtio_ctrl_queue_destroy(ctrl->queues[j]);
+
 out:
 	pthread_mutex_unlock(&ctrl->state_lock);
 	return ret;
@@ -217,6 +251,12 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 		}
 	}
 
+	if (ctrl->bar_cbs->stop) {
+		ret = ctrl->bar_cbs->stop(ctrl->cb_ctx);
+		if (ret)
+			goto out;
+	}
+
 	if (SNAP_VIRTIO_CTRL_RST_DETECTED(ctrl)) {
 		/*
 		 * Host driver is waiting for device RESET process completion
@@ -228,8 +268,7 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 						  ctrl->bar_curr);
 	}
 
-	if (!ret)
-		ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
+	ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
 out:
 	pthread_mutex_unlock(&ctrl->state_lock);
 	return ret;
@@ -250,8 +289,6 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 		if (ret)
 			return;
 	}
-
-	snap_virtio_ctrl_bar_copy(ctrl, ctrl->bar_curr, ctrl->bar_prev);
 }
 
 void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl)
@@ -299,6 +336,8 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	}
 
 	ctrl->bar_ops = bar_ops;
+	ctrl->bar_cbs = attr->bar_cbs;
+	ctrl->cb_ctx = attr->cb_ctx;
 	ret = snap_virtio_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;

@@ -89,9 +89,17 @@ enum snap_virtio_ctrl_state {
 	SNAP_VIRTIO_CTRL_STARTED,
 };
 
+struct snap_virtio_ctrl_bar_cbs {
+	int (*validate)(void *cb_ctx);
+	int (*start)(void *cb_ctx);
+	int (*stop)(void *cb_ctx);
+};
+
 struct snap_virtio_ctrl_attr {
 	enum snap_virtio_ctrl_type type;
 	int pf_id;
+	void *cb_ctx;
+	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
 };
 
 struct snap_virtio_ctrl_queue {
@@ -131,6 +139,8 @@ struct snap_virtio_ctrl {
 	pthread_spinlock_t live_queues_lock;
 	TAILQ_HEAD(, snap_virtio_ctrl_queue) live_queues;
 	struct snap_virtio_queue_ops *q_ops;
+	void *cb_ctx; /* bar callback context */
+	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
 	struct snap_virtio_ctrl_bar_ops *bar_ops;
 	struct snap_virtio_device_attr *bar_curr;
 	struct snap_virtio_device_attr *bar_prev;
