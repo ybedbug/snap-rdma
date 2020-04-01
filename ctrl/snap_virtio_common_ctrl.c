@@ -257,17 +257,6 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 			goto out;
 	}
 
-	if (SNAP_VIRTIO_CTRL_RST_DETECTED(ctrl)) {
-		/*
-		 * Host driver is waiting for device RESET process completion
-		 * by polling device_status until reading `0`.
-		 */
-		ctrl->bar_curr->status = 0;
-		ret = snap_virtio_ctrl_bar_modify(ctrl,
-						  SNAP_VIRTIO_MOD_DEV_STATUS,
-						  ctrl->bar_curr);
-	}
-
 	ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
 out:
 	pthread_mutex_unlock(&ctrl->state_lock);
@@ -288,6 +277,15 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 		ret = snap_virtio_ctrl_change_status(ctrl);
 		if (ret)
 			return;
+	}
+	if (ctrl->bar_curr->status == SNAP_VIRTIO_DEVICE_S_RESET) {
+		/*
+		 * Host driver is waiting for device RESET process completion
+		 * by polling device_status until reading `0`.
+		 */
+		ctrl->bar_curr->status = 0;
+		snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_DEV_STATUS,
+					    ctrl->bar_curr);
 	}
 }
 
