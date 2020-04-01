@@ -98,6 +98,7 @@ struct snap_virtio_ctrl_bar_cbs {
 struct snap_virtio_ctrl_attr {
 	enum snap_virtio_ctrl_type type;
 	int pf_id;
+	bool event;
 	void *cb_ctx;
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
 };
