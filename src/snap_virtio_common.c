@@ -270,6 +270,9 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		errno = EINVAL;
 		goto out;
 	}
+	DEVX_SET64(virtio_q, virtq_ctx, desc_addr, vattr->desc);
+	DEVX_SET64(virtio_q, virtq_ctx, available_addr, vattr->driver);
+	DEVX_SET64(virtio_q, virtq_ctx, used_addr, vattr->device);
 
 	ret = snap_virtio_get_pd_id(vattr->pd, &pd_id);
 	if (ret) {
