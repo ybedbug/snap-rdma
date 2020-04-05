@@ -79,7 +79,9 @@ struct mlx5_snap_context {
 	uint8_t				max_ft_level;
 	uint8_t				log_max_ft_size;
 
-	bool				need_tunnel;
+	bool				nvme_need_tunnel;
+	bool				virtio_net_need_tunnel;
+	bool				virtio_blk_need_tunnel;
 };
 
 struct mlx5_snap_pci {

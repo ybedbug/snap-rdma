@@ -421,10 +421,22 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->emulation_caps |= SNAP_VIRTIO_BLK;
 
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.resources_on_emulation_manager))
-		sctx->mctx.need_tunnel = false;
+		capability.cmd_hca_cap.resources_on_nvme_emulation_manager))
+		sctx->mctx.nvme_need_tunnel = false;
 	else
-		sctx->mctx.need_tunnel = true;
+		sctx->mctx.nvme_need_tunnel = true;
+
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.resources_on_virtio_net_emulation_manager))
+		sctx->mctx.virtio_net_need_tunnel = false;
+	else
+		sctx->mctx.virtio_net_need_tunnel = true;
+
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.resources_on_virtio_blk_emulation_manager))
+		sctx->mctx.virtio_blk_need_tunnel = false;
+	else
+		sctx->mctx.virtio_blk_need_tunnel = true;
 
 	if (DEVX_GET(query_hca_cap_out, out,
 		capability.cmd_hca_cap.hotplug_manager) &&
@@ -2577,6 +2589,9 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev)
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 resources_on_emulation_manager,
+		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2616,6 +2631,9 @@ snap_create_virtio_blk_device_emulation(struct snap_device *sdev)
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	DEVX_SET(virtio_blk_device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
+	DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+		 resources_on_emulation_manager,
+		 sdev->sctx->mctx.virtio_blk_need_tunnel ? 0 : 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2657,7 +2675,7 @@ snap_create_nvme_device_emulation(struct snap_device *sdev)
 		 sdev->pci->mpci.vhca_id);
 	DEVX_SET(nvme_device_emulation, device_emulation_in,
 		 resources_on_emulation_manager,
-		 sdev->sctx->mctx.need_tunnel ? 0 : 1);
+		 sdev->sctx->mctx.nvme_need_tunnel ? 0 : 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2903,18 +2921,22 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 {
 	struct snap_device *sdev;
 	struct snap_pfs_ctx *pfs;
+	bool need_tunnel;
 	int ret;
 
 	/* Currently support only PFs emulation */
 	if (attr->type == SNAP_NVME_PF &&
 	    attr->pf_id < sctx->nvme_pfs.max_pfs) {
 		pfs = &sctx->nvme_pfs;
+		need_tunnel = sctx->mctx.nvme_need_tunnel;
 	} else if (attr->type == SNAP_VIRTIO_NET_PF &&
 		   attr->pf_id < sctx->virtio_net_pfs.max_pfs) {
 		pfs = &sctx->virtio_net_pfs;
+		need_tunnel = sctx->mctx.virtio_net_need_tunnel;
 	} else if (attr->type == SNAP_VIRTIO_BLK_PF &&
 		   attr->pf_id < sctx->virtio_blk_pfs.max_pfs) {
 		pfs = &sctx->virtio_blk_pfs;
+		need_tunnel = sctx->mctx.virtio_blk_need_tunnel;
 	} else {
 		errno = EINVAL;
 		goto out_err;
@@ -2956,7 +2978,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	}
 
 	/* This should be done only for BF-1 */
-	if (sctx->mctx.need_tunnel) {
+	if (need_tunnel) {
 		sdev->mdev.vtunnel = snap_create_vhca_tunnel(sdev);
 		if (!sdev->mdev.vtunnel) {
 			errno = EINVAL;

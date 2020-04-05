@@ -923,7 +923,7 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         repeated_mkey[0x1];
 	u8         dump_fill_mkey[0x1];
 	u8         dpp[0x1];
-	u8         resources_on_emulation_manager[0x1];
+	u8         resources_on_nvme_emulation_manager[0x1];
 	u8         fast_teardown[0x1];
 	u8         log_max_eq[0x4];
 
@@ -937,7 +937,9 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         null_mkey[0x1];
 	u8         log_max_klm_list_size[0x6];
 
-	u8         reserved_at_120[0xa];
+	u8         reserved_at_120[0x8];
+	u8         resources_on_virtio_net_emulation_manager[0x1];
+	u8         resources_on_virtio_blk_emulation_manager[0x1];
 	u8         log_max_ra_req_dc[0x6];
 	u8         reserved_at_130[0xa];
 	u8         log_max_ra_res_dc[0x6];
@@ -2707,7 +2709,7 @@ struct mlx5_ifc_virtio_q_layout_bits {
 struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   reserved_at_40[0x1];
+	u8	   resources_on_emulation_manager[0x1];
 	u8	   enabled[0x1];
 	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];
@@ -2724,7 +2726,7 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   reserved_at_40[0x1];
+	u8	   resources_on_emulation_manager[0x1];
 	u8	   enabled[0x1];
 	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];
