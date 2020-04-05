@@ -3564,7 +3564,8 @@ struct mlx5_ifc_virtio_q_bits {
 	u8         virtio_q_mkey[0x20];
 
 	u8         max_tunnel_desc[0x10];
-	u8         reserved_at_170[0x10];
+	u8         reserved_at_170[0x8];
+	u8	   error_type[0x8];
 
 	u8         umem_1_id[0x20];
 	u8         umem_1_size[0x20];
@@ -3604,7 +3605,7 @@ struct mlx5_ifc_virtio_net_q_bits {
 	u8	   reserved_at_90[0xc];
 	u8	   state[0x4];
 
-	u8	   error_type[0x8];
+	u8	   reserved_at_a0[0x8];
 	u8	   tisn_or_qpn[0x18];
 
 	u8	   dirty_bitmap_mkey[0x20];
@@ -3640,7 +3641,7 @@ struct mlx5_ifc_virtio_blk_q_bits {
 	u8	   reserved_at_90[0xc];
 	u8	   state[0x4];
 
-	u8	   error_type[0x8];
+	u8	   reserved_at_a0[0x8];
 	u8	   qpn[0x18];
 
 	u8	   dirty_bitmap_mkey[0x20];
