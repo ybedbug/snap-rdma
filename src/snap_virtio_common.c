@@ -293,13 +293,16 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, max_tunnel_desc, vattr->max_tunnel_desc);
 	DEVX_SET(virtio_q, virtq_ctx, event_qpn_or_msix, vattr->event_qpn_or_msix);
 	DEVX_SET(virtio_q, virtq_ctx, offload_type, offload_type);
-	DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
+	if (umem[0].devx_umem)
+		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
 	DEVX_SET(virtio_q, virtq_ctx, umem_1_size, umem[0].size);
 	DEVX_SET64(virtio_q, virtq_ctx, umem_1_offset, 0);
-	DEVX_SET(virtio_q, virtq_ctx, umem_2_id, umem[1].devx_umem->umem_id);
+	if (umem[1].devx_umem)
+		DEVX_SET(virtio_q, virtq_ctx, umem_2_id, umem[1].devx_umem->umem_id);
 	DEVX_SET(virtio_q, virtq_ctx, umem_2_size, umem[1].size);
 	DEVX_SET64(virtio_q, virtq_ctx, umem_2_offset, 0);
-	DEVX_SET(virtio_q, virtq_ctx, umem_3_id, umem[2].devx_umem->umem_id);
+	if (umem[2].devx_umem)
+		DEVX_SET(virtio_q, virtq_ctx, umem_3_id, umem[2].devx_umem->umem_id);
 	DEVX_SET(virtio_q, virtq_ctx, umem_3_size, umem[2].size);
 	DEVX_SET64(virtio_q, virtq_ctx, umem_3_offset, 0);
 
@@ -513,6 +516,40 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	return 0;
 }
 
+static int snap_umem_init(struct snap_context *sctx,
+		struct snap_virtio_umem *umem)
+{
+	int ret;
+
+	if (!umem->size)
+		return 0;
+	ret = posix_memalign((void **)&umem->buf, SNAP_VIRTIO_UMEM_ALIGN,
+			     umem->size);
+	if (ret)
+		return ret;
+
+	umem->devx_umem = mlx5dv_devx_umem_reg(sctx->context, umem->buf,
+					       umem->size,
+					       IBV_ACCESS_LOCAL_WRITE);
+	if (umem->devx_umem)
+		return 0;
+
+	free(umem->buf);
+	umem->buf = NULL;
+	return -1;
+}
+
+static void snap_umem_free(struct snap_virtio_umem *umem)
+{
+	if (!umem->size)
+		return;
+
+	mlx5dv_devx_umem_dereg(umem->devx_umem);
+	free(umem->buf);
+
+	memset(umem, 0, sizeof(*umem));
+}
+
 int snap_virtio_init_virtq_umem(struct snap_context *sctx,
 		struct snap_virtio_caps *virtio,
 		struct snap_virtio_queue *virtq,
@@ -522,73 +559,35 @@ int snap_virtio_init_virtq_umem(struct snap_context *sctx,
 
 	virtq->umem[0].size = (virtio->umem_1_buffer_param_a * depth) +
 			virtio->umem_1_buffer_param_b;
-	ret = posix_memalign((void **)&virtq->umem[0].buf,
-			     SNAP_VIRTIO_UMEM_ALIGN,
-			     virtq->umem[0].size);
+	ret = snap_umem_init(sctx, &virtq->umem[0]);
 	if (ret)
-		goto out;
-	virtq->umem[0].devx_umem = mlx5dv_devx_umem_reg(sctx->context,
-							virtq->umem[0].buf,
-							virtq->umem[0].size,
-							IBV_ACCESS_LOCAL_WRITE);
-	if (!virtq->umem[0].devx_umem)
 		goto out_free_buf_0;
 
 	virtq->umem[1].size = (virtio->umem_2_buffer_param_a * depth) +
 			virtio->umem_2_buffer_param_b;
-	ret = posix_memalign((void **)&virtq->umem[1].buf,
-			     SNAP_VIRTIO_UMEM_ALIGN,
-			     virtq->umem[1].size);
+	ret = snap_umem_init(sctx, &virtq->umem[1]);
 	if (ret)
-		goto out_free_umem_0;
-	virtq->umem[1].devx_umem = mlx5dv_devx_umem_reg(sctx->context,
-							virtq->umem[1].buf,
-							virtq->umem[1].size,
-							IBV_ACCESS_LOCAL_WRITE);
-	if (!virtq->umem[1].devx_umem)
 		goto out_free_buf_1;
 
 	virtq->umem[2].size = (virtio->umem_3_buffer_param_a * depth) +
 			virtio->umem_3_buffer_param_b;
-	ret = posix_memalign((void **)&virtq->umem[2].buf,
-			     SNAP_VIRTIO_UMEM_ALIGN,
-			     virtq->umem[2].size);
+	ret = snap_umem_init(sctx, &virtq->umem[2]);
 	if (ret)
-		goto out_free_umem_1;
-	virtq->umem[2].devx_umem = mlx5dv_devx_umem_reg(sctx->context,
-							virtq->umem[2].buf,
-							virtq->umem[2].size,
-							IBV_ACCESS_LOCAL_WRITE);
-	if (!virtq->umem[2].devx_umem)
 		goto out_free_buf_2;
 
 	return 0;
 
 out_free_buf_2:
-	free(virtq->umem[2].buf);
-out_free_umem_1:
-	mlx5dv_devx_umem_dereg(virtq->umem[1].devx_umem);
+	snap_umem_free(&virtq->umem[1]);
 out_free_buf_1:
-	free(virtq->umem[1].buf);
-out_free_umem_0:
-	mlx5dv_devx_umem_dereg(virtq->umem[0].devx_umem);
+	snap_umem_free(&virtq->umem[0]);
 out_free_buf_0:
-	free(virtq->umem[0].buf);
-out:
 	return ENOMEM;
 }
 
 void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
 {
-	mlx5dv_devx_umem_dereg(virtq->umem[2].devx_umem);
-	free(virtq->umem[2].buf);
-	virtq->umem[2].size = 0;
-
-	mlx5dv_devx_umem_dereg(virtq->umem[1].devx_umem);
-	free(virtq->umem[1].buf);
-	virtq->umem[1].size = 0;
-
-	mlx5dv_devx_umem_dereg(virtq->umem[0].devx_umem);
-	free(virtq->umem[0].buf);
-	virtq->umem[0].size = 0;
+	snap_umem_free(&virtq->umem[2]);
+	snap_umem_free(&virtq->umem[1]);
+	snap_umem_free(&virtq->umem[0]);
 }
