@@ -293,18 +293,21 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, max_tunnel_desc, vattr->max_tunnel_desc);
 	DEVX_SET(virtio_q, virtq_ctx, event_qpn_or_msix, vattr->event_qpn_or_msix);
 	DEVX_SET(virtio_q, virtq_ctx, offload_type, offload_type);
-	if (umem[0].devx_umem)
+	if (umem[0].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
-	DEVX_SET(virtio_q, virtq_ctx, umem_1_size, umem[0].size);
-	DEVX_SET64(virtio_q, virtq_ctx, umem_1_offset, 0);
-	if (umem[1].devx_umem)
+		DEVX_SET(virtio_q, virtq_ctx, umem_1_size, umem[0].size);
+		DEVX_SET64(virtio_q, virtq_ctx, umem_1_offset, 0);
+	}
+	if (umem[1].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_2_id, umem[1].devx_umem->umem_id);
-	DEVX_SET(virtio_q, virtq_ctx, umem_2_size, umem[1].size);
-	DEVX_SET64(virtio_q, virtq_ctx, umem_2_offset, 0);
-	if (umem[2].devx_umem)
+		DEVX_SET(virtio_q, virtq_ctx, umem_2_size, umem[1].size);
+		DEVX_SET64(virtio_q, virtq_ctx, umem_2_offset, 0);
+	}
+	if (umem[2].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_3_id, umem[2].devx_umem->umem_id);
-	DEVX_SET(virtio_q, virtq_ctx, umem_3_size, umem[2].size);
-	DEVX_SET64(virtio_q, virtq_ctx, umem_3_offset, 0);
+		DEVX_SET(virtio_q, virtq_ctx, umem_3_size, umem[2].size);
+		DEVX_SET64(virtio_q, virtq_ctx, umem_3_offset, 0);
+	}
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
@@ -523,6 +526,7 @@ static int snap_umem_init(struct snap_context *sctx,
 
 	if (!umem->size)
 		return 0;
+
 	ret = posix_memalign((void **)&umem->buf, SNAP_VIRTIO_UMEM_ALIGN,
 			     umem->size);
 	if (ret)
@@ -531,12 +535,17 @@ static int snap_umem_init(struct snap_context *sctx,
 	umem->devx_umem = mlx5dv_devx_umem_reg(sctx->context, umem->buf,
 					       umem->size,
 					       IBV_ACCESS_LOCAL_WRITE);
-	if (umem->devx_umem)
-		return 0;
+	if (!umem->devx_umem) {
+		ret = -errno;
+		goto out_free;
+	}
 
+	return ret;
+
+out_free:
 	free(umem->buf);
 	umem->buf = NULL;
-	return -1;
+	return ret;
 }
 
 static void snap_umem_free(struct snap_virtio_umem *umem)
