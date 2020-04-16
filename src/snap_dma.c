@@ -2,6 +2,31 @@
 
 #include "snap.h"
 #include "snap_dma.h"
+#include "mlx5_ifc.h"
+
+static int check_roce_enabled(struct ibv_context *ctx, bool *roce_en)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_nic_vport_context_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_nic_vport_context_out)] = {0};
+	uint8_t devx_v;
+	int ret;
+
+	DEVX_SET(query_nic_vport_context_in, in, opcode,
+		 MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT);
+	ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret) {
+		snap_error("failed checking if ROCE enabled, errno %m\n");
+		return ret;
+	}
+	devx_v = DEVX_GET(query_nic_vport_context_out, out,
+			  nic_vport_context.roce_en);
+	if (devx_v == 0)
+		*roce_en = false;
+	else
+		*roce_en = true;
+	return 0;
+}
 
 static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 {
@@ -157,26 +182,173 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd)
 	return rc;
 }
 
+static int snap_modify_lb_qp_to_init(struct ibv_qp *qp,
+				     struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rst2init_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rst2init_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
+	DEVX_SET(rst2init_qp_in, in, qpn, qp->qp_num);
+	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
+
+	if (attr_mask & IBV_QP_PKEY_INDEX)
+		DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
+			 qp_attr->pkey_index);
+
+	if (attr_mask & IBV_QP_PORT)
+		DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num,
+			 qp_attr->port_num);
+
+	if (attr_mask & IBV_QP_ACCESS_FLAGS) {
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_READ)
+			DEVX_SET(qpc, qpc, rre, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_WRITE)
+			DEVX_SET(qpc, qpc, rwe, 1);
+	}
+
+	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to init with errno = %m\n");
+	return ret;
+}
+
+static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
+				    struct ibv_qp_attr *qp_attr, int attr_mask,
+				    bool roce_enabled)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
+	uint8_t mac[6];
+	uint8_t gid[16];
+	int ret;
+
+	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
+	DEVX_SET(init2rtr_qp_in, in, qpn, qp->qp_num);
+
+	/* 30 is the maximum value for Infiniband QPs*/
+	DEVX_SET(qpc, qpc, log_msg_max, 30);
+
+	/* TODO: add more attributes */
+	if (attr_mask & IBV_QP_PATH_MTU)
+		DEVX_SET(qpc, qpc, mtu, qp_attr->path_mtu);
+	if (attr_mask & IBV_QP_DEST_QPN)
+		DEVX_SET(qpc, qpc, remote_qpn, qp_attr->dest_qp_num);
+	if (attr_mask & IBV_QP_RQ_PSN)
+		DEVX_SET(qpc, qpc, next_rcv_psn, qp_attr->rq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_PKEY_INDEX)
+		DEVX_SET(qpc, qpc, primary_address_path.pkey_index,
+			 qp_attr->pkey_index);
+	if (attr_mask & IBV_QP_PORT)
+		DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num,
+			 qp_attr->port_num);
+	if (attr_mask & IBV_QP_MAX_DEST_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_rra_max,
+			 snap_u32log2(qp_attr->max_dest_rd_atomic));
+	if (attr_mask & IBV_QP_MIN_RNR_TIMER)
+		DEVX_SET(qpc, qpc, min_rnr_nak, qp_attr->min_rnr_timer);
+	if (attr_mask & IBV_QP_AV) {
+		DEVX_SET(qpc, qpc, primary_address_path.tclass,
+			 qp_attr->ah_attr.grh.traffic_class);
+		/* set destination mac */
+		memcpy(gid, qp_attr->ah_attr.grh.dgid.raw, 16);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+		       gid,
+		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+		mac[0] = gid[8] ^ 0x02;
+		mac[1] = gid[9];
+		mac[2] = gid[10];
+		mac[3] = gid[13];
+		mac[4] = gid[14];
+		mac[5] = gid[15];
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+		       mac, 6);
+
+		DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
+			 qp_attr->ah_attr.grh.sgid_index);
+		if (qp_attr->ah_attr.sl & 0x7)
+			DEVX_SET(qpc, qpc, primary_address_path.eth_prio,
+				 qp_attr->ah_attr.sl & 0x7);
+		if (qp_attr->ah_attr.grh.hop_limit > 1)
+			DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
+				 qp_attr->ah_attr.grh.hop_limit);
+		else
+			DEVX_SET(qpc, qpc, primary_address_path.hop_limit, 64);
+	}
+	if (!roce_enabled)
+		DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
+
+	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rtr with errno = %m\n");
+	return ret;
+}
+
+static int snap_modify_lb_qp_to_rts(struct ibv_qp *qp,
+				    struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rtr2rts_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rtr2rts_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rtr2rts_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
+	DEVX_SET(rtr2rts_qp_in, in, qpn, qp->qp_num);
+
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_RETRY_CNT)
+		DEVX_SET(qpc, qpc, retry_count, qp_attr->retry_cnt);
+	if (attr_mask & IBV_QP_SQ_PSN)
+		DEVX_SET(qpc, qpc, next_send_psn, qp_attr->sq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_RNR_RETRY)
+		DEVX_SET(qpc, qpc, rnr_retry, qp_attr->rnr_retry);
+	if (attr_mask & IBV_QP_MAX_QP_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_sra_max,
+			 snap_u32log2(qp_attr->max_rd_atomic));
+
+	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rts with errno = %m\n");
+	return ret;
+}
+
 static int snap_connect_loop_qp(struct snap_dma_q *q)
 {
 	struct ibv_qp_attr attr;
 	union ibv_gid sw_gid, fw_gid;
-	int rc;
+	int rc, flags_mask;
+	bool roce_en;
 
-	rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-			SNAP_DMA_QP_GID_INDEX, &sw_gid);
+	rc = check_roce_enabled(q->sw_qp.qp->context, &roce_en);
 	if (rc) {
-		snap_error("Failed to get SW QP gid[%d]\n",
-				SNAP_DMA_QP_GID_INDEX);
+		snap_error("Failed to check if roce enabled on function\n");
 		return rc;
 	}
 
-	rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-			SNAP_DMA_QP_GID_INDEX, &fw_gid);
-	if (rc) {
-		snap_error("Failed to get FW QP gid[%d]\n",
-				SNAP_DMA_QP_GID_INDEX);
-		return rc;
+	if (roce_en) {
+		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+				   SNAP_DMA_QP_GID_INDEX, &sw_gid);
+		if (rc) {
+			snap_error("Failed to get SW QP gid[%d]\n",
+				   SNAP_DMA_QP_GID_INDEX);
+			return rc;
+		}
+
+		rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+				   SNAP_DMA_QP_GID_INDEX, &fw_gid);
+		if (rc) {
+			snap_error("Failed to get FW QP gid[%d]\n",
+				   SNAP_DMA_QP_GID_INDEX);
+			return rc;
+		}
 	}
 
 	memset(&attr, 0, sizeof(attr));
@@ -184,22 +356,18 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	attr.pkey_index = SNAP_DMA_QP_PKEY_INDEX;
 	attr.port_num = SNAP_DMA_QP_PORT_NUM;
 	attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
+	flags_mask = IBV_QP_STATE |
+		     IBV_QP_PKEY_INDEX |
+		     IBV_QP_PORT |
+		     IBV_QP_ACCESS_FLAGS;
 
-	rc = ibv_modify_qp(q->sw_qp.qp, &attr,
-			IBV_QP_STATE |
-			IBV_QP_PKEY_INDEX |
-			IBV_QP_PORT |
-			IBV_QP_ACCESS_FLAGS);
+	rc = snap_modify_lb_qp_to_init(q->sw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to INIT errno=%d\n", rc);
 		return rc;
 	}
 
-	rc = ibv_modify_qp(q->fw_qp.qp, &attr,
-			IBV_QP_STATE |
-			IBV_QP_PKEY_INDEX |
-			IBV_QP_PORT |
-			IBV_QP_ACCESS_FLAGS);
+	rc = snap_modify_lb_qp_to_init(q->fw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to INIT errno=%d\n", rc);
 		return rc;
@@ -216,32 +384,28 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	attr.ah_attr.grh.hop_limit = SNAP_DMA_QP_HOP_LIMIT;
 
 	attr.dest_qp_num = q->fw_qp.qp->qp_num;
-	memcpy(attr.ah_attr.grh.dgid.raw, fw_gid.raw, sizeof(fw_gid.raw));
+	flags_mask = IBV_QP_STATE              |
+		     IBV_QP_AV                 |
+		     IBV_QP_PATH_MTU           |
+		     IBV_QP_DEST_QPN           |
+		     IBV_QP_RQ_PSN             |
+		     IBV_QP_MAX_DEST_RD_ATOMIC |
+		     IBV_QP_MIN_RNR_TIMER;
 
-	rc = ibv_modify_qp(q->sw_qp.qp, &attr,
-			IBV_QP_STATE              |
-			IBV_QP_AV                 |
-			IBV_QP_PATH_MTU           |
-			IBV_QP_DEST_QPN           |
-			IBV_QP_RQ_PSN             |
-			IBV_QP_MAX_DEST_RD_ATOMIC |
-			IBV_QP_MIN_RNR_TIMER);
+	if (roce_en)
+		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid.raw,
+		       sizeof(fw_gid.raw));
+	rc = snap_modify_lb_qp_to_rtr(q->sw_qp.qp, &attr, flags_mask, roce_en);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
 		return rc;
 	}
 
+	if (roce_en)
+		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid.raw,
+		       sizeof(sw_gid.raw));
 	attr.dest_qp_num = q->sw_qp.qp->qp_num;
-	memcpy(attr.ah_attr.grh.dgid.raw, sw_gid.raw, sizeof(sw_gid.raw));
-
-	rc = ibv_modify_qp(q->fw_qp.qp, &attr,
-			IBV_QP_STATE              |
-			IBV_QP_AV                 |
-			IBV_QP_PATH_MTU           |
-			IBV_QP_DEST_QPN           |
-			IBV_QP_RQ_PSN             |
-			IBV_QP_MAX_DEST_RD_ATOMIC |
-			IBV_QP_MIN_RNR_TIMER);
+	rc = snap_modify_lb_qp_to_rtr(q->fw_qp.qp, &attr, flags_mask, roce_en);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTR errno=%d\n", rc);
 		return rc;
@@ -254,26 +418,22 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	attr.sq_psn = SNAP_DMA_QP_SQ_PSN;
 	attr.rnr_retry = SNAP_DMA_QP_RNR_RETRY;
 	attr.max_rd_atomic = SNAP_DMA_QP_MAX_RD_ATOMIC;
+	flags_mask = IBV_QP_STATE              |
+		     IBV_QP_TIMEOUT            |
+		     IBV_QP_RETRY_CNT          |
+		     IBV_QP_RNR_RETRY          |
+		     IBV_QP_SQ_PSN             |
+		     IBV_QP_MAX_QP_RD_ATOMIC;
 
-	rc = ibv_modify_qp(q->sw_qp.qp, &attr,
-			IBV_QP_STATE              |
-			IBV_QP_TIMEOUT            |
-			IBV_QP_RETRY_CNT          |
-			IBV_QP_RNR_RETRY          |
-			IBV_QP_SQ_PSN             |
-			IBV_QP_MAX_QP_RD_ATOMIC);
+	/* once QPs were moved to RTR using devx, they must also move to RTS
+	 * using devx since kernel doesn't know QPs are on RTR state */
+	rc = snap_modify_lb_qp_to_rts(q->sw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTS errno=%d\n", rc);
 		return rc;
 	}
 
-	rc = ibv_modify_qp(q->fw_qp.qp, &attr,
-			IBV_QP_STATE              |
-			IBV_QP_TIMEOUT            |
-			IBV_QP_RETRY_CNT          |
-			IBV_QP_RNR_RETRY          |
-			IBV_QP_SQ_PSN             |
-			IBV_QP_MAX_QP_RD_ATOMIC);
+	rc = snap_modify_lb_qp_to_rts(q->fw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTS errno=%d\n", rc);
 		return rc;
