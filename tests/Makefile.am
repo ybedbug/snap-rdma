@@ -43,7 +43,7 @@ snap_create_destroy_nvme_namespace_SOURCES = snap_create_destroy_nvme_namespace.
 snap_create_destroy_nvme_namespace_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_nvme_cq_CFLAGS = $(LOCAL_CFLAGS)
-snap_create_destroy_nvme_cq_SOURCES = snap_create_destroy_nvme_cq.c
+snap_create_destroy_nvme_cq_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvme_cq.c
 snap_create_destroy_nvme_cq_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_nvme_sq_CFLAGS = $(LOCAL_CFLAGS)
