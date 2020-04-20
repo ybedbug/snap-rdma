@@ -39,14 +39,26 @@
 #include "snap_nvme.h"
 #include "nvme_proto.h"
 
+enum snap_nvme_ctrl_type {
+	SNAP_NVME_CTRL_PF,
+	SNAP_NVME_CTRL_VF,
+};
+
+struct snap_nvme_ctrl_attr {
+	enum snap_nvme_ctrl_type	type;
+	int				pf_id;
+	int				vf_id;
+};
 
 struct snap_nvme_ctrl {
 	struct snap_context		*sctx;
-	struct snap_nvme_device		*sdev;
+	struct snap_device		*sdev;
+	struct snap_nvme_device		*ndev;
 };
 
 struct snap_nvme_ctrl*
-snap_nvme_ctrl_open(struct snap_context *sctx);
+snap_nvme_ctrl_open(struct snap_context *sctx,
+		    struct snap_nvme_ctrl_attr *attr);
 void snap_nvme_ctrl_close(struct snap_nvme_ctrl *ctrl);
 
 #endif
