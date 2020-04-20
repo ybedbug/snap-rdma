@@ -16,6 +16,7 @@ noinst_PROGRAMS = \
 		snap_sample_uio_driver
 
 LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
+SNAP_TEST_FILES = snap_test.h snap_test.c
 
 snap_open_close_CFLAGS = $(LOCAL_CFLAGS)
 snap_open_close_SOURCES = snap_open_close.c
@@ -34,7 +35,7 @@ snap_init_teardown_device_SOURCES = snap_init_teardown_device.c
 snap_init_teardown_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_nvme_device_CFLAGS = $(LOCAL_CFLAGS)
-snap_query_nvme_device_SOURCES = snap_query_nvme_device.c
+snap_query_nvme_device_SOURCES = $(SNAP_TEST_FILES) snap_query_nvme_device.c
 snap_query_nvme_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_nvme_namespace_CFLAGS = $(LOCAL_CFLAGS)
