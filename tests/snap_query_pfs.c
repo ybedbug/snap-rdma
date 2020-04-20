@@ -3,13 +3,14 @@
 #include <infiniband/verbs.h>
 
 #include "snap.h"
+#include "snap_test.h"
 
 static int snap_get_pf_helper(struct snap_context *sctx,
 	enum snap_emulation_type type, char *name)
 {
 	struct snap_pci **slist;
 	struct snap_pfs_ctx *pfs;
-	int j, scount;
+	int j, scount, ret = 0;
 
 	if (type == SNAP_NVME)
 		pfs = &sctx->nvme_pfs;
@@ -25,6 +26,12 @@ static int snap_get_pf_helper(struct snap_context *sctx,
 		return -ENOMEM;
 
 	scount = snap_get_pf_list(sctx, type, slist);
+	if (!scount) {
+		fprintf(stderr, "no PFs for type %d on %s\n", type, name);
+		fflush(stderr);
+		ret = -ENOSYS;
+		goto out;
+	}
 	for (j = 0; j < scount; j++) {
 		fprintf(stdout,
 			"snap_type=%d pf_type=%d pf id=%d number=%d num_vfs=%d plugged=%d for %s\n",
@@ -32,16 +39,17 @@ static int snap_get_pf_helper(struct snap_context *sctx,
 			slist[j]->num_vfs, slist[j]->plugged, name);
 		fflush(stdout);
 	}
+
+out:
 	free(slist);
 
-	return 0;
+	return ret;
 }
 
 int main(int argc, char **argv)
 {
-	struct ibv_device **list;
 	struct snap_context *sctx;
-	int ret = 0, i, dev_count, dev_type = 0, opt;
+	int ret = 0, dev_type = 0, opt;
 
 	while ((opt = getopt(argc, argv, "t:")) != -1) {
 		switch (opt) {
@@ -66,36 +74,26 @@ int main(int argc, char **argv)
 	if (!dev_type)
 		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
-	list = ibv_get_device_list(&dev_count);
-	if (!list) {
-		fprintf(stderr, "failed to open ib device list.\n");
+	sctx = snap_ctx_open(dev_type);
+	if (!sctx) {
+		fprintf(stderr, "failed to open snap ctx for %d types\n",
+			dev_type);
 		fflush(stderr);
-		ret = 1;
+		ret = -errno;
 		goto out;
 	}
 
-	for (i = 0; i < dev_count; i++) {
+	if (dev_type & SNAP_NVME)
+		ret |= snap_get_pf_helper(sctx, SNAP_NVME,
+					  sctx->context->device->name);
+	if (dev_type & SNAP_VIRTIO_BLK)
+		ret |= snap_get_pf_helper(sctx, SNAP_VIRTIO_BLK,
+					  sctx->context->device->name);
+	if (dev_type & SNAP_VIRTIO_NET)
+		ret |= snap_get_pf_helper(sctx, SNAP_VIRTIO_NET,
+					  sctx->context->device->name);
 
-		sctx = snap_open(list[i]);
-		if (!sctx) {
-			fprintf(stderr, "failed to create snap ctx for %s\n",
-				list[i]->name);
-			fflush(stderr);
-			continue;
-		}
-
-		if (dev_type & SNAP_NVME)
-			snap_get_pf_helper(sctx, SNAP_NVME, list[i]->name);
-		if (dev_type & SNAP_VIRTIO_BLK)
-			snap_get_pf_helper(sctx, SNAP_VIRTIO_BLK, list[i]->name);
-		if (dev_type & SNAP_VIRTIO_NET)
-			snap_get_pf_helper(sctx, SNAP_VIRTIO_NET, list[i]->name);
-
-		snap_close(sctx);
-	}
-
+	snap_ctx_close(sctx);
 out:
-	ibv_free_device_list(list);
-
 	return ret;
 }
