@@ -31,7 +31,7 @@ snap_query_pfs_SOURCES = snap_query_pfs.c
 snap_query_pfs_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_init_teardown_device_CFLAGS = $(LOCAL_CFLAGS)
-snap_init_teardown_device_SOURCES = snap_init_teardown_device.c
+snap_init_teardown_device_SOURCES = $(SNAP_TEST_FILES) snap_init_teardown_device.c
 snap_init_teardown_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_nvme_device_CFLAGS = $(LOCAL_CFLAGS)
@@ -47,7 +47,7 @@ snap_create_destroy_nvme_cq_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvm
 snap_create_destroy_nvme_cq_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_nvme_sq_CFLAGS = $(LOCAL_CFLAGS)
-snap_create_destroy_nvme_sq_SOURCES = snap_create_destroy_nvme_sq.c
+snap_create_destroy_nvme_sq_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvme_sq.c
 snap_create_destroy_nvme_sq_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_virtio_device_CFLAGS = $(LOCAL_CFLAGS)

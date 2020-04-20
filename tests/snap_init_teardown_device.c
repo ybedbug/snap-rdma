@@ -6,6 +6,7 @@
 #include "snap_nvme.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
+#include "snap_test.h"
 
 static int snap_init_teardown_helper(struct snap_context *sctx,
 		enum snap_pci_type type)
@@ -69,7 +70,7 @@ static int snap_init_teardown_helper(struct snap_context *sctx,
 
 int main(int argc, char **argv)
 {
-	struct ibv_device **list;
+	struct snap_context *sctx;
 	int ret = 0, i, dev_count, opt, dev_type = 0;
 
 	while ((opt = getopt(argc, argv, "t:")) != -1) {
@@ -95,37 +96,23 @@ int main(int argc, char **argv)
 	if (!dev_type)
 		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
-	list = ibv_get_device_list(&dev_count);
-	if (!list) {
-		fprintf(stderr, "failed to open ib device list.\n");
+	sctx = snap_ctx_open(dev_type);
+	if (!sctx) {
+		fprintf(stderr, "failed to open snap ctx for %d types\n",
+			dev_type);
 		fflush(stderr);
-		ret = 1;
+		ret = -errno;
 		goto out;
 	}
 
-	for (i = 0; i < dev_count; i++) {
-		struct snap_context *sctx;
+	if (dev_type & SNAP_NVME)
+		snap_init_teardown_helper(sctx, SNAP_NVME_PF);
+	if (dev_type & SNAP_VIRTIO_BLK)
+		snap_init_teardown_helper(sctx, SNAP_VIRTIO_BLK_PF);
+	if (dev_type & SNAP_VIRTIO_NET)
+		snap_init_teardown_helper(sctx, SNAP_VIRTIO_NET_PF);
 
-		sctx = snap_open(list[i]);
-		if (!sctx) {
-			fprintf(stderr, "failed to create snap ctx for %s err=%d. continue trying\n",
-				list[i]->name, errno);
-			fflush(stderr);
-			continue;
-		}
-
-
-		if (dev_type & SNAP_NVME)
-			snap_init_teardown_helper(sctx, SNAP_NVME_PF);
-		if (dev_type & SNAP_VIRTIO_BLK)
-			snap_init_teardown_helper(sctx, SNAP_VIRTIO_BLK_PF);
-		if (dev_type & SNAP_VIRTIO_NET)
-			snap_init_teardown_helper(sctx, SNAP_VIRTIO_NET_PF);
-
-		snap_close(sctx);
-	}
-
-	ibv_free_device_list(list);
+	snap_ctx_close(sctx);
 out:
 	return ret;
 }
