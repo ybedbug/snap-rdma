@@ -3,6 +3,7 @@
 #include <infiniband/verbs.h>
 
 #include "snap.h"
+#include "snap_test.h"
 
 static int snap_open_close_pf_helper(struct snap_context *sctx,
 	enum snap_emulation_type type, bool ev)
@@ -92,9 +93,9 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 
 int main(int argc, char **argv)
 {
-	struct ibv_device **list;
+	struct snap_context *sctx;
 	bool ev = false;
-	int ret = 0, i, opt, dev_count, dev_type = 0;
+	int ret = 0, opt, dev_type = 0;
 
 	while ((opt = getopt(argc, argv, "et:")) != -1) {
 		switch (opt) {
@@ -122,36 +123,24 @@ int main(int argc, char **argv)
 	if (!dev_type)
 		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
-	list = ibv_get_device_list(&dev_count);
-	if (!list) {
-		fprintf(stderr, "failed to open ib device list.\n");
+
+	sctx = snap_ctx_open(dev_type);
+	if (!sctx) {
+		fprintf(stderr, "failed to open snap ctx for %d types\n",
+			dev_type);
 		fflush(stderr);
-		ret = 1;
+		ret = -errno;
 		goto out;
 	}
 
-	for (i = 0; i < dev_count; i++) {
-		struct snap_context *sctx;
+	if (dev_type & SNAP_NVME)
+		snap_open_close_pf_helper(sctx, SNAP_NVME, ev);
+	if (dev_type & SNAP_VIRTIO_BLK)
+		snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK, ev);
+	if (dev_type & SNAP_VIRTIO_NET)
+		snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET, ev);
 
-		sctx = snap_open(list[i]);
-		if (!sctx) {
-			fprintf(stderr, "failed to create snap ctx for %s err=%d. continue trying\n",
-				list[i]->name, errno);
-			fflush(stderr);
-			continue;
-		}
-
-		if (sctx->emulation_caps & SNAP_NVME & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_NVME, ev);
-		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK, ev);
-		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
-			snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET, ev);
-
-		snap_close(sctx);
-	}
-
-	ibv_free_device_list(list);
+	snap_ctx_close(sctx);
 out:
 	return ret;
 }

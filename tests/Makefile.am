@@ -23,7 +23,7 @@ snap_open_close_SOURCES = $(SNAP_TEST_FILES) snap_open_close.c
 snap_open_close_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_open_close_device_CFLAGS = $(LOCAL_CFLAGS)
-snap_open_close_device_SOURCES = snap_open_close_device.c
+snap_open_close_device_SOURCES = $(SNAP_TEST_FILES) snap_open_close_device.c
 snap_open_close_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_pfs_CFLAGS = $(LOCAL_CFLAGS)
