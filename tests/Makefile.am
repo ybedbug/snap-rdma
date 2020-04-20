@@ -19,7 +19,7 @@ LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
 SNAP_TEST_FILES = snap_test.h snap_test.c
 
 snap_open_close_CFLAGS = $(LOCAL_CFLAGS)
-snap_open_close_SOURCES = snap_open_close.c
+snap_open_close_SOURCES = $(SNAP_TEST_FILES) snap_open_close.c
 snap_open_close_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_open_close_device_CFLAGS = $(LOCAL_CFLAGS)
