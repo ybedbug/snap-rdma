@@ -26,7 +26,7 @@ libsnap_virtio_net_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.
 
 #nvme-ctrl
 libsnap_nvme_ctrl_ladir = $(includedir)/
-libsnap_nvme_ctrl_la_HEADERS = snap_nvme_ctrl.h nvme_proto.h
-libsnap_nvme_ctrl_la_SOURCES = snap_nvme_ctrl.c
+libsnap_nvme_ctrl_la_HEADERS = snap_nvme_ctrl.h nvme_proto.h nvme_register.h
+libsnap_nvme_ctrl_la_SOURCES = snap_nvme_ctrl.c nvme_register.c
 libsnap_nvme_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE)
 libsnap_nvme_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread

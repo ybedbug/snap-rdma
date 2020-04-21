@@ -50,8 +50,10 @@ int main(int argc, char **argv)
 		sctx->context->device->name, pf_id);
 	fflush(stdout);
 
-	while (keep_running)
+	while (keep_running) {
+		snap_nvme_ctrl_progress(ctrl);
 		usleep(200000);
+	}
 
 	snap_nvme_ctrl_close(ctrl);
 

@@ -38,6 +38,10 @@
 
 #include "snap_nvme.h"
 #include "nvme_proto.h"
+#include "nvme_register.h"
+
+/* 100 msec between bar updates */
+#define SNAP_NVME_BAR_CB_INTERVAL (100000 / CLOCKS_PER_SEC)
 
 enum snap_nvme_ctrl_type {
 	SNAP_NVME_CTRL_PF,
@@ -54,11 +58,20 @@ struct snap_nvme_ctrl {
 	struct snap_context		*sctx;
 	struct snap_device		*sdev;
 	struct snap_nvme_device		*ndev;
+
+	bool				reset_device;
+	bool				curr_enabled;
+	bool				prev_enabled;
+
+	clock_t				last_bar_cb;
+	struct nvme_bar			bar;
+
 };
 
 struct snap_nvme_ctrl*
 snap_nvme_ctrl_open(struct snap_context *sctx,
 		    struct snap_nvme_ctrl_attr *attr);
 void snap_nvme_ctrl_close(struct snap_nvme_ctrl *ctrl);
+void snap_nvme_ctrl_progress(struct snap_nvme_ctrl *ctrl);
 
 #endif
