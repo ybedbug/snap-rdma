@@ -9,6 +9,7 @@ noinst_PROGRAMS = \
 		snap_create_destroy_nvme_namespace \
 		snap_create_destroy_nvme_cq \
 		snap_create_destroy_nvme_sq \
+		snap_create_destroy_nvme_ctrl \
 		snap_query_virtio_device \
 		snap_create_destroy_virtio_queue \
 		snap_create_destroy_virtio_ctrl \
@@ -71,6 +72,12 @@ snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c \
 					  $(BLK_FILES)
 snap_create_destroy_virtio_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
+
+snap_create_destroy_nvme_ctrl_CFLAGS = $(LOCAL_CFLAGS) \
+					-I$(top_srcdir)/ctrl
+snap_create_destroy_nvme_ctrl_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvme_ctrl.c
+					  $(SNAP_TEST_FILES)
+snap_create_destroy_nvme_ctrl_LDADD = $(top_builddir)/ctrl/libsnap-nvme-ctrl.la
 
 UIO_FILES = host_uio.h host_uio.c
 
