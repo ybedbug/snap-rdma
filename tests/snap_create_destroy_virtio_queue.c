@@ -206,6 +206,7 @@ int main(int argc, char **argv)
 	enum snap_virtq_event_mode ev_mode = SNAP_VIRTQ_NO_MSIX_MODE;
 	char dev_name[64] = {0};
 	struct snap_sf sf;
+	struct snap_context *sctx;
 
 	sf.context = NULL;
 	sf.vhca_id = -1;
@@ -290,29 +291,31 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	for (i = 0; i < dev_count; i++) {
-		struct snap_context *sctx;
 
-		sctx = snap_open(list[i]);
-		if (!sctx) {
-			fprintf(stderr, "failed to create snap ctx for %s err=%d. continue trying\n",
-				list[i]->name, errno);
-			fflush(stderr);
-			continue;
-		}
-
-		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
-			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_BLK,
-							 num_queues, q_type,
-							 ev_mode, list[i]->name, ev, &sf);
-		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
-			snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_NET,
-							 num_queues, q_type,
-							 ev_mode, list[i]->name, ev, &sf);
-
-		snap_close(sctx);
+	sctx = snap_ctx_open(dev_type);
+	if (!sctx) {
+		fprintf(stderr, "failed to open snap ctx for %d types\n", dev_type);
+		fflush(stderr);
+		ret = -errno;
+		goto out_free;
 	}
 
+	if (dev_type & SNAP_VIRTIO_BLK)
+		ret |= snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_BLK,
+							num_queues, q_type,
+							ev_mode,
+							sctx->context->device->name,
+							ev, &sf);
+	if (dev_type & SNAP_VIRTIO_NET)
+		ret |= snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_NET,
+							num_queues, q_type,
+							ev_mode,
+							sctx->context->device->name,
+							ev, &sf);
+
+	snap_ctx_close(sctx);
+
+out_free:
 	if (sf.cq)
 		ibv_destroy_cq(sf.cq);
 	if (sf.pd)

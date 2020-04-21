@@ -51,11 +51,11 @@ snap_create_destroy_nvme_sq_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvm
 snap_create_destroy_nvme_sq_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_query_virtio_device_CFLAGS = $(LOCAL_CFLAGS)
-snap_query_virtio_device_SOURCES = snap_query_virtio_device.c
+snap_query_virtio_device_SOURCES = $(SNAP_TEST_FILES) snap_query_virtio_device.c
 snap_query_virtio_device_LDADD = $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_virtio_queue_CFLAGS = $(LOCAL_CFLAGS)
-snap_create_destroy_virtio_queue_SOURCES = snap_create_destroy_virtio_queue.c
+snap_create_destroy_virtio_queue_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_virtio_queue.c
 snap_create_destroy_virtio_queue_LDADD = $(top_builddir)/src/libsnap.la
 
 #cant use $(top_srcdir) here because of bug in configure which does not parse

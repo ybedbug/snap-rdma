@@ -5,6 +5,7 @@
 #include "snap.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
+#include "snap_test.h"
 
 int snap_query_virtio_device_helper(struct snap_context *sctx,
 		enum snap_emulation_type type, char *name)
@@ -71,8 +72,8 @@ int snap_query_virtio_device_helper(struct snap_context *sctx,
 
 int main(int argc, char **argv)
 {
-	struct ibv_device **list;
-	int ret = 0, i, dev_count, opt, dev_type = 0;
+	struct snap_context *sctx;
+	int opt, ret = 0, dev_type = 0;
 
 	while ((opt = getopt(argc, argv, "t:")) != -1) {
 		switch (opt) {
@@ -95,34 +96,23 @@ int main(int argc, char **argv)
 	if (!dev_type)
 		dev_type = SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
-	list = ibv_get_device_list(&dev_count);
-	if (!list) {
-		fprintf(stderr, "failed to open ib device list.\n");
+	sctx = snap_ctx_open(dev_type);
+	if (!sctx) {
+		fprintf(stderr, "failed to open snap ctx for %d types\n",
+			dev_type);
 		fflush(stderr);
-		ret = 1;
+		ret = -errno;
 		goto out;
 	}
 
-	for (i = 0; i < dev_count; i++) {
-		struct snap_context *sctx;
+	if (dev_type & SNAP_VIRTIO_BLK)
+		ret |= snap_query_virtio_device_helper(sctx, SNAP_VIRTIO_BLK,
+						sctx->context->device->name);
+	if (dev_type & SNAP_VIRTIO_NET)
+		ret |= snap_query_virtio_device_helper(sctx, SNAP_VIRTIO_NET,
+						sctx->context->device->name);
 
-		sctx = snap_open(list[i]);
-		if (!sctx) {
-			fprintf(stderr, "failed to create snap ctx for %s err=%d. continue trying\n",
-				list[i]->name, errno);
-			fflush(stderr);
-			continue;
-		}
-
-		if (sctx->emulation_caps & SNAP_VIRTIO_BLK & dev_type)
-			snap_query_virtio_device_helper(sctx, SNAP_VIRTIO_BLK, list[i]->name);
-		if (sctx->emulation_caps & SNAP_VIRTIO_NET & dev_type)
-			snap_query_virtio_device_helper(sctx, SNAP_VIRTIO_NET, list[i]->name);
-
-		snap_close(sctx);
-	}
-
-	ibv_free_device_list(list);
+	snap_ctx_close(sctx);
 out:
 	return ret;
 }
