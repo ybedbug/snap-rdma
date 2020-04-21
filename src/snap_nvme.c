@@ -127,8 +127,12 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 	}
 
 	/* we'll modify only allowed fields */
-	if (mask & ~sdev->mod_allowed_mask)
+	if (mask & ~sdev->mod_allowed_mask) {
+		snap_error("failed modify NVMe sdev 0x%p mask=0x%llx "
+			   "allowed_mask=0x%llx\n", sdev, mask,
+			   sdev->mod_allowed_mask);
 		return -EINVAL;
+	}
 
 	in_size = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		  DEVX_ST_SZ_BYTES(nvme_device_emulation) +
