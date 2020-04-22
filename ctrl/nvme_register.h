@@ -60,8 +60,6 @@
 
 #define NVME_DB_BASE	0x1000   /* offset of SQ/CQ doorbells */
 
-#define NVME_BIT(n)	(1u<<(n))
-
 /* register indexes */
 #define NVME_REG_CAP_IDX	0
 #define NVME_REG_VS_IDX		1
@@ -79,6 +77,40 @@
 #define NVME_REG_BPINFO_IDX	12
 #define NVME_REG_BPRSEL_IDX	13
 #define NVME_REG_BPMBL_IDX	14
+
+#define NVME_REG_MAX_DUMP_FUNC_LEN   256
+
+enum nvme_register_type {
+	NVME_REG_RO = 1 << 0,    /* read only */
+	NVME_REG_RW = 1 << 1,    /* read/write */
+	NVME_REG_RW1S = 1 << 2,    /* read/write 1 to set */
+	NVME_REG_RW1C = 1 << 3,     /* read/write 1 to clear */
+};
+
+enum nvme_csts_shift {
+	CSTS_RDY_SHIFT		= 0,
+	CSTS_CFS_SHIFT		= 1,
+	CSTS_SHST_SHIFT		= 2,
+	CSTS_NSSRO_SHIFT	= 4,
+	CSTS_PP_SHIFT		= 5,
+};
+
+enum nvme_csts_mask {
+	CSTS_RDY_MASK	= 0x1,
+	CSTS_CFS_MASK	= 0x1,
+	CSTS_SHST_MASK	= 0x3,
+	CSTS_NSSRO_MASK	= 0x1,
+	CSTS_PP_MASK	= 0x1,
+};
+
+enum nvme_csts {
+	NVME_CSTS_READY		= 1 << CSTS_RDY_SHIFT,
+	NVME_CSTS_FAILED	= 1 << CSTS_CFS_SHIFT,
+	NVME_CSTS_SHST_NORMAL	= 0 << CSTS_SHST_SHIFT,
+	NVME_CSTS_SHST_PROGRESS	= 1 << CSTS_SHST_SHIFT,
+	NVME_CSTS_SHST_COMPLETE	= 2 << CSTS_SHST_SHIFT,
+	NVME_CSTS_NSSRO		= 1 << CSTS_NSSRO_SHIFT,
+};
 
 union nvme_cc_register {
 	uint32_t	raw;
@@ -121,6 +153,7 @@ struct nvme_bar {
 	uint64_t	bpmbl;
 };
 
+void nvme_bar_dump(struct nvme_bar *bar);
 int nvme_initial_register_check(struct nvme_bar *bar);
 
 #endif
