@@ -75,7 +75,10 @@
 		printf("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
 	} while (0)
 
+// TODO: Add formal logger
 #define snap_error printf
+#define snap_warn  printf
+#define snap_info  printf
 
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
