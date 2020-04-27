@@ -6,6 +6,12 @@ to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
 	return container_of(vq, struct snap_virtio_blk_ctrl_queue, common);
 }
 
+static inline struct snap_virtio_blk_ctrl*
+to_blk_ctrl(struct snap_virtio_ctrl *vctrl)
+{
+	return container_of(vctrl, struct snap_virtio_blk_ctrl, common);
+}
+
 static struct snap_virtio_device_attr*
 snap_virtio_blk_ctrl_bar_create(struct snap_virtio_ctrl *vctrl)
 {
@@ -102,25 +108,68 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 static struct snap_virtio_ctrl_queue*
 snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 {
+	struct blk_virtq_create_attr attr = {0};
+	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(vctrl);
+	struct snap_context *sctx = vctrl->sdev->sctx;
 	struct snap_virtio_blk_ctrl_queue *vbq;
+	struct snap_virtio_blk_device_attr *dev_attr;
 
 	vbq = calloc(1, sizeof(*vbq));
 	if (!vbq)
 		return NULL;
 
-	vbq->attr = &to_blk_device_attr(vctrl->bar_curr)->q_attrs[index];
+	dev_attr = to_blk_device_attr(vctrl->bar_curr);
+	vbq->attr = &dev_attr->q_attrs[index];
+	attr.idx = index;
+	attr.size_max = dev_attr->size_max;
+	attr.seg_max = dev_attr->seg_max;
+	attr.queue_size = vbq->attr->vattr.size;
+	attr.pd = blk_ctrl->common.lb_pd;
+	attr.desc = vbq->attr->vattr.desc;
+	attr.driver = vbq->attr->vattr.driver;
+	attr.device = vbq->attr->vattr.device;
+	attr.max_tunnel_desc = sctx->virtio_blk_caps.max_tunnel_desc;
+	attr.msix_vector = vbq->attr->vattr.msix_vector;
+	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
+
+	vbq->q_impl = blk_virtq_create(blk_ctrl->bdev_ops, blk_ctrl->bdev,
+				       vctrl->sdev, &attr);
+	if (!vbq->q_impl) {
+		snap_error("controller failed to create blk virtq\n");
+		free(vbq);
+		return NULL;
+	}
+
 	return &vbq->common;
 }
 
+/**
+ * snap_virtio_blk_ctrl_queue_destroy() - destroys and deletes queue
+ * @vq: queue to destroy
+ *
+ * Function moves the queue to suspend state before destroying it.
+ *
+ * Context: Function assumes queue isnt progressed outside of its scope
+ *
+ * Return: void
+ */
 static void snap_virtio_blk_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+
+	blk_virtq_suspend(vbq->q_impl);
+	while (!blk_virtq_is_suspended(vbq->q_impl))
+		blk_virtq_progress(vbq->q_impl);
+
+	blk_virtq_destroy(vbq->q_impl);
 	free(vbq);
 }
 
 static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
-	//TODO: virtq implementation
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+
+	blk_virtq_progress(vbq->q_impl);
 }
 
 static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {

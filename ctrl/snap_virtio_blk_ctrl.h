@@ -39,10 +39,12 @@
 #include "snap_virtio_common_ctrl.h"
 #include "snap_virtio_blk.h"
 #include "snap_blk_ops.h"
+#include "snap_virtio_blk_virtq.h"
 
 struct snap_virtio_blk_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
 	const struct snap_virtio_blk_queue_attr	*attr;
+	struct blk_virtq_ctx *q_impl;
 };
 
 struct snap_virtio_blk_ctrl_attr {
