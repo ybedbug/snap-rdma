@@ -338,6 +338,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	ctrl->bar_ops = bar_ops;
 	ctrl->bar_cbs = *attr->bar_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
+	ctrl->lb_pd = attr->pd;
 	ret = snap_virtio_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;

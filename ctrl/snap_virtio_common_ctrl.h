@@ -101,6 +101,7 @@ struct snap_virtio_ctrl_attr {
 	bool event;
 	void *cb_ctx;
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
+	struct ibv_pd *pd;
 };
 
 struct snap_virtio_ctrl_queue {
@@ -145,6 +146,7 @@ struct snap_virtio_ctrl {
 	struct snap_virtio_ctrl_bar_ops *bar_ops;
 	struct snap_virtio_device_attr *bar_curr;
 	struct snap_virtio_device_attr *bar_prev;
+	struct ibv_pd *lb_pd;
 };
 
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);

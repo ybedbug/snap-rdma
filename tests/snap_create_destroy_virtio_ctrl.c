@@ -137,13 +137,18 @@ int main(int argc, char **argv)
 		}
 
 		blk_attr.common.bar_cbs = &bar_cbs;
+		blk_attr.common.pd = ibv_alloc_pd(sctx->context);
+		if (!blk_attr.common.pd) {
+			printf("Failed to alloc pd\n");
+			goto close_blk;
+		}
 		blk_attr.common.pf_id = pf_id;
 		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr, &bdev->ops,
 						     bdev);
 		if (!blk_ctrl) {
 			printf("Failed to create virtio-blk controller\n");
 			ret = -ENODEV;
-			goto close_blk;
+			goto free_pd;
 		}
 	} else {
 		net_attr.common.bar_cbs = &bar_cbs;
@@ -173,6 +178,9 @@ int main(int argc, char **argv)
 	else
 		snap_virtio_net_ctrl_close(net_ctrl);
 	printf("virtio controller closed\n");
+free_pd:
+	if (type == SNAP_VIRTIO_BLK_CTRL)
+		ibv_dealloc_pd(blk_attr.common.pd);
 close_blk:
 	if (type == SNAP_VIRTIO_BLK_CTRL)
 		snap_blk_dev_close(bdev);
