@@ -163,6 +163,35 @@ void snap_nvme_ctrl_close(struct snap_nvme_ctrl *ctrl)
 	free(ctrl);
 }
 
+static void snap_nvme_ctrl_modify_config(struct snap_nvme_ctrl * ctrl,
+		uint32_t new_val, uint32_t prev_val)
+{
+}
+
+static void snap_register_change_cb(void *ctx, unsigned int reg,
+		char *reg_desc, uint64_t new_val, uint64_t prev_val)
+{
+	struct snap_nvme_ctrl *ctrl = (struct snap_nvme_ctrl *)ctx;
+
+	snap_debug("%s [0x%llx] <- 0x%llx bar change detected", reg_desc,
+		   prev_val, new_val);
+
+	switch (reg) {
+	case NVME_REG_CC:
+		snap_nvme_ctrl_modify_config(ctrl, (uint32_t)new_val,
+					     (uint32_t)prev_val);
+		break;
+	case NVME_REG_AQA:
+	case NVME_REG_ASQ:
+	case NVME_REG_ACQ:
+	case NVME_REG_CSTS:
+		break;
+	default:
+		snap_error("0x%X <- 0x%llx unsupported bar change detected",
+			   reg, new_val);
+	}
+}
+
 static void snap_nvme_ctrl_progress_mmio(struct snap_nvme_ctrl *ctrl)
 {
 	int ret;
@@ -185,8 +214,12 @@ static void snap_nvme_ctrl_progress_mmio(struct snap_nvme_ctrl *ctrl)
 	if (snap_unlikely(ret))
 		return;
 
-	//TODO: add state machine for bar changes
+	/* No changes in BAR - do nothing */
+	if (!memcmp(&ctrl->bar, ctrl->sdev->pci->bar.data, sizeof(ctrl->bar)))
+		return;
 
+	nvme_register_identify_change(&ctrl->bar, ctrl->sdev->pci->bar.data,
+				      snap_register_change_cb, ctrl);
 	memcpy(&ctrl->bar, ctrl->sdev->pci->bar.data, sizeof(ctrl->bar));
 }
 

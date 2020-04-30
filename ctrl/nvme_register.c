@@ -299,4 +299,49 @@ out_err:
 	return -EINVAL;
 }
 
+static const char *nvme_reg_str(unsigned int reg)
+{
+	switch (reg) {
+	case NVME_REG_CAP:
+		return "Controller Capabilities (CAP)";
+	case NVME_REG_VS:
+		return "Controller Version (VS)";
+	case NVME_REG_INTMS:
+		return "Interrupt Mask Set (INTMS)";
+	case NVME_REG_INTMC:
+		return "Interrupt Mask Set (INTMC)";
+	case NVME_REG_CC:
+		return "Controller Configuration (CC)";
+	case NVME_REG_CSTS:
+		return "Controller Status (CSTS)";
+	case NVME_REG_NSSR:
+		return "NVM Subsystem Reset (NSSR)";
+	case NVME_REG_AQA:
+		return "Admin Queue Attributes (AQA)";
+	case NVME_REG_ASQ:
+		return "Admin Submission Queue Base Address (ASQ)";
+	case NVME_REG_ACQ:
+		return "Admin Completion Queue Base Address (ACQ)";
+	case NVME_REG_CMBLOC:
+		return "Controller Memory Buffer Location (CMBLOC)";
+	case NVME_REG_CMBSZ:
+		return "Controller Memory Buffer Size (CMBSZ)";
+	case NVME_REG_BPINFO:
+		return "Boot Partition Information (BPINFO)";
+	case NVME_REG_BPRSEL:
+		return "Boot Partition Select (BPRSEL)";
+	case NVME_REG_BPMBL:
+		return "Boot Partition Memory Buffer Location (BPMBL)";
+	default:
+		return "unrecognized register";
+	}
+}
+
+void nvme_register_identify_change(struct nvme_bar *prev,
+		struct nvme_bar *curr, nvme_register_change_cb_t change_cb,
+		void *ctx)
+{
+	//TODO: parse bar changes
+	printf("bar change detected\n");
+}
 

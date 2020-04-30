@@ -153,6 +153,24 @@ struct nvme_bar {
 	uint64_t	bpmbl;
 };
 
+/**
+ * typedef nvme_register_change_cb_t - NVMe register change callback
+ * @ctx:	Context to identify caller.
+ * @reg:	Changed register (offset from BAR0 start).
+ * @reg_desc:	Register description.
+ * @new_val:	New value for register.
+ * @prev_val:	Previous value on the register.
+ *
+ * The callback is called when change in register is recognized by NVMe
+ * register layer. It passes the context of the caller and a verbose
+ * description of the register alongside with the new/old values of it.
+ */
+typedef void (*nvme_register_change_cb_t)(void *ctx, unsigned int reg,
+		char *reg_desc, uint64_t new_val, uint64_t prev_val);
+void nvme_register_identify_change(struct nvme_bar *prev,
+		struct nvme_bar *curr, nvme_register_change_cb_t change_cb,
+		void *ctx);
+
 void nvme_bar_dump(struct nvme_bar *bar);
 int nvme_initial_register_check(struct nvme_bar *bar);
 
