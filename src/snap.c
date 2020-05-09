@@ -2477,6 +2477,7 @@ snap_create_device_object(struct snap_context *sctx,
 		goto out_free;
 	}
 
+	DEVX_SET(device, device_in, initial_registers_valid, 1);
 	DEVX_SET(device, device_in, device_type, device_type);
 	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
 	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
