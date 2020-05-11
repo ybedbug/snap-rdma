@@ -861,6 +861,13 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 		snap_error("failed query created snap virtio blk queue\n");
 		goto destroy_virtio_blk_queue;
 	}
+	qattr.vattr.state = SNAP_VIRTQ_STATE_RDY;
+	if (snap_virtio_blk_modify_queue(vq_priv->snap_vbq,
+					 SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
+					 &qattr)) {
+		snap_error("failed to change virtq to READY state\n");
+		goto destroy_virtio_blk_queue;
+	}
 
 	snap_debug("created VIRTQ %d succesfully\n", attr->idx);
 	return vq_ctx;
