@@ -44,7 +44,7 @@
  */
 struct virtq_bdev {
 	void *ctx;
-	struct virtq_bdev_ops *ops;
+	struct snap_bdev_ops *ops;
 };
 
 /**
