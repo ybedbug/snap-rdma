@@ -103,6 +103,7 @@ enum virtq_cmd_sm_op_status {
  * @dma_comp:		struct given to snap library
  * @tunnel_comp:	completion sent to FW
  * @total_seg_len:	total length of the request data to be written/read
+ * @total_in_len:	total length of data written to request buffers
  */
 struct blk_virtq_cmd {
 	int idx;
@@ -119,7 +120,7 @@ struct blk_virtq_cmd {
 	struct snap_dma_completion dma_comp;
 	struct split_tunnel_comp *tunnel_comp;
 	uint32_t total_seg_len;
-	uint32_t total_written_len;
+	uint32_t total_in_len;
 };
 
 struct blk_virtq_priv {
@@ -183,6 +184,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->idx = idx;
 	cmd->vq_priv = vq_priv;
 	cmd->dma_comp.func = sm_dma_cb;
+	cmd->total_in_len = 0;
 	cmd->descs = calloc(num_descs, sizeof(struct vring_desc));
 	if (!cmd->descs) {
 		snap_error("failed to alloc memory for virtq descs\n");
@@ -585,6 +587,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			return true;
 		}
+		cmd->total_in_len += cmd->iovecs[i].iov_len;
 	}
 	return false;
 }
@@ -598,12 +601,10 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
 				   enum virtq_cmd_sm_op_status status)
 {
 	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-	if (status != VIRTQ_CMD_SM_OP_OK) {
+	if (status != VIRTQ_CMD_SM_OP_OK)
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
-	} else {
-		cmd->total_written_len = cmd->total_seg_len;
+	else
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
-	}
 }
 
 /**
@@ -636,6 +637,7 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
+	cmd->total_in_len += sizeof(struct virtio_blk_outftr);
 	return false;
 }
 
@@ -658,8 +660,7 @@ static void sm_send_completion(struct blk_virtq_cmd *cmd,
 
 	req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
 	cmd->tunnel_comp->avail_idx = cmd->avail_idx;
-	cmd->tunnel_comp->len = cmd->total_written_len +
-				sizeof(struct virtio_blk_outftr);
+	cmd->tunnel_comp->len = cmd->total_in_len;
 	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
 					 cmd->tunnel_comp,
 					 sizeof(struct split_tunnel_comp));
@@ -717,6 +718,7 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 		case VIRTQ_CMD_STATE_RELEASE:
 			cmd->vq_priv->cmd_cntr--;
 			cmd->total_seg_len = 0;
+			cmd->total_in_len = 0;
 			break;
 		case VIRTQ_CMD_STATE_FATAL_ERR:
 			cmd->vq_priv->vq_ctx.fatal_err = -1;
