@@ -132,9 +132,14 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
 
 		if (mask & SNAP_VIRTIO_MOD_DEV_STATUS) {
-			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
+		}
+		if (mask & SNAP_VIRTIO_MOD_ENABLED) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 enabled, attr->enabled);
 		}
 		DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
@@ -146,9 +151,14 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
 		if (mask & SNAP_VIRTIO_MOD_DEV_STATUS) {
-			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
+		}
+		if (mask & SNAP_VIRTIO_MOD_ENABLED) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 enabled, attr->enabled);
 		}
 		DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);

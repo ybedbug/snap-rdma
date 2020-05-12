@@ -1469,6 +1469,7 @@ enum {
 
 enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_STATUS = 1 << 0,
+	MLX5_VIRTIO_DEVICE_MODIFY_ENABLED = 1 << 2,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {

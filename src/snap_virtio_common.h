@@ -112,6 +112,7 @@ struct snap_virtio_queue {
 
 enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_DEV_STATUS = 1 << 0,
+	SNAP_VIRTIO_MOD_ENABLED = 1 << 2,
 };
 
 struct snap_virtio_device_attr {

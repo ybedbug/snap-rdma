@@ -64,13 +64,14 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 				  virtio_blk_config.blk_size);
 	attr->vattr.enabled = DEVX_GET(virtio_blk_device_emulation,
 				       device_emulation_out, enabled);
+	attr->modifiable_fields = 0;
 	dev_allowed = DEVX_GET64(virtio_blk_device_emulation,
 				 device_emulation_out, modify_field_select);
 	if (dev_allowed) {
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_STATUS)
-			attr->modifiable_fields = SNAP_VIRTIO_MOD_DEV_STATUS;
-	} else {
-		attr->modifiable_fields = 0;
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_STATUS;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ENABLED)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ENABLED;
 	}
 
 out_free:
