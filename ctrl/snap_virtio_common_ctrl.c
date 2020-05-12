@@ -2,35 +2,18 @@
 #include "snap_queue.h"
 
 /*
- * Device ERROR can be discovered in 2 cases:
- *  - host driver raises FAILED bit in device_status,
- *    declaring that it gave up the device.
- *  - device/driver raises DEVICE_NEEDS_RESET bit.
- *
- * In both cases, the only way for the host driver to recover from such
- * status is by resetting the device.
+ * Driver may choose to reset device for numerous reasons:
+ * during initialization, on error, or during FLR.
+ * Driver executes reset by writing `0` to `device_status` bar register.
+ * According to virtio v0.95 spec., driver is not obligated to wait
+ * for device to finish the RESET command, which may cause race conditions
+ * to occur between driver and controller.
+ * Issue is solved by using the extra internal `enabled` bit:
+ *  - FW set bit to `0` on driver reset.
+ *  - Controller set it back to `1` once finished.
  */
-#define SNAP_VIRTIO_CTRL_DEV_STATUS_ERR(status) \
-		!!((status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET) || \
-		   (status & SNAP_VIRTIO_DEVICE_S_FAILED))
-#define SNAP_VIRTIO_CTRL_ERR_DETECTED(vctrl) \
-		(!SNAP_VIRTIO_CTRL_DEV_STATUS_ERR(vctrl->bar_prev->status) && \
-		 SNAP_VIRTIO_CTRL_DEV_STATUS_ERR(vctrl->bar_curr->status))
-
-/*
- * Device RESET can be discovered when `device_status` register is zeroed
- * out by host driver (a.k.a moved to RESET state).
- */
-#define SNAP_VIRTIO_CTRL_RST_DETECTED(vctrl) \
-		((vctrl->bar_prev->status != SNAP_VIRTIO_DEVICE_S_RESET) && \
-		 (vctrl->bar_curr->status == SNAP_VIRTIO_DEVICE_S_RESET))
-
-/*
- * PCI FLR (Function Level Reset) is discovered by monitoring the `enabled`
- * snap emulation device attribute (When moving from `1` to `0`).
- */
-#define SNAP_VIRTIO_CTRL_FLR_DETECTED(vctrl) \
-		(vctrl->bar_prev->enabled && !vctrl->bar_curr->enabled)
+#define SNAP_VIRTIO_CTRL_RESET_DETECTED(vctrl) \
+		(!vctrl->bar_curr->enabled)
 
 /*
  * DRIVER_OK bit indicates that the driver is set up and ready to drive the
@@ -151,19 +134,6 @@ static void snap_virtio_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 	ctrl->q_ops->progress(vq);
 }
 
-static inline bool snap_virtio_ctrl_needs_reset(struct snap_virtio_ctrl *ctrl)
-{
-	/*
-	 * Device needs to be reset in a few cases:
-	 *  - DEVICE_NEEDS_RESET/FAILED status raised
-	 *  - FLR occured (enabled bit removed)
-	 *  - device_status was changed to RESET ("0").
-	 */
-	return SNAP_VIRTIO_CTRL_ERR_DETECTED(ctrl) ||
-	       SNAP_VIRTIO_CTRL_RST_DETECTED(ctrl) ||
-	       SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl);
-}
-
 static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
 {
 	if (ctrl->bar_cbs.validate)
@@ -183,8 +153,21 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 
-	if (snap_virtio_ctrl_needs_reset(ctrl)) {
+	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
 		ret = snap_virtio_ctrl_stop(ctrl);
+		if (!ret) {
+			/*
+			 * When done with reset process, need to set enabled bit
+			 * back to `1` which signal FW to update `device_status`
+			 * if needed. Host driver might be waiting for device
+			 * RESET process completion by polling device_status
+			 * until reading `0`.
+			 */
+			ctrl->bar_curr->enabled = 1;
+			ret = snap_virtio_ctrl_bar_modify(ctrl,
+							  SNAP_VIRTIO_MOD_ENABLED,
+							  ctrl->bar_curr);
+		}
 	} else {
 		ret = snap_virtio_ctrl_validate(ctrl);
 		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
@@ -274,7 +257,7 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 
 	/* Handle device_status changes */
 	if ((ctrl->bar_curr->status != ctrl->bar_prev->status) ||
-	    (ctrl->bar_curr->enabled != ctrl->bar_prev->enabled)) {
+	    (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl))) {
 		ret = snap_virtio_ctrl_change_status(ctrl);
 		if (ret)
 			return;
