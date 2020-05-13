@@ -89,6 +89,7 @@ struct snap_virtio_queue_attr {
 	uint64_t			desc;
 	uint64_t			driver;
 	uint64_t			device;
+	struct ibv_pd			*pd;
 
 	enum snap_virtq_state		state; /* query and modify */
 

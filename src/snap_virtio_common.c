@@ -164,6 +164,23 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 				    out, sizeof(out));
 }
 
+static int snap_virtio_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
+{
+	int ret = 0;
+	struct mlx5dv_pd pd_info;
+	struct mlx5dv_obj obj;
+
+	if (!pd)
+		return -EINVAL;
+	obj.pd.in = pd;
+	obj.pd.out = &pd_info;
+	ret = mlx5dv_init_obj(&obj, MLX5DV_OBJ_PD);
+	if (ret)
+		return ret;
+	*pd_id = pd_info.pdn;
+	return 0;
+}
+
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *vattr, struct snap_virtio_umem *umem)
@@ -178,7 +195,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	uint8_t *virtq_ctx;
 	uint16_t obj_type;
 	struct mlx5_snap_devx_obj *virtq;
-	int virtq_type, ev_mode, inlen, offload_type;
+	int virtq_type, ev_mode, inlen, offload_type, ret;
+	uint32_t pd_id;
 
 	if (vattr->type == SNAP_VIRTQ_SPLIT_MODE) {
 		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
@@ -253,7 +271,14 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		goto out;
 	}
 
+	ret = snap_virtio_get_pd_id(vattr->pd, &pd_id);
+	if (ret) {
+		errno = ret;
+		goto out;
+	}
+
 	/* common virtq attributes */
+	DEVX_SET(virtio_q, virtq_ctx, pd, pd_id);
 	DEVX_SET(virtio_q, virtq_ctx, device_emulation_id,
 		 sdev->pci->mpci.vhca_id);
 	DEVX_SET(virtio_q, virtq_ctx, virtio_q_type, virtq_type);
