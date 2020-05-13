@@ -141,10 +141,20 @@ enum blk_sw_virtq_state {
 	BLK_SW_VIRTQ_SUSPENDED,
 };
 
+/**
+ * struct virtq_bdev - Backend block device
+ * @ctx:	Opaque bdev context given to block device functions
+ * @ops:	Block device operation pointers
+ */
+struct virtq_bdev {
+	void *ctx;
+	struct snap_bdev_ops *ops;
+};
+
 struct blk_virtq_priv {
 	volatile enum blk_sw_virtq_state swq_state;
 	struct blk_virtq_ctx vq_ctx;
-	struct virtq_bdev *blk_dev;
+	struct virtq_bdev blk_dev;
 	struct ibv_pd *pd;
 	struct snap_virtio_blk_queue *snap_vbq;
 	struct snap_virtio_blk_queue_attr snap_attr;
@@ -171,7 +181,7 @@ static void free_blk_virtq_cmd(struct blk_virtq_cmd *cmd)
 {
 	ibv_dereg_mr(cmd->desc_mr);
 	ibv_dereg_mr(cmd->req_mr);
-	cmd->vq_priv->blk_dev->ops->dma_free(cmd->req_buf);
+	cmd->vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
 	free(cmd->iovecs);
 	free(cmd->descs);
 }
@@ -219,7 +229,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 
 	buf_size = req_buf_size(size_max, seg_max)
 		   + sizeof(struct split_tunnel_comp);
-	cmd->req_buf = vq_priv->blk_dev->ops->dma_malloc(buf_size);
+	cmd->req_buf = vq_priv->blk_dev.ops->dma_malloc(buf_size);
 	if (!cmd->req_buf) {
 		snap_error("failed to allocate memory for blk request for queue"
 			   " %d\n", vq_priv->vq_ctx.idx);
@@ -252,7 +262,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 dereg_req_mr:
 	 ibv_dereg_mr(cmd->req_mr);
 free_req_bufs:
-	vq_priv->blk_dev->ops->dma_free(cmd->req_buf);
+	vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
 free_iovecs:
 	free(cmd->iovecs);
 free_descs:
@@ -505,7 +515,7 @@ static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			     enum virtq_cmd_sm_op_status status)
 {
-	struct virtq_bdev *bdev = cmd->vq_priv->blk_dev;
+	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
 	int ret;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
@@ -790,7 +800,8 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 /**
  * blk_virtq_create() - Creates a new blk virtq object, along with RDMA QPs.
- * @blk_dev:	Backend block device
+ * @bdev_ops:	operations provided by bdev
+ * @bdev:	Backend block device
  * @snap_dev:	Snap device on top virtq is created
  * @attr:	Configuration attributes
  *
@@ -804,8 +815,8 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
  *
  * Return: NULL on failure, new block virtqueue context on success
  */
-struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
-				       struct snap_device *snap_dev,
+struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
+				       void *bdev, struct snap_device *snap_dev,
 				       struct blk_virtq_create_attr *attr)
 {
 	struct snap_dma_q_create_attr rdma_qp_create_attr = {};
@@ -820,7 +831,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 
 	vq_ctx = &vq_priv->vq_ctx;
 	vq_ctx->priv = vq_priv;
-	vq_priv->blk_dev = blk_dev;
+	vq_priv->blk_dev.ops = bdev_ops;
+	vq_priv->blk_dev.ctx = bdev;
 	vq_priv->pd = attr->pd;
 	vq_ctx->idx = attr->idx;
 	vq_ctx->fatal_err = 0;
