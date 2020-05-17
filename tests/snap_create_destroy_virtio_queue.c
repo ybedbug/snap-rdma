@@ -77,6 +77,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 					battr.vattr.full_emulation = true;
 					battr.vattr.virtio_version_1_0 = true;
 					battr.vattr.max_tunnel_desc = 4;
+					battr.vattr.pd = sf->pd;
 					if (sf && sf->context && sf->cq && sf->pd) {
 						qp = snap_create_qp(sf->pd, sf->cq);
 						if (!qp)
@@ -135,6 +136,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 					nattr.vattr.ev_mode = ev_mode;
 					nattr.vattr.idx = j;
 					nattr.vattr.size = 16;
+					nattr.vattr.pd = sf->pd;
 					nattr.tisn_or_qpn = (j + 1) * 0xbeaf;
 					vnq = snap_virtio_net_create_queue(sdev, &nattr);
 					if (vnq) {
