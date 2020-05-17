@@ -845,6 +845,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 	vq_priv->snap_attr.vattr.full_emulation = true;
 	vq_priv->snap_attr.vattr.max_tunnel_desc = attr->max_tunnel_desc;
 	vq_priv->snap_attr.vattr.event_qpn_or_msix = attr->msix_vector;
+	vq_priv->snap_attr.vattr.pd = attr->pd;
 	vq_priv->snap_attr.qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
 	if (!vq_priv->snap_attr.qp) {
 		snap_error("no fw qp exist when trying to create virtq\n");
