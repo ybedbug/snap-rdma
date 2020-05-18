@@ -516,13 +516,13 @@ void snap_dma_q_destroy(struct snap_dma_q *q)
 
 static inline int snap_dma_q_progress_rx(struct snap_dma_q *q)
 {
-	struct ibv_wc wcs[SNAP_DMA_MAX_COMPLETIONS];
+	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS];
 	int i, n;
 	int rc;
-	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_COMPLETIONS + 1], *bad_wr;
-	struct ibv_sge rx_sge[SNAP_DMA_MAX_COMPLETIONS + 1];
+	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
+	struct ibv_sge rx_sge[SNAP_DMA_MAX_RX_COMPLETIONS + 1];
 
-	n = ibv_poll_cq(q->sw_qp.rx_cq, SNAP_DMA_MAX_COMPLETIONS, wcs);
+	n = ibv_poll_cq(q->sw_qp.rx_cq, SNAP_DMA_MAX_RX_COMPLETIONS, wcs);
 	if (n == 0)
 		return 0;
 
@@ -565,11 +565,11 @@ static inline int snap_dma_q_progress_rx(struct snap_dma_q *q)
 
 static inline int snap_dma_q_progress_tx(struct snap_dma_q *q)
 {
-	struct ibv_wc wcs[SNAP_DMA_MAX_COMPLETIONS];
+	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS];
 	struct snap_dma_completion *comp;
 	int i, n;
 
-	n = ibv_poll_cq(q->sw_qp.tx_cq, SNAP_DMA_MAX_COMPLETIONS, wcs);
+	n = ibv_poll_cq(q->sw_qp.tx_cq, SNAP_DMA_MAX_TX_COMPLETIONS, wcs);
 	if (n == 0)
 		return 0;
 
