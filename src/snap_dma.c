@@ -654,7 +654,7 @@ static inline int qp_can_tx(struct snap_dma_q *q)
 }
 
 static inline int do_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
-		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op,
+		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
 		struct snap_dma_completion *comp)
 {
 	struct ibv_qp *qp = q->sw_qp.qp;
@@ -670,7 +670,7 @@ static inline int do_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	sge.lkey = lkey;
 
 	rdma_wr.opcode = op;
-	rdma_wr.send_flags = IBV_SEND_SIGNALED;
+	rdma_wr.send_flags = IBV_SEND_SIGNALED | flags;
 	rdma_wr.num_sge = 1;
 	rdma_wr.sg_list = &sge;
 	rdma_wr.wr_id = (uint64_t)comp;
@@ -717,7 +717,41 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 		struct snap_dma_completion *comp)
 {
 	return do_dma_xfer(q, src_buf, len, lkey, dstaddr, rmkey,
-			IBV_WR_RDMA_WRITE, comp);
+			IBV_WR_RDMA_WRITE, 0, comp);
+}
+
+/**
+ * snap_dma_q_write_short() - DMA write of small amount of data to the
+ *                            host memory
+ * @q:            dma queue
+ * @src_buf:      where to get data
+ * @len:          data length. It must be no greater than the
+ *                &struct snap_dma_q_create_attr.tx_elem_size
+ * @dstaddr:      host physical or virtual address
+ * @rmkey:        host memory key that describes remote memory
+ *
+ * The function starts non blocking memory transfer to the host memory. The
+ * function is optimized to reduce latency when sending small amount of data.
+ * Operations on the same dma queue are done in order.
+ *
+ * Note that it is safe to use @src_buf after the function returns.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
+		uint64_t dstaddr, uint32_t rmkey)
+{
+	if (snap_unlikely(len > q->tx_elem_size))
+		return -EINVAL;
+
+	return do_dma_xfer(q, src_buf, len, 0, dstaddr, rmkey,
+			IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
 }
 
 /**
@@ -748,7 +782,7 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 		struct snap_dma_completion *comp)
 {
 	return do_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
-			IBV_WR_RDMA_READ, comp);
+			IBV_WR_RDMA_READ, 0, comp);
 }
 
 /**

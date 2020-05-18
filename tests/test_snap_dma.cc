@@ -284,6 +284,32 @@ TEST_F(SnapDmaTest, dma_write) {
 	snap_dma_q_destroy(q);
 }
 
+TEST_F(SnapDmaTest, dma_write_short) {
+	struct snap_dma_q *q;
+	char cqe[m_dma_q_attr.tx_elem_size];
+	int rc;
+	int n;
+
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	memset(m_rbuf, 0, sizeof(cqe));
+	memset(cqe, 0xDA, sizeof(cqe));
+
+	rc = snap_dma_q_write_short(q, cqe, sizeof(cqe), (uintptr_t)m_rbuf,
+			            m_rmr->lkey);
+	ASSERT_EQ(0, rc);
+	n = 0;
+	while (q->tx_available < m_dma_q_attr.tx_qsize && n < 10000) {
+		snap_dma_q_progress(q);
+		n++;
+	}
+
+	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
+	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
+	snap_dma_q_destroy(q);
+}
+
 TEST_F(SnapDmaTest, send_completion) {
 	struct snap_dma_q *q;
 	char cqe[m_dma_q_attr.tx_elem_size];

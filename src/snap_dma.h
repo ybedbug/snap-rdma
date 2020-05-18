@@ -175,6 +175,8 @@ void snap_dma_q_destroy(struct snap_dma_q *q);
 int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 		uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		struct snap_dma_completion *comp);
+int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
+		uint64_t dstaddr, uint32_t rmkey);
 int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 		uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		struct snap_dma_completion *comp);
