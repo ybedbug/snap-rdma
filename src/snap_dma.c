@@ -755,16 +755,16 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
  * snap_dma_q_send_completion() - Send completion to the host
  * @q:       dma queue to
  * @src_buf: local buffer to copy the completion data from.
- * @len:     the length of completion. E.x. 16 bytes for the NVME. It
- *           must be less then the value of the
+ * @len:     the length of completion. E.x. 16 bytes for the NVMe. It
+ *           must be no greater than the value of the
  *           &struct snap_dma_q_create_attr.tx_elem_size
  *
  * The function sends a completion notification to the host. The exact meaning of
  * the 'completion' is defined by the emulation layer. For example in case of
- * NVME it means that completion entry is placed in the completion queue and
+ * NVMe it means that completion entry is placed in the completion queue and
  * MSI-X interrupt is triggered.
  *
- * Note that it is safe to use @src_buf after function return.
+ * Note that it is safe to use @src_buf after the function returns.
  *
  * Return:
  * 0

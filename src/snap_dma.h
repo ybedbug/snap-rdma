@@ -51,7 +51,7 @@ struct snap_dma_completion;
  * is received from the emulated device.
  *
  * The layout of the @data as well as the validity of @imm_data field depends
- * on the emulated device.  For example, in case of the NVME emulation queue
+ * on the emulated device.  For example, in case of the NVMe emulation queue
  * @data will be a nvme sqe and @imm_data will be undefined.
  *
  * It is safe to initiate data transfers from withing the callback. However
@@ -88,11 +88,11 @@ struct snap_dma_ibv_qp {
  * struct snap_dma_q - DMA queue
  *
  * DMA queue is a connected pair of the IB queue pais (QPs). One QP
- * can be passed to the FW emulation objects such as NVME
+ * can be passed to the FW emulation objects such as NVMe
  * submission queue or VirtIO queue. Another QP can be used to:
  *
- *  - receive protocol related data. E.x. NVME submission queue entry or SGL
- *  - send completion notifications. E.x. NVME completion queue entry
+ *  - receive protocol related data. E.x. NVMe submission queue entry or SGL
+ *  - send completion notifications. E.x. NVMe completion queue entry
  *  - read/write data from/to the host memory
  *
  * DMA queue is not thread safe. A caller must take care of the proper locking
@@ -119,10 +119,12 @@ struct snap_dma_q {
  * struct snap_dma_q_create_attr - DMA queue creation attributes
  * @tx_qsize:     send queue size of the software qp
  * @tx_elem_size: size of the completion. The size is emulation specific.
- *                For example 16 bytes for NVME
- * @rx_qsize:     receive queue size of the software qp
+ *                For example 16 bytes for NVMe
+ * @rx_qsize:     receive queue size of the software qp. In case if the qp is
+ *                used with the NVMe SQ, @rx_qsize must be no less than the
+ *                SQ size.
  * @rx_elem_size: size of the receive element. The size is emulation specific.
- *                For example 64 bytes for NVME
+ *                For example 64 bytes for NVMe
  * @uctx:         user supplied context
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
  * @comp_channel: receive and adn DMA completion channel. See
