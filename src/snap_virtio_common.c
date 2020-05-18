@@ -417,7 +417,7 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	struct snap_virtio_queue_attr *vattr)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)];
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
 	uint8_t out_blk[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 			DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
 	uint8_t out_net[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
