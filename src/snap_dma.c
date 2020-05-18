@@ -328,10 +328,8 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	bool roce_en;
 
 	rc = check_roce_enabled(q->sw_qp.qp->context, &roce_en);
-	if (rc) {
-		snap_error("Failed to check if roce enabled on function\n");
+	if (rc)
 		return rc;
-	}
 
 	if (roce_en) {
 		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,

@@ -99,6 +99,7 @@ static void dma_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
 
 void SnapDmaTest::SetUp()
 {
+	struct mlx5dv_context_attr rdma_attr = {};
 	bool init_ok = false;
 	int i, n_dev;
 	struct ibv_device **dev_list;
@@ -119,7 +120,8 @@ void SnapDmaTest::SetUp()
 	for (i = 0; i < n_dev; i++) {
 		if (strcmp(ibv_get_device_name(dev_list[i]),
 					get_dev_name()) == 0) {
-			ib_ctx = ibv_open_device(dev_list[i]);
+			rdma_attr.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
+			ib_ctx = mlx5dv_open_device(dev_list[i], &rdma_attr);
 			if (!ib_ctx)
 				FAIL() << "Failed to open " << dev_list[i];
 			m_pd = ibv_alloc_pd(ib_ctx);
