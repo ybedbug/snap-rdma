@@ -145,8 +145,6 @@ struct mlx5_snap_hw_qp {
 	struct mlx5_snap_flow_group		*fg_rx;
 	struct mlx5_snap_flow_table_entry	*fte_rx;
 
-	struct mlx5_snap_flow_table		*rdma_ft_rx;
-	struct mlx5_snap_flow_group		*rdma_fg_rx;
 	struct mlx5dv_flow_matcher		*rdma_matcher;
 	struct ibv_flow				*rdma_flow;
 
