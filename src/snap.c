@@ -1958,12 +1958,11 @@ int snap_teardown_device(struct snap_device *sdev)
 	if (!sdev->mdev.vtunnel)
 		return 0;
 
-	ret = snap_destroy_pd(sdev->mdev.tunneled_pd);
-	if (ret)
-		return ret;
-	ret = snap_reset_steering(sdev);
-	if (ret)
-		return ret;
+	/* ignore failures from destroying pd and steering because
+	 * the objects may have been destroyed by the FLR */
+	snap_destroy_pd(sdev->mdev.tunneled_pd);
+	snap_reset_steering(sdev);
+
 	ret = snap_teardown_hca(sdev);
 	if (ret)
 		return ret;
