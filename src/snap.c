@@ -2239,7 +2239,7 @@ int snap_device_get_events(struct snap_device *sdev, int num_events,
 		sevent = &events[i];
 		bytes = mlx5dv_devx_get_event(sdev->mdev.channel, &event_data,
 					      sizeof(event_data));
-		if (bytes == 0)
+		if (bytes == 0 || (bytes == -1 && errno == EAGAIN))
 			break;
 		else if (bytes == -1)
 			return -errno;
