@@ -521,27 +521,25 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 		uint32_t qp_num = 0;
 
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
-		/*
-		 * we might change the QP for this NVMe SQ, so rdma_dev could
-		 * be different from the previous.
-		 */
-		if (sq->rdma_dev) {
-			snap_put_rdma_dev(sdev, sq->rdma_dev);
-			sq->rdma_dev = NULL;
-		}
 
 		if (attr->qp) {
+			/* we need to destroy current hw qp and dereference
+			 * rdma_dev, because new rdma_dev may be different from
+			 * the previous one.
+			 */
+			if (sq->hw_qp) {
+				snap_destroy_hw_qp(sq->hw_qp);
+				sq->hw_qp = NULL;
+				snap_put_rdma_dev(sdev, sq->rdma_dev);
+				sq->rdma_dev = NULL;
+			}
+
 			sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
 			if (!sq->rdma_dev)
 				return -ENODEV;
 
 			/* For Bluefield-1 QP's VHCA_ID is the NVMe VHCA_ID */
 			if (sdev->mdev.vtunnel) {
-				if (sq->hw_qp) {
-					snap_destroy_hw_qp(sq->hw_qp);
-					sq->hw_qp = NULL;
-				}
-
 				sq->hw_qp = snap_create_hw_qp(sdev, attr->qp);
 				if (!sq->hw_qp) {
 					ret = -EINVAL;
@@ -577,7 +575,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 				 MLX5_NVME_SQ_STATE_ERR);
 		} else {
 			ret = -EINVAL;
-			goto out_put_dev;
+			goto out_free_qp;
 		}
 	}
 
@@ -585,11 +583,13 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 
 	ret = snap_devx_obj_modify(sq->sq, in, sizeof(in), out, sizeof(out));
 	if (ret)
-		goto out_put_dev;
+		goto out_free_qp;
 
 	if (destroy_qp && sq->hw_qp) {
 		snap_destroy_hw_qp(sq->hw_qp);
 		sq->hw_qp = NULL;
+		snap_put_rdma_dev(sdev, sq->rdma_dev);
+		sq->rdma_dev = NULL;
 	}
 
 	return 0;
@@ -747,7 +747,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 				      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
 	if (!sq->sq) {
 		errno = ENODEV;
-		goto out_put_dev;
+		goto out_destroy_hw_qp;
 	}
 
 	if (sdev->mdev.vtunnel) {
@@ -802,8 +802,16 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 			&sq_attr);
 	}
 
-	if (!ret)
-		ret = snap_devx_obj_destroy(sq->sq);
+	ret = snap_devx_obj_destroy(sq->sq);
+
+	/* If hw qp was not destroyed it means that modify failed because of
+	 * the FLR. We have to desrtoy it expicitly in order to avoid leaking
+	 * RDMA_FT_RX rdma flow table.
+	 */
+	if (sq->hw_qp) {
+		snap_destroy_hw_qp(sq->hw_qp);
+		sq->hw_qp = NULL;
+	}
 
 	if (sq->rdma_dev) {
 		snap_put_rdma_dev(sdev, sq->rdma_dev);
