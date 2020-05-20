@@ -2006,35 +2006,33 @@ static int snap_set_device_address(struct snap_device *sdev,
 					 sizeof(out), 0);
 }
 
-static int snap_destroy_rdma_steering(struct snap_device *sdev)
+static void snap_destroy_rdma_steering(struct snap_device *sdev)
 {
 	int ret;
 
-	ret = snap_fte_reset(sdev->mdev.rdma_fte_rx);
-	if (ret)
-		return ret;
-
+	/*
+	 * Ignore errors when destroying flow tables on the
+	 * emulated function. They might have been already destroyed
+	 * by the FLR.
+	 */
+	snap_fte_reset(sdev->mdev.rdma_fte_rx);
 	sdev->mdev.rdma_fte_rx = NULL;
 
-	ret = snap_fte_reset(sdev->mdev.fte_rx_miss);
-	if (ret)
-		return ret;
-
+	snap_fte_reset(sdev->mdev.fte_rx_miss);
 	sdev->mdev.fte_rx_miss = NULL;
 
-	ret = snap_destroy_flow_group(sdev->mdev.rdma_fg_rx);
-	if (ret)
-		return ret;
-
+	snap_destroy_flow_group(sdev->mdev.rdma_fg_rx);
 	sdev->mdev.rdma_fg_rx = NULL;
 
 	ret = snap_destroy_flow_table(sdev->mdev.rdma_ft_rx);
-	if (ret)
-		return ret;
-
 	sdev->mdev.rdma_ft_rx = NULL;
-
-	return 0;
+	/*
+	 * There is a limited number of the flow tables in the kernel,
+	 * once we run out of the flow tables we will not be able to create
+	 * SQs.
+	 */
+	if (ret)
+		snap_warn("failed to destroy RDMA_FT_RX - possible resource leak\n");
 }
 
 static int snap_create_rdma_steering(struct snap_device *sdev,
