@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([snap-rdma], [1.0], [support@mellanox.com])
+AC_INIT([libsnap], [1.0], [support@mellanox.com])
 AC_CONFIG_SRCDIR([src/snap.h])
 AC_CONFIG_HEADERS([config.h])
 

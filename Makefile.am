@@ -3,6 +3,8 @@ ACLOCAL_AMFLAGS=-I m4
 
 SUBDIRS = src ctrl tests
 
+include_HEADERS = blk/snap_blk_dev.h  blk/snap_blk_ops.h  blk/snap_null_blk_dev.h
+
 EXTRA_DIST = libsnap.spec README.md autogen.sh
 
 if HAVE_GTEST
