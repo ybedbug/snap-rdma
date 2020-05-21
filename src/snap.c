@@ -456,6 +456,11 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 	bool rx_supported, tx_supported;
 	int ret;
 
+	// Only nvme sq requires special steering on BF1, virtio
+	// never needs steering tables
+	if (!sctx->mctx.nvme_need_tunnel)
+		return 0;
+
 	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
 	DEVX_SET(query_hca_cap_in, in, op_mod,
 		 MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE);
