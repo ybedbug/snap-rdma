@@ -4,26 +4,49 @@
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
 
-static int check_roce_enabled(struct ibv_context *ctx, bool *roce_en)
+static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
+		      bool *ib_en, uint16_t *lid)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_nic_vport_context_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_nic_vport_context_out)] = {0};
 	uint8_t devx_v;
+	struct ibv_port_attr port_attr;
 	int ret;
 
+	*roce_en = false;
+	*ib_en = false;
+
+	ret = ibv_query_port(ctx, port_num, &port_attr);
+	if (ret)
+		return ret;
+
+	if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
+		/* we only support local IB addressing for now */
+		if (port_attr.flags & IBV_QPF_GRH_REQUIRED) {
+			snap_error("IB enabled and GRH addressing is required"
+				   " but only local addressing is supported\n");
+			return -1;
+		}
+		*lid = port_attr.lid;
+		*ib_en = true;
+		return 0;
+	}
+
+	if (port_attr.link_layer != IBV_LINK_LAYER_ETHERNET)
+		return -1;
+
+	/* port may be ethernet but still have roce disabled */
 	DEVX_SET(query_nic_vport_context_in, in, opcode,
 		 MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT);
 	ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out,
 				      sizeof(out));
 	if (ret) {
-		snap_error("failed checking if ROCE enabled, errno %m\n");
+		snap_error("Failed to get VPORT context - assuming ROCE is disabled\n");
 		return ret;
 	}
 	devx_v = DEVX_GET(query_nic_vport_context_out, out,
 			  nic_vport_context.roce_en);
-	if (devx_v == 0)
-		*roce_en = false;
-	else
+	if (devx_v)
 		*roce_en = true;
 	return 0;
 }
@@ -254,35 +277,45 @@ static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 	if (attr_mask & IBV_QP_MIN_RNR_TIMER)
 		DEVX_SET(qpc, qpc, min_rnr_nak, qp_attr->min_rnr_timer);
 	if (attr_mask & IBV_QP_AV) {
-		DEVX_SET(qpc, qpc, primary_address_path.tclass,
-			 qp_attr->ah_attr.grh.traffic_class);
-		/* set destination mac */
-		memcpy(gid, qp_attr->ah_attr.grh.dgid.raw, 16);
-		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-		       gid,
-		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
-		mac[0] = gid[8] ^ 0x02;
-		mac[1] = gid[9];
-		mac[2] = gid[10];
-		mac[3] = gid[13];
-		mac[4] = gid[14];
-		mac[5] = gid[15];
-		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
-		       mac, 6);
+		if (qp_attr->ah_attr.is_global) {
+			DEVX_SET(qpc, qpc, primary_address_path.tclass,
+				 qp_attr->ah_attr.grh.traffic_class);
+			/* set destination mac */
+			memcpy(gid, qp_attr->ah_attr.grh.dgid.raw, 16);
+			memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+					    gid,
+					    DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+			mac[0] = gid[8] ^ 0x02;
+			mac[1] = gid[9];
+			mac[2] = gid[10];
+			mac[3] = gid[13];
+			mac[4] = gid[14];
+			mac[5] = gid[15];
+			memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+					    mac, 6);
 
-		DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
-			 qp_attr->ah_attr.grh.sgid_index);
-		if (qp_attr->ah_attr.sl & 0x7)
-			DEVX_SET(qpc, qpc, primary_address_path.eth_prio,
-				 qp_attr->ah_attr.sl & 0x7);
-		if (qp_attr->ah_attr.grh.hop_limit > 1)
-			DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
-				 qp_attr->ah_attr.grh.hop_limit);
-		else
-			DEVX_SET(qpc, qpc, primary_address_path.hop_limit, 64);
+			DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
+				 qp_attr->ah_attr.grh.sgid_index);
+			if (qp_attr->ah_attr.sl & 0x7)
+				DEVX_SET(qpc, qpc, primary_address_path.eth_prio,
+					 qp_attr->ah_attr.sl & 0x7);
+			if (qp_attr->ah_attr.grh.hop_limit > 1)
+				DEVX_SET(qpc, qpc, primary_address_path.hop_limit,
+					 qp_attr->ah_attr.grh.hop_limit);
+			else
+				DEVX_SET(qpc, qpc, primary_address_path.hop_limit, 64);
+
+			if (!roce_enabled)
+				DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
+		} else {
+			DEVX_SET(qpc, qpc, primary_address_path.rlid,
+				 qp_attr->ah_attr.dlid);
+			DEVX_SET(qpc, qpc, primary_address_path.grh, 0);
+			if (qp_attr->ah_attr.sl & 0xf)
+				DEVX_SET(qpc, qpc, primary_address_path.sl,
+					 qp_attr->ah_attr.sl & 0xf);
+		}
 	}
-	if (!roce_enabled)
-		DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
 
 	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
@@ -325,9 +358,11 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	struct ibv_qp_attr attr;
 	union ibv_gid sw_gid, fw_gid;
 	int rc, flags_mask;
-	bool roce_en;
+	bool roce_en, ib_en;
+	uint16_t lid;
 
-	rc = check_roce_enabled(q->sw_qp.qp->context, &roce_en);
+	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
+			&ib_en, &lid);
 	if (rc)
 		return rc;
 
@@ -377,9 +412,14 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	attr.rq_psn = SNAP_DMA_QP_RQ_PSN;
 	attr.max_dest_rd_atomic = SNAP_DMA_QP_MAX_DEST_RD_ATOMIC;
 	attr.min_rnr_timer = SNAP_DMA_QP_RNR_TIMER;
-	attr.ah_attr.is_global = 1;
 	attr.ah_attr.port_num = SNAP_DMA_QP_PORT_NUM;
 	attr.ah_attr.grh.hop_limit = SNAP_DMA_QP_HOP_LIMIT;
+	if (ib_en) {
+		attr.ah_attr.is_global = 0;
+		attr.ah_attr.dlid = lid;
+	} else {
+		attr.ah_attr.is_global = 1;
+	}
 
 	attr.dest_qp_num = q->fw_qp.qp->qp_num;
 	flags_mask = IBV_QP_STATE              |
