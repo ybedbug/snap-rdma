@@ -57,6 +57,8 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	if (dev_allowed) {
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_STATUS)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_STATUS;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_LINK)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_LINK_STATUS;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ENABLED)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ENABLED;
 	}

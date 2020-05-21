@@ -147,6 +147,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		in = in_net;
 		inlen = sizeof(in_net);
 		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+		struct snap_virtio_net_device_attr *nattr = to_net_device_attr(attr);
 
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
@@ -154,6 +155,11 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
+		}
+		if (mask & SNAP_VIRTIO_MOD_LINK_STATUS) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_LINK;
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				virtio_net_config.status, nattr->status);
 		}
 		if (mask & SNAP_VIRTIO_MOD_ENABLED) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
