@@ -19,11 +19,13 @@ struct blk_virtq_priv;
 
 /**
  * struct split_tunnel_req_hdr - header of command received from FW
+ *
+ * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
  */
 struct split_tunnel_req_hdr {
 	uint16_t avail_idx;
 	uint16_t num_desc;
-	uint64_t rsvd1;
+	uint32_t rsvd1;
 	uint32_t rsvd2;
 };
 
