@@ -115,6 +115,7 @@ struct blk_virtq_cmd {
 	struct virtio_blk_outftr blk_req_ftr;
 	enum virtq_cmd_sm_state state;
 	uint8_t *req_buf;
+	char *device_id;
 	struct ibv_mr *req_mr;
 	struct vring_desc *descs;
 	struct iovec *iovecs;
@@ -227,13 +228,17 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	}
 
 	buf_size = req_buf_size(size_max, seg_max)
-		   + sizeof(struct split_tunnel_comp);
+		   + sizeof(struct split_tunnel_comp)
+		   + VIRTIO_BLK_ID_BYTES;
 	cmd->req_buf = vq_priv->blk_dev.ops->dma_malloc(buf_size);
 	if (!cmd->req_buf) {
 		snap_error("failed to allocate memory for blk request for queue"
 			   " %d\n", vq_priv->vq_ctx.idx);
 		goto free_iovecs;
 	}
+	cmd->device_id = (char *)(cmd->req_buf +
+			 req_buf_size(size_max, seg_max) +
+			 sizeof(struct split_tunnel_comp));
 	cmd->tunnel_comp = (struct split_tunnel_comp *)
 			   (cmd->req_buf + buf_size);
 	cmd->req_mr = ibv_reg_mr(vq_priv->pd, cmd->req_buf, buf_size,
@@ -515,9 +520,10 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			     enum virtq_cmd_sm_op_status status)
 {
 	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
-	int ret;
+	int ret, len;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
+	char *dev_name;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to get request data, returning"
@@ -559,6 +565,29 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			ret = bdev->ops->flush(bdev->ctx, 0, num_blocks,
 					       bdev_io_comp_cb, cmd);
 		}
+		break;
+	case VIRTIO_BLK_T_GET_ID:
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+		dev_name = bdev->ops->get_bdev_name(bdev->ctx);
+		ret = snprintf(cmd->device_id, VIRTIO_BLK_ID_BYTES, "%s",
+			       dev_name);
+		if (ret < 0) {
+			snap_error("failed to read block id\n");
+			cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
+			return true;
+		}
+		cmd->dma_comp.count = 1;
+		if (VIRTIO_BLK_ID_BYTES > cmd->descs[1].len)
+			len = cmd->descs[1].len;
+		else
+			len = VIRTIO_BLK_ID_BYTES;
+		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
+				       cmd->device_id,
+				       len,
+				       cmd->req_mr->lkey,
+				       cmd->descs[1].addr,
+				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
+				       &(cmd->dma_comp));
 		break;
 	default:
 		ERR_ON_CMD(cmd, "invalid command - requested command type "
