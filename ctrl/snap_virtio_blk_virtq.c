@@ -168,6 +168,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 	struct blk_virtq_cmd *cmd = container_of(self,
 						 struct blk_virtq_cmd,
 						 dma_comp);
+
 	if (status != IBV_WC_SUCCESS) {
 		snap_error("error in dma for queue %d\n",
 			   cmd->vq_priv->vq_ctx.idx);
@@ -180,8 +181,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
 {
-	uint32_t buf_size;
 	int num_descs = VIRTIO_NUM_DESC(seg_max);
+	uint32_t buf_size;
 
 	cmd->idx = idx;
 	cmd->vq_priv = vq_priv;
@@ -266,8 +267,8 @@ static struct blk_virtq_cmd *
 alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 			struct blk_virtq_priv *vq_priv)
 {
-	struct blk_virtq_cmd *cmd_arr;
 	int i, j, ret, num = vq_priv->snap_attr.vattr.size;
+	struct blk_virtq_cmd *cmd_arr;
 
 	cmd_arr = calloc(num, sizeof(struct blk_virtq_cmd));
 	if (!cmd_arr) {
@@ -539,7 +540,6 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
 		return true;
-		// ToDo: respond with UNSUPPORTED status!
 	}
 
 	if (ret) {
@@ -820,10 +820,6 @@ struct blk_virtq_ctx *blk_virtq_create(struct virtq_bdev *blk_dev,
 	}
 	vq_priv->cmd_cntr = 0;
 
-	/* create hw and sw qps, hw qps will be given to VIRTIO_BLK_Q
-	 * Completion is sent inline, hence tx elem size is completion size
-	 * the rx queue size should match the number of possible descriptors
-	 * this in the worst case scenario is the VIRTQ size */
 	rdma_qp_create_attr.tx_qsize = SQ_SIZE;
 	rdma_qp_create_attr.tx_elem_size = sizeof(struct split_tunnel_comp);
 	rdma_qp_create_attr.rx_qsize = attr->queue_size;
@@ -924,9 +920,8 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
  */
 int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv;
+	struct blk_virtq_priv *priv = q->priv;
 
-	priv = q->priv;
 	return snap_dma_q_progress(priv->dma_q);
 }
 
