@@ -68,6 +68,11 @@ static int snap_null_blk_dev_get_block_size(void *ctx) {
 	return bdev->attrs.blk_size;
 }
 
+static char *snap_null_blk_dev_get_bdev_name(void *ctx) {
+	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
+	return bdev->name;
+}
+
 struct snap_blk_dev *snap_null_blk_dev_open(const char *name,
 				       const struct snap_blk_dev_attrs *attrs)
 {
@@ -91,6 +96,7 @@ struct snap_blk_dev *snap_null_blk_dev_open(const char *name,
 	bdev->ops.dma_free = snap_null_blk_dev_dma_free;
 	bdev->ops.get_num_blocks = snap_null_blk_dev_get_num_blocks;
 	bdev->ops.get_block_size = snap_null_blk_dev_get_block_size;
+	bdev->ops.get_bdev_name = snap_null_blk_dev_get_bdev_name;
 
 	return bdev;
 

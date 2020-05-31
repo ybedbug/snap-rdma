@@ -25,6 +25,8 @@ typedef void (*snap_bdev_io_done_cb_t)(int result, void *done_arg);
  * @dma_free:		free memory allocated by dma_malloc
  * @get_num_blocks:	pointer to function which gets number of blocks in bdev
  * @get_block_size:	pointer to function which gets bdev block size
+ * @get_bdev_name:	pointer to function which returns null terminated bdev
+ * 			name
  *
  * operations provided by the block device given to the virtio controller
  * ToDo: add mechanism to tell which block operations are supported
@@ -47,6 +49,7 @@ struct snap_bdev_ops {
 	void (*dma_free)(void *buf);
 	int (*get_num_blocks)(void *ctx);
 	int (*get_block_size)(void *ctx);
+	char *(*get_bdev_name)(void *ctx);
 };
 
 #endif
