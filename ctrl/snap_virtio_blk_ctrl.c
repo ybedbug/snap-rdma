@@ -1,5 +1,10 @@
 #include "snap_virtio_blk_ctrl.h"
 
+static inline struct snap_virtio_blk_ctrl_queue*
+to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
+{
+	return container_of(vq, struct snap_virtio_blk_ctrl_queue, common);
+}
 
 static struct snap_virtio_device_attr*
 snap_virtio_blk_ctrl_bar_create(struct snap_virtio_ctrl *vctrl)
@@ -109,9 +114,7 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 
 static void snap_virtio_blk_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 {
-	struct snap_virtio_blk_ctrl_queue *vbq = container_of(vq,
-				struct snap_virtio_blk_ctrl_queue, common);
-
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 	free(vbq);
 }
 
