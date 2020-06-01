@@ -165,8 +165,8 @@ static inline bool snap_virtio_ctrl_needs_reset(struct snap_virtio_ctrl *ctrl)
 
 static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
 {
-	if (ctrl->bar_cbs->validate)
-		return ctrl->bar_cbs->validate(ctrl->cb_ctx);
+	if (ctrl->bar_cbs.validate)
+		return ctrl->bar_cbs.validate(ctrl->cb_ctx);
 
 	return 0;
 }
@@ -216,8 +216,8 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 		}
 	}
 
-	if (ctrl->bar_cbs->start) {
-		ret = ctrl->bar_cbs->start(ctrl->cb_ctx);
+	if (ctrl->bar_cbs.start) {
+		ret = ctrl->bar_cbs.start(ctrl->cb_ctx);
 		if (ret) {
 			snap_virtio_ctrl_device_error(ctrl);
 			goto vq_cleanup;
@@ -251,8 +251,8 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 		}
 	}
 
-	if (ctrl->bar_cbs->stop) {
-		ret = ctrl->bar_cbs->stop(ctrl->cb_ctx);
+	if (ctrl->bar_cbs.stop) {
+		ret = ctrl->bar_cbs.stop(ctrl->cb_ctx);
 		if (ret)
 			goto out;
 	}
@@ -336,7 +336,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	}
 
 	ctrl->bar_ops = bar_ops;
-	ctrl->bar_cbs = attr->bar_cbs;
+	ctrl->bar_cbs = *attr->bar_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
 	ret = snap_virtio_ctrl_bars_init(ctrl);
 	if (ret)

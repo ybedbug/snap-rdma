@@ -82,6 +82,7 @@ int main(int argc, char **argv)
 	struct snap_virtio_blk_ctrl *blk_ctrl = NULL;
 	struct snap_virtio_net_ctrl *net_ctrl = NULL;
 	struct snap_virtio_blk_ctrl_attr blk_attr = {};
+	struct snap_virtio_ctrl_bar_cbs bar_cbs = {};
 	struct snap_blk_dev_attrs bdev_attrs = {0};
 	struct snap_virtio_net_ctrl_attr net_attr = {};
 	struct snap_blk_dev *bdev;
@@ -135,6 +136,7 @@ int main(int argc, char **argv)
 		    goto put_sctx;
 		}
 
+		blk_attr.common.bar_cbs = &bar_cbs;
 		blk_attr.common.pf_id = pf_id;
 		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr, &bdev->ops,
 						     bdev);
@@ -144,6 +146,7 @@ int main(int argc, char **argv)
 			goto close_blk;
 		}
 	} else {
+		net_attr.common.bar_cbs = &bar_cbs;
 		net_attr.common.pf_id = pf_id;
 		net_ctrl = snap_virtio_net_ctrl_open(sctx, &net_attr);
 		if (!net_ctrl) {
