@@ -113,6 +113,33 @@ def main():
     subparsers = parser.add_subparsers(help='Mellanox SNAP JSON-RPC 2.0 Client methods',
                                        dest='called_rpc_name')
 
+    def controller_nvme_delete(args):
+        params = {
+            'name': args.name,
+        }
+        args.client.call('controller_nvme_delete', params)
+    p = subparsers.add_parser('controller_nvme_delete',
+                              help='Destroy NVMe SNAP controller')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_nvme_delete)
+
+    def controller_nvme_create(args):
+        params = {
+            'pci_func': args.pci_func,
+        }
+        if args.conf:
+            params['conf_file'] = args.conf
+
+        result = args.client.call('controller_nvme_create', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_nvme_create',
+                              help='Create new NVMe SNAP controller')
+    p.add_argument('pci_func', help='PCI function to start emulation on',
+                   type=int)
+    p.add_argument('-c', '--conf', help='JSON configuration file to use',
+                   type=str, required=False)
+    p.set_defaults(func=controller_nvme_create)
+
     def emulation_list(args):
         result = args.client.call('emulation_list')
         print(json.dumps(result, indent=2))
