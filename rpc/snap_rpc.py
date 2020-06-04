@@ -161,6 +161,47 @@ def main():
     p = subparsers.add_parser('emulation_list', help=__help)
     p.set_defaults(func=emulation_list)
 
+    def controller_nvme_namespace_detach(args):
+        params = {
+            'ctrl': args.ctrl,
+            'nsid': args.nsid,
+        }
+        args.client.call('controller_nvme_namespace_detach', params)
+    p = subparsers.add_parser('controller_nvme_namespace_detach',
+                              help='Delete NVMe emulation attached namespace')
+    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.add_argument('nsid', help='Namespace id (NSID) to delete', type=int)
+    p.set_defaults(func=controller_nvme_namespace_detach)
+
+    def controller_nvme_namespace_attach(args):
+        params = {
+            'ctrl': args.ctrl,
+            'bdev_type': args.bdev_type,
+            'bdev': args.bdev,
+            'nsid': args.nsid,
+        }
+        args.client.call('controller_nvme_namespace_attach', params)
+    p = subparsers.add_parser('controller_nvme_namespace_attach',
+                              help='Add new NVMe emulation namespace')
+    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.add_argument('bdev_type', help='Block device type', type=str,
+                   choices=["spdk"])
+    p.add_argument('bdev', help='Block device to use as backend', type=str)
+    p.add_argument('nsid', help='Namespace id (NSID)', type=int)
+    p.set_defaults(func=controller_nvme_namespace_attach)
+
+    def controller_nvme_namespace_list(args):
+        params = {
+            'ctrl': args.ctrl,
+        }
+        result = args.client.call('controller_nvme_namespace_list', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('controller_nvme_namespace_list',
+                              help='List attached namespaces on '
+                                   'NVMe controller')
+    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.set_defaults(func=controller_nvme_namespace_list)
+
     def call_rpc_func(args):
         args.func(args)
 
