@@ -214,7 +214,6 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->idx = idx;
 	cmd->vq_priv = vq_priv;
 	cmd->dma_comp.func = sm_dma_cb;
-	cmd->total_in_len = 0;
 	cmd->descs = calloc(num_descs, sizeof(struct vring_desc));
 	if (!cmd->descs) {
 		snap_error("failed to alloc memory for virtq descs\n");
@@ -632,8 +631,6 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
 	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	if (status != VIRTQ_CMD_SM_OP_OK)
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
-	else
-		cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
 }
 
 /**
@@ -746,8 +743,6 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 			break;
 		case VIRTQ_CMD_STATE_RELEASE:
 			cmd->vq_priv->cmd_cntr--;
-			cmd->total_seg_len = 0;
-			cmd->total_in_len = 0;
 			break;
 		case VIRTQ_CMD_STATE_FATAL_ERR:
 			cmd->vq_priv->vq_ctx.fatal_err = -1;
@@ -787,6 +782,9 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd = &priv->cmd_arr[cmd_idx];
 	cmd->num_desc = split_hdr->num_desc;
 	cmd->avail_idx = split_hdr->avail_idx;
+	cmd->total_seg_len = 0;
+	cmd->total_in_len = 0;
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
 
 	if (split_hdr->num_desc) {
 		len = sizeof(struct vring_desc) * split_hdr->num_desc;
