@@ -113,6 +113,43 @@ def main():
     subparsers = parser.add_subparsers(help='Mellanox SNAP JSON-RPC 2.0 Client methods',
                                        dest='called_rpc_name')
 
+    def emulation_device_detach(args):
+        params = {
+            'emulation_manager': args.emu_manager,
+            'pci_id': args.pci_id,
+        }
+        args.client.call('emulation_device_detach', params)
+    p = subparsers.add_parser('emulation_device_detach',
+                              help='Detach (Unplug) SNAP device from host')
+    p.add_argument('emu_manager', help='Emulation manager', type=str)
+    p.add_argument('pci_id', help='PCI Identifier', type=int)
+    p.set_defaults(func=emulation_device_detach)
+
+    def emulation_device_attach_virtio_blk(args):
+        params = {
+            'emulation_manager': args.emu_manager,
+            'bdev_type': args.bdev_type,
+            'bdev': args.bdev,
+            'ssid': args.subsystem_id,
+            'ssvid': args.subsystem_vendor_id,
+            'num_queues': args.num_queues,
+            'queue_depth': args.queue_depth
+        }
+        result = args.client.call('emulation_device_attach_virtio_blk', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('emulation_device_attach_virtio_blk',
+                              help='Attach (plug) VirtIO BLK SNAP device '
+                                   'to host')
+    p.add_argument('emu_manager', help='Emulation manager', type=str)
+    p.add_argument('bdev_type', help='Block device type', type=str,
+                   choices=["spdk"])
+    p.add_argument('bdev', help='Block device to use as backend', type=str)
+    p.add_argument('--ssid', help='Subsystem ID', type=int, default=0)
+    p.add_argument('--ssvid', help='Subsystem Vendor ID', type=int, default=0)
+    p.add_argument('--num_queues', help='Number of queues', type=int, default=8)
+    p.add_argument('--queue_depth', help='Queue depth', type=int, default=1024)
+    p.set_defaults(func=emulation_device_attach_virtio_blk)
+
     def controller_virtio_blk_delete(args):
         params = {
             'name': args.name,
