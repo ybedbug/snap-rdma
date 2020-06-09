@@ -2,6 +2,7 @@
 #include "snap_nvme.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
+#include "snap_queue.h"
 
 #include "mlx5_ifc.h"
 
@@ -1583,7 +1584,7 @@ static int snap_destroy_flow_group(struct mlx5_snap_flow_group *fg)
 {
 	int ret;
 
-	TAILQ_REMOVE(&fg->ft->fg_list, fg, entry);
+	SNAP_TAILQ_REMOVE_SAFE(&fg->ft->fg_list, fg, entry);
 	/* TODO: make sure fte_list is empty */
 	ret = snap_devx_obj_destroy(fg->fg);
 	free(fg->fte_bitmap);
@@ -1695,7 +1696,7 @@ static int snap_reset_tx_steering(struct snap_device *sdev)
 	int ret = 0;
 
 	pthread_mutex_lock(&sdev->mdev.tx->lock);
-	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.tx->fg_list, entry, next) {
+	SNAP_TAILQ_FOREACH_SAFE(fg, &sdev->mdev.tx->fg_list, entry, next) {
 		if (fg == sdev->mdev.fg_tx)
 			sdev->mdev.fg_tx = NULL;
 		ret = snap_destroy_flow_group(fg);
@@ -1741,7 +1742,7 @@ static int snap_reset_rx_steering(struct snap_device *sdev)
 	int ret = 0;
 
 	pthread_mutex_lock(&sdev->mdev.rx->lock);
-	TAILQ_FOREACH_SAFE(fg, &sdev->mdev.rx->fg_list, entry, next) {
+	SNAP_TAILQ_FOREACH_SAFE(fg, &sdev->mdev.rx->fg_list, entry, next) {
 		if (fg == sdev->mdev.fg_rx)
 			sdev->mdev.fg_rx = NULL;
 		else if (fg == sdev->mdev.fg_rx_miss)
@@ -3030,7 +3031,7 @@ void snap_close_device(struct snap_device *sdev)
 	struct snap_context *sctx = sdev->sctx;
 
 	pthread_mutex_lock(&sctx->lock);
-	TAILQ_REMOVE(&sctx->device_list, sdev, entry);
+	SNAP_TAILQ_REMOVE_SAFE(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
 	if (sdev->mdev.channel)

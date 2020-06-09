@@ -1,4 +1,5 @@
 #include "snap_virtio_common_ctrl.h"
+#include "snap_queue.h"
 
 /*
  * Device ERROR can be discovered in 2 cases:
@@ -137,7 +138,7 @@ static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 	struct snap_virtio_ctrl *ctrl = vq->ctrl;
 
 	pthread_spin_lock(&ctrl->live_queues_lock);
-	TAILQ_REMOVE(&ctrl->live_queues, vq, entry);
+	SNAP_TAILQ_REMOVE_SAFE(&ctrl->live_queues, vq, entry);
 	pthread_spin_unlock(&ctrl->live_queues_lock);
 
 	ctrl->q_ops->destroy(vq);

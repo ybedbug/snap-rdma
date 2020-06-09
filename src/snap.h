@@ -42,10 +42,10 @@
 #include <pthread.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/queue.h>
 
 #include <infiniband/verbs.h>
 
-#include "queue.h"
 #include "mlx5_snap.h"
 
 #define PFX "snap: "

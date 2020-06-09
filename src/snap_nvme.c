@@ -1,4 +1,5 @@
 #include "snap_nvme.h"
+#include "snap_queue.h"
 
 #include "mlx5_ifc.h"
 
@@ -351,10 +352,10 @@ int snap_nvme_destroy_namespace(struct snap_nvme_namespace *ns)
 	int ret;
 
 	pthread_mutex_lock(&ndev->lock);
-	TAILQ_FOREACH_SAFE(tmp, &ndev->ns_list, entry, next) {
+	SNAP_TAILQ_FOREACH_SAFE(tmp, &ndev->ns_list, entry, next) {
 		if (tmp == ns) {
 			found = true;
-			TAILQ_REMOVE(&ndev->ns_list, ns, entry);
+			SNAP_TAILQ_REMOVE_SAFE(&ndev->ns_list, ns, entry);
 			break;
 		}
 	}

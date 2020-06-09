@@ -28,6 +28,9 @@ AC_PROG_INSTALL
 
 # Checks for header files.
 AC_CHECK_HEADER([stdlib.h])
+AC_CHECK_HEADER([sys/queue.h],
+                [],
+                [AC_MSG_ERROR("Cannot find sys/queue.h needed for compilation")])
 
 AC_SEARCH_LIBS([pthread_create],[pthread])
 
