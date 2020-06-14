@@ -13,6 +13,16 @@
 typedef void (*snap_bdev_io_done_cb_t)(int result, void *done_arg);
 
 /**
+ * struct snap_bdev_io_done_ctx - context given for bdev ops
+ * @cb: 	callback on io operation done
+ * @user_arg:	user opaque argument given to cb
+ */
+struct snap_bdev_io_done_ctx {
+	snap_bdev_io_done_cb_t cb;
+	void *user_arg;
+};
+
+/**
  * struct snap_bdev_ops - operations provided by block device
  * @read:		pointer to function which reads blocks from bdev
  * @write:		pointer to function which writes blocks to bdev
@@ -34,17 +44,17 @@ typedef void (*snap_bdev_io_done_cb_t)(int result, void *done_arg);
 struct snap_bdev_ops {
 	int (*read)(void *ctx, struct iovec *iov, int iovcnt,
 		    uint64_t offset_blocks, uint64_t num_blocks,
-		    snap_bdev_io_done_cb_t done_fn, void *done_arg);
+		    struct snap_bdev_io_done_ctx *done_ctx);
 	int (*write)(void *ctx, struct iovec *iov, int iovcnt,
 		     uint64_t offset_blocks, uint64_t num_blocks,
-		     snap_bdev_io_done_cb_t done_fn, void *done_arg);
+		     struct snap_bdev_io_done_ctx *done_ctx);
 	int (*flush)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
-		     snap_bdev_io_done_cb_t done_fn, void *done_arg);
+		     struct snap_bdev_io_done_ctx *done_ctx);
 	int (*write_zeroes)(void *ctx,
 			    uint64_t offset_blocks, uint64_t num_blocks,
-			    snap_bdev_io_done_cb_t done_fn, void *done_arg);
+			    struct snap_bdev_io_done_ctx *done_ctx);
 	int (*discard)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
-		       snap_bdev_io_done_cb_t done_fn, void *done_arg);
+		       struct snap_bdev_io_done_ctx *done_ctx);
 	void *(*dma_malloc)(size_t size);
 	void (*dma_free)(void *buf);
 	int (*get_num_blocks)(void *ctx);
