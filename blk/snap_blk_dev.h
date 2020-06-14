@@ -7,27 +7,6 @@
 #include <sys/uio.h>
 #include "snap_blk_ops.h"
 
-/**
- * enum snap_blk_dev_cmd_status - Return status values on bdev_io_done_cb
- * @BLOCK_DEVICE_IO_SUCCESS: 	IO operation succeeded
- * @BLOCK_DEVICE_IO_ERROR:	IO operation failed
- */
-enum snap_blk_dev_cmd_status {
-	BLOCK_DEVICE_IO_SUCCESS,
-	BLOCK_DEVICE_IO_ERROR,
-};
-
-/**
- * bdev_io_done_cb_t - Callback on io done
- * @result:	status of command finished
- * @done_arg:	user provided argument given upon io request
- *
- * Callback given to the block device, should be called
- * when IO command is completed
- */
-typedef void (*bdev_io_done_cb_t)(enum snap_blk_dev_cmd_status result,
-				  void *done_arg);
-
 /*
  * enum snap_blk_dev_type - bdev types
  * @SNAP_BLOCK_DEVICE_NULL:	NULL Block device

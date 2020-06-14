@@ -7,7 +7,7 @@ static int snap_null_blk_dev_read(void *ctx,
 				  struct snap_bdev_io_done_ctx *done_ctx,
 				  int qid)
 {
-	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
 }
 
@@ -17,7 +17,7 @@ static int snap_null_blk_dev_write(void *ctx,
 				   struct snap_bdev_io_done_ctx *done_ctx,
 				   int qid)
 {
-	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
 }
 
@@ -26,7 +26,7 @@ static int snap_null_blk_dev_flush(void *ctx,
 				   struct snap_bdev_io_done_ctx *done_ctx,
 				   int qid)
 {
-	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
 }
 
@@ -36,7 +36,7 @@ static int snap_null_blk_dev_write_zeroes(void *ctx,
 					  struct snap_bdev_io_done_ctx *done_ctx,
 					  int qid)
 {
-	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
 }
 
@@ -46,7 +46,7 @@ static int snap_null_blk_dev_discard(void *ctx,
 				     struct snap_bdev_io_done_ctx *done_ctx,
 				     int qid)
 {
-	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
 }
 

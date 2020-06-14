@@ -4,13 +4,24 @@
 #include <sys/uio.h>
 
 /**
+ * enum snap_bdev_op_status - Return status values for snap_bdev_io_done_cb_t
+ * @SNAP_BDEV_OP_SUCCESS:	operation finished successfully
+ * @SNAP_BDEV_OP_IO_ERROR:	operation failed due to IO error
+ */
+enum snap_bdev_op_status {
+	SNAP_BDEV_OP_SUCCESS,
+	SNAP_BDEV_OP_IO_ERROR,
+};
+
+/**
  * typedef snap_bdev_io_done_cb_t - callback on io operations done
- * @result:	status of the finished operation
+ * @status:	status of the finished operation
  * @done_arg:	user context given on operation request
  *
  * callback function called by block device when operation is finished
  */
-typedef void (*snap_bdev_io_done_cb_t)(int result, void *done_arg);
+typedef void (*snap_bdev_io_done_cb_t)(enum snap_bdev_op_status status,
+				       void *done_arg);
 
 /**
  * struct snap_bdev_io_done_ctx - context given for bdev ops

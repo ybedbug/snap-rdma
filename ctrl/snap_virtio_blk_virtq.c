@@ -203,7 +203,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 	blk_virtq_cmd_progress(cmd, op_status);
 }
 
-static void bdev_io_comp_cb(int result, void *done_arg);
+static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg);
 
 static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
@@ -410,12 +410,12 @@ static int set_iovecs(struct blk_virtq_cmd *cmd)
 	return total_len;
 }
 
-static void bdev_io_comp_cb(int result, void *done_arg)
+static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 {
 	struct blk_virtq_cmd *cmd = done_arg;
 	enum virtq_cmd_sm_op_status op_status = VIRTQ_CMD_SM_OP_OK;
 
-	if (snap_unlikely(result)) {
+	if (snap_unlikely(status != SNAP_BDEV_OP_SUCCESS)) {
 		snap_error("Failed iov completion!\n");
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
