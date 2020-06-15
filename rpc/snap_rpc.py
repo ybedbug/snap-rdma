@@ -140,6 +140,20 @@ def main():
                    type=str, required=False)
     p.set_defaults(func=controller_nvme_create)
 
+    def controller_list(args):
+        params = {}
+        if args.type:
+            params['type'] = args.type
+
+        result = args.client.call('controller_list')
+        print(json.dumps(result, indent=2))
+    __help = 'List all SNAP active controllers with their characteristics'
+    p = subparsers.add_parser('controller_list', help=__help)
+    p.add_argument('-t', '--type', help='Controller Type',
+                   choices=["nvme", "virtio_blk", "virtio_net"], type=str,
+                   required=False)
+    p.set_defaults(func=controller_list)
+
     def emulation_list(args):
         result = args.client.call('emulation_list')
         print(json.dumps(result, indent=2))
