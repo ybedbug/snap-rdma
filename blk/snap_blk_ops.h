@@ -49,7 +49,7 @@ struct snap_bdev_ops {
 	void (*dma_free)(void *buf);
 	int (*get_num_blocks)(void *ctx);
 	int (*get_block_size)(void *ctx);
-	char *(*get_bdev_name)(void *ctx);
+	const char *(*get_bdev_name)(void *ctx);
 };
 
 #endif

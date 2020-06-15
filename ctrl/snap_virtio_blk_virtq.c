@@ -521,7 +521,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	int ret, len;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
-	char *dev_name;
+	const char *dev_name;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to get request data, returning"
