@@ -4,7 +4,8 @@
 static int snap_null_blk_dev_read(void *ctx,
 				  struct iovec *iov, int iovcnt,
 				  uint64_t offset_blocks, uint64_t num_blocks,
-				  struct snap_bdev_io_done_ctx *done_ctx)
+				  struct snap_bdev_io_done_ctx *done_ctx,
+				  int qid)
 {
 	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
 	return 0;
@@ -13,7 +14,8 @@ static int snap_null_blk_dev_read(void *ctx,
 static int snap_null_blk_dev_write(void *ctx,
 				   struct iovec *iov, int iovcnt,
 				   uint64_t offset_blocks, uint64_t num_blocks,
-				   struct snap_bdev_io_done_ctx *done_ctx)
+				   struct snap_bdev_io_done_ctx *done_ctx,
+				   int qid)
 {
 	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
 	return 0;
@@ -21,7 +23,8 @@ static int snap_null_blk_dev_write(void *ctx,
 
 static int snap_null_blk_dev_flush(void *ctx,
 				   uint64_t offset_blocks, uint64_t num_blocks,
-				   struct snap_bdev_io_done_ctx *done_ctx)
+				   struct snap_bdev_io_done_ctx *done_ctx,
+				   int qid)
 {
 	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
 	return 0;
@@ -30,7 +33,8 @@ static int snap_null_blk_dev_flush(void *ctx,
 static int snap_null_blk_dev_write_zeroes(void *ctx,
 					  uint64_t offset_blocks,
 					  uint64_t num_blocks,
-					  struct snap_bdev_io_done_ctx *done_ctx)
+					  struct snap_bdev_io_done_ctx *done_ctx,
+					  int qid)
 {
 	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
 	return 0;
@@ -39,7 +43,8 @@ static int snap_null_blk_dev_write_zeroes(void *ctx,
 static int snap_null_blk_dev_discard(void *ctx,
 				     uint64_t offset_blocks,
 				     uint64_t num_blocks,
-				     struct snap_bdev_io_done_ctx *done_ctx)
+				     struct snap_bdev_io_done_ctx *done_ctx,
+				     int qid)
 {
 	done_ctx->cb(BLOCK_DEVICE_IO_SUCCESS, done_ctx->user_arg);
 	return 0;

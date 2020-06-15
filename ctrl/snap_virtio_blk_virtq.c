@@ -523,7 +523,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			     enum virtq_cmd_sm_op_status status)
 {
 	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
-	int ret, len;
+	int ret, len, qid = cmd->vq_priv->vq_ctx.idx;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
 	const char *dev_name;
@@ -545,7 +545,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				       cmd->num_desc - NUM_HDR_FTR_DESCS,
 				       req_hdr_p->sector * BDEV_SECTOR_SIZE,
 				       cmd->total_seg_len,
-				       &cmd->bdev_op_ctx);
+				       &cmd->bdev_op_ctx, qid);
 		break;
 	case VIRTIO_BLK_T_IN:
 		cmd->total_seg_len = set_iovecs(cmd);
@@ -554,7 +554,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				      cmd->num_desc - NUM_HDR_FTR_DESCS,
 				      req_hdr_p->sector * BDEV_SECTOR_SIZE,
 				      cmd->total_seg_len,
-				      &cmd->bdev_op_ctx);
+				      &cmd->bdev_op_ctx, qid);
 		break;
 	case VIRTIO_BLK_T_FLUSH:
 		req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
@@ -566,7 +566,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			num_blocks = bdev->ops->get_num_blocks(bdev->ctx);
 			ret = bdev->ops->flush(bdev->ctx, 0, num_blocks,
-					       &cmd->bdev_op_ctx);
+					       &cmd->bdev_op_ctx, qid);
 		}
 		break;
 	case VIRTIO_BLK_T_GET_ID:
