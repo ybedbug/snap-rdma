@@ -368,7 +368,8 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 	else
 		return VIRTQ_FETCH_DESC_DONE;
 
-	srcaddr = cmd->vq_priv->snap_attr.vattr.desc + in_ring_desc_addr;
+	srcaddr = cmd->vq_priv->snap_attr.vattr.desc +
+		  in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->dma_comp.count = 1;
 	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->descs[cmd->num_desc],
 			      sizeof(struct vring_desc), cmd->desc_mr->lkey,
