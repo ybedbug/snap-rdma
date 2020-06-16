@@ -4,9 +4,6 @@
 #include "snap_dma.h"
 #include "snap_virtio_blk.h"
 
-#define SQ_SIZE_LOG  6
-#define SQ_SIZE (1 << SQ_SIZE_LOG)
-
 #define NUM_HDR_FTR_DESCS 2
 
 #define BDEV_SECTOR_SIZE 512
@@ -878,7 +875,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 	}
 	vq_priv->cmd_cntr = 0;
 
-	rdma_qp_create_attr.tx_qsize = SQ_SIZE;
+	rdma_qp_create_attr.tx_qsize = attr->queue_size;
 	rdma_qp_create_attr.tx_elem_size = sizeof(struct split_tunnel_comp);
 	rdma_qp_create_attr.rx_qsize = attr->queue_size;
 	rdma_qp_create_attr.rx_elem_size = sizeof(struct split_tunnel_req_hdr) +
