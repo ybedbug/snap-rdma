@@ -113,6 +113,33 @@ def main():
     subparsers = parser.add_subparsers(help='Mellanox SNAP JSON-RPC 2.0 Client methods',
                                        dest='called_rpc_name')
 
+    def controller_virtio_blk_delete(args):
+        params = {
+            'name': args.name,
+        }
+        args.client.call('controller_virtio_blk_delete', params)
+    p = subparsers.add_parser('controller_virtio_blk_delete',
+                              help='Destroy VirtIO BLK SNAP controller')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_virtio_blk_delete)
+
+    def controller_virtio_blk_create(args):
+        params = {
+            'pci_func': args.pci_func,
+            'bdev_type': args.bdev_type,
+            'bdev': args.bdev,
+        }
+        result = args.client.call('controller_virtio_blk_create', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_virtio_blk_create',
+                              help='Create new VirtIO BLK SNAP controller')
+    p.add_argument('pci_func', help='PCI function to start emulation on',
+                   type=int)
+    p.add_argument('bdev_type', help='Block device type', type=str,
+                   choices=["spdk"])
+    p.add_argument('bdev', help='Block device to use as backend', type=str)
+    p.set_defaults(func=controller_virtio_blk_create)
+
     def controller_nvme_delete(args):
         params = {
             'name': args.name,
