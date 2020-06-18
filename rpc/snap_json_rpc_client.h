@@ -40,6 +40,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <errno.h>
+#include <poll.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -49,17 +50,39 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#define SNAP_JSON_RPC_RECV_BUF_SIZE_INIT (8 * 1024)
+#define SNAP_JSON_RPC_RECV_BUF_MAX_SIZE (128 * 1024)
+
+struct snap_json_rpc_client_response {
+	char *buf;
+	size_t length;
+};
 
 struct snap_json_rpc_client {
 	int sockfd;
 	bool connected;
 
+	/* lock to serialize the data transfers */
+	pthread_mutex_t lock;
+
+	bool rsp_ready;
 	size_t recv_buf_size;
 	size_t recv_offset;
 	char *recv_buf;
+
+	size_t send_len;
+	size_t send_offset;
+	char *send_buf;
+
 };
 
 struct snap_json_rpc_client *snap_json_rpc_client_open(const char *addr);
 void snap_json_rpc_client_close(struct snap_json_rpc_client *client);
+int snap_json_rpc_client_send_req(struct snap_json_rpc_client *client,
+				  void *buf, size_t length);
+int snap_json_rpc_wait_for_response(struct snap_json_rpc_client *client);
+void snap_json_rpc_put_response(struct snap_json_rpc_client_response *rsp);
+struct snap_json_rpc_client_response*
+snap_json_rpc_get_response(struct snap_json_rpc_client *client);
 
 #endif
