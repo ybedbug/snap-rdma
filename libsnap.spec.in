@@ -41,6 +41,7 @@ make %{?_smp_mflags}
 %install
 rm -rf $RPM_BUILD_ROOT
 %make_install
+install -m 755 ./rpc/snap_rpc.py ${RPM_BUILD_ROOT}%{_sbindir}
 
 %files
 %defattr(-,root,root)

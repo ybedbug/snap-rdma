@@ -5,7 +5,7 @@ SUBDIRS = src ctrl rpc tests
 
 include_HEADERS = blk/snap_blk_dev.h  blk/snap_blk_ops.h  blk/snap_null_blk_dev.h
 
-EXTRA_DIST = libsnap.spec README.md autogen.sh
+EXTRA_DIST = libsnap.spec README.md autogen.sh debian rpc/snap_rpc.py
 
 if HAVE_GTEST
 #

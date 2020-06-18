@@ -17,7 +17,11 @@ else
 fi
 AC_SUBST([GIT_BRANCH], [$(git rev-parse --abbrev-ref HEAD)])
 AC_SUBST([GIT_SHA1], [$(git rev-parse HEAD |cut -c -8)])
-
+dateopt=""
+if test -n "$SOURCE_DATE_EPOCH" ; then
+    dateopt="-u -d @$SOURCE_DATE_EPOCH"
+fi
+AC_SUBST([BUILD_DATE_CHANGELOG], [$(date $dateopt +'%a, %d %b %Y %T %z')])
 
 # Use C not C++
 AC_LANG([C])
@@ -62,6 +66,7 @@ AC_CONFIG_FILES([Makefile
 		 ctrl/Makefile
 		 rpc/Makefile
 		 tests/Makefile
-		 libsnap.spec])
+		 libsnap.spec
+         debian/changelog])
 
 AC_OUTPUT

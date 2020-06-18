@@ -42,9 +42,6 @@ depcomp
 build-*
 rpm-dist
 cov_build*
-debian/changelog
-debian/control
-debian/rules
 doc/doxygen-doc
 doc/uml/uct.pdf
 test-driver

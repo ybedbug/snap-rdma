@@ -1,0 +1,11 @@
+Source: libsnap
+Section: unknown
+Priority: optional
+Maintainer: Andrii Holovchenko <andriih@mellanox.com>
+Build-Depends: debhelper (>= 10), autotools-dev
+Standards-Version: 4.1.2
+Homepage: www.mellanox.com
+Package: libsnap
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, librdmacm1 (>= 51mlnx1-1.51023)
+Description: Library that assists in common tasks when interacting with the emulating hardware in order to present a SNAP device to an external host or a VM.
