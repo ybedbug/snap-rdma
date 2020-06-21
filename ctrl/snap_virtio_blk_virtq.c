@@ -526,6 +526,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	int ret, len, qid = cmd->vq_priv->vq_ctx.idx;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
+	uint32_t blk_size;
 	const char *dev_name;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
@@ -565,7 +566,9 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		} else {
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			num_blocks = bdev->ops->get_num_blocks(bdev->ctx);
-			ret = bdev->ops->flush(bdev->ctx, 0, num_blocks,
+			blk_size = bdev->ops->get_block_size(bdev->ctx);
+			ret = bdev->ops->flush(bdev->ctx, 0,
+					       num_blocks * blk_size,
 					       &cmd->bdev_op_ctx, qid);
 		}
 		break;
