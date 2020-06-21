@@ -20,6 +20,7 @@ int main(int argc, char **argv)
 			break;
 		case 'l':
 			lba = atoi(optarg);
+			break;
 		case 'm':
 			md = atoi(optarg);
 			break;
