@@ -14,7 +14,9 @@ noinst_PROGRAMS = \
 		snap_create_destroy_virtio_queue \
 		snap_create_destroy_virtio_ctrl \
 		snap_sample_device \
-		snap_sample_uio_driver
+		snap_sample_uio_driver \
+		snap_rpc_client_open_close
+
 
 LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
 SNAP_TEST_FILES = snap_test.h snap_test.c
@@ -82,6 +84,11 @@ snap_create_destroy_nvme_ctrl_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_n
 snap_create_destroy_nvme_ctrl_LDADD = $(IBVERBS_LIBS) \
 				      $(top_builddir)/ctrl/libsnap-nvme-ctrl.la \
 				      $(top_builddir)/src/libsnap.la
+
+snap_rpc_client_open_close_CFLAGS = $(LOCAL_CFLAGS) \
+					-I$(top_srcdir)/rpc
+snap_rpc_client_open_close_SOURCES = snap_rpc_client_open_close.c
+snap_rpc_client_open_close_LDADD = $(top_builddir)/rpc/libsnap-json-rpc-client.la
 
 UIO_FILES = host_uio.h host_uio.c
 
