@@ -247,6 +247,11 @@ out:
 	return ret;
 }
 
+bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl)
+{
+	return ctrl->state == SNAP_VIRTIO_CTRL_STOPPED;
+}
+
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 {
 	int ret;

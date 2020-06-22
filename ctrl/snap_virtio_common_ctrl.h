@@ -149,6 +149,7 @@ struct snap_virtio_ctrl {
 	struct ibv_pd *lb_pd;
 };
 
+bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
