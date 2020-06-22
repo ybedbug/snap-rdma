@@ -16,7 +16,8 @@ as acquired from controller_virtio_blk_create().
   "method": "controller_virtio_blk_delete"
 
   "params": {
-    "name": "VblkEmu0"
+    "name": "VblkEmu0",
+    "force": True
   }
 }
 

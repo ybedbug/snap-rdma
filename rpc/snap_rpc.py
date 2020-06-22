@@ -154,10 +154,15 @@ def main():
         params = {
             'name': args.name,
         }
+        if args.f:
+            params['force'] = args.f
+
         args.client.call('controller_virtio_blk_delete', params)
     p = subparsers.add_parser('controller_virtio_blk_delete',
                               help='Destroy VirtIO BLK SNAP controller')
     p.add_argument('name', help='Controller Name', type=str)
+    p.add_argument('--f', '--force', help='Force controller deletion',
+                   required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_delete)
 
     def controller_virtio_blk_create(args):
