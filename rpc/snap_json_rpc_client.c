@@ -82,7 +82,7 @@ static int snap_json_rpc_client_sock_send(struct snap_json_rpc_client *client)
 	if (client->send_len > 0) {
 		ret = send(client->sockfd,
 			   client->send_buf + client->send_offset,
-			   client->send_len, 0);
+			   client->send_len, MSG_NOSIGNAL);
 		if (ret < 0) {
 			/* For EINTR we pretend that nothing was send. */
 			if (errno == EINTR)
