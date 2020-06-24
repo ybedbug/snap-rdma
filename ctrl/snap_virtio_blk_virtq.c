@@ -1,5 +1,6 @@
 #include <linux/virtio_ring.h>
 #include <linux/virtio_blk.h>
+#include <linux/virtio_pci.h>
 #include "snap_virtio_blk_virtq.h"
 #include "snap_dma.h"
 #include "snap_virtio_blk.h"
@@ -898,7 +899,9 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 	}
 
 	vq_priv->snap_attr.vattr.type = SNAP_VIRTQ_SPLIT_MODE;
-	vq_priv->snap_attr.vattr.ev_mode = SNAP_VIRTQ_MSIX_MODE;
+	vq_priv->snap_attr.vattr.ev_mode = (attr->msix_vector == VIRTIO_MSI_NO_VECTOR) ?
+					    SNAP_VIRTQ_NO_MSIX_MODE :
+					    SNAP_VIRTQ_MSIX_MODE;
 	vq_priv->snap_attr.vattr.virtio_version_1_0 = attr->virtio_version_1_0;
 	vq_priv->snap_attr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
 	vq_priv->snap_attr.vattr.idx = attr->idx;
