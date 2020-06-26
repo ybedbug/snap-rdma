@@ -13,7 +13,7 @@
 
 %define dist .mlnx
 
-Name:	libsnap
+Name:	mlnx-libsnap
 Version:        %{scm_version}
 Release:        %{scm_rev}%{?dist}
 
@@ -21,7 +21,7 @@ Summary:	Software-defined Network Accelerated Processing (SNAP) user-space libra
 
 License:	Proprietary
 URL:	https://github.com/Mellanox/snap-rdma
-Source0:	libsnap-%{version}.tar.gz
+Source0:	mlnx-libsnap-%{version}.tar.gz
 
 BuildRequires:	automake autoconf make gcc
 Requires:	librdmacm >= 50mlnx1-1.50218
@@ -31,7 +31,7 @@ Library that assists in common tasks when interacting with the emulating hardwar
 in order to present a SNAP device to an external host or a VM.
 
 %prep
-%setup -q -n libsnap-%{scm_version}
+%setup -q -n mlnx-libsnap-%{scm_version}
 
 %build
 ./autogen.sh

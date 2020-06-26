@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([libsnap], [1.0], [support@mellanox.com])
+AC_INIT([mlnx-libsnap], [1.0], [support@mellanox.com])
 AC_CONFIG_SRCDIR([src/snap.h])
 AC_CONFIG_HEADERS([config.h])
 
@@ -66,7 +66,7 @@ AC_CONFIG_FILES([Makefile
 		 ctrl/Makefile
 		 rpc/Makefile
 		 tests/Makefile
-		 libsnap.spec
+		 mlnx-libsnap.spec
          debian/changelog])
 
 AC_OUTPUT

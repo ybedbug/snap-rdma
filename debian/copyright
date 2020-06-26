@@ -1,5 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: libsnap
+Upstream-Name: mlnx-libsnap
 Source: https://github.com/Mellanox/snap-rdma
 
 Files: *
