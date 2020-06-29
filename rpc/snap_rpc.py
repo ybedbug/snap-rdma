@@ -130,8 +130,8 @@ def main():
             'emulation_manager': args.emu_manager,
             'bdev_type': args.bdev_type,
             'bdev': args.bdev,
-            'ssid': args.subsystem_id,
-            'ssvid': args.subsystem_vendor_id,
+            'ssid': args.ssid,
+            'ssvid': args.ssvid,
             'num_queues': args.num_queues,
             'queue_depth': args.queue_depth
         }
