@@ -167,6 +167,8 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 			ret = snap_virtio_ctrl_bar_modify(ctrl,
 							  SNAP_VIRTIO_MOD_ENABLED,
 							  ctrl->bar_curr);
+			/* The status should be 0 if Driver reset device. */
+			ctrl->bar_curr->status = 0;
 		}
 	} else {
 		ret = snap_virtio_ctrl_validate(ctrl);
