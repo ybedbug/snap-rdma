@@ -53,5 +53,9 @@ install -m 755 ./rpc/snap_rpc.py ${RPM_BUILD_ROOT}%{_sbindir}
 %doc README.md AUTHORS COPYING NEWS
 
 %changelog
+* Thu Jul 02 2020 Andrii Holovchenko <andriih@mellanox.com> [1.0.0]
+- Created Debian package
+- Renamed libsnap -> mlnx-libsnap
+
 * Thu Nov 28 2019 Max Gurtovoy <maxg@mellanox.com> [0.1]
 - created initial spec file for libsnap
