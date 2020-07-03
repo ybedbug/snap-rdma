@@ -8,5 +8,5 @@ Homepage: www.mellanox.com
 
 Package: mlnx-libsnap
 Architecture: arm64
-Depends: ${shlibs:Depends}, ${misc:Depends}, librdmacm1 (>= 51mlnx1-1.51023)
+Depends: ${shlibs:Depends}, ${misc:Depends}, librdmacm1
 Description: Library that assists in common tasks when interacting with the emulating hardware in order to present a SNAP device to an external host or a VM.
