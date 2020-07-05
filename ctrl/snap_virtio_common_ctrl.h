@@ -120,6 +120,7 @@ struct snap_virtio_queue_ops {
 	void (*destroy)(struct snap_virtio_ctrl_queue *queue);
 	void (*progress)(struct snap_virtio_ctrl_queue *queue);
 	void (*start)(struct snap_virtio_ctrl_queue *queue);
+	void (*suspend)(struct snap_virtio_ctrl_queue *queue);
 };
 
 struct snap_virtio_ctrl_bar_ops {
