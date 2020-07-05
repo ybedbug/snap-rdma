@@ -74,10 +74,16 @@ struct blk_virtq_create_attr {
 	bool virtio_version_1_0;
 };
 
+struct blk_virtq_start_attr {
+	int pg_id;
+};
+
 struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 				       void *bdev, struct snap_device *snap_dev,
 				       struct blk_virtq_create_attr *attr);
 void blk_virtq_destroy(struct blk_virtq_ctx *q);
+void blk_virtq_start(struct blk_virtq_ctx *q,
+		     struct blk_virtq_start_attr *attr);
 int blk_virtq_progress(struct blk_virtq_ctx *q);
 int blk_virtq_suspend(struct blk_virtq_ctx *q);
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);

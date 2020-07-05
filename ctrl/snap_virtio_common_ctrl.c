@@ -107,6 +107,8 @@ static void snap_virtio_ctrl_sched_q(struct snap_virtio_ctrl *ctrl,
 	pthread_spin_lock(&pg->lock);
 	TAILQ_INSERT_TAIL(&pg->q_list, &vq->pg_q, entry);
 	vq->pg = pg;
+	if (ctrl->q_ops->start)
+		ctrl->q_ops->start(vq);
 	pthread_spin_unlock(&pg->lock);
 }
 

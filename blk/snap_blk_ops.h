@@ -55,17 +55,18 @@ struct snap_bdev_io_done_ctx {
 struct snap_bdev_ops {
 	int (*read)(void *ctx, struct iovec *iov, int iovcnt,
 		    uint64_t offset_blocks, uint64_t num_blocks,
-		    struct snap_bdev_io_done_ctx *done_ctx, int qid);
+		    struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	int (*write)(void *ctx, struct iovec *iov, int iovcnt,
 		     uint64_t offset_blocks, uint64_t num_blocks,
-		     struct snap_bdev_io_done_ctx *done_ctx, int qid);
+		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	int (*flush)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
-		     struct snap_bdev_io_done_ctx *done_ctx, int qid);
+		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	int (*write_zeroes)(void *ctx,
 			    uint64_t offset_blocks, uint64_t num_blocks,
-			    struct snap_bdev_io_done_ctx *done_ctx, int qid);
+			    struct snap_bdev_io_done_ctx *done_ctx,
+			    int thread_id);
 	int (*discard)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
-		       struct snap_bdev_io_done_ctx *done_ctx, int qid);
+		       struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	void *(*dma_malloc)(size_t size);
 	void (*dma_free)(void *buf);
 	int (*get_num_blocks)(void *ctx);

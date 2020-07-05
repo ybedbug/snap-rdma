@@ -164,6 +164,7 @@ struct blk_virtq_priv {
 	struct ibv_mr *req_mr;
 	struct ibv_mr *desc_mr;
 	struct iovec *iovecs;
+	int pg_id;
 };
 
 static inline int req_buf_size(int size_max, int seg_max)
@@ -572,7 +573,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				       cmd->num_desc - NUM_HDR_FTR_DESCS,
 				       req_hdr_p->sector * BDEV_SECTOR_SIZE,
 				       cmd->total_seg_len,
-				       &cmd->bdev_op_ctx, qid);
+				       &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
 		break;
 	case VIRTIO_BLK_T_IN:
 		cmd->total_seg_len = set_iovecs(cmd);
@@ -581,7 +582,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				      cmd->num_desc - NUM_HDR_FTR_DESCS,
 				      req_hdr_p->sector * BDEV_SECTOR_SIZE,
 				      cmd->total_seg_len,
-				      &cmd->bdev_op_ctx, qid);
+				      &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
 		break;
 	case VIRTIO_BLK_T_FLUSH:
 		req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
@@ -595,7 +596,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			blk_size = bdev->ops->get_block_size(bdev->ctx);
 			ret = bdev->ops->flush(bdev->ctx, 0,
 					       num_blocks * blk_size,
-					       &cmd->bdev_op_ctx, qid);
+					       &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
 		}
 		break;
 	case VIRTIO_BLK_T_GET_ID:
@@ -1070,6 +1071,23 @@ bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->priv;
 	return priv->swq_state == BLK_SW_VIRTQ_SUSPENDED;
+}
+
+/**
+ * blk_virtq_start() - set virtq attributes used for operating
+ * @q:  	queue to start
+ * @attr:	attrs used to start the quue
+ *
+ * Function set attributes queue needs in order to operate.
+ *
+ * Return: void
+ */
+void blk_virtq_start(struct blk_virtq_ctx *q,
+		     struct blk_virtq_start_attr *attr)
+{
+	struct blk_virtq_priv *priv = q->priv;
+
+	priv->pg_id = attr->pg_id;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx) {

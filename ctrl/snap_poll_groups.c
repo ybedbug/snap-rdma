@@ -54,6 +54,7 @@ struct snap_pg *snap_pg_get_next(struct snap_pg_ctx *ctx)
 	struct snap_pg *pg;
 
 	pg = &ctx->pgs[ctx->next_pg];
+	pg->id = ctx->next_pg;
 	ctx->next_pg = (ctx->next_pg + 1) % ctx->npgs;
 	return pg;
 }
