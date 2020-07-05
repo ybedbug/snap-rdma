@@ -96,10 +96,8 @@ enum virtq_cmd_sm_op_status {
  * @blk_req_ftr:	request footer written to host memory
  * @state:		state of sm processing the command
  * @req_buf:		buffer holding the request data
- * @req_mr:		memory region for req_buf
  * @descs:		memory holding command descriptors
  * @iovecs:		io vectors pointing to data to written/read by bdev
- * @desc_mr:		memory region for descs
  * @dma_comp:		struct given to snap library
  * @tunnel_comp:	completion sent to FW
  * @total_seg_len:	total length of the request data to be written/read
@@ -114,10 +112,8 @@ struct blk_virtq_cmd {
 	enum virtq_cmd_sm_state state;
 	uint8_t *req_buf;
 	char *device_id;
-	struct ibv_mr *req_mr;
 	struct vring_desc *descs;
 	struct iovec *iovecs;
-	struct ibv_mr *desc_mr;
 	struct snap_dma_completion dma_comp;
 	struct split_tunnel_comp *tunnel_comp;
 	uint32_t total_seg_len;
@@ -163,6 +159,11 @@ struct blk_virtq_priv {
 	int cmd_cntr;
 	int seg_max;
 	int size_max;
+	uint8_t *req_buf;
+	struct vring_desc *descs_buf;
+	struct ibv_mr *req_mr;
+	struct ibv_mr *desc_mr;
+	struct iovec *iovecs;
 };
 
 static inline int req_buf_size(int size_max, int seg_max)
@@ -175,15 +176,6 @@ static inline uint8_t *cmd2ftr(struct blk_virtq_cmd *cmd)
 {
 	return cmd->req_buf + sizeof(struct virtio_blk_outhdr) +
 	       cmd->total_seg_len;
-}
-
-static void free_blk_virtq_cmd(struct blk_virtq_cmd *cmd)
-{
-	ibv_dereg_mr(cmd->desc_mr);
-	ibv_dereg_mr(cmd->req_mr);
-	cmd->vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
-	free(cmd->iovecs);
-	free(cmd->descs);
 }
 
 static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
@@ -206,7 +198,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 
 static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg);
 
-static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
+static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
 {
@@ -216,67 +208,101 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->idx = idx;
 	cmd->vq_priv = vq_priv;
 	cmd->dma_comp.func = sm_dma_cb;
-	cmd->descs = calloc(num_descs, sizeof(struct vring_desc));
+	cmd->descs = &vq_priv->descs_buf[num_descs * idx];
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->bdev_op_ctx.user_arg = cmd;
-	if (!cmd->descs) {
-		snap_error("failed to alloc memory for virtq descs\n");
-		goto err;
-	}
 
-	cmd->iovecs = calloc(seg_max, sizeof(struct iovec));
-	if (!cmd->iovecs) {
-		snap_error("failed to alloc memory for virtq iovecs\n");
-		goto free_descs;
-	}
-
+	cmd->iovecs = &vq_priv->iovecs[seg_max * idx];
 	buf_size = req_buf_size(size_max, seg_max)
 		   + sizeof(struct split_tunnel_comp)
 		   + VIRTIO_BLK_ID_BYTES;
-	cmd->req_buf = vq_priv->blk_dev.ops->dma_malloc(buf_size);
-	if (!cmd->req_buf) {
-		snap_error("failed to allocate memory for blk request for queue"
-			   " %d\n", vq_priv->vq_ctx.idx);
-		goto free_iovecs;
-	}
+	cmd->req_buf = vq_priv->req_buf + buf_size * idx;
 	cmd->device_id = (char *)(cmd->req_buf +
 			 req_buf_size(size_max, seg_max) +
 			 sizeof(struct split_tunnel_comp));
 	cmd->tunnel_comp = (struct split_tunnel_comp *)
 			   (cmd->req_buf + buf_size);
-	cmd->req_mr = ibv_reg_mr(vq_priv->pd, cmd->req_buf, buf_size,
-				 IBV_ACCESS_REMOTE_READ |
-				 IBV_ACCESS_REMOTE_WRITE |
-				 IBV_ACCESS_LOCAL_WRITE);
-	if (!cmd->req_mr) {
-		snap_error("failed to register data mr for queue %d cmd"
-			   " reqs\n", vq_priv->vq_ctx.idx);
-		goto free_req_bufs;
+}
+
+static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
+			      struct blk_virtq_priv *vq_priv)
+{
+	uint32_t n_descs = VIRTIO_NUM_DESC(seg_max);
+	uint32_t req_size = req_buf_size(size_max, seg_max);
+	uint32_t comp_size = sizeof(struct split_tunnel_comp);
+	uint32_t n_cmds = vq_priv->snap_attr.vattr.size;
+	int err = 0;
+	uint32_t buf_size, descs_mr_size;
+
+	vq_priv->iovecs = calloc(seg_max * n_cmds, sizeof(struct iovec));
+	if (!vq_priv->iovecs) {
+		snap_error("failed to alloc memory for virtq %d iovecs\n",
+			   vq_priv->vq_ctx.idx);
+		return -ENOMEM;
 	}
 
-	cmd->desc_mr = ibv_reg_mr(vq_priv->pd, cmd->descs,
-				  sizeof(struct vring_desc) * num_descs,
-				  IBV_ACCESS_REMOTE_READ |
-				  IBV_ACCESS_REMOTE_WRITE |
-				  IBV_ACCESS_LOCAL_WRITE);
-	if (!cmd->desc_mr) {
-		snap_error("failed to register mr for queue %d cmd"
-			   " descs\n", vq_priv->vq_ctx.idx);
-		goto dereg_req_mr;
+	vq_priv->descs_buf = calloc(n_descs * n_cmds,
+				    sizeof(struct vring_desc));
+	if (!vq_priv->descs_buf) {
+		snap_error("failed to allocate memory for virtq %d descs\n",
+			    vq_priv->vq_ctx.idx);
+		err = -ENOMEM;
+		goto free_iovecs;
 	}
+
+	descs_mr_size = n_descs * n_cmds * sizeof(struct vring_desc);
+	vq_priv->desc_mr = ibv_reg_mr(vq_priv->pd, vq_priv->descs_buf,
+				      descs_mr_size,
+				      IBV_ACCESS_REMOTE_READ |
+				      IBV_ACCESS_REMOTE_WRITE |
+				      IBV_ACCESS_LOCAL_WRITE);
+	if (!vq_priv->desc_mr) {
+		snap_error("failed to register desc mr for queue %d\n",
+			   vq_priv->vq_ctx.idx);
+		err = -1;
+		goto free_descs;
+	}
+
+	buf_size = n_cmds * (req_size + comp_size + VIRTIO_BLK_ID_BYTES);
+	vq_priv->req_buf = vq_priv->blk_dev.ops->dma_malloc(buf_size);
+	if (!vq_priv->req_buf) {
+		snap_error("failed to allocate memory for virtq %d requests\n",
+			    vq_priv->vq_ctx.idx);
+		err = -ENOMEM;
+		goto dereg_desc_mr;
+	}
+
+	vq_priv->req_mr = ibv_reg_mr(vq_priv->pd, vq_priv->req_buf, buf_size,
+				     IBV_ACCESS_REMOTE_READ |
+				     IBV_ACCESS_REMOTE_WRITE |
+				     IBV_ACCESS_LOCAL_WRITE);
+	if (!vq_priv->req_mr) {
+		snap_error("failed to register data mr for queue %d\n",
+			   vq_priv->vq_ctx.idx);
+		err = -1;
+		goto free_reqs_buf;
+	}
+
 	return 0;
 
-dereg_req_mr:
-	 ibv_dereg_mr(cmd->req_mr);
-free_req_bufs:
-	vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
-free_iovecs:
-	free(cmd->iovecs);
+free_reqs_buf:
+	vq_priv->blk_dev.ops->dma_free(vq_priv->req_buf);
+dereg_desc_mr:
+	ibv_dereg_mr(vq_priv->desc_mr);
 free_descs:
-	free(cmd->descs);
-err:
-	snap_error("failed to initialize cmd %d\n", idx);
-	return -1;
+	free(vq_priv->descs_buf);
+free_iovecs:
+	free(vq_priv->iovecs);
+	return err;
+}
+
+void free_blk_virtq_cmds_mem(struct blk_virtq_priv *vq_priv)
+{
+	ibv_dereg_mr(vq_priv->req_mr);
+	vq_priv->blk_dev.ops->dma_free(vq_priv->req_buf);
+	ibv_dereg_mr(vq_priv->desc_mr);
+	free(vq_priv->descs_buf);
+	free(vq_priv->iovecs);
 }
 
 /**
@@ -301,38 +327,35 @@ static struct blk_virtq_cmd *
 alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 			struct blk_virtq_priv *vq_priv)
 {
-	int i, j, ret, num = vq_priv->snap_attr.vattr.size;
+	int i, num = vq_priv->snap_attr.vattr.size;
 	struct blk_virtq_cmd *cmd_arr;
+
+	if (init_virtq_cmds_mem(size_max, seg_max, vq_priv))
+		return NULL;
 
 	cmd_arr = calloc(num, sizeof(struct blk_virtq_cmd));
 	if (!cmd_arr) {
 		snap_error("failed to allocate memory for blk_virtq commands\n");
-		return NULL;
+		goto free_mem;
 	}
 
 	for (i = 0; i < num; i++) {
-		ret = init_blk_virtq_cmd(&cmd_arr[i], i, size_max, seg_max,
-					 vq_priv);
-		if (ret)
-			goto free_reqs;
+		init_blk_virtq_cmd(&cmd_arr[i], i, size_max, seg_max,
+				   vq_priv);
 	}
 	return cmd_arr;
 
-free_reqs:
-	for (j = 0; j < i; j++)
-		free_blk_virtq_cmd(&cmd_arr[j]);
-	free(cmd_arr);
-	snap_error("failed allocating commands for queue\n");
+free_mem:
+	free_blk_virtq_cmds_mem(vq_priv);
+	snap_error("failed allocating commands for queue %d\n",
+		   vq_priv->vq_ctx.idx);
 	return NULL;
 }
 
 static void free_blk_virtq_cmd_arr(struct blk_virtq_priv *priv)
 {
-	int i;
-
-	for (i = 0; i < priv->snap_attr.vattr.size; i++)
-		free_blk_virtq_cmd(&priv->cmd_arr[i]);
 	free(priv->cmd_arr);
+	free_blk_virtq_cmds_mem(priv);
 }
 
 /**
@@ -359,6 +382,7 @@ enum virtq_fetch_desc_status {
  */
 static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 {
+	struct blk_virtq_priv *vq = cmd->vq_priv;
 	uint64_t srcaddr;
 	uint16_t in_ring_desc_addr;
 	int ret;
@@ -375,7 +399,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 		  in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->dma_comp.count = 1;
 	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->descs[cmd->num_desc],
-			      sizeof(struct vring_desc), cmd->desc_mr->lkey,
+			      sizeof(struct vring_desc), vq->desc_mr->lkey,
 			      srcaddr, cmd->vq_priv->snap_attr.vattr.dma_mkey,
 			      &(cmd->dma_comp));
 	if (ret)
@@ -496,7 +520,7 @@ static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 			continue;
 
 		ret = snap_dma_q_read(priv->dma_q, cmd->req_buf + offset,
-				      cmd->descs[i].len, cmd->req_mr->lkey,
+				      cmd->descs[i].len, priv->req_mr->lkey,
 				      cmd->descs[i].addr,
 				      priv->snap_attr.vattr.dma_mkey,
 				      &cmd->dma_comp);
@@ -524,7 +548,8 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			     enum virtq_cmd_sm_op_status status)
 {
 	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
-	int ret, len, qid = cmd->vq_priv->vq_ctx.idx;
+	struct blk_virtq_priv *vq = cmd->vq_priv;
+	int ret, len, qid = vq->vq_ctx.idx;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
 	uint32_t blk_size;
@@ -591,7 +616,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->device_id,
 				       len,
-				       cmd->req_mr->lkey,
+				       vq->req_mr->lkey,
 				       cmd->descs[1].addr,
 				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 				       &(cmd->dma_comp));
@@ -626,6 +651,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 				  enum virtq_cmd_sm_op_status status)
 {
+	struct blk_virtq_priv *vq = cmd->vq_priv;
 	int i, ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
@@ -642,7 +668,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->iovecs[i].iov_base,
 				       cmd->iovecs[i].iov_len,
-				       cmd->req_mr->lkey,
+				       vq->req_mr->lkey,
 				       cmd->descs[i + 1].addr,
 				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 				       &(cmd->dma_comp));
@@ -680,6 +706,7 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
 static bool sm_write_status(struct blk_virtq_cmd *cmd,
 			    enum virtq_cmd_sm_op_status status)
 {
+	struct blk_virtq_priv *vq = cmd->vq_priv;
 	int ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK)
@@ -691,7 +718,7 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
 	cmd->dma_comp.count = 1;
 	ret = snap_dma_q_write(cmd->vq_priv->dma_q, cmd2ftr(cmd),
 			       sizeof(struct virtio_blk_outftr),
-			       cmd->req_mr->lkey,
+			       vq->req_mr->lkey,
 			       cmd->descs[cmd->num_desc - 1].addr,
 			       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 			       &cmd->dma_comp);
