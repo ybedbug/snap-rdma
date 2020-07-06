@@ -275,3 +275,17 @@ void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
 {
 	snap_virtio_ctrl_io_progress(&ctrl->common);
 }
+
+/**
+ * snap_virtio_blk_ctrl_io_progress_thread() - Handle IO requests for thread
+ * @ctrl:       controller instance
+ * @thread_id: 	id queues belong to
+ *
+ * Looks for any IO requests from host recieved on QPs which belong to thread
+ * thread_id, and handles them based on the request's parameters.
+ */
+void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
+					     uint32_t thread_id)
+{
+	snap_virtio_ctrl_pg_io_progress(&ctrl->common, thread_id);
+}

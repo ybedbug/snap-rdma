@@ -143,6 +143,7 @@ int main(int argc, char **argv)
 			goto close_blk;
 		}
 		blk_attr.common.pf_id = pf_id;
+		blk_attr.common.npgs = 1;
 		blk_ctrl = snap_virtio_blk_ctrl_open(sctx, &blk_attr, &bdev->ops,
 						     bdev);
 		if (!blk_ctrl) {

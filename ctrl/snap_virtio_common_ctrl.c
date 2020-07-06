@@ -98,6 +98,31 @@ static int snap_virtio_ctrl_bars_teardown(struct snap_virtio_ctrl *ctrl)
 	snap_virtio_ctrl_bar_destroy(ctrl, ctrl->bar_curr);
 }
 
+static void snap_virtio_ctrl_sched_q(struct snap_virtio_ctrl *ctrl,
+				     struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_pg *pg;
+
+	pg = snap_pg_get_next(&ctrl->pg_ctx);
+	pthread_spin_lock(&pg->lock);
+	TAILQ_INSERT_TAIL(&pg->q_list, &vq->pg_q, entry);
+	vq->pg = pg;
+	pthread_spin_unlock(&pg->lock);
+}
+
+static void snap_virtio_ctrl_desched_q(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_pg *pg = vq->pg;
+
+	if (!pg)
+		return;
+
+	pthread_spin_lock(&pg->lock);
+	TAILQ_REMOVE(&pg->q_list, &vq->pg_q, entry);
+	vq->pg = NULL;
+	pthread_spin_unlock(&pg->lock);
+}
+
 static struct snap_virtio_ctrl_queue*
 snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
 {
@@ -109,9 +134,7 @@ snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
 
 	vq->ctrl = ctrl;
 	vq->index = index;
-	pthread_spin_lock(&ctrl->live_queues_lock);
-	TAILQ_INSERT_HEAD(&ctrl->live_queues, vq, entry);
-	pthread_spin_unlock(&ctrl->live_queues_lock);
+	snap_virtio_ctrl_sched_q(ctrl, vq);
 
 	return vq;
 }
@@ -120,10 +143,7 @@ static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_ctrl *ctrl = vq->ctrl;
 
-	pthread_spin_lock(&ctrl->live_queues_lock);
-	SNAP_TAILQ_REMOVE_SAFE(&ctrl->live_queues, vq, entry);
-	pthread_spin_unlock(&ctrl->live_queues_lock);
-
+	snap_virtio_ctrl_desched_q(vq);
 	ctrl->q_ops->destroy(vq);
 }
 
@@ -269,14 +289,32 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 	}
 }
 
+static inline struct snap_virtio_ctrl_queue *
+pg_q_entry_to_virtio_ctrl_queue(struct snap_pg_q_entry *pg_q)
+{
+	return container_of(pg_q, struct snap_virtio_ctrl_queue, pg_q);
+}
+
+void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id)
+{
+	struct snap_pg *pg = &ctrl->pg_ctx.pgs[pg_id];
+	struct snap_virtio_ctrl_queue *vq;
+	struct snap_pg_q_entry *pg_q;
+
+	pthread_spin_lock(&pg->lock);
+	TAILQ_FOREACH(pg_q, &pg->q_list, entry) {
+		vq = pg_q_entry_to_virtio_ctrl_queue(pg_q);
+		snap_virtio_ctrl_queue_progress(vq);
+	}
+	pthread_spin_unlock(&pg->lock);
+}
+
 void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl)
 {
-	struct snap_virtio_ctrl_queue *vq;
+	int i;
 
-	pthread_spin_lock(&ctrl->live_queues_lock);
-	TAILQ_FOREACH(vq, &ctrl->live_queues, entry)
-		snap_virtio_ctrl_queue_progress(vq);
-	pthread_spin_unlock(&ctrl->live_queues_lock);
+	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
+		snap_virtio_ctrl_pg_io_progress(ctrl, i);
 }
 
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
@@ -287,10 +325,18 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 {
 	int ret = 0;
 	struct snap_device_attr sdev_attr = {0};
+	uint32_t npgs;
 
 	if (!sctx) {
 		ret = -ENODEV;
 		goto err;
+	}
+
+	if (attr->npgs == 0) {
+		snap_debug("virtio requires at least one poll group\n");
+		npgs = 1;
+	} else {
+		npgs = attr->npgs;
 	}
 
 	sdev_attr.pf_id = attr->pf_id;
@@ -334,10 +380,10 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto mutex_destroy;
 	}
 
-	TAILQ_INIT(&ctrl->live_queues);
-	ret = pthread_spin_init(&ctrl->live_queues_lock, 0);
-	if (ret)
+	if (snap_pgs_alloc(&ctrl->pg_ctx, npgs)) {
+		snap_error("allocate poll groups failed");
 		goto free_queues;
+	}
 
 	ctrl->type = attr->type;
 	return 0;
@@ -356,9 +402,12 @@ err:
 
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 {
-	if (!TAILQ_EMPTY(&ctrl->live_queues))
-		snap_warn("Closing ctrl with queues still active");
-	pthread_spin_destroy(&ctrl->live_queues_lock);
+	int i;
+
+	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
+		if (!TAILQ_EMPTY(&ctrl->pg_ctx.pgs[i].q_list))
+			snap_warn("Closing ctrl with queue %d still active", i);
+	snap_pgs_free(&ctrl->pg_ctx);
 	free(ctrl->queues);
 	pthread_mutex_destroy(&ctrl->state_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);

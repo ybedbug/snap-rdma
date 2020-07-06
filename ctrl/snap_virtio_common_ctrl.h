@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include "snap.h"
 #include "snap_virtio_common.h"
+#include "snap_poll_groups.h"
 
 struct snap_virtio_ctrl;
 struct snap_virtio_ctrl_queue;
@@ -102,11 +103,14 @@ struct snap_virtio_ctrl_attr {
 	void *cb_ctx;
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
 	struct ibv_pd *pd;
+	uint32_t npgs;
 };
 
 struct snap_virtio_ctrl_queue {
 	struct snap_virtio_ctrl *ctrl;
 	int index;
+	struct snap_pg *pg;
+	struct snap_pg_q_entry pg_q;
 	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
 };
 
@@ -138,8 +142,6 @@ struct snap_virtio_ctrl {
 	size_t num_queues;
 	size_t enabled_queues;
 	struct snap_virtio_ctrl_queue **queues;
-	pthread_spinlock_t live_queues_lock;
-	TAILQ_HEAD(, snap_virtio_ctrl_queue) live_queues;
 	struct snap_virtio_queue_ops *q_ops;
 	void *cb_ctx; /* bar callback context */
 	struct snap_virtio_ctrl_bar_cbs bar_cbs;
@@ -147,6 +149,7 @@ struct snap_virtio_ctrl {
 	struct snap_virtio_device_attr *bar_curr;
 	struct snap_virtio_device_attr *bar_prev;
 	struct ibv_pd *lb_pd;
+	struct snap_pg_ctx pg_ctx;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
@@ -154,6 +157,7 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
+void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id);
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
 			  struct snap_virtio_queue_ops *q_ops,
