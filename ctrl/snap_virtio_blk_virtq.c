@@ -221,7 +221,7 @@ static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			 req_buf_size(size_max, seg_max) +
 			 sizeof(struct split_tunnel_comp));
 	cmd->tunnel_comp = (struct split_tunnel_comp *)
-			   (cmd->req_buf + buf_size);
+			   (cmd->req_buf + req_buf_size(size_max, seg_max));
 }
 
 static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
