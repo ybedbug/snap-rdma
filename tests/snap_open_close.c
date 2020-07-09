@@ -10,9 +10,15 @@ int main(int argc, char **argv)
 	int type = SNAP_NVME;
 	int opt, ret = 0;
 	struct snap_context *sctx;
+	char mdev[64] = {0};
+	bool has_mdev = false;
 
-	while ((opt = getopt(argc, argv, "t:")) != -1) {
+	while ((opt = getopt(argc, argv, "m:t:")) != -1) {
 		switch (opt) {
+		case 'm':
+			strcpy(mdev, optarg);
+			has_mdev = true;
+			break;
 		case 't':
 			if (!strcmp(optarg, "all"))
 				type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
@@ -29,7 +35,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	sctx = snap_ctx_open(type);
+	sctx = snap_ctx_open(type, has_mdev ? mdev : NULL);
 	if (!sctx) {
 		fprintf(stderr, "failed to open snap ctx for %d types\n", type);
 		fflush(stderr);

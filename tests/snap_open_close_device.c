@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
 
 
-	sctx = snap_ctx_open(dev_type);
+	sctx = snap_ctx_open(dev_type, NULL);
 	if (!sctx) {
 		fprintf(stderr, "failed to open snap ctx for %d types\n",
 			dev_type);

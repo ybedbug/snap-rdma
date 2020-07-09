@@ -3,7 +3,7 @@
 #include "snap_test.h"
 
 
-struct snap_context *snap_ctx_open(int emulation_types)
+struct snap_context *snap_ctx_open(int emulation_types, const char *manager)
 {
 	struct ibv_device **list;
 	struct snap_context *sctx = NULL;
@@ -18,10 +18,14 @@ struct snap_context *snap_ctx_open(int emulation_types)
 	for (i = 0; i < dev_count; i++) {
 		sctx = snap_open(list[i]);
 		if (sctx &&
-		    sctx->emulation_caps & emulation_types == emulation_types)
-			break;
-		else
+		    sctx->emulation_caps & emulation_types == emulation_types) {
+			if (manager && strcmp(sctx->context->device->name, manager))
+				sctx = NULL;
+			else
+				break;
+		} else {
 			sctx = NULL;
+		}
 	}
 
 	ibv_free_device_list(list);

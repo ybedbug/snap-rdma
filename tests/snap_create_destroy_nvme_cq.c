@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	sctx = snap_ctx_open(SNAP_NVME);
+	sctx = snap_ctx_open(SNAP_NVME, NULL);
 	if (!sctx) {
 		fprintf(stderr, "failed to open snap ctx for NVMe dev\n");
 		fflush(stderr);
