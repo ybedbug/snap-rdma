@@ -4,6 +4,7 @@
 #include <infiniband/mlx5dv.h>
 
 #include "snap.h"
+#include "snap_test.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
 #include "mlx5_ifc.h"
