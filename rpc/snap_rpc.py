@@ -167,6 +167,7 @@ def main():
 
     def controller_virtio_blk_create(args):
         params = {
+            'emulation_manager': args.emu_manager,
             'pci_func': args.pci_func,
             'bdev_type': args.bdev_type,
             'bdev': args.bdev,
@@ -175,6 +176,7 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
                               help='Create new VirtIO BLK SNAP controller')
+    p.add_argument('emu_manager', help='Emulation manager', type=str)
     p.add_argument('pci_func', help='PCI function to start emulation on',
                    type=int)
     p.add_argument('bdev_type', help='Block device type', type=str,
@@ -194,6 +196,7 @@ def main():
 
     def controller_nvme_create(args):
         params = {
+            'emulation_manager': args.emu_manager,
             'pci_func': args.pci_func,
         }
         if args.conf:
@@ -203,6 +206,7 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_nvme_create',
                               help='Create new NVMe SNAP controller')
+    p.add_argument('emu_manager', help='Emulation manager', type=str)
     p.add_argument('pci_func', help='PCI function to start emulation on',
                    type=int)
     p.add_argument('-c', '--conf', help='JSON configuration file to use',

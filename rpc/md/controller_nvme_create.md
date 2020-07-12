@@ -16,6 +16,7 @@ The response contains a uniquely identified controller name.
   "method": "controller_nvme_create",
 
   "params": {
+    "emulation_manager": "mlx5_2",
     "pci_func": 1,
     "conf_file": "/etc/nvme_snap/nvme0.json"
   }

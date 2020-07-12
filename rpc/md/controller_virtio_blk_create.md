@@ -16,6 +16,7 @@ The response contains a uniquely identified controller name.
   "method": "controller_virtio_blk_create",
 
   "params": {
+    "emulation_manager": "mlx5_0",
     "pci_func": 1,
     "bdev_type": "spdk",
     "bdev": "Null0"
