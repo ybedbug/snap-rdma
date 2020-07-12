@@ -1,6 +1,6 @@
 # NAME
 
-emulation_list - List all SNAP plugged emulation functions with their characteristics
+emulation_functions_list - List all SNAP plugged emulation functions with their characteristics
 
 # DESCRIPTION
 
@@ -14,7 +14,7 @@ list of the online (plugged) emulation functions with their characteristics.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "emulation_list"
+  "method": "emulation_functions_list"
 }
 
 # Response object

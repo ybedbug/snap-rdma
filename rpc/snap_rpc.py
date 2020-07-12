@@ -223,12 +223,12 @@ def main():
                    required=False)
     p.set_defaults(func=controller_list)
 
-    def emulation_list(args):
-        result = args.client.call('emulation_list')
+    def emulation_functions_list(args):
+        result = args.client.call('emulation_functions_list')
         print(json.dumps(result, indent=2))
     __help = 'List all SNAP plugged emulation functions with their characteristics'
-    p = subparsers.add_parser('emulation_list', help=__help)
-    p.set_defaults(func=emulation_list)
+    p = subparsers.add_parser('emulation_functions_list', help=__help)
+    p.set_defaults(func=emulation_functions_list)
 
     def controller_nvme_namespace_detach(args):
         params = {
