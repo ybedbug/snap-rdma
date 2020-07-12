@@ -230,6 +230,13 @@ def main():
     p = subparsers.add_parser('emulation_functions_list', help=__help)
     p.set_defaults(func=emulation_functions_list)
 
+    def emulation_managers_list(args):
+        result = args.client.call('emulation_managers_list')
+        print(json.dumps(result, indent=2))
+    __help = 'List all SNAP emulation managers with their characteristics'
+    p = subparsers.add_parser('emulation_managers_list', help=__help)
+    p.set_defaults(func=emulation_managers_list)
+
     def controller_nvme_namespace_detach(args):
         params = {
             'ctrl': args.ctrl,
