@@ -34,8 +34,9 @@ static int snap_get_pf_helper(struct snap_context *sctx,
 	}
 	for (j = 0; j < scount; j++) {
 		fprintf(stdout,
-			"snap_type=%d pf_type=%d pf id=%d number=%d num_vfs=%d plugged=%d for %s\n",
-			type, slist[j]->type, slist[j]->id, slist[j]->pci_number,
+			"snap_type=%d pf_type=%d pf id=%d bdf=%02x:%02x.%d num_vfs=%d plugged=%d for %s\n",
+			type, slist[j]->type, slist[j]->id, slist[j]->pci_bdf.bdf.bus,
+			slist[j]->pci_bdf.bdf.device, slist[j]->pci_bdf.bdf.function,
 			slist[j]->num_vfs, slist[j]->plugged, name);
 		fflush(stdout);
 	}

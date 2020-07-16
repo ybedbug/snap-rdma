@@ -139,6 +139,15 @@ struct snap_pci_attr {
 	uint16_t			num_msix;
 };
 
+union snap_pci_bdf {
+	uint16_t raw;
+	struct {
+		uint16_t function : 3;
+		uint16_t device : 5;
+		uint16_t bus : 8;
+	} bdf;
+};
+
 struct snap_pci {
 	struct snap_context		*sctx;
 	enum snap_pci_type		type;
@@ -146,7 +155,7 @@ struct snap_pci {
 	struct snap_pci_bar		bar;
 	bool				plugged;
 	int				id;
-	int				pci_number;
+	union snap_pci_bdf		pci_bdf;
 
 	int				num_vfs;
 	struct snap_pci			*vfs;// VFs array for PF

@@ -170,7 +170,7 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf)
 
 		vf->plugged = true;
 		vf->id = i;
-		vf->pci_number = pf->pci_number;
+		vf->pci_bdf.raw = pf->pci_bdf.raw;
 		vf->num_vfs = 0;
 		vf->parent = pf;
 		ret = snap_alloc_pci_bar(vf);
@@ -265,9 +265,9 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 	if (idx == -1)
 		return -ENODEV;
 
-	pf->pci_number = DEVX_GET(query_emulated_functions_info_out,
-				  emulated_info_out,
-				  emulated_pf_info[idx].pf_pci_number);
+	pf->pci_bdf.raw = DEVX_GET(query_emulated_functions_info_out,
+				   emulated_info_out,
+				   emulated_pf_info[idx].pf_pci_number);
 	pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
 				    emulated_info_out,
 				    emulated_pf_info[idx].pf_vhca_id);
