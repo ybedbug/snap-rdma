@@ -132,9 +132,11 @@ def main():
             'bdev': args.bdev,
             'ssid': args.ssid,
             'ssvid': args.ssvid,
-            'num_queues': args.num_queues,
-            'queue_depth': args.queue_depth
         }
+        if args.num_queues:
+            params['num_queues'] = args.num_queues
+        if args.queue_depth:
+            params['queue_depth'] = args.queue_depth
         result = args.client.call('emulation_device_attach_virtio_blk', params)
         print(json.dumps(result, indent=2))
     p = subparsers.add_parser('emulation_device_attach_virtio_blk',
@@ -146,8 +148,8 @@ def main():
     p.add_argument('bdev', help='Block device to use as backend', type=str)
     p.add_argument('--ssid', help='Subsystem ID', type=int, default=0)
     p.add_argument('--ssvid', help='Subsystem Vendor ID', type=int, default=0)
-    p.add_argument('--num_queues', help='Number of queues', type=int, default=8)
-    p.add_argument('--queue_depth', help='Queue depth', type=int, default=1024)
+    p.add_argument('--num_queues', help='Number of queues', type=int)
+    p.add_argument('--queue_depth', help='Queue depth', type=int)
     p.set_defaults(func=emulation_device_attach_virtio_blk)
 
     def controller_virtio_blk_delete(args):
