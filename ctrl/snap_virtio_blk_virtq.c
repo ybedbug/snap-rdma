@@ -102,6 +102,8 @@ enum virtq_cmd_sm_op_status {
  * @tunnel_comp:	completion sent to FW
  * @total_seg_len:	total length of the request data to be written/read
  * @total_in_len:	total length of data written to request buffers
+ * @use_dmem:		command uses dynamic mem for req_buf
+ * @req_mr:		dynamically allocated request mr for big requests
  */
 struct blk_virtq_cmd {
 	int idx;
@@ -119,6 +121,8 @@ struct blk_virtq_cmd {
 	uint32_t total_seg_len;
 	uint32_t total_in_len;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
+	bool use_dmem;
+	struct ibv_mr *req_mr;
 };
 
 /**
@@ -199,6 +203,13 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 
 static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg);
 
+static inline uint32_t cmd_buf_size(size_max, seg_max)
+{
+	return req_buf_size(size_max, seg_max) +
+	       sizeof(struct split_tunnel_comp) +
+	       VIRTIO_BLK_ID_BYTES;
+}
+
 static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
@@ -212,11 +223,10 @@ static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->descs = &vq_priv->descs_buf[num_descs * idx];
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->bdev_op_ctx.user_arg = cmd;
+	cmd->req_mr = vq_priv->req_mr;
 
 	cmd->iovecs = &vq_priv->iovecs[seg_max * idx];
-	buf_size = req_buf_size(size_max, seg_max)
-		   + sizeof(struct split_tunnel_comp)
-		   + VIRTIO_BLK_ID_BYTES;
+	buf_size = cmd_buf_size(size_max, seg_max);
 	cmd->req_buf = vq_priv->req_buf + buf_size * idx;
 	cmd->device_id = (char *)(cmd->req_buf +
 			 req_buf_size(size_max, seg_max) +
@@ -229,7 +239,6 @@ static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
 {
 	uint32_t n_descs = VIRTIO_NUM_DESC(seg_max);
-	uint32_t req_size = req_buf_size(size_max, seg_max);
 	uint32_t comp_size = sizeof(struct split_tunnel_comp);
 	uint32_t n_cmds = vq_priv->snap_attr.vattr.size;
 	int err = 0;
@@ -264,7 +273,7 @@ static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
 		goto free_descs;
 	}
 
-	buf_size = n_cmds * (req_size + comp_size + VIRTIO_BLK_ID_BYTES);
+	buf_size = n_cmds * cmd_buf_size(size_max, seg_max);
 	vq_priv->req_buf = vq_priv->blk_dev.ops->dma_malloc(buf_size);
 	if (!vq_priv->req_buf) {
 		snap_error("failed to allocate memory for virtq %d requests\n",
@@ -485,6 +494,49 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 	}
 }
 
+static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, uint32_t len)
+{
+	uint8_t *buf_ptr;
+
+	buf_ptr = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
+	if (!buf_ptr) {
+		snap_error("failed to dynamically allocate %d bytes for \
+			   command %d request\n", len, cmd->idx);
+		goto err;
+	}
+	cmd->req_buf = buf_ptr;
+	cmd->req_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->req_buf, len,
+				 IBV_ACCESS_REMOTE_READ |
+				 IBV_ACCESS_REMOTE_WRITE |
+				 IBV_ACCESS_LOCAL_WRITE);
+	if (!cmd->req_mr) {
+		snap_error("failed to dynamically allocate mr for commmand \
+			   %d\n", cmd->idx);
+		goto free_buf;
+	}
+	cmd->use_dmem = true;
+	return 0;
+
+free_buf:
+	free(buf_ptr);
+err:
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+	return -1;
+}
+
+static void virtq_rel_req_dbuf(struct blk_virtq_cmd *cmd)
+{
+	uint32_t buf_size = cmd_buf_size(cmd->vq_priv->size_max,
+					 cmd->vq_priv->seg_max);
+
+	ibv_dereg_mr(cmd->req_mr);
+	cmd->req_mr = cmd->vq_priv->req_mr;
+	cmd->vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
+	cmd->req_buf = cmd->vq_priv->req_buf + buf_size * cmd->idx;
+	cmd->use_dmem = false;
+}
+
 /**
  * virtq_read_req_from_host() - Read request from host
  * @cmd: Command being processed
@@ -493,7 +545,11 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
  * Error after requesting the first RDMA READ is fatal because we can't
  * cancel previous RDMA READ requests done for this command, and since
  * the failing RDMA READ will not return the completion counter will not get
- * to 0 and the callback for the previous RDMA READ requests will not return
+ * to 0 and the callback for the previous RDMA READ requests will not return.
+ *
+ * Handles also cases in which request is bigger than maximum buffer, so that
+ * drivers which don't support the VIRTIO_BLK_F_SIZE_MAX feature will not
+ * crash
  * ToDo: add non-fatal error in case first read fails
  * Note: Last desc is always VRING_DESC_F_READ
  *
@@ -504,24 +560,30 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 {
 	struct blk_virtq_priv *priv = cmd->vq_priv;
-	int i, avail_buf, ret;
-	uint32_t offset;
+	uint32_t offset, max_size, len = 0;
+	int i, ret;
 
 	cmd->dma_comp.count = 0;
-	for (i = 0; i < cmd->num_desc - 1; i++) {
+	for (i = 0; i < cmd->num_desc; i++) {
+		len += cmd->descs[i].len;
 		if ((cmd->descs[i].flags & VRING_DESC_F_WRITE) == 0)
 			cmd->dma_comp.count++;
 	}
 
+	max_size = req_buf_size(cmd->vq_priv->seg_max, cmd->vq_priv->size_max);
+	if (snap_unlikely(len > max_size)) {
+		if (virtq_alloc_req_dbuf(cmd, len))
+			return true;
+	}
+
 	offset = 0;
 	cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
-	avail_buf = req_buf_size(priv->size_max, priv->seg_max);
 	for (i = 0; i < cmd->num_desc - 1; i++) {
 		if (cmd->descs[i].flags & VRING_DESC_F_WRITE)
 			continue;
 
 		ret = snap_dma_q_read(priv->dma_q, cmd->req_buf + offset,
-				      cmd->descs[i].len, priv->req_mr->lkey,
+				      cmd->descs[i].len, cmd->req_mr->lkey,
 				      cmd->descs[i].addr,
 				      priv->snap_attr.vattr.dma_mkey,
 				      &cmd->dma_comp);
@@ -530,7 +592,6 @@ static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 			return true;
 		}
 		offset += cmd->descs[i].len;
-		avail_buf -= cmd->descs[i].len;
 	}
 	return false;
 }
@@ -669,7 +730,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->iovecs[i].iov_base,
 				       cmd->iovecs[i].iov_len,
-				       vq->req_mr->lkey,
+				       cmd->req_mr->lkey,
 				       cmd->descs[i + 1].addr,
 				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 				       &(cmd->dma_comp));
@@ -719,7 +780,7 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
 	cmd->dma_comp.count = 1;
 	ret = snap_dma_q_write(cmd->vq_priv->dma_q, cmd2ftr(cmd),
 			       sizeof(struct virtio_blk_outftr),
-			       vq->req_mr->lkey,
+			       cmd->req_mr->lkey,
 			       cmd->descs[cmd->num_desc - 1].addr,
 			       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 			       &cmd->dma_comp);
@@ -806,6 +867,8 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 			repeat = true;
 			break;
 		case VIRTQ_CMD_STATE_RELEASE:
+			if (snap_unlikely(cmd->use_dmem))
+				virtq_rel_req_dbuf(cmd);
 			cmd->vq_priv->cmd_cntr--;
 			break;
 		case VIRTQ_CMD_STATE_FATAL_ERR:
@@ -849,6 +912,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->total_seg_len = 0;
 	cmd->total_in_len = 0;
 	cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
+	cmd->use_dmem = false;
 
 	if (split_hdr->num_desc) {
 		len = sizeof(struct vring_desc) * split_hdr->num_desc;
