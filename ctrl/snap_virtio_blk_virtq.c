@@ -392,7 +392,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 		in_ring_desc_addr = cmd->avail_idx %
 				    cmd->vq_priv->snap_attr.vattr.size;
 	else if (cmd->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
-		in_ring_desc_addr = cmd->descs[cmd->num_desc].next;
+		in_ring_desc_addr = cmd->descs[cmd->num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
 
