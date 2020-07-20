@@ -189,13 +189,15 @@ static void snap_destroy_fw_qp(struct snap_dma_q *q)
 	snap_destroy_qp_helper(&q->fw_qp);
 }
 
-static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd)
+static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
+			     struct snap_dma_q_create_attr *attr)
 {
 	struct ibv_qp_init_attr init_attr = {};
 	int rc;
 
 	/* cannot create empty cq or a qp without one */
-	init_attr.cap.max_send_wr = 1;
+	init_attr.cap.max_send_wr = snap_max(attr->tx_qsize / 4,
+					     SNAP_DMA_FW_QP_MIN_SEND_WR);
 	init_attr.cap.max_recv_wr = 1;
 	/* give one sge so that we can post which is useful
 	 * for testing */
@@ -530,7 +532,7 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_q;
 
-	rc = snap_create_fw_qp(q, pd);
+	rc = snap_create_fw_qp(q, pd, attr);
 	if (rc)
 		goto free_sw_qp;
 

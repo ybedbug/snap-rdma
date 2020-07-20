@@ -204,6 +204,9 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 /* align start of the receive buffer on 4k boundary */
 #define SNAP_DMA_RX_BUF_ALIGN    4096
 
+/* create params */
+#define SNAP_DMA_FW_QP_MIN_SEND_WR 32
+
 /* INIT state params */
 #define SNAP_DMA_QP_PKEY_INDEX  0
 #define SNAP_DMA_QP_PORT_NUM    1
