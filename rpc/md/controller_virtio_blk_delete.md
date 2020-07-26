@@ -13,7 +13,7 @@ as acquired from controller_virtio_blk_create().
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "controller_virtio_blk_delete"
+  "method": "controller_virtio_blk_delete",
 
   "params": {
     "name": "VblkEmu0",
@@ -33,3 +33,4 @@ as acquired from controller_virtio_blk_create().
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

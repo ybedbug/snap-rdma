@@ -13,7 +13,7 @@ as acquired from controller_nvme_create().
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "controller_nvme_delete"
+  "method": "controller_nvme_delete",
 
   "params": {
     "name": "NvmeEmu0"
@@ -32,3 +32,4 @@ as acquired from controller_nvme_create().
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

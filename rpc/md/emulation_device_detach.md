@@ -17,7 +17,7 @@ the device.
 
   "params": {
     "emulation_manager": "mlx5_0",
-    "pci_id": 1
+    "pci_bdf": "83:00.2"
   }
 }
 
@@ -33,3 +33,4 @@ the device.
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

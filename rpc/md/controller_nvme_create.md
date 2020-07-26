@@ -17,7 +17,7 @@ The response contains a uniquely identified controller name.
 
   "params": {
     "emulation_manager": "mlx5_2",
-    "pci_func": 1,
+    "pci_bdf": "84:00.2",
     "conf_file": "/etc/nvme_snap/nvme0.json"
   }
 }
@@ -34,3 +34,4 @@ The response contains a uniquely identified controller name.
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

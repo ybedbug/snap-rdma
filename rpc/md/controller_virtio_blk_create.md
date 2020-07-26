@@ -17,7 +17,7 @@ The response contains a uniquely identified controller name.
 
   "params": {
     "emulation_manager": "mlx5_0",
-    "pci_func": 1,
+    "pci_bdf": "83:00.2",
     "bdev_type": "spdk",
     "bdev": "Null0"
   }
@@ -35,3 +35,4 @@ The response contains a uniquely identified controller name.
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

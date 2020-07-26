@@ -42,7 +42,7 @@ in emulation_list() RPC command.
       "emulation_manager": "mlx5_0",
       "emulation_type": "virtio_blk",
       "pci_type": "physical function",
-      "pci_id": "0"
+      "pci_bdf": "83:00.2"
     }
 }
 
@@ -50,3 +50,4 @@ in emulation_list() RPC command.
 # AUTHOR
 
 Nitzan Carmi <nitzanc@mellanox.com>
+Max Gurtovoy <maxg@mellanox.com>

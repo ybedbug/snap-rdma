@@ -27,25 +27,25 @@ list of the online (plugged) emulation functions with their characteristics.
       "emulation_manager": "mlx5_0",
       "emulation_type": "nvme",
       "pci_type": "physical function",
-      "pci_id": "0"
+      "pci_bdf": "83:00.2"
     },
     {
       "emulation_manager": "mlx5_0",
       "emulation_type": "nvme",
       "pci_type": "physical function",
-      "pci_id": "1"
+      "pci_bdf": "83:00.3"
     },
     {
       "emulation_manager": "mlx5_0",
       "emulation_type": "virtio_blk",
       "pci_type": "physical function",
-      "pci_id": "2"
+      "pci_bdf": "84:00.2"
     },
     {
       "emulation_manager": "mlx5_1",
       "emulation_type": "virtio_net",
       "pci_type": "physical function",
-      "pci_id": "0"
+      "pci_bdf": "85:00.4"
     }
   ]
 }
