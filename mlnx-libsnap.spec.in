@@ -29,6 +29,7 @@ Requires:	librdmacm >= 50mlnx1-1.50218
 %description
 Library that assists in common tasks when interacting with the emulating hardware
 in order to present a SNAP device to an external host or a VM.
+git branch %{_branch}, sha1 %{_sha1}
 
 %prep
 %setup -q -n mlnx-libsnap-%{scm_version}
