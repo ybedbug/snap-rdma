@@ -4,7 +4,8 @@ controller_nvme_create - Create new SNAP-based NVMe controller
 
 # DESCRIPTION
 
-Create new NVMe controller over specific PCI function on host.
+Create new NVMe controller over specific PCI function on host for a
+specific NVM subsystem.
 
 The response contains a uniquely identified controller name.
 
@@ -16,6 +17,7 @@ The response contains a uniquely identified controller name.
   "method": "controller_nvme_create",
 
   "params": {
+    "nqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
     "emulation_manager": "mlx5_2",
     "pci_bdf": "84:00.2",
     "conf_file": "/etc/nvme_snap/nvme0.json"
