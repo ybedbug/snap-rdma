@@ -212,9 +212,9 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 #define SNAP_DMA_QP_PORT_NUM    1
 
 /* RTR state params */
-#define SNAP_DMA_QP_PATH_MTU                 2
+#define SNAP_DMA_QP_PATH_MTU                 5  // 4k
 #define SNAP_DMA_QP_RQ_PSN              0x4242
-#define SNAP_DMA_QP_MAX_DEST_RD_ATOMIC       4
+#define SNAP_DMA_QP_MAX_DEST_RD_ATOMIC      16
 #define SNAP_DMA_QP_RNR_TIMER               12
 #define SNAP_DMA_QP_HOP_LIMIT               64
 #define SNAP_DMA_QP_GID_INDEX                0
@@ -223,7 +223,7 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 #define SNAP_DMA_QP_TIMEOUT            14
 #define SNAP_DMA_QP_RETRY_COUNT         7
 #define SNAP_DMA_QP_RNR_RETRY           7
-#define SNAP_DMA_QP_MAX_RD_ATOMIC       4
+#define SNAP_DMA_QP_MAX_RD_ATOMIC      16
 #define SNAP_DMA_QP_SQ_PSN         0x4242
 
 #endif
