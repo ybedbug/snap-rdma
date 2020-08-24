@@ -268,6 +268,9 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 	pf->pci_bdf.raw = DEVX_GET(query_emulated_functions_info_out,
 				   emulated_info_out,
 				   emulated_pf_info[idx].pf_pci_number);
+	snprintf(pf->pci_number, sizeof(pf->pci_number), "%02x:%02x.%d",
+		 pf->pci_bdf.bdf.bus, pf->pci_bdf.bdf.device,
+		 pf->pci_bdf.bdf.function);
 	pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
 				    emulated_info_out,
 				    emulated_pf_info[idx].pf_vhca_id);

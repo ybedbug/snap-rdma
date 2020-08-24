@@ -156,6 +156,7 @@ struct snap_pci {
 	bool				plugged;
 	int				id;
 	union snap_pci_bdf		pci_bdf;
+	char				pci_number[16];
 
 	int				num_vfs;
 	struct snap_pci			*vfs;// VFs array for PF
