@@ -2361,6 +2361,108 @@ static void snap_destroy_device_object(struct mlx5_snap_devx_obj *device)
 	free(device);
 }
 
+static void snap_set_nvme_hotplug_device(struct snap_hotplug_attr *attr,
+		uint8_t *device_in)
+{
+	DEVX_SET(device, device_in, device_type,
+		 MLX5_HOTPLUG_DEVICE_TYPE_NVME);
+}
+
+static void snap_set_virtio_net_hotplug_device(struct snap_hotplug_attr *attr,
+		uint8_t *device_in)
+{
+	DEVX_SET(device, device_in, device_type,
+		 MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET);
+	DEVX_SET64(device, device_in,
+		   emulation_initial_regs.virtio_net.device_features,
+		   attr->regs.virtio_net.device_features);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_net.queue_size,
+		 attr->regs.virtio_net.queue_size);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_net.virtio_net_config.mac_15_0,
+		 attr->regs.virtio_net.mac & 0xffff);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_net.virtio_net_config.mac_47_16,
+		 attr->regs.virtio_net.mac >> 16);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_net.virtio_net_config.max_virtqueue_pairs,
+		 attr->regs.virtio_net.max_queues);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_net.virtio_net_config.mtu,
+		 attr->regs.virtio_net.mtu);
+}
+
+static void snap_set_virtio_blk_hotplug_device(struct snap_hotplug_attr *attr,
+		uint8_t *device_in)
+{
+	DEVX_SET(device, device_in, device_type,
+		 MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK);
+	DEVX_SET64(device, device_in,
+		   emulation_initial_regs.virtio_blk.device_features,
+		   attr->regs.virtio_blk.device_features);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.queue_size,
+		 attr->regs.virtio_blk.queue_size);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.num_queues,
+		 attr->regs.virtio_blk.max_queues);
+	DEVX_SET64(device, device_in,
+		   emulation_initial_regs.virtio_blk.virtio_blk_config.capacity,
+		   attr->regs.virtio_blk.capacity);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.size_max,
+		 attr->regs.virtio_blk.size_max);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.seg_max,
+		 attr->regs.virtio_blk.seg_max);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.cylinders,
+		 attr->regs.virtio_blk.cylinders);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.heads,
+		 attr->regs.virtio_blk.heads);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.sectors,
+		 attr->regs.virtio_blk.sectors);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.blk_size,
+		 attr->regs.virtio_blk.blk_size);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.physical_blk_exp,
+		 attr->regs.virtio_blk.physical_blk_exp);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.alignment_offset,
+		 attr->regs.virtio_blk.alignment_offset);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.min_io_size,
+		 attr->regs.virtio_blk.min_io_size);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.opt_io_size,
+		 attr->regs.virtio_blk.opt_io_size);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.writeback,
+		 attr->regs.virtio_blk.writeback);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.max_discard_sectors,
+		 attr->regs.virtio_blk.max_discard_sectors);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.max_discard_seg,
+		 attr->regs.virtio_blk.max_discard_seg);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.discard_sector_alignment,
+		 attr->regs.virtio_blk.discard_sector_alignment);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.max_write_zeroes_sectors,
+		 attr->regs.virtio_blk.max_write_zeroes_sectors);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.max_write_zeroes_segs,
+		 attr->regs.virtio_blk.max_write_zeroes_segs);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.write_zeroes_may_unmap,
+		 attr->regs.virtio_blk.write_zeroes_may_unmap);
+}
+
 static struct mlx5_snap_devx_obj*
 snap_create_device_object(struct snap_context *sctx,
 		struct snap_hotplug_attr *attr)
@@ -2369,7 +2471,7 @@ snap_create_device_object(struct snap_context *sctx,
 		   DEVX_ST_SZ_BYTES(device)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	struct ibv_context *context = sctx->context;
-	uint8_t *device_in, device_type;
+	uint8_t *device_in;
 	struct mlx5_snap_devx_obj *device;
 
 	if (!(sctx->hotplug.supported_types & attr->type)) {
@@ -2389,99 +2491,21 @@ snap_create_device_object(struct snap_context *sctx,
 		 MLX5_OBJ_TYPE_DEVICE);
 
 	device_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	if (attr->type == SNAP_NVME) {
-		device_type = MLX5_HOTPLUG_DEVICE_TYPE_NVME;
-	} else if (attr->type == SNAP_VIRTIO_NET) {
-		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET;
-		DEVX_SET64(device, device_in,
-			   emulation_initial_regs.virtio_net.device_features,
-			   attr->regs.virtio_net.device_features);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_net.queue_size,
-			 attr->regs.virtio_net.queue_size);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_net.virtio_net_config.mac_15_0,
-			 attr->regs.virtio_net.mac & 0xffff);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_net.virtio_net_config.mac_47_16,
-			 attr->regs.virtio_net.mac >> 16);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_net.virtio_net_config.max_virtqueue_pairs,
-			 attr->regs.virtio_net.max_queues);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_net.virtio_net_config.mtu,
-			 attr->regs.virtio_net.mtu);
-	} else if (attr->type == SNAP_VIRTIO_BLK) {
-		device_type = MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK;
-		DEVX_SET64(device, device_in,
-			   emulation_initial_regs.virtio_blk.device_features,
-			   attr->regs.virtio_blk.device_features);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.queue_size,
-			 attr->regs.virtio_blk.queue_size);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.num_queues,
-			 attr->regs.virtio_blk.max_queues);
-		DEVX_SET64(device, device_in,
-			   emulation_initial_regs.virtio_blk.virtio_blk_config.capacity,
-			   attr->regs.virtio_blk.capacity);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.size_max,
-			 attr->regs.virtio_blk.size_max);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.seg_max,
-			 attr->regs.virtio_blk.seg_max);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.cylinders,
-			 attr->regs.virtio_blk.cylinders);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.heads,
-			 attr->regs.virtio_blk.heads);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.sectors,
-			 attr->regs.virtio_blk.sectors);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.blk_size,
-			 attr->regs.virtio_blk.blk_size);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.physical_blk_exp,
-			 attr->regs.virtio_blk.physical_blk_exp);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.alignment_offset,
-			 attr->regs.virtio_blk.alignment_offset);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.min_io_size,
-			 attr->regs.virtio_blk.min_io_size);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.opt_io_size,
-			 attr->regs.virtio_blk.opt_io_size);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.writeback,
-			 attr->regs.virtio_blk.writeback);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.max_discard_sectors,
-			 attr->regs.virtio_blk.max_discard_sectors);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.max_discard_seg,
-			 attr->regs.virtio_blk.max_discard_seg);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.discard_sector_alignment,
-			 attr->regs.virtio_blk.discard_sector_alignment);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.max_write_zeroes_sectors,
-			 attr->regs.virtio_blk.max_write_zeroes_sectors);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.max_write_zeroes_segs,
-			 attr->regs.virtio_blk.max_write_zeroes_segs);
-		DEVX_SET(device, device_in,
-			 emulation_initial_regs.virtio_blk.virtio_blk_config.write_zeroes_may_unmap,
-			 attr->regs.virtio_blk.write_zeroes_may_unmap);
-	} else {
+	switch (attr->type) {
+	case SNAP_NVME:
+		snap_set_nvme_hotplug_device(attr, device_in);
+		break;
+	case SNAP_VIRTIO_NET:
+		snap_set_virtio_net_hotplug_device(attr, device_in);
+		break;
+	case SNAP_VIRTIO_BLK:
+		snap_set_virtio_blk_hotplug_device(attr, device_in);
+		break;
+	default:
 		goto out_free;
 	}
 
 	DEVX_SET(device, device_in, initial_registers_valid, 1);
-	DEVX_SET(device, device_in, device_type, device_type);
 	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
 	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
 	DEVX_SET(device, device_in, pci_params.revision_id, attr->pci_attr.revision_id);
