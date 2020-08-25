@@ -223,15 +223,15 @@ static int snap_query_functions_info(struct snap_context *sctx,
 	switch (type) {
 	case SNAP_NVME:
 		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
-			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_DEVICE);
+			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_PHYSICAL_FUNCTIONS);
 		break;
 	case SNAP_VIRTIO_NET:
 		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
-			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_DEVICE);
+			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_PHYSICAL_FUNCTIONS);
 		break;
 	case SNAP_VIRTIO_BLK:
 		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
-			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_DEVICE);
+			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS);
 		break;
 	default:
 		return -EINVAL;

@@ -1520,9 +1520,10 @@ struct mlx5_ifc_query_hca_cap_in_bits {
 };
 
 enum {
-	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_DEVICE = 0x0,
-	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_DEVICE = 0x1,
-	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_DEVICE = 0x2,
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_PHYSICAL_FUNCTIONS = 0x0,
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_PHYSICAL_FUNCTIONS = 0x1,
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS = 0x2,
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS = 0x3,
 };
 
 struct mlx5_ifc_emulated_pf_info_bits {
@@ -1552,7 +1553,10 @@ struct mlx5_ifc_query_emulated_functions_info_in_bits {
 	u8         reserved_at_20[0x10];
 	u8         op_mod[0x10];
 
-	u8         reserved_at_40[0x40];
+	u8         reserved_at_40[0x20];
+
+	u8         reserved_at_60[0x10];
+	u8         pf_vhca_id[0x10];
 };
 
 enum mlx5_cap_type {
