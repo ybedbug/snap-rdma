@@ -2901,6 +2901,15 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto unbind_vhca_id;
 	}
 
+	/* RM:2268268 Wait for 1 sec for host to finish the PCI config cycle.
+	 * This should be based on the event from firmware to tell when is this
+	 * PCI BDF is ready, and update the user later.
+	 * A better scheme might be to decide the D.F by the device/firmware so
+	 * that even if the host drivers are not loaded, PCI D.F are predicatable
+	 * numbers that system admin can use.
+	 */
+	sleep(1);
+
 	ret = snap_query_functions_info(sctx, attr->type, out, output_size);
 	if (ret)
 		goto free_cmd;
