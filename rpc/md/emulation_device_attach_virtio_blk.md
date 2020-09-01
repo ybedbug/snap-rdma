@@ -42,6 +42,7 @@ in emulation_list() RPC command.
       "emulation_manager": "mlx5_0",
       "emulation_type": "virtio_blk",
       "pci_type": "physical function",
+      "pci_index": 0,
       "pci_bdf": "83:00.2"
     }
 }

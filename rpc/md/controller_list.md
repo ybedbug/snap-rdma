@@ -26,12 +26,16 @@ with their characteristics.
   "result": [
     {
       "name": "NvmeEmu0",
+      "emulation_manager": "mlx5_2",
       "type": "nvme",
+      "pci_index": 0,
       "pci_bdf": "83:00.1"
     },
     {
       "name": "VblkEmu0",
+      "emulation_manager": "mlx5_0",
       "type": "virtio_blk",
+      "pci_index": 0,
       "pci_bdf": "84:00.1"
     }
   ]

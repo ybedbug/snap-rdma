@@ -8,6 +8,11 @@ Detach plugged emulated device from host.
 Unlike attach, there is no importance for which protocol is used by
 the device.
 
+To specify the PCI function to open controller upon, either "pci_bdf"
+("84:00.2") or "pci_index" (0) must be provided, but not both.
+The mapping for pci_bdf and pci_index can be queried by running
+emulation_functions_list method.
+
 # Request object
 
 {

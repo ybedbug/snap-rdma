@@ -6,6 +6,11 @@ controller_virtio_blk_create - Create new SNAP-based VirtIO BLK controller
 
 Create new VirtIO BLK controller over specific PCI function on host.
 
+To specify the PCI function to open controller upon, either "pci_bdf"
+("84:00.2") or "pci_index" (0) must be provided, but not both.
+The mapping for pci_bdf and pci_index can be queried by running
+emulation_functions_list method.
+
 The response contains a uniquely identified controller name.
 
 # Request object
