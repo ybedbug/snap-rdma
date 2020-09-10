@@ -62,11 +62,17 @@ BASE_CFLAGS="-DSNAP_DEBUG=$dbg $BASE_CFLAGS"
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS])
 
 AC_CONFIG_FILES([Makefile
-		 src/Makefile
-		 ctrl/Makefile
-		 rpc/Makefile
-		 tests/Makefile
-		 mlnx-libsnap.spec
-         debian/changelog])
+                 src/Makefile
+                 ctrl/Makefile
+                 rpc/Makefile
+                 tests/Makefile])
+
+AC_CHECK_FILE([debian/changelog],
+              [],
+              [AC_CONFIG_FILES([debian/changelog])])
+
+AC_CHECK_FILE([mlnx-libsnap.spec],
+              [],
+              [AC_CONFIG_FILES([mlnx-libsnap.spec])])
 
 AC_OUTPUT
