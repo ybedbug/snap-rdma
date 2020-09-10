@@ -114,29 +114,15 @@ def main():
                                        dest='called_rpc_name')
 
     def emulation_device_detach(args):
-        if args.pci_bdf is None and args.pci_index is -1:
-            raise JsonRpcSnapException("Either pci_bdf or pci_index must "
-                                       "be configured")
-        if args.pci_bdf is not None and args.pci_index is not -1:
-            raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
-                                       "both configured")
         params = {
             'emulation_manager': args.emu_manager,
+            'pci_id': args.pci_id,
         }
-        if args.pci_bdf:
-            params['pci_bdf'] = args.pci_bdf
-        if args.pci_index is not -1:
-            params['pci_index'] = args.pci_index
         args.client.call('emulation_device_detach', params)
     p = subparsers.add_parser('emulation_device_detach',
                               help='Detach (Unplug) SNAP device from host')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
-    p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
-                   'Must be set if \'--pci_index\' is not set',
-                   type=str, required=False)
-    p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
-                   'Must be set if \'--pci_bdf\' is not set',
-                   default=-1, type=int, required=False)
+    p.add_argument('pci_id', help='PCI Identifier', type=int)
     p.set_defaults(func=emulation_device_detach)
 
     def emulation_device_attach_virtio_blk(args):
@@ -182,32 +168,19 @@ def main():
     p.set_defaults(func=controller_virtio_blk_delete)
 
     def controller_virtio_blk_create(args):
-        if args.pci_bdf is None and args.pci_index is -1:
-            raise JsonRpcSnapException("Either pci_bdf or pci_index must "
-                                       "be configured")
-        if args.pci_bdf is not None and args.pci_index is not -1:
-            raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
-                                       "both configured")
         params = {
             'emulation_manager': args.emu_manager,
+            'pci_func': args.pci_func,
             'bdev_type': args.bdev_type,
             'bdev': args.bdev,
         }
-        if args.pci_bdf:
-            params['pci_bdf'] = args.pci_bdf
-        if args.pci_index is not -1:
-            params['pci_index'] = args.pci_index
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
                               help='Create new VirtIO BLK SNAP controller')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
-    p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
-                   'Must be set if \'--pci_index\' is not set',
-                   type=str, required=False)
-    p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
-                   'Must be set if \'--pci_bdf\' is not set',
-                   default=-1, type=int, required=False)
+    p.add_argument('pci_func', help='PCI function to start emulation on',
+                   type=int)
     p.add_argument('bdev_type', help='Block device type', type=str,
                    choices=["spdk"])
     p.add_argument('bdev', help='Block device to use as backend', type=str)
@@ -224,19 +197,10 @@ def main():
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
-        if args.pci_bdf is None and args.pci_index is -1:
-            raise JsonRpcSnapException("Either pci_bdf or pci_index must "
-                                       "be configured")
-        if args.pci_bdf is not None and args.pci_index is not -1:
-            raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
-                                       "both configured")
         params = {
             'emulation_manager': args.emu_manager,
+            'pci_func': args.pci_func,
         }
-        if args.pci_bdf:
-            params['pci_bdf'] = args.pci_bdf
-        if args.pci_index is not -1:
-            params['pci_index'] = args.pci_index
         if args.conf:
             params['conf_file'] = args.conf
 
@@ -245,12 +209,8 @@ def main():
     p = subparsers.add_parser('controller_nvme_create',
                               help='Create new NVMe SNAP controller')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
-    p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
-                   'Must be set if \'--pci_index\' is not set',
-                   type=str, required=False)
-    p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
-                   'Must be set if \'--pci_bdf\' is not set',
-                   default=-1, type=int, required=False)
+    p.add_argument('pci_func', help='PCI function to start emulation on',
+                   type=int)
     p.add_argument('-c', '--conf', help='JSON configuration file to use',
                    type=str, required=False)
     p.set_defaults(func=controller_nvme_create)
