@@ -1,4 +1,14 @@
 #include "snap_virtio_blk_ctrl.h"
+#include <linux/virtio_blk.h>
+#include <linux/virtio_config.h>
+
+
+#define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
+					 (1ULL << VIRTIO_BLK_F_MQ) |\
+					 (1ULL << VIRTIO_BLK_F_SIZE_MAX) |\
+					 (1ULL << VIRTIO_BLK_F_SEG_MAX) |\
+					 (1ULL << VIRTIO_BLK_F_BLK_SIZE))
+
 
 static inline struct snap_virtio_blk_ctrl_queue*
 to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
@@ -104,6 +114,157 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.modify = snap_virtio_blk_ctrl_bar_modify,
 	.get_queue_attr = snap_virtio_blk_ctrl_bar_get_queue_attr,
 };
+
+static bool
+snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
+				     const struct snap_virtio_blk_device_attr *bar,
+				     const struct snap_virtio_blk_registers *regs)
+{
+	const struct snap_virtio_caps *vblk_caps;
+	bool ret = true;
+	const struct snap_pci *spci = ctrl->common.sdev->pci;
+
+	vblk_caps = &ctrl->common.sdev->sctx->virtio_blk_caps;
+
+	if (regs->max_queues > vblk_caps->max_emulated_virtqs) {
+		snap_error("Cannot create %d queues (max %d)\n", regs->max_queues,
+			   vblk_caps->max_emulated_virtqs);
+		return false;
+	} else if (regs->max_queues > spci->pci_attr.num_msix - 1) {
+		snap_error("No sufficient msix for %d queues (max %d)\n",
+			   regs->max_queues, spci->pci_attr.num_msix - 1);
+		return false;
+	}
+
+	/* Everything is configurable as long as driver is still down */
+	if (snap_virtio_ctrl_is_stopped(&ctrl->common))
+		return true;
+
+	/* virtio_common_pci_config registers */
+	if ((regs->device_features ^ bar->vattr.device_feature) &
+	    SNAP_VIRTIO_BLK_MODIFIABLE_FTRS) {
+		snap_error("Cant modify device_features, host driver is up\n");
+		ret = false;
+	}
+
+	if (regs->max_queues &&
+	    regs->max_queues != bar->vattr.max_queues) {
+		snap_error("Cant modify max_queues, host driver is up\n");
+		ret = false;
+	}
+
+	if (regs->queue_size &&
+	    regs->queue_size != bar->vattr.max_queue_size) {
+		snap_error("Cant modify queue_size, host driver is up\n");
+		ret = false;
+	}
+
+	/* virtio_blk_config registers */
+	if (regs->capacity < bar->capacity) {
+		snap_error("Cant reduce capacity, host driver is up\n");
+		ret = false;
+	}
+
+	if (regs->blk_size && regs->blk_size != bar->blk_size) {
+		snap_error("Cant modify blk_size, host driver is up\n");
+		ret = false;
+	}
+
+	if (regs->size_max && regs->size_max != bar->size_max) {
+		snap_error("Cant modify size_max, host driver is up\n");
+		ret = false;
+	}
+
+	if (regs->seg_max && regs->seg_max != bar->seg_max) {
+		snap_error("Cant modify seg_max, host driver is up\n");
+		ret = false;
+	}
+
+	return ret;
+}
+
+/**
+ * snap_virtio_blk_ctrl_bar_setup() - Setup PCI BAR virtio registers
+ * @ctrl:       controller instance
+ * @regs:	registers struct to modify
+ *
+ * Update all configurable PCI BAR virtio register values, when possible.
+ * Value of `0` means value is not to be updated (old value is kept).
+ */
+int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
+				   struct snap_virtio_blk_registers *regs,
+				   uint16_t regs_mask)
+{
+	struct snap_virtio_blk_device_attr bar = {};
+	uint16_t extra_flags = 0;
+	int ret;
+	uint64_t new_ftrs;
+	const struct snap_pci *spci = ctrl->common.sdev->pci;
+
+	/* Get last bar values as a reference */
+	ret = snap_virtio_blk_query_device(ctrl->common.sdev, &bar);
+	if (ret) {
+		snap_error("Failed to query bar\n");
+		return -EINVAL;
+	}
+
+	if (!snap_virtio_blk_ctrl_bar_setup_valid(ctrl, &bar, regs)) {
+		snap_error("Setup is not valid\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * if max_queues value wasn't configured on neither hotplug nor
+	 * ctrl creation - just configure to max possible number
+	 */
+	if (!regs->max_queues && !bar.vattr.max_queues) {
+		regs->max_queues = spci->pci_attr.num_msix - 1;
+		snap_warn("No num_queues. Setting to max possible (%d)\n",
+			  regs->max_queues);
+	}
+
+	if (regs_mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
+		/* Update only the device_feature modifiable bits */
+		new_ftrs = regs->device_features ? : bar.vattr.device_feature;
+		bar.vattr.device_feature = (bar.vattr.device_feature &
+					    ~SNAP_VIRTIO_BLK_MODIFIABLE_FTRS);
+		bar.vattr.device_feature |= (new_ftrs &
+					     SNAP_VIRTIO_BLK_MODIFIABLE_FTRS);
+		bar.vattr.max_queue_size = regs->queue_size ? :
+					   bar.vattr.max_queue_size;
+		bar.vattr.max_queues = regs->max_queues ? :
+				       bar.vattr.max_queues;
+		if (regs->max_queues) {
+			/*
+			 * We always wish to keep blk queues and
+			 * virtio queues values aligned
+			 */
+			extra_flags |= SNAP_VIRTIO_MOD_DEV_CFG;
+			bar.max_blk_queues = regs->max_queues;
+		}
+	}
+
+	if (regs_mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+		/*
+		 * We must be able to set capacity to 0.
+		 * This means we cannot change DEV_CFG without
+		 * updating capacity (unless its of same size)
+		 */
+		bar.capacity = regs->capacity;
+		bar.blk_size = regs->blk_size ? : bar.blk_size;
+		bar.size_max = regs->size_max ? : bar.size_max;
+		bar.seg_max = regs->seg_max ? : bar.seg_max;
+	}
+
+	ret = snap_virtio_blk_modify_device(ctrl->common.sdev,
+					    regs_mask | extra_flags, &bar);
+	if (ret) {
+		snap_error("Failed to config virtio controller\n");
+		return ret;
+	}
+
+	return ret;
+}
 
 static struct snap_virtio_ctrl_queue*
 snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
@@ -242,8 +403,16 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	if (ret)
 		goto close_ctrl;
 
+	ret = snap_virtio_blk_ctrl_bar_setup(ctrl, &attr->regs,
+					     SNAP_VIRTIO_MOD_PCI_COMMON_CFG |
+					     SNAP_VIRTIO_MOD_DEV_CFG);
+	if (ret)
+		goto teardown_dev;
+
 	return ctrl;
 
+teardown_dev:
+	snap_virtio_blk_teardown_device(ctrl->common.sdev);
 close_ctrl:
 	snap_virtio_ctrl_close(&ctrl->common);
 free_ctrl:

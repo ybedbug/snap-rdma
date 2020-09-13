@@ -49,6 +49,7 @@ struct snap_virtio_blk_ctrl_queue {
 
 struct snap_virtio_blk_ctrl_attr {
 	struct snap_virtio_ctrl_attr common;
+	struct snap_virtio_blk_registers regs;
 };
 
 struct snap_virtio_blk_ctrl {
@@ -63,6 +64,9 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			  struct snap_bdev_ops *bdev_ops,
 			  void *bdev);
 void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl);
+int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
+				   struct snap_virtio_blk_registers *regs,
+				   uint16_t regs_mask);
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
