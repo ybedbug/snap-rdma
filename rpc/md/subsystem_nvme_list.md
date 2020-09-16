@@ -1,6 +1,6 @@
 # NAME
 
-nvme_subsystem_list - List all active SNAP-Based NVMe subsystems
+subsystem_nvme_list - List all active SNAP-Based NVMe subsystems
 
 # DESCRIPTION
 
@@ -13,7 +13,7 @@ of controllers that are associated with it.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "nvme_subsystem_list"
+  "method": "subsystem_nvme_list"
 }
 
 # Response object

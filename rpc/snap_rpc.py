@@ -231,6 +231,7 @@ def main():
             raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
                                        "both configured")
         params = {
+            'nqn': args.nqn,
             'emulation_manager': args.emu_manager,
         }
         if args.pci_bdf:
@@ -244,6 +245,7 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_nvme_create',
                               help='Create new NVMe SNAP controller')
+    p.add_argument('nqn', help='NVMe subsystem nqn', type=str)
     p.add_argument('emu_manager', help='Emulation manager', type=str)
     p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
                    'Must be set if \'--pci_index\' is not set',
@@ -323,6 +325,37 @@ def main():
                                    'NVMe controller')
     p.add_argument('ctrl', help='Controller Name', type=str)
     p.set_defaults(func=controller_nvme_namespace_list)
+
+    def subsystem_nvme_create(args):
+        params = {
+            'nqn': args.nqn,
+            'serial_number': args.serial_number,
+            'model_number': args.model_number,
+        }
+        args.client.call('subsystem_nvme_create', params)
+    p = subparsers.add_parser('subsystem_nvme_create',
+                              help='Create new NVMe subsystem')
+    p.add_argument('nqn', help='Subsystem NQN', type=str)
+    p.add_argument('serial_number', help='Subsystem serial number', type=str)
+    p.add_argument('model_number', help='Subsystem model number', type=str)
+    p.set_defaults(func=subsystem_nvme_create)
+
+    def subsystem_nvme_delete(args):
+        params = {
+            'nqn': args.nqn,
+        }
+        args.client.call('subsystem_nvme_delete', params)
+    p = subparsers.add_parser('subsystem_nvme_delete',
+                              help='Delete NVMe subsystem')
+    p.add_argument('nqn', help='Subsystem NQN', type=str)
+    p.set_defaults(func=subsystem_nvme_delete)
+
+    def subsystem_nvme_list(args):
+        result = args.client.call('subsystem_nvme_list')
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('subsystem_nvme_list',
+                              help='List NVMe subsystems')
+    p.set_defaults(func=subsystem_nvme_list)
 
     def call_rpc_func(args):
         args.func(args)
