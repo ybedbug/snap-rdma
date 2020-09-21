@@ -320,6 +320,8 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		struct snap_hotplug_attr *attr);
 void snap_hotunplug_pf(struct snap_pci *pf);
 
+int snap_rescan_vfs(struct snap_pci *pf);
+
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);

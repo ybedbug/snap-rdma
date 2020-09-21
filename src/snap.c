@@ -2984,6 +2984,24 @@ out_err:
 }
 
 /**
+ * snap_rescan_vfs() - Reconfigure PF's virtual functions
+ * @pf:      physical function pci context
+ *
+ * Releases currently configured virtual functions and configures
+ * new virtual functions.
+ *
+ * The function should be called if host changed number of virtual functions
+ * on the @pf
+ *
+ * Return: 0 on success, -1 otherwise
+ */
+int snap_rescan_vfs(struct snap_pci *pf)
+{
+	snap_free_virtual_functions(pf);
+	return snap_alloc_virtual_functions(pf);
+}
+
+/**
  * snap_open_device() - Create a new snap device from snap context
  * @sctx:       snap context
  * @attr:       snap device attributes
