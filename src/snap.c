@@ -3002,16 +3002,20 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	bool need_tunnel;
 	int ret;
 
-	/* Currently support only PFs emulation */
-	if (attr->type == SNAP_NVME_PF &&
+	if (attr->pf_id < 0) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	if ((attr->type == SNAP_NVME_PF || attr->type == SNAP_NVME_VF) &&
 	    attr->pf_id < sctx->nvme_pfs.max_pfs) {
 		pfs = &sctx->nvme_pfs;
 		need_tunnel = sctx->mctx.nvme_need_tunnel;
-	} else if (attr->type == SNAP_VIRTIO_NET_PF &&
+	} else if ((attr->type == SNAP_VIRTIO_NET_PF || attr->type == SNAP_VIRTIO_NET_VF) &&
 		   attr->pf_id < sctx->virtio_net_pfs.max_pfs) {
 		pfs = &sctx->virtio_net_pfs;
 		need_tunnel = sctx->mctx.virtio_net_need_tunnel;
-	} else if (attr->type == SNAP_VIRTIO_BLK_PF &&
+	} else if ((attr->type == SNAP_VIRTIO_BLK_PF || attr->type == SNAP_VIRTIO_BLK_VF) &&
 		   attr->pf_id < sctx->virtio_blk_pfs.max_pfs) {
 		pfs = &sctx->virtio_blk_pfs;
 		need_tunnel = sctx->mctx.virtio_blk_need_tunnel;
@@ -3042,7 +3046,14 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	sdev->mdev.rdma_dev_users = 0;
 
 	sdev->sctx = sctx;
-	sdev->pci = &pfs->pfs[attr->pf_id];
+	if (attr->type & (SNAP_VIRTIO_NET_VF | SNAP_VIRTIO_BLK_VF | SNAP_NVME_VF)) {
+		if (attr->vf_id < 0 || attr->vf_id >= pfs->pfs[attr->pf_id].num_vfs) {
+			errno = EINVAL;
+			goto out_free_mutex;
+		}
+		sdev->pci = &pfs->pfs[attr->pf_id].vfs[attr->vf_id];
+	} else
+		sdev->pci = &pfs->pfs[attr->pf_id];
 	sdev->mdev.device_emulation = snap_create_device_emulation(sdev);
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
@@ -3229,5 +3240,4 @@ void snap_close(struct snap_context *sctx)
 	snap_free_functions(sctx);
 	free(sctx);
 	ibv_close_device(context);
-
 }
