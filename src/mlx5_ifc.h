@@ -1528,12 +1528,11 @@ enum {
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS = 0x3,
 };
 
-struct mlx5_ifc_emulated_pf_info_bits {
-	u8         pf_pci_number[0x10];
-	u8         pf_vhca_id[0x10];
+struct mlx5_ifc_emulated_function_info_bits {
+	u8         pci_bdf[0x10];
+	u8         vhca_id[0x10];
 
-	u8         num_of_vfs[0x10];
-	u8         vfs_base_vhca_id[0x10];
+	u8         reserved_at_20[0x20];
 };
 
 struct mlx5_ifc_query_emulated_functions_info_out_bits {
@@ -1543,9 +1542,9 @@ struct mlx5_ifc_query_emulated_functions_info_out_bits {
 	u8         syndrome[0x20];
 
 	u8         reserved_at_40[0x38];
-	u8         num_emulated_pfs[0x8];
+	u8         num_emulated_functions[0x8];
 
-	struct mlx5_ifc_emulated_pf_info_bits emulated_pf_info[0];
+	struct mlx5_ifc_emulated_function_info_bits emulated_function_info[0];
 };
 
 struct mlx5_ifc_query_emulated_functions_info_in_bits {

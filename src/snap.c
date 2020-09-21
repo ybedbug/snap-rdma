@@ -250,11 +250,11 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 		idx = pf->id;
 	} else {
 		num_emulated_pfs = DEVX_GET(query_emulated_functions_info_out,
-					    emulated_info_out, num_emulated_pfs);
+					    emulated_info_out, num_emulated_functions);
 		for (i = 0; i < num_emulated_pfs; i++) {
 			if (pf->mpci.vhca_id == DEVX_GET(query_emulated_functions_info_out,
 							 emulated_info_out,
-							 emulated_pf_info[i].pf_vhca_id)) {
+							 emulated_function_info[i].vhca_id)) {
 				idx = i;
 				break;
 			}
@@ -267,20 +267,22 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 
 	pf->pci_bdf.raw = DEVX_GET(query_emulated_functions_info_out,
 				   emulated_info_out,
-				   emulated_pf_info[idx].pf_pci_number);
+				   emulated_function_info[idx].pci_bdf);
 	snprintf(pf->pci_number, sizeof(pf->pci_number), "%02x:%02x.%d",
 		 pf->pci_bdf.bdf.bus, pf->pci_bdf.bdf.device,
 		 pf->pci_bdf.bdf.function);
 	pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
 				    emulated_info_out,
-				    emulated_pf_info[idx].pf_vhca_id);
+				    emulated_function_info[idx].vhca_id);
+#if 0
 	pf->mpci.vfs_base_vhca_id = DEVX_GET(query_emulated_functions_info_out,
 					     emulated_info_out,
-					     emulated_pf_info[idx].vfs_base_vhca_id);
+					     emulated_function_info[idx].vfs_base_vhca_id);
 	pf->num_vfs = DEVX_GET(query_emulated_functions_info_out,
 			       emulated_info_out,
-			       emulated_pf_info[idx].num_of_vfs);
-
+			       emulated_function_info[idx].num_of_vfs);
+#endif
+	pf->num_vfs = 0;
 	return 0;
 }
 
@@ -296,7 +298,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		return -ENOMEM;
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
-		      DEVX_ST_SZ_BYTES(emulated_pf_info) * (pfs_ctx->max_pfs);
+		      DEVX_ST_SZ_BYTES(emulated_function_info) * (pfs_ctx->max_pfs);
 	out = calloc(1, output_size);
 	if (!out) {
 		ret = -ENOMEM;
@@ -308,7 +310,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		goto out_free;
 
 	num_emulated_pfs = DEVX_GET(query_emulated_functions_info_out, out,
-				    num_emulated_pfs);
+				    num_emulated_functions);
 	if (num_emulated_pfs > pfs_ctx->max_pfs) {
 		ret = -EINVAL;
 		goto out_free;
@@ -2901,7 +2903,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto destroy_hotplug;
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
-		      DEVX_ST_SZ_BYTES(emulated_pf_info) * (pfs_ctx->max_pfs);
+		      DEVX_ST_SZ_BYTES(emulated_function_info) * (pfs_ctx->max_pfs);
 	out = calloc(1, output_size);
 	if (!out) {
 		errno = ENOMEM;
