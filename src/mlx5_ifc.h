@@ -2761,7 +2761,10 @@ struct mlx5_ifc_nvme_device_emulation_bits {
 
 	u8	   counter_set_id[0x20];
 
-	u8	   reserved_at_a0[0x60];
+	u8	   reserved_at_a0[0x10];
+	u8	   num_of_vfs[0x10];
+
+	u8	   reserved_at_c0[0x40];
 
 	struct mlx5_ifc_device_pci_parameters_bits pci_params;
 

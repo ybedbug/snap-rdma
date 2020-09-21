@@ -74,6 +74,8 @@ int snap_nvme_query_device(struct snap_device *sdev,
 
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
+	attr->num_of_vfs = DEVX_GET(nvme_device_emulation, device_emulation_out,
+				    num_of_vfs);
 	dev_allowed = DEVX_GET64(nvme_device_emulation, device_emulation_out,
 				 modify_field_select);
 	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR)
