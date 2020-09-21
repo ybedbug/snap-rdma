@@ -80,6 +80,9 @@
 #define snap_warn  printf
 #define snap_info  printf
 
+// TODO: query from cap
+#define SNAP_MAX_VFS	64
+
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
 	SNAP_NVME_PF		= 1 << 0,
@@ -94,6 +97,7 @@ enum snap_emulation_type {
 	SNAP_NVME	= 1 << 0,
 	SNAP_VIRTIO_NET	= 1 << 1,
 	SNAP_VIRTIO_BLK	= 1 << 2,
+	SNAP_VF		= 1 << 3,
 };
 
 enum snap_device_attr_flags {

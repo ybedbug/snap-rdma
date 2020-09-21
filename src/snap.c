@@ -11,6 +11,9 @@
 #define SNAP_GENERAL_CMD_USEC_WAIT 50000
 #define SNAP_UNINITIALIZED_VHCA_ID -1
 
+static int snap_query_functions_info(struct snap_context *sctx,
+		enum snap_emulation_type type, int vhca_id, uint8_t *out, int outlen);
+
 static int snap_general_tunneled_cmd(struct snap_device *sdev, void *in,
 		size_t inlen, void *out, size_t outlen, int retries)
 {
@@ -121,6 +124,9 @@ static void snap_free_virtual_functions(struct snap_pci *pf)
 {
 	int i;
 
+	if (pf->num_vfs == 0)
+		return;
+
 	for (i = 0; i < pf->num_vfs ; i++)
 		snap_free_pci_bar(&pf->vfs[i]);
 	free(pf->vfs);
@@ -156,6 +162,25 @@ snap_emulation_type_to_pf_type(enum snap_emulation_type type)
 static int snap_alloc_virtual_functions(struct snap_pci *pf)
 {
 	int i, j, ret;
+	int output_size;
+	uint8_t *out;
+
+	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
+		      DEVX_ST_SZ_BYTES(emulated_function_info) * SNAP_MAX_VFS;
+	out = calloc(1, output_size);
+	if (!out)
+		return -ENOMEM;
+
+	ret = snap_query_functions_info(pf->sctx, SNAP_VF, pf->mpci.vhca_id, out, output_size);
+	if (ret)
+		goto free_vfs_query;
+
+	pf->num_vfs = DEVX_GET(query_emulated_functions_info_out, out,
+			       num_emulated_functions);
+	if (pf->num_vfs == 0) {
+		ret = 0;
+		goto free_vfs_query;
+	}
 
 	pf->vfs = calloc(pf->num_vfs, sizeof(struct snap_pci));
 	if (!pf->vfs)
@@ -166,24 +191,35 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf)
 
 		vf->type = snap_pf_to_vf_type(pf->type);
 		vf->sctx = pf->sctx;
-		vf->mpci.vhca_id = pf->mpci.vfs_base_vhca_id + i;
 
 		vf->plugged = true;
 		vf->id = i;
-		vf->pci_bdf.raw = pf->pci_bdf.raw;
 		vf->num_vfs = 0;
 		vf->parent = pf;
+
+		vf->pci_bdf.raw = DEVX_GET(query_emulated_functions_info_out,
+					   out, emulated_function_info[i].pci_bdf);
+		snprintf(vf->pci_number, sizeof(vf->pci_number), "%02x:%02x.%d",
+			 vf->pci_bdf.bdf.bus, vf->pci_bdf.bdf.device,
+			 vf->pci_bdf.bdf.function);
+
+		vf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
+					    out, emulated_function_info[i].vhca_id);
+
 		ret = snap_alloc_pci_bar(vf);
 		if (ret)
 			goto free_vfs;
 	}
 
+	free(out);
 	return 0;
 
 free_vfs:
 	for (j = 0; j < i; j++)
 		snap_free_pci_bar(&pf->vfs[j]);
 	free(pf->vfs);
+free_vfs_query:
+	free(out);
 	return ret;
 }
 
@@ -193,7 +229,7 @@ static void _snap_free_functions(struct snap_context *sctx,
 	int i;
 
 	for (i = 0; i < pfs->max_pfs; i++) {
-		if (pfs->pfs[i].plugged && pfs->pfs[i].num_vfs)
+		if (pfs->pfs[i].plugged)
 			snap_free_virtual_functions(&pfs->pfs[i]);
 		snap_free_pci_bar(&pfs->pfs[i]);
 	}
@@ -212,7 +248,7 @@ static void snap_free_functions(struct snap_context *sctx)
 }
 
 static int snap_query_functions_info(struct snap_context *sctx,
-		enum snap_emulation_type type ,uint8_t *out, int outlen)
+		enum snap_emulation_type type, int vhca_id, uint8_t *out, int outlen)
 {
 	struct ibv_context *context = sctx->context;
 	uint8_t in[DEVX_ST_SZ_BYTES(query_emulated_functions_info_in)] = {0};
@@ -232,6 +268,11 @@ static int snap_query_functions_info(struct snap_context *sctx,
 	case SNAP_VIRTIO_BLK:
 		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
 			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS);
+		break;
+	case SNAP_VF:
+		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
+			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS);
+		DEVX_SET(query_emulated_functions_info_in, in, pf_vhca_id, vhca_id);
 		break;
 	default:
 		return -EINVAL;
@@ -274,14 +315,6 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 	pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
 				    emulated_info_out,
 				    emulated_function_info[idx].vhca_id);
-#if 0
-	pf->mpci.vfs_base_vhca_id = DEVX_GET(query_emulated_functions_info_out,
-					     emulated_info_out,
-					     emulated_function_info[idx].vfs_base_vhca_id);
-	pf->num_vfs = DEVX_GET(query_emulated_functions_info_out,
-			       emulated_info_out,
-			       emulated_function_info[idx].num_of_vfs);
-#endif
 	pf->num_vfs = 0;
 	return 0;
 }
@@ -305,7 +338,8 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		goto out_free_pfs;
 	}
 
-	ret = snap_query_functions_info(sctx, pfs_ctx->type, out, output_size);
+	ret = snap_query_functions_info(sctx, pfs_ctx->type, SNAP_UNINITIALIZED_VHCA_ID,
+					out, output_size);
 	if (ret)
 		goto out_free;
 
@@ -334,12 +368,10 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 				snap_free_pci_bar(pf);
 				goto free_vfs;
 			}
-			if (pf->num_vfs) {
-				ret = snap_alloc_virtual_functions(pf);
-				if (ret) {
-					snap_free_pci_bar(pf);
-					goto free_vfs;
-				}
+			ret = snap_alloc_virtual_functions(pf);
+			if (ret) {
+				snap_free_pci_bar(pf);
+				goto free_vfs;
 			}
 		}
 	}
@@ -350,8 +382,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 
 free_vfs:
 	for (j = 0; j < i; j++) {
-		if (pfs_ctx->pfs[j].num_vfs)
-			snap_free_virtual_functions(&pfs_ctx->pfs[j]);
+		snap_free_virtual_functions(&pfs_ctx->pfs[j]);
 		snap_free_pci_bar(&pfs_ctx->pfs[j]);
 	}
 out_free:
@@ -2833,8 +2864,7 @@ void snap_hotunplug_pf(struct snap_pci *pf)
 	if (!pf->hotplug)
 		return;
 
-	if (pf->num_vfs)
-		snap_free_virtual_functions(pf);
+	snap_free_virtual_functions(pf);
 
 	snap_hotplug_pf_unbind_vhca_id(pf);
 	snap_destroy_device_object(pf->hotplug->obj);
@@ -2922,7 +2952,8 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	 */
 	sleep(1);
 
-	ret = snap_query_functions_info(sctx, attr->type, out, output_size);
+	ret = snap_query_functions_info(sctx, attr->type, SNAP_UNINITIALIZED_VHCA_ID,
+					out, output_size);
 	if (ret)
 		goto free_cmd;
 
@@ -2930,11 +2961,9 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	if (ret)
 		goto free_cmd;
 
-	if (pf->num_vfs) {
-		ret = snap_alloc_virtual_functions(pf);
-		if (ret)
-			goto free_cmd;
-	}
+	ret = snap_alloc_virtual_functions(pf);
+	if (ret)
+		goto free_cmd;
 
 	free(out);
 

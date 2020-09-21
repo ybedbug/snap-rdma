@@ -86,7 +86,6 @@ struct mlx5_snap_context {
 
 struct mlx5_snap_pci {
 	int				vhca_id;
-	int				vfs_base_vhca_id;
 };
 
 struct mlx5_snap_devx_obj {
