@@ -142,11 +142,13 @@ def main():
     def emulation_device_attach_virtio_blk(args):
         params = {
             'emulation_manager': args.emu_manager,
-            'bdev_type': args.bdev_type,
-            'bdev': args.bdev,
             'ssid': args.ssid,
             'ssvid': args.ssvid,
         }
+        if args.bdev_type:
+            params['bdev_type'] = args.bdev_type
+        if args.bdev:
+            params['bdev'] = args.bdev
         if args.num_queues:
             params['num_queues'] = args.num_queues
         if args.queue_depth:
@@ -157,11 +159,12 @@ def main():
                               help='Attach (plug) VirtIO BLK SNAP device '
                                    'to host')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
-    p.add_argument('bdev_type', help='Block device type', type=str,
-                   choices=["spdk"])
-    p.add_argument('bdev', help='Block device to use as backend', type=str)
     p.add_argument('--ssid', help='Subsystem ID', type=int, default=0)
     p.add_argument('--ssvid', help='Subsystem Vendor ID', type=int, default=0)
+    p.add_argument('--bdev_type', help='Block device type', type=str,
+                   choices=["spdk", "none"], required=False)
+    p.add_argument('--bdev', help='Block device to use as backend', type=str,
+                   required=False)
     p.add_argument('--num_queues', help='Number of queues', type=int)
     p.add_argument('--queue_depth', help='Queue depth', type=int)
     p.set_defaults(func=emulation_device_attach_virtio_blk)
@@ -191,12 +194,17 @@ def main():
         params = {
             'emulation_manager': args.emu_manager,
             'bdev_type': args.bdev_type,
-            'bdev': args.bdev,
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
         if args.pci_index is not -1:
             params['pci_index'] = args.pci_index
+        if args.num_queues:
+            params['num_queues'] = args.num_queues
+        if args.queue_depth:
+            params['queue_depth'] = args.queue_depth
+        if args.bdev:
+            params['bdev'] = args.bdev
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -208,9 +216,12 @@ def main():
     p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
                    'Must be set if \'--pci_bdf\' is not set',
                    default=-1, type=int, required=False)
-    p.add_argument('bdev_type', help='Block device type', type=str,
-                   choices=["spdk"])
-    p.add_argument('bdev', help='Block device to use as backend', type=str)
+    p.add_argument('--num_queues', help='Number of queues', type=int)
+    p.add_argument('--queue_depth', help='Queue depth', type=int)
+    p.add_argument('--bdev_type', help='Block device type', type=str,
+                   choices=["spdk", "none"], required=True)
+    p.add_argument('--bdev', help='Block device to use as backend', type=str,
+                   required=False)
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_nvme_delete(args):
