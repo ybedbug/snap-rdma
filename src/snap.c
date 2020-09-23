@@ -2410,6 +2410,10 @@ static void snap_set_virtio_blk_hotplug_device(struct snap_hotplug_attr *attr,
 	DEVX_SET(device, device_in,
 		 emulation_initial_regs.virtio_blk.num_queues,
 		 attr->regs.virtio_blk.max_queues);
+	/* For VIRTIO_BLK_F_MQ need to set max_queues in virtio_blk_config too */
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_blk.virtio_blk_config.num_queues,
+		 attr->regs.virtio_blk.max_queues);
 	DEVX_SET64(device, device_in,
 		   emulation_initial_regs.virtio_blk.virtio_blk_config.capacity,
 		   attr->regs.virtio_blk.capacity);

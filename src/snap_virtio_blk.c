@@ -62,6 +62,9 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	attr->blk_size = DEVX_GET(virtio_blk_device_emulation,
 				  device_emulation_out,
 				  virtio_blk_config.blk_size);
+	attr->max_blk_queues = DEVX_GET(virtio_blk_device_emulation,
+					device_emulation_out,
+					virtio_blk_config.num_queues);
 	attr->vattr.enabled = DEVX_GET(virtio_blk_device_emulation,
 				       device_emulation_out, enabled);
 	attr->modifiable_fields = 0;

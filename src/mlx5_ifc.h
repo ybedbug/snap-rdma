@@ -2626,7 +2626,8 @@ struct mlx5_ifc_virtio_blk_config_bits {
 	u8	   reserved_at_140[0x20];
 
 	u8	   writeback[0x8];
-	u8	   reserved_at_168[0x18];
+	u8	   reserved_at_168[0x8];
+	u8	   num_queues[0x10];
 
 	u8	   max_discard_sectors[0x20];
 
