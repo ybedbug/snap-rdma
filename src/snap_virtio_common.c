@@ -129,6 +129,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		in = in_blk;
 		inlen = sizeof(in_blk);
 		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+		struct snap_virtio_blk_device_attr *battr = to_blk_device_attr(attr);
 
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
@@ -142,6 +143,28 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 enabled, attr->enabled);
+		}
+		if (mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
+			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
+				   virtio_device.device_feature, attr->device_feature);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.num_queues, attr->max_queues);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.max_queue_size, attr->max_queue_size);
+		}
+		if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
+			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_blk_config.capacity, battr->capacity);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_blk_config.size_max, battr->size_max);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_blk_config.seg_max, battr->seg_max);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_blk_config.blk_size, battr->blk_size);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_blk_config.num_queues, battr->max_blk_queues);
 		}
 		DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
@@ -176,7 +199,6 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
 		 sdev->mdev.device_emulation->obj_id);
-
 
 	return snap_devx_obj_modify(sdev->mdev.device_emulation, in, inlen,
 				    out, sizeof(out));

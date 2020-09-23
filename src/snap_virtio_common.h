@@ -114,6 +114,8 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_DEV_STATUS = 1 << 0,
 	SNAP_VIRTIO_MOD_LINK_STATUS = 1 << 1,
 	SNAP_VIRTIO_MOD_ENABLED = 1 << 2,
+	SNAP_VIRTIO_MOD_PCI_COMMON_CFG = 1 << 3,
+	SNAP_VIRTIO_MOD_DEV_CFG = 1 << 4,
 };
 
 struct snap_virtio_device_attr {
