@@ -121,6 +121,7 @@ struct snap_virtio_device_attr {
 	uint64_t			driver_feature;
 	uint16_t			msix_config;
 	uint16_t			max_queues;
+	uint16_t			max_queue_size;
 	uint8_t				status;
 	bool				enabled;
 };

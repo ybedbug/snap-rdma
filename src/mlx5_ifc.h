@@ -2693,7 +2693,8 @@ struct mlx5_ifc_virtio_device_bits {
 
 	u8	   notify_off_multiplier[0x20];
 
-	u8	   reserved_at_146[0x20];
+	u8	   max_queue_size[0x10];
+	u8	   reserved_at_162[0x10];
 
 	struct mlx5_ifc_device_pci_parameters_bits pci_params;
 };

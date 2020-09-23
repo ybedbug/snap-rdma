@@ -35,6 +35,8 @@ void snap_virtio_get_device_attr(struct snap_device *sdev,
 				      msix_config);
 	vattr->max_queues = DEVX_GET(virtio_device, device_configuration,
 				     num_queues);
+	vattr->max_queue_size = DEVX_GET(virtio_device, device_configuration,
+					 max_queue_size);
 	vattr->status = DEVX_GET(virtio_device, device_configuration,
 				 device_status);
 
