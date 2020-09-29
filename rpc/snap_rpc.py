@@ -407,6 +407,30 @@ def main():
                               help='List NVMe subsystems')
     p.set_defaults(func=subsystem_nvme_list)
 
+    def dpu_exec(args):
+        file_args = None
+        params = {
+            'file': args.file,
+        }
+        if args.args:
+            file_args = []
+            for i in args.args.strip().split(' '):
+                file_args.append(i)
+            params['args'] = file_args
+        result = args.client.call('dpu_exec', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('dpu_exec',
+                              help='Execute a program file with provide arguments')
+    p.add_argument('file', help='Executable program file name', type=str)
+    p.add_argument('-a', dest='args', help="""whitespace-separated list of
+                   arguments to file enclosed in quotes. This parameter
+                   can be ommited. Example:
+                   'op=connect paths=2 policy=round-robin protocol=nvme qn=sub0 '
+                   'hostqn=nqn.2020-10.snic.rsws05:1 transport=rdma '
+                   'paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421' etc""",
+                   required=False)
+    p.set_defaults(func=dpu_exec)
+
     def call_rpc_func(args):
         args.func(args)
 
