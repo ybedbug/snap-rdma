@@ -1663,6 +1663,7 @@ struct mlx5_ifc_query_nic_vport_context_in_bits {
 
 enum {
 	MLX5_MKC_ACCESS_MODE_KLMS  = 0x2,
+	MLX5_MKC_ACCESS_MODE_CROSSING_VHCA_MKEY = 0x6,
 };
 
 struct mlx5_ifc_mkc_bits {
@@ -1703,9 +1704,12 @@ struct mlx5_ifc_mkc_bits {
 
 	u8         bsf_octword_size[0x20];
 
-	u8         reserved_at_120[0x80];
+	u8         reserved_at_120[0x60];
 
-	u8         translations_octword_size[0x20];
+	u8         crossing_target_vhca_id[0x10];
+	u8         reserved_at_190[0x10];
+
+	u8         translations_octword_size_crossing_target_mkey[0x20];
 
 	u8         reserved_at_1c0[0x1b];
 	u8         log_page_size[0x5];

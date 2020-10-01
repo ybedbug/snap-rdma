@@ -823,3 +823,90 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 
 	return ret;
 }
+
+static int snap_nvme_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
+{
+	int ret = 0;
+	struct mlx5dv_pd pd_info;
+	struct mlx5dv_obj obj;
+
+	if (!pd)
+		return -EINVAL;
+	obj.pd.in = pd;
+	obj.pd.out = &pd_info;
+	ret = mlx5dv_init_obj(&obj, MLX5DV_OBJ_PD);
+	if (ret)
+		return ret;
+	*pd_id = pd_info.pdn;
+	return 0;
+}
+
+/**
+ * snap_create_mkey() - Creates a new mkey
+ * @pd - pd this mkey belongs to
+ * @target_mkey - the mkey this key should point to
+ * @target_vhca_id - the id of the vhca the mkey pointed by this key belongs to
+ *
+ * @Return: created cross gvmi mkey
+ */
+struct snap_cross_mkey *snap_nvme_create_cross_mkey(struct ibv_pd *pd,
+						    uint32_t target_mkey,
+						    uint16_t target_vhca_id)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(create_mkey_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(create_mkey_out)] = {0};
+	void *mkc = DEVX_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
+	struct ibv_context *ctx = pd->context;
+	struct snap_cross_mkey *cmkey;
+	uint32_t pd_id;
+
+	cmkey = calloc(1, sizeof(*cmkey));
+	if (!cmkey) {
+		snap_error("failed to alloc cross_mkey for pd: 0x%x\n, err: %m\n",
+			   pd->handle);
+		return NULL;
+	}
+
+	snap_nvme_get_pd_id(pd, &pd_id);
+
+	DEVX_SET(create_mkey_in, in, opcode, MLX5_CMD_OP_CREATE_MKEY);
+	DEVX_SET(mkc, mkc, access_mode_1_0,
+		 MLX5_MKC_ACCESS_MODE_CROSSING_VHCA_MKEY & 0x3);
+	DEVX_SET(mkc, mkc, access_mode_4_2,
+		 (MLX5_MKC_ACCESS_MODE_CROSSING_VHCA_MKEY >> 2) & 0x7);
+	DEVX_SET(mkc, mkc, a, 1);
+	DEVX_SET(mkc, mkc, rw, 1);
+	DEVX_SET(mkc, mkc, rr, 1);
+	DEVX_SET(mkc, mkc, lw, 1);
+	DEVX_SET(mkc, mkc, lr, 1);
+	DEVX_SET(mkc, mkc, pd, pd_id);
+	DEVX_SET(mkc, mkc, qpn, 0xffffff);
+	DEVX_SET(mkc, mkc, length64, 1);
+	/* TODO: change mkey_7_0 to increasing counter */
+	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
+	DEVX_SET(mkc, mkc, crossing_target_vhca_id, target_vhca_id);
+	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey, target_mkey);
+
+	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
+						 sizeof(out));
+	if (!cmkey->devx_obj)
+		goto out_err;
+
+	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;
+
+	return cmkey;
+
+out_err:
+	free(cmkey);
+	return NULL;
+}
+
+int snap_nvme_destroy_cross_mkey(struct snap_cross_mkey *mkey)
+{
+	int ret;
+
+	ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
+	free(mkey);
+
+	return ret;
+}
