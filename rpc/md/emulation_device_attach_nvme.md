@@ -6,8 +6,9 @@ emulation_device_attach_nvme - Plug new emulated NVMe device to host.
 
 Attach (plug) a new emulated NVMe device with the given parameters.
 Currently the following parameters are configurable:  device_id,
-vendor_id, subsystem_id and subsystem_vendor_id. All other PCI
-attributes fields are pre-determined by NVMe specification (v1.1).
+vendor_id, subsystem_id , subsystem_vendor_id, num_msix and total_vf.
+All other PCI attributes fields are pre-determined by NVMe specification
+(v1.1).
 
 The function returns the new PF entry, as will be shown from now on
 in emulation_list() RPC command.
@@ -21,6 +22,8 @@ in emulation_list() RPC command.
 
   "params": {
     "emulation_manager": "mlx5_0",
+    "num_msix": 0x10,
+    "total_vf": 0x8,
     "did": 0x6001, //Mellanox device id
     "vid": 0x15b3, //Mellanox vendor id
     "ssid": 0, // Indicates the sub-system identifier
