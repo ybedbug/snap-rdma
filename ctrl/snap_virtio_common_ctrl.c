@@ -44,6 +44,7 @@ static inline void snap_virtio_ctrl_bar_copy(struct snap_virtio_ctrl *ctrl,
 	ctrl->bar_ops->copy(orig, copy);
 	copy->status = orig->status;
 	copy->enabled = orig->enabled;
+	copy->num_of_vfs = orig->num_of_vfs;
 }
 
 static inline int snap_virtio_ctrl_bar_update(struct snap_virtio_ctrl *ctrl,

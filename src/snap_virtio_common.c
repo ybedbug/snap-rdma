@@ -39,6 +39,8 @@ void snap_virtio_get_device_attr(struct snap_device *sdev,
 					 max_queue_size);
 	vattr->status = DEVX_GET(virtio_device, device_configuration,
 				 device_status);
+	vattr->num_of_vfs = DEVX_GET(virtio_device, device_configuration,
+				     num_of_vfs);
 
 	snap_get_pci_attr(&sdev->pci->pci_attr,
 			  DEVX_ADDR_OF(virtio_device,

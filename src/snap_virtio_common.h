@@ -126,6 +126,7 @@ struct snap_virtio_device_attr {
 	uint16_t			max_queue_size;
 	uint8_t				status;
 	bool				enabled;
+	uint16_t			num_of_vfs;
 };
 
 struct snap_virtio_device {
