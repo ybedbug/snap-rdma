@@ -475,6 +475,12 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 	    general_obj_types & (1 << MLX5_OBJ_TYPE_DEVICE))
 		sctx->hotplug_supported = true;
 
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.crossing_vhca_mkey))
+		sctx->nvme_caps.crossing_vhca_mkey = true;
+	else
+		sctx->nvme_caps.crossing_vhca_mkey = false;
+
 	return 0;
 }
 

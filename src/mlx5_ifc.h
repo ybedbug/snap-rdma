@@ -1237,7 +1237,9 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         reserved_at_588[0x10];
 	u8         log_max_atomic_size_dc[0x8];
 
-	u8         reserved_at_5a0[0x1c];
+	u8         reserved_at_5a0[0x12];
+	u8         crossing_vhca_mkey[0x1];
+	u8         reserved_at_5b3[0x9];
 	u8         mini_cqe_resp_stride_index[0x1];
 	u8         cqe_128_always[0x1];
 	u8         cqe_compression_128b[0x1];
