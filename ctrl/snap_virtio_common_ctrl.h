@@ -94,6 +94,7 @@ struct snap_virtio_ctrl_bar_cbs {
 	int (*validate)(void *cb_ctx);
 	int (*start)(void *cb_ctx);
 	int (*stop)(void *cb_ctx);
+	int (*num_vfs_changed)(void *cb_ctx, uint16_t new_numvfs);
 };
 
 struct snap_virtio_ctrl_attr {

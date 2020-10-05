@@ -279,6 +279,27 @@ bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl)
 	return ctrl->state == SNAP_VIRTIO_CTRL_STOPPED;
 }
 
+static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
+{
+	int ret;
+
+	/* Give application a chance to clear resources */
+	if (ctrl->bar_cbs.num_vfs_changed) {
+		ret = ctrl->bar_cbs.num_vfs_changed(ctrl->cb_ctx,
+						    ctrl->bar_curr->num_of_vfs);
+		if (ret)
+			return ret;
+	}
+
+	ret = snap_rescan_vfs(ctrl->sdev->pci);
+	if (ret) {
+		snap_error("Failed to rescan vfs\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 {
 	int ret;
@@ -292,6 +313,9 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 	    (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl))) {
 		snap_virtio_ctrl_change_status(ctrl);
 	}
+
+	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
+		snap_virtio_ctrl_change_num_vfs(ctrl);
 }
 
 static inline struct snap_virtio_ctrl_queue *
