@@ -98,7 +98,9 @@ struct snap_virtio_ctrl_bar_cbs {
 
 struct snap_virtio_ctrl_attr {
 	enum snap_virtio_ctrl_type type;
+	enum snap_pci_type pci_type;
 	int pf_id;
+	int vf_id;
 	bool event;
 	void *cb_ctx;
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;

@@ -345,10 +345,11 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	}
 
 	sdev_attr.pf_id = attr->pf_id;
+	sdev_attr.vf_id = attr->vf_id;
 	switch (attr->type) {
 	case SNAP_VIRTIO_BLK_CTRL:
 		ctrl->num_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
-		sdev_attr.type = SNAP_VIRTIO_BLK_PF;
+		sdev_attr.type = attr->pci_type;
 		break;
 	case SNAP_VIRTIO_NET_CTRL:
 		ctrl->num_queues = sctx->virtio_net_caps.max_emulated_virtqs;

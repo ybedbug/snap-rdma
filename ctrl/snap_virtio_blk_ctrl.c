@@ -389,6 +389,25 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	ctrl->bdev_ops = bdev_ops;
 	ctrl->bdev = bdev;
 
+	if (attr->common.pf_id < 0 ||
+	    attr->common.pf_id >= sctx->virtio_blk_pfs.max_pfs) {
+		snap_error("Bad PF id (%d). Only %d PFs are supported\n",
+			   attr->common.pf_id, sctx->virtio_blk_pfs.max_pfs);
+		errno = -ENODEV;
+		goto free_ctrl;
+	}
+
+	if (attr->common.pci_type == SNAP_VIRTIO_BLK_VF &&
+	    (attr->common.vf_id < 0 ||
+	     attr->common.vf_id >= sctx->virtio_blk_pfs.pfs[attr->common.pf_id].num_vfs)) {
+		snap_error("Bad VF id (%d). Only %d VFs are supported for PF %d\n",
+			   attr->common.vf_id,
+			   sctx->virtio_blk_pfs.pfs[attr->common.pf_id].num_vfs,
+			   attr->common.pf_id);
+		errno = -ENODEV;
+		goto free_ctrl;
+	}
+
 	attr->common.type = SNAP_VIRTIO_BLK_CTRL;
 	ret = snap_virtio_ctrl_open(&ctrl->common,
 				    &snap_virtio_blk_ctrl_bar_ops,
