@@ -7,9 +7,9 @@ emulation_device_attach_virtio_blk - Plug new VirtIO BLK emulated device to host
 Attach (plug) new VirtIO BLK emulated device.
 For acquiring block device attributes, block device must be provided,
 while queue-level attributes are kept configurable.
-For pci attributes flexibility, subsystem_id and subsystem_vendor_id
-are configurable. All other PCI attributes fields are pre-determined
-by Virtio Specification (v1.1).
+For pci attributes flexibility, num_msix, total_vf, subsystem_id and
+subsystem_vendor_id are configurable. All other PCI attributes fields
+are pre-determined by Virtio Specification (v1.1).
 
 The function returns the new PF entry, as will be shown from now on
 in emulation_list() RPC command.
@@ -28,6 +28,8 @@ in emulation_list() RPC command.
     "ssid": 0,
     "ssvid": 0,
     "num_queues": 8,
+    "num_msix": 0x8,
+    "total_vf": 0x10,
     "queue_depth": 1024
   }
 }
