@@ -1480,7 +1480,10 @@ struct mlx5_ifc_hotplug_cap_bits {
 	u8         log_max_bar_size[0x8];
 	u8         max_hotplug_devices[0x8];
 
-	u8         reserved_at_20[0x7e0];
+	u8         reserved_at_20[0x10];
+	u8         max_total_vfs[0x10];
+
+	u8         reserved_at_40[0x7c0];
 };
 
 union mlx5_ifc_hca_cap_union_bits {
@@ -2671,7 +2674,7 @@ struct mlx5_ifc_device_bits {
 	u8	   initial_registers_valid[0x1];
 	u8	   device_type[0x8];
 
-	u8	   reserved_at_60[0x10];
+	u8	   total_vf[0x10];
 	u8	   vhca_id[0x10];
 
 	struct mlx5_ifc_device_pci_parameters_bits pci_params;

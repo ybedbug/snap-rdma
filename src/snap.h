@@ -230,7 +230,7 @@ struct snap_hotplug_attr {
 	enum snap_emulation_type	type;
 	struct snap_pci_attr		pci_attr;
 	union snap_device_registers	regs;
-
+	uint16_t			max_vfs;
 };
 
 struct snap_hotplug_device {
@@ -245,6 +245,7 @@ struct snap_hotplug_context {
 	int		supported_types;//mask of snap_emulation_type
 	uint8_t		max_devices;
 	uint8_t		log_max_bar_size;
+	uint16_t	max_total_vfs;
 };
 
 struct snap_pfs_ctx {

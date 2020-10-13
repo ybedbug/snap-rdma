@@ -670,6 +670,8 @@ static int snap_query_hotplug_caps(struct snap_context *sctx)
 	if (ret)
 		return ret;
 
+	sctx->hotplug.max_total_vfs = DEVX_GET(query_hca_cap_out, out,
+				capability.hotplug_cap.max_total_vfs);
 	sctx->hotplug.max_devices = DEVX_GET(query_hca_cap_out, out,
 				capability.hotplug_cap.max_hotplug_devices);
 	sctx->hotplug.log_max_bar_size = DEVX_GET(query_hca_cap_out, out,
@@ -2514,6 +2516,7 @@ snap_create_device_object(struct snap_context *sctx,
 		goto out_free;
 	}
 
+	DEVX_SET(device, device_in, total_vf, attr->max_vfs);
 	DEVX_SET(device, device_in, initial_registers_valid, 1);
 	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
 	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
