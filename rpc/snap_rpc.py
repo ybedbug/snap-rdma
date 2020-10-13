@@ -153,6 +153,10 @@ def main():
             params['num_queues'] = args.num_queues
         if args.queue_depth:
             params['queue_depth'] = args.queue_depth
+        if args.total_vf:
+            params['total_vf'] = args.total_vf
+        if args.num_msix:
+            params['num_msix'] = args.num_msix
         result = args.client.call('emulation_device_attach_virtio_blk', params)
         print(json.dumps(result, indent=2))
     p = subparsers.add_parser('emulation_device_attach_virtio_blk',
@@ -167,6 +171,10 @@ def main():
                    required=False)
     p.add_argument('--num_queues', help='Number of queues', type=int)
     p.add_argument('--queue_depth', help='Queue depth', type=int)
+    p.add_argument('--total_vf', help='Maximal num of VFs allowed', type=int,
+                   required=False)
+    p.add_argument('--num_msix', help='MSI-X vector size', type=int,
+                   required=False)
     p.set_defaults(func=emulation_device_attach_virtio_blk)
 
     def controller_virtio_blk_delete(args):
