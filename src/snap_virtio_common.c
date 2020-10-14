@@ -252,6 +252,34 @@ static int snap_virtio_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 }
 
 struct mlx5_snap_devx_obj*
+snap_virtio_create_queue_counters(struct snap_device *sdev)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		       DEVX_ST_SZ_BYTES(virtio_q_counters)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct mlx5_snap_devx_obj *counters;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS);
+
+	counters = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+					NULL,
+					DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
+					DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
+	if (!counters) {
+		snap_error("Failed to create VirtIO counters devx object\n");
+		errno = ENODEV;
+		goto out;
+	}
+
+	return counters;
+out:
+	return NULL;
+}
+
+struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *vattr, struct snap_virtio_umem *umem)
 {
@@ -368,6 +396,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, queue_period, vattr->queue_period);
 	DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
 		 vattr->queue_max_count);
+	DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
+
 	if (umem[0].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_size, umem[0].size);

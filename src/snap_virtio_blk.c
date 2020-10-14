@@ -288,6 +288,12 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 		goto out;
 	}
 
+	vbq->virtq.ctrs_obj = snap_virtio_create_queue_counters(sdev);
+	if (vbq->virtq.ctrs_obj)
+		attr->vattr.ctrs_obj_id = vbq->virtq.ctrs_obj->obj_id;
+	else
+		goto out_umem;
+
 	vbq->virtq.virtq = snap_virtio_create_queue(sdev, &attr->vattr,
 						    vbq->virtq.umem);
 	if (!vbq->virtq.virtq)
@@ -328,14 +334,18 @@ out:
  */
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 {
-	int ret;
+	int q_ret, ctrs_ret;
 
 	vbq->virtq.virtq->consume_event = NULL;
 
-	ret = snap_devx_obj_destroy(vbq->virtq.virtq);
+	q_ret = snap_devx_obj_destroy(vbq->virtq.virtq);
+	ctrs_ret = snap_devx_obj_destroy(vbq->virtq.ctrs_obj);
 	snap_virtio_teardown_virtq_umem(&vbq->virtq);
 
-	return ret;
+	if (q_ret)
+		return q_ret;
+
+	return ctrs_ret;
 }
 
 static int

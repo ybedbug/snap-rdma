@@ -2396,6 +2396,7 @@ enum {
 	MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION = 0x0015,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION = 0x0016,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_Q = 0x0017,
+	MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS = 0x001c,
 };
 
 enum {
@@ -3561,6 +3562,26 @@ enum {
 enum {
 	MLX5_VIRTIO_Q_OFFLOAD_TYPE_ETH_FRAME	= 0x0,
 	MLX5_VIRTIO_Q_OFFLOAD_TYPE_DESC_TUNNEL	= 0x1,
+};
+
+struct mlx5_ifc_virtio_q_counters_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x40];
+
+	u8	   received_desc[0x40];
+
+	u8	   completed_desc[0x40];
+
+	u8	   error_cqes[0x20];
+
+	u8	   bad_desc_errors[0x20];
+
+	u8	   exceed_max_chain[0x20];
+
+	u8	   invalid_buffer[0x20];
+
+	u8	   reserved_at_180[0x280];
 };
 
 struct mlx5_ifc_virtio_q_bits {

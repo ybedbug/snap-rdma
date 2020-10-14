@@ -96,6 +96,7 @@ struct snap_virtio_queue_attr {
 	uint64_t			driver;
 	uint64_t			device;
 	struct ibv_pd			*pd;
+	uint32_t			ctrs_obj_id;
 
 	enum snap_virtq_state		state; /* query and modify */
 
@@ -118,6 +119,7 @@ struct snap_virtio_queue {
 	struct mlx5_snap_devx_obj		*virtq;
 	struct snap_virtio_umem			umem[3];
 	uint64_t				mod_allowed_mask;
+	struct mlx5_snap_devx_obj		*ctrs_obj;
 };
 
 enum snap_virtio_dev_modify {
@@ -156,6 +158,9 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		enum snap_emulation_type type, uint64_t mask,
 		struct snap_virtio_device_attr *attr);
 
+
+struct mlx5_snap_devx_obj*
+snap_virtio_create_queue_counters(struct snap_device *sdev);
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *attr, struct snap_virtio_umem *umem);
