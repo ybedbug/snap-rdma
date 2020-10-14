@@ -1084,8 +1084,14 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->priv;
 
-	if (priv->swq_state == BLK_SW_VIRTQ_FLUSHING && priv->cmd_cntr == 0) {
-		priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
+	/*
+	 * Don't read any new descriptors while flushing.
+	 * Still need to wait until all inflight requests
+	 * are finished before moving to suspend state.
+	 */
+	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING)) {
+		if (priv->cmd_cntr == 0)
+			priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
 		return 0;
 	}
 
