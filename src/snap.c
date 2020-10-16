@@ -2998,6 +2998,7 @@ out_err:
 int snap_rescan_vfs(struct snap_pci *pf)
 {
 	snap_free_virtual_functions(pf);
+	sleep(1);
 	return snap_alloc_virtual_functions(pf);
 }
 
