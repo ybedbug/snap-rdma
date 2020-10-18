@@ -5,7 +5,7 @@
 #include "mlx5_ifc.h"
 
 static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
-		      bool *ib_en, uint16_t *lid)
+		      bool *ib_en, uint16_t *lid, enum ibv_mtu *mtu)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_nic_vport_context_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_nic_vport_context_out)] = {0};
@@ -27,6 +27,7 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 				   " but only local addressing is supported\n");
 			return -1;
 		}
+		*mtu = port_attr.active_mtu;
 		*lid = port_attr.lid;
 		*ib_en = true;
 		return 0;
@@ -48,6 +49,8 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 			  nic_vport_context.roce_en);
 	if (devx_v)
 		*roce_en = true;
+
+	*mtu = port_attr.active_mtu;
 	return 0;
 }
 
@@ -362,9 +365,10 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	int rc, flags_mask;
 	bool roce_en, ib_en;
 	uint16_t lid;
+	enum ibv_mtu mtu;
 
 	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
-			&ib_en, &lid);
+			&ib_en, &lid, &mtu);
 	if (rc)
 		return rc;
 
@@ -419,7 +423,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 
 	memset(&attr, 0, sizeof(attr));
 	attr.qp_state = IBV_QPS_RTR;
-	attr.path_mtu = SNAP_DMA_QP_PATH_MTU;
+	attr.path_mtu = mtu;
 	attr.rq_psn = SNAP_DMA_QP_RQ_PSN;
 	attr.max_dest_rd_atomic = SNAP_DMA_QP_MAX_DEST_RD_ATOMIC;
 	attr.min_rnr_timer = SNAP_DMA_QP_RNR_TIMER;
