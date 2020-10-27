@@ -123,6 +123,12 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	const struct snap_virtio_caps *vblk_caps;
 	bool ret = true;
 	const struct snap_pci *spci = ctrl->common.sdev->pci;
+	struct snap_virtio_blk_registers regs_whitelist = {};
+
+	/* If only capacity is asked to be changed, allow it */
+	regs_whitelist.capacity = regs->capacity;
+	if (!memcmp(regs, &regs_whitelist, sizeof(regs_whitelist)))
+		return true;
 
 	vblk_caps = &ctrl->common.sdev->sctx->virtio_blk_caps;
 
