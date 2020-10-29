@@ -114,10 +114,10 @@ def main():
                                        dest='called_rpc_name')
 
     def emulation_device_detach(args):
-        if args.pci_bdf is None and args.pci_index is -1:
+        if args.pci_bdf is None and args.pci_index == -1:
             raise JsonRpcSnapException("Either pci_bdf or pci_index must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pci_index is not -1:
+        if args.pci_bdf is not None and args.pci_index != -1:
             raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
                                        "both configured")
         params = {
@@ -125,7 +125,7 @@ def main():
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
-        if args.pci_index is not -1:
+        if args.pci_index != -1:
             params['pci_index'] = args.pci_index
         args.client.call('emulation_device_detach', params)
     p = subparsers.add_parser('emulation_device_detach',
@@ -193,10 +193,10 @@ def main():
     p.set_defaults(func=controller_virtio_blk_delete)
 
     def controller_virtio_blk_create(args):
-        if args.pci_bdf is None and args.pf_id is -1:
+        if args.pci_bdf is None and args.pf_id == -1:
             raise JsonRpcSnapException("Either pci_bdf or pf_id must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pf_id is not -1:
+        if args.pci_bdf is not None and args.pf_id != -1:
             raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
                                        "both configured")
         params = {
@@ -205,9 +205,9 @@ def main():
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
-        if args.pf_id is not -1:
+        if args.pf_id != -1:
             params['pf_id'] = args.pf_id
-        if args.pf_id is not -1 and args.vf_id is not -1:
+        if args.pf_id != -1 and args.vf_id != -1:
             params['vf_id'] = args.vf_id
         if args.num_queues:
             params['num_queues'] = args.num_queues
@@ -274,10 +274,10 @@ def main():
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
-        if args.pci_bdf is None and args.pci_index is -1:
+        if args.pci_bdf is None and args.pci_index == -1:
             raise JsonRpcSnapException("Either pci_bdf or pci_index must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pci_index is not -1:
+        if args.pci_bdf is not None and args.pci_index != -1:
             raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
                                        "both configured")
         params = {
@@ -286,7 +286,7 @@ def main():
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
-        if args.pci_index is not -1:
+        if args.pci_index != -1:
             params['pci_index'] = args.pci_index
         if args.conf:
             params['conf_file'] = args.conf
