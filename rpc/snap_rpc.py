@@ -213,6 +213,10 @@ def main():
             params['num_queues'] = args.num_queues
         if args.queue_depth:
             params['queue_depth'] = args.queue_depth
+        if args.size_max:
+            params['size_max'] = args.size_max
+        if args.seg_max:
+            params['seg_max'] = args.seg_max
         if args.bdev:
             params['bdev'] = args.bdev
         result = args.client.call('controller_virtio_blk_create', params)
@@ -231,6 +235,8 @@ def main():
                    default=-1, type=int, required=False)
     p.add_argument('--num_queues', help='Number of queues', type=int)
     p.add_argument('--queue_depth', help='Queue depth', type=int)
+    p.add_argument('--size_max', help='size_max PCI register value', type=int)
+    p.add_argument('--seg_max', help='seg_max PCI register value', type=int)
     p.add_argument('--bdev_type', help='Block device type', type=str,
                    choices=["spdk", "none"], required=True)
     p.add_argument('--bdev', help='Block device to use as backend', type=str,
@@ -243,6 +249,10 @@ def main():
             'bdev_type': args.bdev_type,
             'bdev': args.bdev,
         }
+        if args.size_max:
+            params['size_max'] = args.size_max
+        if args.seg_max:
+            params['seg_max'] = args.seg_max
         args.client.call('controller_virtio_blk_bdev_attach', params)
     p = subparsers.add_parser('controller_virtio_blk_bdev_attach',
                               help='Attach bdev to VirtIO BLK controller')
@@ -251,6 +261,8 @@ def main():
                    choices=["spdk"], required=True)
     p.add_argument('--bdev', help='Block device to use as backend', type=str,
                    required=True)
+    p.add_argument('--size_max', help='size_max PCI register value', type=int)
+    p.add_argument('--seg_max', help='seg_max PCI register value', type=int)
     p.set_defaults(func=controller_virtio_blk_bdev_attach)
 
     def controller_virtio_blk_bdev_detach(args):

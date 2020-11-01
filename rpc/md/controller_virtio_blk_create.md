@@ -25,6 +25,8 @@ The response contains a uniquely identified controller name.
     "pci_bdf": "83:00.2",
     "num_queues": 8,
     "queue_depth": 32,
+    "size_max": 4096,
+    "seg_max": 4,
     "bdev_type": "spdk",
     "bdev": "Null0"
   }

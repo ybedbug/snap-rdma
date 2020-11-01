@@ -18,7 +18,9 @@ it will act as its backend
   "params": {
     "name": "VblkEmu0pf0",
     "bdev": "Null0",
-    "bdev_type": "spdk"
+    "bdev_type": "spdk",
+    "size_max": 4096,
+    "seg_max": 4
   }
 }
 
