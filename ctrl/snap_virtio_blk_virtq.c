@@ -1001,7 +1001,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 	vq_priv->snap_attr.vattr.driver = attr->driver;
 	vq_priv->snap_attr.vattr.device = attr->device;
 	vq_priv->snap_attr.vattr.full_emulation = true;
-	vq_priv->snap_attr.vattr.max_tunnel_desc = attr->max_tunnel_desc;
+	vq_priv->snap_attr.vattr.max_tunnel_desc = snap_min(attr->max_tunnel_desc,
+							    attr->seg_max + NUM_HDR_FTR_DESCS);
 	vq_priv->snap_attr.vattr.event_qpn_or_msix = attr->msix_vector;
 	vq_priv->snap_attr.vattr.pd = attr->pd;
 	vq_priv->snap_attr.qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
