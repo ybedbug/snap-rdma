@@ -425,9 +425,9 @@ def main():
     p.add_argument('-a', dest='args', help="""whitespace-separated list of
                    arguments to file enclosed in quotes. This parameter
                    can be ommited. Example:
-                   'op=connect paths=2 policy=round-robin protocol=nvme qn=sub0 '
-                   'hostqn=nqn.2020-10.snic.rsws05:1 transport=rdma '
-                   'paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421' etc""",
+                   '--op=connect --paths=2 --policy=round-robin --protocol=nvme --qn=sub0 '
+                   '--hostqn=nqn.2020-10.snic.rsws05:1 --transport=rdma '
+                   '--paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421' etc""",
                    required=False)
     p.set_defaults(func=dpu_exec)
 

@@ -18,7 +18,7 @@ otherwise, will return the output from stderr.
 
   "params": {
     "file": "configure_multipath.py",
-    "args": ["op=connect", "policy=round-robin", "protocol=nvme", "qn=sub0", "hostqn=nqn.2020-10.snic.rsws05:1", "transport=rdma", "paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421"],
+    "args": ["--op=connect", "--policy=round-robin", "--protocol=nvme", "--qn=sub0", "--hostqn=nqn.2020-10.snic.rsws05:1", "--transport=rdma", "--paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421"],
    }
 }
 
