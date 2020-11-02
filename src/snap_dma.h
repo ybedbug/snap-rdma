@@ -34,6 +34,7 @@
 #define SNAP_DMA_H
 
 #include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
 
 struct snap_dma_q;
 struct snap_dma_completion;
@@ -76,12 +77,29 @@ typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
  */
 typedef void (*snap_dma_comp_cb_t)(struct snap_dma_completion *comp, int status);
 
+struct snap_dv_qp {
+	struct mlx5dv_qp  qp;
+	uint16_t          pi;
+	uint16_t          ci;
+	struct snap_dma_completion **comps;
+};
+
+struct snap_dv_cq {
+	struct mlx5dv_cq cq;
+	uint16_t         ci;
+};
+
 struct snap_dma_ibv_qp {
 	struct ibv_qp  *qp;
 	struct ibv_cq  *tx_cq;
 	struct ibv_cq  *rx_cq;
 	struct ibv_mr  *rx_mr;
 	char           *rx_buf;
+
+	/* used when working in devx mode */
+	struct snap_dv_qp  dv_qp;
+	struct snap_dv_cq  dv_tx_cq;
+	struct snap_dv_cq  dv_rx_cq;
 };
 
 struct snap_dma_q_ops {
@@ -235,6 +253,7 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 
 /* align start of the receive buffer on 4k boundary */
 #define SNAP_DMA_RX_BUF_ALIGN    4096
+#define SNAP_DMA_BUF_ALIGN       4096
 
 /* create params */
 #define SNAP_DMA_FW_QP_MIN_SEND_WR 32

@@ -4,7 +4,42 @@
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
 
+/* memory barriers */
+
+#define snap_compiler_fence() asm volatile(""::: "memory")
+
+#if defined(__x86_64__)
+
+#define snap_memory_bus_fence()        asm volatile("mfence"::: "memory")
+#define snap_memory_bus_store_fence()  asm volatile("sfence" ::: "memory")
+#define snap_memory_bus_load_fence()   asm volatile("lfence" ::: "memory")
+
+#define snap_memory_cpu_fence()        snap_compiler_fence()
+#define snap_memory_cpu_store_fence()  snap_compiler_fence()
+#define snap_memory_cpu_load_fence()   snap_compiler_fence()
+
+#elif defined(__aarch64__)
+
+#define snap_memory_bus_fence()        asm volatile("dsb sy" ::: "memory")
+#define snap_memory_bus_store_fence()  asm volatile("dsb st" ::: "memory")
+#define snap_memory_bus_load_fence()   asm volatile("dsb ld" ::: "memory")
+
+#define snap_memory_cpu_fence()        asm volatile("dmb ish" ::: "memory")
+#define snap_memory_cpu_store_fence()  asm volatile("dmb ishst" ::: "memory")
+#define snap_memory_cpu_load_fence()   asm volatile("dmb ishld" ::: "memory")
+
+#else
+# error "Unsupported architecture"
+#endif
+
+#define SNAP_MLX5_RECV_WQE_BB  16
+static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
+				     size_t len, uint32_t lkey);
+static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp);
+static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq);
+
 static struct snap_dma_q_ops verb_ops;
+static struct snap_dma_q_ops dv_ops;
 
 static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 		      bool *ib_en, uint16_t *lid, enum ibv_mtu *mtu)
@@ -58,6 +93,9 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 
 static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 {
+	if (qp->dv_qp.comps)
+		free(qp->dv_qp.comps);
+
 	ibv_destroy_qp(qp->qp);
 	ibv_destroy_cq(qp->rx_cq);
 	ibv_destroy_cq(qp->tx_cq);
@@ -96,6 +134,8 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		bool use_dv)
 {
 	struct ibv_context *ibv_ctx = pd->context;
+	struct mlx5dv_obj dv_obj;
+	int rc;
 
 	qp->tx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_send_wr, cq_context,
 			comp_channel, comp_vector);
@@ -119,8 +159,46 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		   qp->qp->qp_num, attr->cap.max_send_wr,
 		   attr->cap.max_recv_wr, attr->cap.max_inline_data, pd);
 
+	if (!use_dv)
+		return 0;
+
+	dv_obj.qp.in = qp->qp;
+	dv_obj.qp.out = &qp->dv_qp.qp;
+	qp->dv_qp.pi = 0;
+	qp->dv_qp.ci = 0;
+	rc = mlx5dv_init_obj(&dv_obj, MLX5DV_OBJ_QP);
+	if (rc)
+		goto free_rx_cq;
+
+	rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
+			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dma_completion *));
+	if (rc)
+		goto free_rx_cq;
+
+	memset(qp->dv_qp.comps, 0,
+	       qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dma_completion *));
+
+	rc = snap_dv_cq_init(qp->tx_cq, &qp->dv_tx_cq);
+	if (rc)
+		goto free_comps;
+
+	rc = snap_dv_cq_init(qp->rx_cq, &qp->dv_rx_cq);
+	if (rc)
+		goto free_comps;
+
+	snap_debug("sq wqe_count = %d stride = %d, rq wqe_count = %d, stride = %d, bf.reg = %p, bf.size = %d\n",
+		   qp->dv_qp.qp.sq.wqe_cnt, qp->dv_qp.qp.sq.stride,
+		   qp->dv_qp.qp.rq.wqe_cnt, qp->dv_qp.qp.rq.stride,
+		   qp->dv_qp.qp.bf.reg, qp->dv_qp.qp.bf.size);
+
+	if (qp->dv_qp.qp.sq.stride != MLX5_SEND_WQE_BB ||
+	    qp->dv_qp.qp.rq.stride != SNAP_MLX5_RECV_WQE_BB)
+		goto free_comps;
+
 	return 0;
 
+free_comps:
+	free(qp->dv_qp.comps);
 free_rx_cq:
 	ibv_destroy_cq(qp->rx_cq);
 free_tx_cq:
@@ -147,9 +225,11 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		printf("*** dma_q mode is %d ****\n", attr->mode);
 	}
 
-	if (attr->mode == SNAP_DMA_Q_MODE_VERBS)
+	if (attr->mode == SNAP_DMA_Q_MODE_VERBS) {
 		q->ops = &verb_ops;
-	else
+	} else if (attr->mode == SNAP_DMA_Q_MODE_DV) {
+		q->ops = &dv_ops;
+	} else
 		return -EINVAL;
 
 	q->tx_available = attr->tx_qsize;
@@ -176,19 +256,27 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		goto free_qp;
 
 	for (i = 0; i < 2 * attr->rx_qsize; i++) {
-		rx_sge.addr = (uint64_t)(q->sw_qp.rx_buf +
-				i * attr->rx_elem_size);
-		rx_sge.length = attr->rx_elem_size;
-		rx_sge.lkey = q->sw_qp.rx_mr->lkey;
+		if (attr->mode == SNAP_DMA_Q_MODE_VERBS) {
+			rx_sge.addr = (uint64_t)(q->sw_qp.rx_buf +
+					i * attr->rx_elem_size);
+			rx_sge.length = attr->rx_elem_size;
+			rx_sge.lkey = q->sw_qp.rx_mr->lkey;
 
-		rx_wr.wr_id = rx_sge.addr;
-		rx_wr.next = NULL;
-		rx_wr.sg_list = &rx_sge;
-		rx_wr.num_sge = 1;
+			rx_wr.wr_id = rx_sge.addr;
+			rx_wr.next = NULL;
+			rx_wr.sg_list = &rx_sge;
+			rx_wr.num_sge = 1;
 
-		rc = ibv_post_recv(q->sw_qp.qp, &rx_wr, &bad_wr);
-		if (rc)
-			goto free_rx_resources;
+			rc = ibv_post_recv(q->sw_qp.qp, &rx_wr, &bad_wr);
+			if (rc)
+				goto free_rx_resources;
+		} else {
+			snap_dv_post_recv(&q->sw_qp.dv_qp,
+					  q->sw_qp.rx_buf + i * attr->rx_elem_size,
+					  attr->rx_elem_size,
+					  q->sw_qp.rx_mr->lkey);
+			snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+		}
 	}
 
 	return 0;
@@ -1013,4 +1101,398 @@ static struct snap_dma_q_ops verb_ops = {
 	.send_completion = verbs_dma_q_send_completion,
 	.progress_tx     = verbs_dma_q_progress_tx,
 	.progress_rx     = verbs_dma_q_progress_rx,
+};
+
+/* DV implementation */
+
+static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
+{
+	struct mlx5dv_obj dv_obj;
+	int rc;
+
+	dv_cq->ci = 0;
+	dv_obj.cq.in = cq;
+	dv_obj.cq.out = &dv_cq->cq;
+	rc = mlx5dv_init_obj(&dv_obj, MLX5DV_OBJ_CQ);
+
+	snap_debug("dv_cq: cqn = 0x%x, cqe_size = %d, cqe_count = %d comp_mask = 0x0%x\n",
+		   dv_cq->cq.cqn, dv_cq->cq.cqe_size, dv_cq->cq.cqe_cnt,
+		   dv_cq->cq.comp_mask);
+	return rc;
+}
+
+static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
+{
+	dv_qp->pi++;
+	snap_memory_cpu_store_fence();
+
+	dv_qp->qp.dbrec[MLX5_SND_DBR] = htobe32(dv_qp->pi);
+	/* Make sure that doorbell record is written before ringing the doorbell */
+	snap_memory_bus_store_fence();
+
+	*(uint64_t *)(dv_qp->qp.bf.reg) = *(uint64_t *)ctrl;
+	snap_memory_bus_store_fence();
+}
+
+static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)
+{
+	snap_memory_cpu_store_fence();
+	dv_qp->qp.dbrec[MLX5_RCV_DBR] = htobe32(dv_qp->ci);
+	snap_memory_bus_store_fence();
+}
+
+static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
+				     size_t len, uint32_t lkey)
+{
+	struct mlx5_wqe_data_seg *dseg;
+
+	dseg = (struct mlx5_wqe_data_seg *)(dv_qp->qp.rq.buf + (dv_qp->ci & (dv_qp->qp.rq.wqe_cnt - 1)) *
+					    SNAP_MLX5_RECV_WQE_BB);
+	mlx5dv_set_data_seg(dseg, len, lkey, (intptr_t)addr);
+	dv_qp->ci++;
+}
+
+static inline void *snap_dv_get_wqe_bb(struct snap_dv_qp *dv_qp)
+{
+	return dv_qp->qp.sq.buf + (dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1)) *
+	       MLX5_SEND_WQE_BB;
+}
+
+static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
+		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
+		struct snap_dma_completion *comp)
+{
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct mlx5_wqe_raddr_seg *rseg;
+	struct mlx5_wqe_data_seg *dseg;
+	uint16_t comp_idx;
+
+	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+
+	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
+			    q->sw_qp.qp->qp_num, MLX5_WQE_CTRL_CQ_UPDATE,
+			    3, 0, 0);
+
+	rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
+	rseg->raddr = htobe64((uintptr_t)raddr);
+	rseg->rkey  = htobe32(rkey);
+
+	dseg = (struct mlx5_wqe_data_seg *)(rseg + 1);
+	mlx5dv_set_data_seg(dseg, len, lkey, (intptr_t)buf);
+
+	snap_dv_ring_tx_db(dv_qp, ctrl);
+
+	/* it is better to start dma as soon as possible and do
+	 * bookkeeping later */
+	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
+	dv_qp->comps[comp_idx] = comp;
+	return 0;
+}
+
+static int dv_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
+			  uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
+			  struct snap_dma_completion *comp)
+{
+	return do_dv_dma_xfer(q, src_buf, len, lkey, dstaddr, rmkey,
+			MLX5_OPCODE_RDMA_WRITE, 0, comp);
+}
+
+static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
+			 uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
+			 struct snap_dma_completion *comp)
+{
+	return do_dv_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
+			MLX5_OPCODE_RDMA_READ, 0, comp);
+}
+
+static inline uint16_t round_up(uint16_t x, uint16_t d)
+{
+	return (x + d - 1)/d;
+}
+
+static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
+				    int op, uint64_t raddr, uint32_t rkey)
+{
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct mlx5_wqe_inl_data_seg *dseg;
+	struct mlx5_wqe_raddr_seg *rseg;
+	uint16_t pi, n_bb, wqe_size, to_end;
+	void *pdata;
+
+	wqe_size = sizeof(*ctrl) + sizeof(*dseg) + len;
+	if (op == MLX5_OPCODE_RDMA_WRITE)
+		wqe_size += sizeof(*rseg);
+
+	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
+			    q->sw_qp.qp->qp_num, MLX5_WQE_CTRL_CQ_UPDATE,
+			    round_up(wqe_size, 16), 0, 0);
+
+	if (op == MLX5_OPCODE_RDMA_WRITE) {
+		rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
+		rseg->raddr = htobe64((uintptr_t)raddr);
+		rseg->rkey = htobe32(rkey);
+		dseg = (struct mlx5_wqe_inl_data_seg *)(rseg + 1);
+	} else
+		dseg = (struct mlx5_wqe_inl_data_seg *)(ctrl + 1);
+
+	dseg->byte_count = htobe32(len | MLX5_INLINE_SEG);
+	pdata = dseg + 1;
+
+	/* handle wrap around, where inline data needs several building blocks */
+	pi = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
+	to_end = (dv_qp->qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB -
+		 sizeof(*ctrl) - sizeof(*dseg);
+	if (op == MLX5_OPCODE_RDMA_WRITE)
+		to_end -= sizeof(*rseg);
+
+	if (snap_unlikely(len > to_end)) {
+		memcpy(pdata, src_buf, to_end);
+		memcpy(dv_qp->qp.sq.buf, src_buf + to_end, len - to_end);
+	} else {
+		memcpy(pdata, src_buf, len);
+	}
+
+	/* calculate how many building blocks are used minus one */
+	n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB) - 1;
+	dv_qp->pi += n_bb;
+
+	snap_dv_ring_tx_db(dv_qp, ctrl);
+
+	dv_qp->comps[pi] = NULL;
+	return 0;
+}
+
+static int dv_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
+				    size_t len)
+{
+	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0);
+}
+
+static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
+				uint64_t dstaddr, uint32_t rmkey)
+{
+	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_RDMA_WRITE,
+			dstaddr, rmkey);
+}
+
+static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq)
+{
+	struct mlx5_cqe64 *cqe;
+
+	cqe = (struct mlx5_cqe64 *)(dv_cq->cq.buf + (dv_cq->ci & (dv_cq->cq.cqe_cnt - 1)) *
+				    sizeof(struct mlx5_cqe64));
+	return cqe;
+}
+
+static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_dv_cq *dv_cq)
+{
+	struct mlx5_cqe64 *cqe;
+
+	cqe = snap_dv_get_cqe(dv_cq);
+
+	/* cqe is hw owned */
+	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cq.cqe_cnt))
+		return NULL;
+
+	/* and must have valid opcode */
+	if (mlx5dv_get_cqe_opcode(cqe) == MLX5_CQE_INVALID)
+		return NULL;
+
+	dv_cq->ci++;
+
+	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d\n",
+		   dv_cq->ci,
+		   mlx5dv_get_cqe_opcode(cqe),
+		   be32toh(cqe->byte_cnt),
+		   be16toh(cqe->wqe_counter));
+	return cqe;
+}
+
+static inline void snap_dv_ring_cq_db(struct snap_dv_cq *dv_cq)
+{
+	/* TODO: create cq with enable overflow */
+	snap_memory_bus_store_fence();
+	dv_cq->cq.dbrec[0] = htobe32(dv_cq->ci);
+}
+
+static const char *snap_dv_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
+{
+	uint8_t wqe_err_opcode = be32toh(ecqe->s_wqe_opcode_qpn) >> 24;
+
+	switch (ecqe->op_own >> 4) {
+	case MLX5_CQE_REQ_ERR:
+		switch (wqe_err_opcode) {
+		case MLX5_OPCODE_RDMA_WRITE_IMM:
+		case MLX5_OPCODE_RDMA_WRITE:
+			return "RDMA_WRITE";
+		case MLX5_OPCODE_SEND_IMM:
+		case MLX5_OPCODE_SEND:
+		case MLX5_OPCODE_SEND_INVAL:
+			return "SEND";
+		case MLX5_OPCODE_RDMA_READ:
+			return "RDMA_READ";
+		case MLX5_OPCODE_ATOMIC_CS:
+			return "COMPARE_SWAP";
+		case MLX5_OPCODE_ATOMIC_FA:
+			return "FETCH_ADD";
+		case MLX5_OPCODE_ATOMIC_MASKED_CS:
+			return "MASKED_COMPARE_SWAP";
+		case MLX5_OPCODE_ATOMIC_MASKED_FA:
+			return "MASKED_FETCH_ADD";
+		default:
+			return "";
+			}
+	case MLX5_CQE_RESP_ERR:
+		return "RECV";
+	default:
+		return "";
+	}
+}
+
+static void snap_dv_cqe_err(struct mlx5_cqe64 *cqe)
+{
+	struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
+	uint16_t wqe_counter;
+	uint32_t qp_num = 0;
+	char info[200] = {0};
+
+	wqe_counter = be16toh(ecqe->wqe_counter);
+	qp_num = be32toh(ecqe->s_wqe_opcode_qpn) & ((1<<24)-1);
+
+	if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
+		snap_debug("QP 0x%x wqe[%d] is flushed\n", qp_num, wqe_counter);
+		return;
+	}
+
+	switch (ecqe->syndrome) {
+	case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
+		snprintf(info, sizeof(info), "Local length");
+		break;
+	case MLX5_CQE_SYNDROME_LOCAL_QP_OP_ERR:
+		snprintf(info, sizeof(info), "Local QP operation");
+		break;
+	case MLX5_CQE_SYNDROME_LOCAL_PROT_ERR:
+		snprintf(info, sizeof(info), "Local protection");
+		break;
+	case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
+		snprintf(info, sizeof(info), "WR flushed because QP in error state");
+		break;
+	case MLX5_CQE_SYNDROME_MW_BIND_ERR:
+		snprintf(info, sizeof(info), "Memory window bind");
+		break;
+	case MLX5_CQE_SYNDROME_BAD_RESP_ERR:
+		snprintf(info, sizeof(info), "Bad response");
+		break;
+	case MLX5_CQE_SYNDROME_LOCAL_ACCESS_ERR:
+		snprintf(info, sizeof(info), "Local access");
+		break;
+	case MLX5_CQE_SYNDROME_REMOTE_INVAL_REQ_ERR:
+		snprintf(info, sizeof(info), "Invalid request");
+		break;
+	case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
+		snprintf(info, sizeof(info), "Remote access");
+		break;
+	case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
+		snprintf(info, sizeof(info), "Remote QP");
+		break;
+	case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
+		snprintf(info, sizeof(info), "Transport retry count exceeded");
+		break;
+	case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
+		snprintf(info, sizeof(info), "Receive-no-ready retry count exceeded");
+		break;
+	case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
+		snprintf(info, sizeof(info), "Remote side aborted");
+		break;
+	default:
+		snprintf(info, sizeof(info), "Generic");
+		break;
+	}
+	snap_error("Error on QP 0x%x wqe[%03d]: %s (synd 0x%x vend 0x%x) opcode %s\n",
+		   qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
+		   snap_dv_cqe_err_opcode(ecqe));
+}
+
+static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
+{
+	struct mlx5_cqe64 *cqe;
+	struct snap_dma_completion *comp;
+	uint16_t comp_idx;
+	int n;
+	uint32_t sq_mask;
+
+	n = 0;
+	sq_mask = q->sw_qp.dv_qp.qp.sq.wqe_cnt - 1;
+	do {
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq);
+		if (!cqe)
+			break;
+
+		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe) != MLX5_CQE_REQ))
+			snap_dv_cqe_err(cqe);
+
+		q->tx_available++;
+		n++;
+		comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
+		comp = q->sw_qp.dv_qp.comps[comp_idx];
+		if (comp && --comp->count == 0)
+			comp->func(comp, mlx5dv_get_cqe_opcode(cqe));
+
+	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
+
+	if (n == 0)
+		return 0;
+
+	snap_dv_ring_cq_db(&q->sw_qp.dv_tx_cq);
+	return n;
+}
+
+static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
+{
+	struct mlx5_cqe64 *cqe;
+	int n, ri;
+	int op;
+	uint32_t rq_mask;
+
+	rq_mask = q->sw_qp.dv_qp.qp.rq.wqe_cnt - 1;
+	n = 0;
+	do {
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq);
+		if (!cqe)
+			break;
+
+		op = mlx5dv_get_cqe_opcode(cqe);
+		if (snap_unlikely(op != MLX5_CQE_RESP_SEND &&
+				  op != MLX5_CQE_RESP_SEND_IMM)) {
+			snap_dv_cqe_err(cqe);
+			return n;
+		}
+
+		n++;
+		ri = be16toh(cqe->wqe_counter) & rq_mask;
+		q->rx_cb(q, q->sw_qp.rx_buf + ri * q->rx_elem_size,
+			 be32toh(cqe->byte_cnt),
+			 cqe->imm_inval_pkey);
+
+	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
+
+	if (n == 0)
+		return 0;
+
+	q->sw_qp.dv_qp.ci += n;
+	snap_dv_ring_cq_db(&q->sw_qp.dv_rx_cq);
+	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+	return n;
+}
+
+static struct snap_dma_q_ops dv_ops = {
+	.write           = dv_dma_q_write,
+	.write_short     = dv_dma_q_write_short,
+	.read            = dv_dma_q_read,
+	.send_completion = dv_dma_q_send_completion,
+	.progress_tx     = dv_dma_q_progress_tx,
+	.progress_rx     = dv_dma_q_progress_rx,
 };
