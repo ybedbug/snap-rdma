@@ -84,6 +84,22 @@ struct snap_dma_ibv_qp {
 	char           *rx_buf;
 };
 
+struct snap_dma_q_ops {
+	int (*write)(struct snap_dma_q *q, void *src_buf, size_t len,
+		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
+		     struct snap_dma_completion *comp);
+	int (*write_short)(struct snap_dma_q *q, void *src_buf, size_t len,
+			   uint64_t dstaddr, uint32_t rmkey);
+	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
+		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
+		    struct snap_dma_completion *comp);
+	int (*send_completion)(struct snap_dma_q *q, void *src_buf, size_t len);
+	int (*progress_tx)(struct snap_dma_q *q);
+	int (*progress_rx)(struct snap_dma_q *q);
+	int (*flush)(struct snap_dma_q *q);
+	int (*arm)(struct snap_dma_q *q);
+};
+
 /**
  * struct snap_dma_q - DMA queue
  *
@@ -110,9 +126,17 @@ struct snap_dma_q {
 	int                    rx_elem_size;
 	snap_dma_rx_cb_t       rx_cb;
 	struct snap_dma_ibv_qp fw_qp;
+	struct snap_dma_q_ops  *ops;
 	/* public: */
 	/** @uctx:  user supplied context */
 	void                  *uctx;
+};
+
+#define SNAP_DMA_Q_MODE   "SNAP_DMA_Q_MODE"
+enum {
+	SNAP_DMA_Q_MODE_VERBS = 0,
+	SNAP_DMA_Q_MODE_DV,
+	SNAP_DMA_Q_MODE_GGA
 };
 
 /**
@@ -126,8 +150,15 @@ struct snap_dma_q {
  * @rx_elem_size: size of the receive element. The size is emulation specific.
  *                For example 64 bytes for NVMe
  * @uctx:         user supplied context
+ * @mode:         choose dma implementation:
+ *                 SNAP_DMA_Q_MODE_VERBS - verbs, standard API, safest, slowest
+ *                 SNAP_DMA_Q_MODE_DV    - dv, direct hw access, faster than verbs
+ *                 SNAP_DMA_Q_MODE_GGA   - dv, plus uses hw dma engine directly to
+ *                                         do rdma read or write. Fastest, best bandwidth.
+ *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_MODE
+ *                environment variable: 0 - verbs, 1 - dv, 2 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
- * @comp_channel: receive and adn DMA completion channel. See
+ * @comp_channel: receive and DMA completion channel. See
  *                man ibv_create_comp_channel
  * @comp_vector:  completion vector
  * @comp_context: completion context that will be returned by the
@@ -138,7 +169,8 @@ struct snap_dma_q_create_attr {
 	int   tx_elem_size;
 	int   rx_qsize;
 	int   rx_elem_size;
-	void *uctx;
+	void  *uctx;
+	int   mode;
 	snap_dma_rx_cb_t rx_cb;
 
 	struct ibv_comp_channel *comp_channel;

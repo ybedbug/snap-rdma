@@ -4,6 +4,8 @@
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
 
+static struct snap_dma_q_ops verb_ops;
+
 static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 		      bool *ib_en, uint16_t *lid, enum ibv_mtu *mtu)
 {
@@ -90,7 +92,8 @@ static int snap_alloc_rx_wqes(struct snap_dma_ibv_qp *qp, int rx_qsize,
 
 static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		struct ibv_comp_channel *comp_channel, int comp_vector,
-		struct ibv_qp_init_attr *attr, struct snap_dma_ibv_qp *qp)
+		struct ibv_qp_init_attr *attr, struct snap_dma_ibv_qp *qp,
+		bool use_dv)
 {
 	struct ibv_context *ibv_ctx = pd->context;
 
@@ -139,6 +142,16 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	struct ibv_sge rx_sge;
 	int i, rc;
 
+	if (getenv(SNAP_DMA_Q_MODE)) {
+		attr->mode = atoi(getenv(SNAP_DMA_Q_MODE));
+		printf("*** dma_q mode is %d ****\n", attr->mode);
+	}
+
+	if (attr->mode == SNAP_DMA_Q_MODE_VERBS)
+		q->ops = &verb_ops;
+	else
+		return -EINVAL;
+
 	q->tx_available = attr->tx_qsize;
 	q->tx_qsize = attr->tx_qsize;
 	q->rx_elem_size = attr->rx_elem_size;
@@ -154,7 +167,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	init_attr.cap.max_recv_sge = 1;
 
 	rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,
-			attr->comp_vector, &init_attr, &q->sw_qp);
+			attr->comp_vector, &init_attr, &q->sw_qp, attr->mode);
 	if (rc)
 		return rc;
 
@@ -206,7 +219,7 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	 * for testing */
 	init_attr.cap.max_send_sge = 1;
 
-	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp);
+	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp, false);
 	return rc;
 }
 
@@ -569,7 +582,346 @@ void snap_dma_q_destroy(struct snap_dma_q *q)
 	free(q);
 }
 
-static inline int snap_dma_q_progress_rx(struct snap_dma_q *q)
+/**
+ * snap_dma_q_progress() - Progress dma queue
+ * @q: dma queue
+ *
+ * The function progresses both send and receive operations on the given dma
+ * queue.
+ *
+ * Send &typedef snap_dma_comp_cb_t and receive &typedef snap_dma_rx_cb_t
+ * completion callbacks may be called from within this function.
+ * It is guaranteed that such callbacks are called in the execution context
+ * of the progress.
+ *
+ * If dma queue was created with a completion channel then one can
+ * use it's file descriptor to check for events instead of the
+ * polling. When event is detected snap_dma_q_progress() should
+ * be called to process it.
+ *
+ * Return: number of events (send and receive) that were processed
+ */
+int snap_dma_q_progress(struct snap_dma_q *q)
+{
+	int n;
+
+	n = q->ops->progress_tx(q);
+	n += q->ops->progress_rx(q);
+	return n;
+}
+
+/**
+ * snap_dma_q_arm() - Request notification
+ * @q: dma queue
+ *
+ * The function 'arms' dma queue to report send and receive events over its
+ * completion channel.
+ *
+ * Return:  0 or -errno on error
+ */
+int snap_dma_q_arm(struct snap_dma_q *q)
+{
+	int rc;
+
+	rc = ibv_req_notify_cq(q->sw_qp.tx_cq, 0);
+	if (rc)
+		return rc;
+
+	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
+}
+
+static inline int qp_can_tx(struct snap_dma_q *q)
+{
+	/* later we can also add cq space check */
+	return q->tx_available > 0;
+}
+
+/**
+ * snap_dma_q_flush() - Wait for outstanding operations to complete
+ * @q:   dma queue
+ *
+ * The function waits until all outstanding operations started with
+ * mlx_dma_q_read(), mlx_dma_q_write() or mlx_dma_q_send_completion() are
+ * finished. The function does not progress receive operation.
+ *
+ * The purpose of this function is to facilitate blocking mode dma
+ * and completion operations.
+ *
+ * Return: number of completed operations or -errno.
+ */
+int snap_dma_q_flush(struct snap_dma_q *q)
+{
+	int n;
+
+	n = 0;
+	while (q->tx_available < q->tx_qsize)
+		n += q->ops->progress_tx(q);
+	return n;
+}
+
+/**
+ * snap_dma_q_write() - DMA write to the host memory
+ * @q:            dma queue
+ * @src_buf:      where to get/put data
+ * @len:          data length
+ * @lkey:         local memory key
+ * @dstaddr:      host physical or virtual address
+ * @rmkey:        host memory key that describes remote memory
+ * @comp:         dma completion structure
+ *
+ * The function starts non blocking memory transfer to the host memory. Once
+ * data transfer is completed the user defined callback may be called.
+ * Operations on the same dma queue are done in order.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
+		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
+		     struct snap_dma_completion *comp)
+{
+	int rc;
+
+	if (snap_unlikely(!qp_can_tx(q)))
+		return -EAGAIN;
+
+	rc = q->ops->write(q, src_buf, len, lkey, dstaddr, rmkey, comp);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available--;
+	return 0;
+}
+
+/**
+ * snap_dma_q_write_short() - DMA write of small amount of data to the
+ *                            host memory
+ * @q:            dma queue
+ * @src_buf:      where to get data
+ * @len:          data length. It must be no greater than the
+ *                &struct snap_dma_q_create_attr.tx_elem_size
+ * @dstaddr:      host physical or virtual address
+ * @rmkey:        host memory key that describes remote memory
+ *
+ * The function starts non blocking memory transfer to the host memory. The
+ * function is optimized to reduce latency when sending small amount of data.
+ * Operations on the same dma queue are done in order.
+ *
+ * Note that it is safe to use @src_buf after the function returns.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
+			   uint64_t dstaddr, uint32_t rmkey)
+{
+	int rc;
+
+	if (snap_unlikely(len > q->tx_elem_size))
+		return -EINVAL;
+
+	if (snap_unlikely(!qp_can_tx(q)))
+		return -EAGAIN;
+
+	rc = q->ops->write_short(q, src_buf, len, dstaddr, rmkey);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available--;
+	return 0;
+}
+
+/**
+ * snap_dma_q_read() - DMA read to the host memory
+ * @q:            dma queue
+ * @dst_buf:      where to get/put data
+ * @len:          data length
+ * @lkey:         local memory key
+ * @srcaddr:      host physical or virtual address
+ * @rmkey:        host memory key that describes remote memory
+ * @comp:         dma completion structure
+ *
+ * The function starts non blocking memory transfer from the host memory. Once
+ * data transfer is completed the user defined callback may be called.
+ * Operations on the same dma queue are done in order.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
+		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
+		    struct snap_dma_completion *comp)
+{
+	int rc;
+
+	if (snap_unlikely(!qp_can_tx(q)))
+		return -EAGAIN;
+
+	rc = q->ops->read(q, dst_buf, len, lkey, srcaddr, rmkey, comp);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available--;
+	return 0;
+}
+
+/**
+ * snap_dma_q_send_completion() - Send completion to the host
+ * @q:       dma queue to
+ * @src_buf: local buffer to copy the completion data from.
+ * @len:     the length of completion. E.x. 16 bytes for the NVMe. It
+ *           must be no greater than the value of the
+ *           &struct snap_dma_q_create_attr.tx_elem_size
+ *
+ * The function sends a completion notification to the host. The exact meaning of
+ * the 'completion' is defined by the emulation layer. For example in case of
+ * NVMe it means that completion entry is placed in the completion queue and
+ * MSI-X interrupt is triggered.
+ *
+ * Note that it is safe to use @src_buf after the function returns.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ *
+ */
+int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
+{
+	int rc;
+
+	if (snap_unlikely(len > q->tx_elem_size))
+		return -EINVAL;
+
+	if (snap_unlikely(!qp_can_tx(q)))
+		return -EAGAIN;
+
+	rc = q->ops->send_completion(q, src_buf, len);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available--;
+	return 0;
+}
+
+/**
+ * snap_dma_q_get_fw_qp() - Get FW qp
+ * @q:   dma queue
+ *
+ * The function returns qp that can be used by the FW emulation objects
+ * See snap_dma_q_create() for the detailed explanation
+ *
+ * Return: fw qp
+ */
+struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
+{
+	return q->fw_qp.qp;
+}
+
+/* Verbs implementation */
+
+static inline int do_verbs_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
+		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
+		struct snap_dma_completion *comp)
+{
+	struct ibv_qp *qp = q->sw_qp.qp;
+	struct ibv_send_wr rdma_wr, *bad_wr;
+	struct ibv_sge sge;
+	int rc;
+
+	sge.addr = (uint64_t)buf;
+	sge.length = len;
+	sge.lkey = lkey;
+
+	rdma_wr.opcode = op;
+	rdma_wr.send_flags = IBV_SEND_SIGNALED | flags;
+	rdma_wr.num_sge = 1;
+	rdma_wr.sg_list = &sge;
+	rdma_wr.wr_id = (uint64_t)comp;
+	rdma_wr.wr.rdma.rkey = rkey;
+	rdma_wr.wr.rdma.remote_addr = raddr;
+	rdma_wr.next = NULL;
+
+	rc = ibv_post_send(qp, &rdma_wr, &bad_wr);
+	if (snap_unlikely(rc))
+		snap_error("DMA queue: %p failed to post opcode 0x%x\n",
+			   q, op);
+
+	return rc;
+}
+
+static inline int verbs_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
+				    uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
+				    struct snap_dma_completion *comp)
+{
+	return do_verbs_dma_xfer(q, src_buf, len, lkey, dstaddr, rmkey,
+			IBV_WR_RDMA_WRITE, 0, comp);
+}
+
+static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
+					  size_t len, uint64_t dstaddr,
+					  uint32_t rmkey)
+{
+	return do_verbs_dma_xfer(q, src_buf, len, 0, dstaddr, rmkey,
+				 IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
+}
+
+static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
+				   uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
+				   struct snap_dma_completion *comp)
+{
+	return do_verbs_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
+			IBV_WR_RDMA_READ, 0, comp);
+}
+
+static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
+					      size_t len)
+{
+	struct ibv_qp *qp = q->sw_qp.qp;
+	struct ibv_send_wr send_wr, *bad_wr;
+	struct ibv_sge sge;
+	int rc;
+
+	sge.addr = (uint64_t)src_buf;
+	sge.length = len;
+
+	send_wr.opcode = IBV_WR_SEND;
+	send_wr.send_flags = IBV_SEND_SIGNALED|IBV_SEND_INLINE;
+	send_wr.num_sge = 1;
+	send_wr.sg_list = &sge;
+	send_wr.next = NULL;
+	send_wr.wr_id = 0;
+
+	rc = ibv_post_send(qp, &send_wr, &bad_wr);
+	if (snap_unlikely(rc)) {
+		snap_error("DMA queue %p: failed to post send: %m\n", q);
+	}
+
+	return rc;
+}
+
+static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 {
 	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS];
 	int i, n;
@@ -618,7 +970,7 @@ static inline int snap_dma_q_progress_rx(struct snap_dma_q *q)
 	return n;
 }
 
-static inline int snap_dma_q_progress_tx(struct snap_dma_q *q)
+static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 {
 	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS];
 	struct snap_dma_completion *comp;
@@ -654,283 +1006,11 @@ static inline int snap_dma_q_progress_tx(struct snap_dma_q *q)
 	return n;
 }
 
-/**
- * snap_dma_q_progress() - Progress dma queue
- * @q: dma queue
- *
- * The function progresses both send and receive operations on the given dma
- * queue.
- *
- * Send &typedef snap_dma_comp_cb_t and receive &typedef snap_dma_rx_cb_t
- * completion callbacks may be called from within this function.
- * It is guaranteed that such callbacks are called in the execution context
- * of the progress.
- *
- * If dma queue was created with a completion channel then one can
- * use it's file descriptor to check for events instead of the
- * polling. When event is detected snap_dma_q_progress() should
- * be called to process it.
- *
- * Return: number of events (send and receive) that were processed
- */
-int snap_dma_q_progress(struct snap_dma_q *q)
-{
-	int n;
-
-	n = snap_dma_q_progress_tx(q);
-	n += snap_dma_q_progress_rx(q);
-	return n;
-}
-
-/**
- * snap_dma_q_arm() - Request notification
- * @q: dma queue
- *
- * The function 'arms' dma queue to report send and receive events over its
- * completion channel.
- *
- * Return:  0 or -errno on error
- */
-int snap_dma_q_arm(struct snap_dma_q *q)
-{
-	int rc;
-
-	rc = ibv_req_notify_cq(q->sw_qp.tx_cq, 0);
-	if (rc)
-		return rc;
-
-	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
-}
-
-static inline int qp_can_tx(struct snap_dma_q *q)
-{
-	/* later we can also add cq space check */
-	return q->tx_available > 0;
-}
-
-static inline int do_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
-		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
-		struct snap_dma_completion *comp)
-{
-	struct ibv_qp *qp = q->sw_qp.qp;
-	struct ibv_send_wr rdma_wr, *bad_wr;
-	struct ibv_sge sge;
-	int rc;
-
-	if (snap_unlikely(!qp_can_tx(q)))
-		return -EAGAIN;
-
-	sge.addr = (uint64_t)buf;
-	sge.length = len;
-	sge.lkey = lkey;
-
-	rdma_wr.opcode = op;
-	rdma_wr.send_flags = IBV_SEND_SIGNALED | flags;
-	rdma_wr.num_sge = 1;
-	rdma_wr.sg_list = &sge;
-	rdma_wr.wr_id = (uint64_t)comp;
-	rdma_wr.wr.rdma.rkey = rkey;
-	rdma_wr.wr.rdma.remote_addr = raddr;
-	rdma_wr.next = NULL;
-
-	rc = ibv_post_send(qp, &rdma_wr, &bad_wr);
-	if (snap_unlikely(rc)) {
-		snap_error("DMA queue: %p failed to post opcode 0x%x\n",
-				q, op);
-		return rc;
-	}
-
-	q->tx_available--;
-	return 0;
-}
-
-/**
- * snap_dma_q_write() - DMA write to the host memory
- * @q:            dma queue
- * @src_buf:      where to get/put data
- * @len:          data length
- * @lkey:         local memory key
- * @dstaddr:      host physical or virtual address
- * @rmkey:        host memory key that describes remote memory
- * @comp:         dma completion structure
- *
- * The function starts non blocking memory transfer to the host memory. Once
- * data transfer is completed the user defined callback may be called.
- * Operations on the same dma queue are done in order.
- *
- * Return:
- * 0
- *	operation has been successfully submitted to the queue
- *	and is now in progress
- * \-EAGAIN
- *	queue does not have enough resources, must be retried later
- * < 0
- *	some other error has occured. Return value is -errno
- */
-int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
-		uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
-		struct snap_dma_completion *comp)
-{
-	return do_dma_xfer(q, src_buf, len, lkey, dstaddr, rmkey,
-			IBV_WR_RDMA_WRITE, 0, comp);
-}
-
-/**
- * snap_dma_q_write_short() - DMA write of small amount of data to the
- *                            host memory
- * @q:            dma queue
- * @src_buf:      where to get data
- * @len:          data length. It must be no greater than the
- *                &struct snap_dma_q_create_attr.tx_elem_size
- * @dstaddr:      host physical or virtual address
- * @rmkey:        host memory key that describes remote memory
- *
- * The function starts non blocking memory transfer to the host memory. The
- * function is optimized to reduce latency when sending small amount of data.
- * Operations on the same dma queue are done in order.
- *
- * Note that it is safe to use @src_buf after the function returns.
- *
- * Return:
- * 0
- *	operation has been successfully submitted to the queue
- * \-EAGAIN
- *	queue does not have enough resources, must be retried later
- * < 0
- *	some other error has occured. Return value is -errno
- */
-int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
-		uint64_t dstaddr, uint32_t rmkey)
-{
-	if (snap_unlikely(len > q->tx_elem_size))
-		return -EINVAL;
-
-	return do_dma_xfer(q, src_buf, len, 0, dstaddr, rmkey,
-			IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
-}
-
-/**
- * snap_dma_q_read() - DMA read to the host memory
- * @q:            dma queue
- * @dst_buf:      where to get/put data
- * @len:          data length
- * @lkey:         local memory key
- * @srcaddr:      host physical or virtual address
- * @rmkey:        host memory key that describes remote memory
- * @comp:         dma completion structure
- *
- * The function starts non blocking memory transfer from the host memory. Once
- * data transfer is completed the user defined callback may be called.
- * Operations on the same dma queue are done in order.
- *
- * Return:
- * 0
- *	operation has been successfully submitted to the queue
- *	and is now in progress
- * \-EAGAIN
- *	queue does not have enough resources, must be retried later
- * < 0
- *	some other error has occured. Return value is -errno
- */
-int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
-		uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
-		struct snap_dma_completion *comp)
-{
-	return do_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
-			IBV_WR_RDMA_READ, 0, comp);
-}
-
-/**
- * snap_dma_q_send_completion() - Send completion to the host
- * @q:       dma queue to
- * @src_buf: local buffer to copy the completion data from.
- * @len:     the length of completion. E.x. 16 bytes for the NVMe. It
- *           must be no greater than the value of the
- *           &struct snap_dma_q_create_attr.tx_elem_size
- *
- * The function sends a completion notification to the host. The exact meaning of
- * the 'completion' is defined by the emulation layer. For example in case of
- * NVMe it means that completion entry is placed in the completion queue and
- * MSI-X interrupt is triggered.
- *
- * Note that it is safe to use @src_buf after the function returns.
- *
- * Return:
- * 0
- *	operation has been successfully submitted to the queue
- *	and is now in progress
- * \-EAGAIN
- *	queue does not have enough resources, must be retried later
- * < 0
- *	some other error has occured. Return value is -errno
- *
- */
-int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
-{
-	struct ibv_qp *qp = q->sw_qp.qp;
-	struct ibv_send_wr send_wr, *bad_wr;
-	struct ibv_sge sge;
-	int rc;
-
-	if (snap_unlikely(len > q->tx_elem_size))
-		return -EINVAL;
-
-	if (snap_unlikely(!qp_can_tx(q)))
-		return -EAGAIN;
-
-	sge.addr = (uint64_t)src_buf;
-	sge.length = len;
-
-	send_wr.opcode = IBV_WR_SEND;
-	send_wr.send_flags = IBV_SEND_SIGNALED|IBV_SEND_INLINE;
-	send_wr.num_sge = 1;
-	send_wr.sg_list = &sge;
-	send_wr.next = NULL;
-	send_wr.wr_id = 0;
-
-	rc = ibv_post_send(qp, &send_wr, &bad_wr);
-	if (snap_unlikely(rc)) {
-		snap_error("DMA queue %p: failed to post send: %m\n", q);
-		return rc;
-	}
-
-	q->tx_available--;
-	return 0;
-}
-
-/**
- * snap_dma_q_flush() - Wait for outstanding operations to complete
- * @q:   dma queue
- *
- * The function waits until all outstanding operations started with
- * mlx_dma_q_read(), mlx_dma_q_write() or mlx_dma_q_send_completion() are
- * finished. The function does not progress receive operation.
- *
- * The purpose of this function is to facilitate blocking mode dma
- * and completion operations.
- *
- * Return: number of completed operations or -errno.
- */
-int snap_dma_q_flush(struct snap_dma_q *q)
-{
-	int n;
-
-	n = 0;
-	while (q->tx_available < q->tx_qsize)
-		n += snap_dma_q_progress_tx(q);
-	return n;
-}
-
-/**
- * snap_dma_q_get_fw_qp() - Get FW qp
- * @q:   dma queue
- *
- * The function returns qp that can be used by the FW emulation objects
- * See snap_dma_q_create() for the detailed explanation
- *
- * Return: fw qp
- */
-struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
-{
-	return q->fw_qp.qp;
-}
+static struct snap_dma_q_ops verb_ops = {
+	.write           = verbs_dma_q_write,
+	.write_short     = verbs_dma_q_write_short,
+	.read            = verbs_dma_q_read,
+	.send_completion = verbs_dma_q_send_completion,
+	.progress_tx     = verbs_dma_q_progress_tx,
+	.progress_rx     = verbs_dma_q_progress_rx,
+};
