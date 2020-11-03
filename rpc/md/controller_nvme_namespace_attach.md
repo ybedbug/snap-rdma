@@ -20,7 +20,8 @@ or alternatively by its subsystem NQN and controller ID.
     "name": "NvmeEmu0",
     "bdev": "Null0",
     "bdev_type": "spdk",
-    "nsid": 1
+    "nsid": 1,
+    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
   }
 }
 
@@ -36,7 +37,8 @@ or alternatively by its subsystem NQN and controller ID.
     "cntlid": 1,
     "bdev": "Null0",
     "bdev_type": "spdk",
-    "nsid": 1
+    "nsid": 1,
+    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
   }
 }
 
