@@ -25,6 +25,8 @@ with their characteristics.
   "id": 1,
   "result": [
     {
+      "subnqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
+      "cntlid": 1,
       "name": "NvmeEmu0",
       "emulation_manager": "mlx5_2",
       "type": "nvme",

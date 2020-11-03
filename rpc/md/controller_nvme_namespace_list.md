@@ -5,7 +5,8 @@ controller_nvme_namespace_list - List all NVMe namespaces on given controller
 # DESCRIPTION
 
 Given NVMe controller, list all attached namespaces, with their
-main characteristics.
+main characteristics. Controller can be uniquely identified by
+controller name, or alternatively by its subsystem NQN and controller ID.
 
 # Request object
 
@@ -16,6 +17,19 @@ main characteristics.
 
   "params": {
     "name": "NvmeEmu0"
+  }
+}
+
+ # Or Alternatively:
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "controller_nvme_namespace_list",
+
+  "params": {
+    "subnqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
+    "cntlid": 1
   }
 }
 

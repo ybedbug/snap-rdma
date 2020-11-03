@@ -12,7 +12,8 @@ To specify the PCI function to open controller upon, either "pci_bdf"
 The mapping for pci_bdf and pci_index can be queried by running
 emulation_functions_list method.
 
-The response contains a uniquely identified controller name.
+The response contains a uniquely identified controller name, and its
+unique controller ID.
 
 # Request object
 
@@ -34,7 +35,10 @@ The response contains a uniquely identified controller name.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "result": "NvmeEmu0"
+  "result": {
+    "name": "NvmeEmu0",
+    "cntlid": 1
+  }
 }
 
 
