@@ -219,6 +219,8 @@ def main():
             params['seg_max'] = args.seg_max
         if args.bdev:
             params['bdev'] = args.bdev
+        if args.serial:
+            params['serial'] = args.serial
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -241,6 +243,8 @@ def main():
                    choices=["spdk", "none"], required=True)
     p.add_argument('--bdev', help='Block device to use as backend', type=str,
                    required=False)
+    p.add_argument('--serial', help='Serial number for the controller',
+                   type=str, required=False)
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_virtio_blk_bdev_attach(args):

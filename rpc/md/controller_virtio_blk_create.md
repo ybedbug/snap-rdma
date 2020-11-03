@@ -28,7 +28,8 @@ The response contains a uniquely identified controller name.
     "size_max": 4096,
     "seg_max": 4,
     "bdev_type": "spdk",
-    "bdev": "Null0"
+    "bdev": "Null0",
+    "serial": "ABCDEFG"
   }
 }
 
