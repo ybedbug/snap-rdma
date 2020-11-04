@@ -81,7 +81,7 @@
 #define snap_info  printf
 
 // TODO: query from cap
-#define SNAP_MAX_VFS	64
+#define SNAP_MAX_VFS	256
 
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
