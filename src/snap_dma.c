@@ -33,10 +33,16 @@
 #endif
 
 #define SNAP_MLX5_RECV_WQE_BB  16
+#define SNAP_DMA_Q_TX_MOD_COUNT 16	/* must be power of 2 */
+
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 				     size_t len, uint32_t lkey);
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp);
 static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq);
+static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
+				    int op, uint64_t raddr, uint32_t rkey,
+				    struct snap_dma_completion *flush_comp);
+
 
 static struct snap_dma_q_ops verb_ops;
 static struct snap_dma_q_ops dv_ops;
@@ -171,12 +177,12 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		goto free_rx_cq;
 
 	rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
-			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dma_completion *));
+			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 	if (rc)
 		goto free_rx_cq;
 
 	memset(qp->dv_qp.comps, 0,
-	       qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dma_completion *));
+	       qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 
 	rc = snap_dv_cq_init(qp->tx_cq, &qp->dv_tx_cq);
 	if (rc)
@@ -232,8 +238,14 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	} else
 		return -EINVAL;
 
-	q->tx_available = attr->tx_qsize;
-	q->tx_qsize = attr->tx_qsize;
+	/* make sure that the completion is requested at least once */
+	if (attr->mode != SNAP_DMA_Q_MODE_VERBS &&
+	    attr->tx_qsize <= SNAP_DMA_Q_TX_MOD_COUNT)
+		q->tx_qsize = SNAP_DMA_Q_TX_MOD_COUNT + 8;
+	else
+		q->tx_qsize = attr->tx_qsize;
+
+	q->tx_available = q->tx_qsize;
 	q->rx_elem_size = attr->rx_elem_size;
 	q->tx_elem_size = attr->tx_elem_size;
 
@@ -739,12 +751,32 @@ static inline int qp_can_tx(struct snap_dma_q *q)
  */
 int snap_dma_q_flush(struct snap_dma_q *q)
 {
-	int n;
+	int n, n_out;
+	struct snap_dma_completion comp;
 
 	n = 0;
+	/* in case we have tx moderation we need at least one
+	 * available to be able to send a flush command
+	 */
+	while (!qp_can_tx(q)) {
+		n += q->ops->progress_tx(q);
+	}
+
+	/* only dv/gga have tx moderation at the moment, flush all outstanding
+	 * ops by issueing a zero length inline rdma write
+	 */
+	n_out = q->sw_qp.dv_qp.n_outstanding;
+	if (n_out) {
+		comp.count = 2;
+		q->tx_available--;
+		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp);
+		n--;
+	}
+
 	while (q->tx_available < q->tx_qsize)
 		n += q->ops->progress_tx(q);
-	return n;
+
+	return n_out + n;
 }
 
 /**
@@ -1104,6 +1136,26 @@ static struct snap_dma_q_ops verb_ops = {
 };
 
 /* DV implementation */
+static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dma_completion *comp)
+{
+	if (comp || (dv_qp->n_outstanding + 1) & (SNAP_DMA_Q_TX_MOD_COUNT - 1) == 0)
+		return MLX5_WQE_CTRL_CQ_UPDATE;
+	else
+		return 0;
+}
+
+static inline void snap_dv_set_comp(struct snap_dv_qp *dv_qp, uint16_t pi,
+				    struct snap_dma_completion *comp, int cq_up)
+{
+	dv_qp->comps[pi].comp = comp;
+	if (cq_up != MLX5_WQE_CTRL_CQ_UPDATE) {
+		dv_qp->n_outstanding++;
+		return;
+	}
+
+	dv_qp->comps[pi].n_outstanding = dv_qp->n_outstanding + 1;
+	dv_qp->n_outstanding = 0;
+}
 
 static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
 {
@@ -1167,12 +1219,13 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	struct mlx5_wqe_raddr_seg *rseg;
 	struct mlx5_wqe_data_seg *dseg;
 	uint16_t comp_idx;
+	int cq_up;
+
+	cq_up = snap_dv_get_cq_update(dv_qp, comp);
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-
-	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
-			    q->sw_qp.qp->qp_num, MLX5_WQE_CTRL_CQ_UPDATE,
-			    3, 0, 0);
+	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0, q->sw_qp.qp->qp_num,
+			    cq_up, 3, 0, 0);
 
 	rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
 	rseg->raddr = htobe64((uintptr_t)raddr);
@@ -1186,7 +1239,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	/* it is better to start dma as soon as possible and do
 	 * bookkeeping later */
 	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
-	dv_qp->comps[comp_idx] = comp;
+	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
 	return 0;
 }
 
@@ -1212,22 +1265,33 @@ static inline uint16_t round_up(uint16_t x, uint16_t d)
 }
 
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
-				    int op, uint64_t raddr, uint32_t rkey)
+				    int op, uint64_t raddr, uint32_t rkey,
+				    struct snap_dma_completion *flush_comp)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	struct mlx5_wqe_ctrl_seg *ctrl;
 	struct mlx5_wqe_inl_data_seg *dseg;
 	struct mlx5_wqe_raddr_seg *rseg;
 	uint16_t pi, n_bb, wqe_size, to_end;
+	int cq_up;
 	void *pdata;
 
 	wqe_size = sizeof(*ctrl) + sizeof(*dseg) + len;
 	if (op == MLX5_OPCODE_RDMA_WRITE)
 		wqe_size += sizeof(*rseg);
 
+	/* if flush_comp is set it means that we are dealing with the zero
+	 * length rdma_write op. Check flush_comp instead of length to allow
+	 * optimization in the fast path where the flush_comp is always NULL.
+	 */
+	if (flush_comp)
+		wqe_size -= sizeof(*dseg);
+
+	cq_up = snap_dv_get_cq_update(dv_qp, flush_comp);
+
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
 	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
-			    q->sw_qp.qp->qp_num, MLX5_WQE_CTRL_CQ_UPDATE,
+			    q->sw_qp.qp->qp_num, cq_up,
 			    round_up(wqe_size, 16), 0, 0);
 
 	if (op == MLX5_OPCODE_RDMA_WRITE) {
@@ -1261,21 +1325,21 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 
-	dv_qp->comps[pi] = NULL;
+	snap_dv_set_comp(dv_qp, pi, flush_comp, cq_up);
 	return 0;
 }
 
 static int dv_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
 				    size_t len)
 {
-	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0);
+	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0, NULL);
 }
 
 static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 				uint64_t dstaddr, uint32_t rmkey)
 {
 	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_RDMA_WRITE,
-			dstaddr, rmkey);
+			dstaddr, rmkey, NULL);
 }
 
 static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq)
@@ -1418,6 +1482,7 @@ static void snap_dv_cqe_err(struct mlx5_cqe64 *cqe)
 
 static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 {
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	struct mlx5_cqe64 *cqe;
 	struct snap_dma_completion *comp;
 	uint16_t comp_idx;
@@ -1425,7 +1490,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	uint32_t sq_mask;
 
 	n = 0;
-	sq_mask = q->sw_qp.dv_qp.qp.sq.wqe_cnt - 1;
+	sq_mask = dv_qp->qp.sq.wqe_cnt - 1;
 	do {
 		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq);
 		if (!cqe)
@@ -1434,10 +1499,11 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe) != MLX5_CQE_REQ))
 			snap_dv_cqe_err(cqe);
 
-		q->tx_available++;
 		n++;
 		comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
-		comp = q->sw_qp.dv_qp.comps[comp_idx];
+		q->tx_available += dv_qp->comps[comp_idx].n_outstanding;
+		comp = dv_qp->comps[comp_idx].comp;
+
 		if (comp && --comp->count == 0)
 			comp->func(comp, mlx5dv_get_cqe_opcode(cqe));
 

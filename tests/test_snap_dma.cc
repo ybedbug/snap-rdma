@@ -305,8 +305,10 @@ TEST_F(SnapDmaTest, dma_write_short) {
 		n++;
 	}
 
-	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
 	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
+	snap_dma_q_flush(q);
+	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
+
 	snap_dma_q_destroy(q);
 }
 
@@ -346,9 +348,11 @@ TEST_F(SnapDmaTest, send_completion) {
 	struct ibv_wc wc;
 	rc = ibv_poll_cq(q->fw_qp.rx_cq, 1, &wc);
 
-	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
 	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
 	ASSERT_EQ(1, rc);
+
+	snap_dma_q_flush(q);
+	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
 
 	snap_dma_q_destroy(q);
 }

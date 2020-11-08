@@ -77,11 +77,17 @@ typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
  */
 typedef void (*snap_dma_comp_cb_t)(struct snap_dma_completion *comp, int status);
 
+struct snap_dv_dma_completion {
+	int n_outstanding;
+	struct snap_dma_completion *comp;
+};
+
 struct snap_dv_qp {
 	struct mlx5dv_qp  qp;
 	uint16_t          pi;
 	uint16_t          ci;
-	struct snap_dma_completion **comps;
+	int               n_outstanding;
+	struct snap_dv_dma_completion *comps;
 };
 
 struct snap_dv_cq {
