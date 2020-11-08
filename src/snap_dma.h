@@ -77,6 +77,8 @@ typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
  */
 typedef void (*snap_dma_comp_cb_t)(struct snap_dma_completion *comp, int status);
 
+struct mlx5_dma_opaque;
+
 struct snap_dv_dma_completion {
 	int n_outstanding;
 	struct snap_dma_completion *comp;
@@ -88,6 +90,9 @@ struct snap_dv_qp {
 	uint16_t          ci;
 	int               n_outstanding;
 	struct snap_dv_dma_completion *comps;
+	/* used to hold GGA data */
+	struct mlx5_dma_opaque     *opaque_buf;
+	struct ibv_mr              *opaque_mr;
 };
 
 struct snap_dv_cq {

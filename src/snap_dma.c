@@ -35,7 +35,32 @@
 #define SNAP_DMA_Q_RX_CQE_SIZE  128
 #define SNAP_DMA_Q_TX_CQE_SIZE  64
 #define SNAP_MLX5_RECV_WQE_BB   16
-#define SNAP_DMA_Q_TX_MOD_COUNT 16	/* must be power of 2 */
+#define SNAP_DMA_Q_TX_MOD_COUNT 16   /* must be power of 2 */
+
+/* GGA specific */
+
+#define MLX5_OPCODE_MMO       0x2F
+#define MLX5_OPC_MOD_MMO_DMA  0x1
+
+struct mlx5_dma_opaque {
+	uint32_t syndrom;
+	uint32_t reserved;
+	uint32_t scattered_length;
+	uint32_t gathered_length;
+	uint8_t  reserved2[240];
+};
+
+struct mlx5_dma_wqe {
+	uint32_t opcode;
+	uint32_t sq_ds;
+	uint32_t flags;
+	uint32_t gga_ctrl1;  /* unused for dma */
+	uint32_t gga_ctrl2;  /* unused for dma */
+	uint32_t opaque_lkey;
+	uint64_t opaque_vaddr;
+	struct mlx5_wqe_data_seg gather;
+	struct mlx5_wqe_data_seg scatter;
+};
 
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 				     size_t len, uint32_t lkey);
@@ -48,6 +73,7 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 
 static struct snap_dma_q_ops verb_ops;
 static struct snap_dma_q_ops dv_ops;
+static struct snap_dma_q_ops gga_ops;
 
 static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 		      bool *ib_en, uint16_t *lid, enum ibv_mtu *mtu)
@@ -103,6 +129,11 @@ static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 {
 	if (qp->dv_qp.comps)
 		free(qp->dv_qp.comps);
+
+	if (qp->dv_qp.opaque_buf) {
+		ibv_dereg_mr(qp->dv_qp.opaque_mr);
+		free(qp->dv_qp.opaque_buf);
+	}
 
 	ibv_destroy_qp(qp->qp);
 	ibv_destroy_cq(qp->rx_cq);
@@ -228,6 +259,26 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	    qp->dv_qp.qp.rq.stride != SNAP_MLX5_RECV_WQE_BB)
 		goto free_comps;
 
+	if (mode == SNAP_DMA_Q_MODE_DV)
+		return 0;
+
+	rc = posix_memalign((void **)&qp->dv_qp.opaque_buf,
+			    sizeof(struct mlx5_dma_opaque),
+			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque));
+	if (rc)
+		goto free_comps;
+
+	qp->dv_qp.opaque_mr = ibv_reg_mr(pd, qp->dv_qp.opaque_buf,
+					 qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque),
+					 IBV_ACCESS_LOCAL_WRITE);
+	if (!qp->dv_qp.opaque_mr)
+		goto free_opaque;
+
+	return 0;
+
+free_opaque:
+	free(qp->dv_qp.opaque_buf);
+
 	return 0;
 
 free_comps:
@@ -262,6 +313,8 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->ops = &verb_ops;
 	} else if (attr->mode == SNAP_DMA_Q_MODE_DV) {
 		q->ops = &dv_ops;
+	} else if (attr->mode == SNAP_DMA_Q_MODE_GGA) {
+		q->ops = &gga_ops;
 	} else
 		return -EINVAL;
 
@@ -1431,6 +1484,8 @@ static const char *snap_dv_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
 			return "MASKED_COMPARE_SWAP";
 		case MLX5_OPCODE_ATOMIC_MASKED_FA:
 			return "MASKED_FETCH_ADD";
+		case MLX5_OPCODE_MMO:
+			return "GGA_DMA";
 		default:
 			return "";
 			}
@@ -1585,6 +1640,73 @@ static struct snap_dma_q_ops dv_ops = {
 	.write           = dv_dma_q_write,
 	.write_short     = dv_dma_q_write_short,
 	.read            = dv_dma_q_read,
+	.send_completion = dv_dma_q_send_completion,
+	.progress_tx     = dv_dma_q_progress_tx,
+	.progress_rx     = dv_dma_q_progress_rx,
+};
+
+/* GGA */
+static void dump_gga_wqe(int op, volatile uint32_t *wqe)
+{
+	int i;
+
+	printf("%s op %d wqe:\n", __func__, op);
+
+	for (i = 0; i < 16; i += 4)
+		printf("%08X %08X %08X %08X\n",
+			ntohl(wqe[i]), ntohl(wqe[i + 1]),
+			ntohl(wqe[i + 2]), ntohl(wqe[i + 3]));
+}
+
+static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
+			      uint32_t s_lkey, uint64_t daddr, uint32_t d_lkey,
+			      struct snap_dma_completion *comp)
+{
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	struct mlx5_dma_wqe *gga_wqe;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	uint16_t comp_idx;
+	int cq_up;
+
+	cq_up = snap_dv_get_cq_update(dv_qp, comp);
+	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
+			    q->sw_qp.qp->qp_num, cq_up,
+			    4, 0, 0);
+
+	gga_wqe = (struct mlx5_dma_wqe *)ctrl;
+	gga_wqe->opaque_lkey = htobe32(dv_qp->opaque_mr->lkey);
+	gga_wqe->opaque_vaddr = htobe64((uint64_t)&dv_qp->opaque_buf[comp_idx]);
+
+	mlx5dv_set_data_seg(&gga_wqe->gather, len, s_lkey, saddr);
+	mlx5dv_set_data_seg(&gga_wqe->scatter, len, d_lkey, daddr);
+
+	snap_dv_ring_tx_db(dv_qp, ctrl);
+
+	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
+	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
+	return 0;
+}
+
+static int gga_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
+			  uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
+			  struct snap_dma_completion *comp)
+{
+	return do_gga_xfer(q, (uint64_t)src_buf, len, lkey, dstaddr, rmkey, comp);
+}
+
+static int gga_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
+			 uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
+			 struct snap_dma_completion *comp)
+{
+	return do_gga_xfer(q, srcaddr, len, rmkey, (uint64_t)dst_buf, lkey, comp);
+}
+
+
+static struct snap_dma_q_ops gga_ops = {
+	.write           = gga_dma_q_write,
+	.write_short     = dv_dma_q_write_short,
+	.read            = gga_dma_q_read,
 	.send_completion = dv_dma_q_send_completion,
 	.progress_tx     = dv_dma_q_progress_tx,
 	.progress_rx     = dv_dma_q_progress_rx,
