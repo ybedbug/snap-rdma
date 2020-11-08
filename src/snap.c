@@ -159,14 +159,14 @@ snap_emulation_type_to_pf_type(enum snap_emulation_type type)
 	}
 }
 
-static int snap_alloc_virtual_functions(struct snap_pci *pf)
+static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 {
 	int i, j, ret;
 	int output_size;
 	uint8_t *out;
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
-		      DEVX_ST_SZ_BYTES(emulated_function_info) * SNAP_MAX_VFS;
+		      DEVX_ST_SZ_BYTES(emulated_function_info) * num_vfs;
 	out = calloc(1, output_size);
 	if (!out)
 		return -ENOMEM;
@@ -364,11 +364,6 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		if (i < num_emulated_pfs) {
 			pf->plugged = true;
 			ret = snap_pf_get_pci_info(pf, out);
-			if (ret) {
-				snap_free_pci_bar(pf);
-				goto free_vfs;
-			}
-			ret = snap_alloc_virtual_functions(pf);
 			if (ret) {
 				snap_free_pci_bar(pf);
 				goto free_vfs;
@@ -2961,10 +2956,6 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	if (ret)
 		goto free_cmd;
 
-	ret = snap_alloc_virtual_functions(pf);
-	if (ret)
-		goto free_cmd;
-
 	free(out);
 
 	return pf;
@@ -2986,6 +2977,7 @@ out_err:
 /**
  * snap_rescan_vfs() - Reconfigure PF's virtual functions
  * @pf:      physical function pci context
+ * @num_vfs: expected number of VFs to scan
  *
  * Releases currently configured virtual functions and configures
  * new virtual functions.
@@ -2995,11 +2987,11 @@ out_err:
  *
  * Return: 0 on success, -1 otherwise
  */
-int snap_rescan_vfs(struct snap_pci *pf)
+int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs)
 {
 	snap_free_virtual_functions(pf);
 	sleep(1);
-	return snap_alloc_virtual_functions(pf);
+	return snap_alloc_virtual_functions(pf, num_vfs);
 }
 
 /**

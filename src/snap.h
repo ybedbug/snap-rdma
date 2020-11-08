@@ -80,8 +80,6 @@
 #define snap_warn  printf
 #define snap_info  printf
 
-// TODO: query from cap
-#define SNAP_MAX_VFS	256
 
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
@@ -320,7 +318,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		struct snap_hotplug_attr *attr);
 void snap_hotunplug_pf(struct snap_pci *pf);
 
-int snap_rescan_vfs(struct snap_pci *pf);
+int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs);
 
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
