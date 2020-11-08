@@ -32,7 +32,9 @@
 # error "Unsupported architecture"
 #endif
 
-#define SNAP_MLX5_RECV_WQE_BB  16
+#define SNAP_DMA_Q_RX_CQE_SIZE  128
+#define SNAP_DMA_Q_TX_CQE_SIZE  64
+#define SNAP_MLX5_RECV_WQE_BB   16
 #define SNAP_DMA_Q_TX_MOD_COUNT 16	/* must be power of 2 */
 
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
@@ -137,19 +139,44 @@ static int snap_alloc_rx_wqes(struct snap_dma_ibv_qp *qp, int rx_qsize,
 static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		struct ibv_comp_channel *comp_channel, int comp_vector,
 		struct ibv_qp_init_attr *attr, struct snap_dma_ibv_qp *qp,
-		bool use_dv)
+		int mode)
 {
+	struct ibv_cq_init_attr_ex cq_attr = {
+		.cqe = attr->cap.max_recv_wr,
+		.cq_context = cq_context,
+		.channel = comp_channel,
+		.comp_vector = comp_vector,
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS,
+		.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+	};
+	struct mlx5dv_cq_init_attr cq_ex_attr = {
+		.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
+		.cqe_size = SNAP_DMA_Q_TX_CQE_SIZE
+	};
 	struct ibv_context *ibv_ctx = pd->context;
 	struct mlx5dv_obj dv_obj;
 	int rc;
 
-	qp->tx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_send_wr, cq_context,
-			comp_channel, comp_vector);
+	if (mode == SNAP_DMA_Q_MODE_VERBS)
+		qp->tx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_send_wr, cq_context,
+				comp_channel, comp_vector);
+	else
+		qp->tx_cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(ibv_ctx, &cq_attr, &cq_ex_attr));
 	if (!qp->tx_cq)
 		return -EINVAL;
 
-	qp->rx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_recv_wr, cq_context,
-			comp_channel, comp_vector);
+	if (mode == SNAP_DMA_Q_MODE_VERBS)
+		qp->rx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_recv_wr, cq_context,
+					  comp_channel, comp_vector);
+	else {
+		/* Enable scatter to cqe on the receive side.
+		 * NOTE: it seems that scatter is enabled by default in the
+		 * rdma-core lib. We only have to make sure that cqe size is
+		 * 128 bytes to use it. */
+		cq_ex_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
+		qp->rx_cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(ibv_ctx, &cq_attr, &cq_ex_attr));
+	}
 	if (!qp->rx_cq)
 		goto free_tx_cq;
 
@@ -165,7 +192,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		   qp->qp->qp_num, attr->cap.max_send_wr,
 		   attr->cap.max_recv_wr, attr->cap.max_inline_data, pd);
 
-	if (!use_dv)
+	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		return 0;
 
 	dv_obj.qp.in = qp->qp;
@@ -1342,20 +1369,23 @@ static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			dstaddr, rmkey, NULL);
 }
 
-static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq)
+static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq, int cqe_size)
 {
 	struct mlx5_cqe64 *cqe;
 
+	/* note: that the cq_size is known at the compilation time. We pass it
+	 * down here so that branch and multiplication will be done at the
+	 * compile time during inlining */
 	cqe = (struct mlx5_cqe64 *)(dv_cq->cq.buf + (dv_cq->ci & (dv_cq->cq.cqe_cnt - 1)) *
-				    sizeof(struct mlx5_cqe64));
-	return cqe;
+				    cqe_size);
+	return cqe_size == 64 ? cqe : cqe + 1;
 }
 
-static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_dv_cq *dv_cq)
+static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_dv_cq *dv_cq, int cqe_size)
 {
 	struct mlx5_cqe64 *cqe;
 
-	cqe = snap_dv_get_cqe(dv_cq);
+	cqe = snap_dv_get_cqe(dv_cq, cqe_size);
 
 	/* cqe is hw owned */
 	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cq.cqe_cnt))
@@ -1367,19 +1397,14 @@ static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_dv_cq *dv_cq)
 
 	dv_cq->ci++;
 
-	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d\n",
+	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d scatter32 %d scatter64 %d\n",
 		   dv_cq->ci,
 		   mlx5dv_get_cqe_opcode(cqe),
 		   be32toh(cqe->byte_cnt),
-		   be16toh(cqe->wqe_counter));
+		   be16toh(cqe->wqe_counter),
+		   cqe->op_own & MLX5_INLINE_SCATTER_32,
+		   cqe->op_own & MLX5_INLINE_SCATTER_64);
 	return cqe;
-}
-
-static inline void snap_dv_ring_cq_db(struct snap_dv_cq *dv_cq)
-{
-	/* TODO: create cq with enable overflow */
-	snap_memory_bus_store_fence();
-	dv_cq->cq.dbrec[0] = htobe32(dv_cq->ci);
 }
 
 static const char *snap_dv_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
@@ -1492,7 +1517,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	n = 0;
 	sq_mask = dv_qp->qp.sq.wqe_cnt - 1;
 	do {
-		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq);
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
 		if (!cqe)
 			break;
 
@@ -1509,10 +1534,6 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 
 	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
 
-	if (n == 0)
-		return 0;
-
-	snap_dv_ring_cq_db(&q->sw_qp.dv_tx_cq);
 	return n;
 }
 
@@ -1526,7 +1547,7 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 	rq_mask = q->sw_qp.dv_qp.qp.rq.wqe_cnt - 1;
 	n = 0;
 	do {
-		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq);
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
 		if (!cqe)
 			break;
 
@@ -1538,10 +1559,17 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 		}
 
 		n++;
-		ri = be16toh(cqe->wqe_counter) & rq_mask;
-		q->rx_cb(q, q->sw_qp.rx_buf + ri * q->rx_elem_size,
-			 be32toh(cqe->byte_cnt),
-			 cqe->imm_inval_pkey);
+		/* optimize for NVMe where SQE is 64 bytes and will always
+		 * be scattered */
+		if (snap_likely(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64))) {
+			__builtin_prefetch(cqe - 1);
+			q->rx_cb(q, cqe - 1, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
+		} else {
+			ri = be16toh(cqe->wqe_counter) & rq_mask;
+			__builtin_prefetch(q->sw_qp.rx_buf + ri * q->rx_elem_size);
+			q->rx_cb(q, q->sw_qp.rx_buf + ri * q->rx_elem_size,
+				 be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
+		}
 
 	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
 
@@ -1549,7 +1577,6 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 		return 0;
 
 	q->sw_qp.dv_qp.ci += n;
-	snap_dv_ring_cq_db(&q->sw_qp.dv_rx_cq);
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
 	return n;
 }
