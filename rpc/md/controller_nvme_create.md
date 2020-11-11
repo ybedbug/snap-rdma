@@ -26,7 +26,11 @@ unique controller ID.
     "nqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
     "emulation_manager": "mlx5_2",
     "pci_bdf": "84:00.2",
-    "conf_file": "/etc/nvme_snap/nvme0.json"
+    "conf_file": "/etc/nvme_snap/nvme0.json",
+    "nr_io_queues": 32,
+    "mdts": 4,
+    "max_namespaces": 0,
+    "quirks": 0
   }
 }
 

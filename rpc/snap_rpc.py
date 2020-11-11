@@ -306,6 +306,14 @@ def main():
             params['pci_index'] = args.pci_index
         if args.conf:
             params['conf_file'] = args.conf
+        if args.nr_io_queues != -1:
+            params['nr_io_queues'] = args.nr_io_queues
+        if args.mdts != -1:
+            params['mdts'] = args.mdts
+        if args.max_namespaces != -1:
+            params['max_namespaces'] = args.max_namespaces
+        if args.quirks != -1:
+            params['quirks'] = args.quirks
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -321,6 +329,15 @@ def main():
                    default=-1, type=int, required=False)
     p.add_argument('-c', '--conf', help='JSON configuration file to use',
                    type=str, required=False)
+    p.add_argument('-n', '--nr_io_queues', help='IO queue number to NVMe controller',
+                   default=-1, type=int, required=False)
+    p.add_argument('-t', '--mdts', help='Maximum Data Transfer Size',
+                   default=-1, type=int, required=False)
+    p.add_argument('-m', '--max_namespaces', help='Maximun number of namespace',
+                   default=-1, type=int, required=False)
+    p.add_argument('-q', '--quirks', help='Bitmask for enabling specific NVMe '
+                   'driver quirks in order to work with non NVMe spec compliant drivers',
+                   default=-1, type=int, required=False)
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
