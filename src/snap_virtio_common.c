@@ -193,6 +193,24 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 enabled, attr->enabled);
 		}
+		if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
+			DEVX_SET(virtio_net_device_emulation,
+				 device_emulation_in,
+				 virtio_net_config.mac_47_16,
+				 nattr->mac >> 16);
+			DEVX_SET(virtio_net_device_emulation,
+				 device_emulation_in,
+				 virtio_net_config.mac_15_0,
+				 nattr->mac & 0xffff);
+			DEVX_SET(virtio_net_device_emulation,
+				 device_emulation_in,
+				 virtio_net_config.max_virtqueue_pairs,
+				 nattr->max_queue_pairs);
+			DEVX_SET(virtio_net_device_emulation,
+				 device_emulation_in,
+				 virtio_net_config.mtu, nattr->mtu);
+		}
 		DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
 	}

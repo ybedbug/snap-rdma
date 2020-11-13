@@ -61,6 +61,9 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_LINK_STATUS;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ENABLED)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ENABLED;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_CFG;
+
 	}
 	attr->mtu = DEVX_GET(virtio_net_device_emulation,
 			     device_emulation_out, virtio_net_config.mtu);
@@ -130,6 +133,7 @@ int snap_virtio_net_modify_device(struct snap_device *sdev, uint64_t mask,
  */
 int snap_virtio_net_init_device(struct snap_device *sdev)
 {
+	struct snap_virtio_net_device_attr nattr = {};
 	struct snap_virtio_net_device *vndev;
 	int ret, i;
 
@@ -155,6 +159,19 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 	ret = snap_init_device(sdev);
 	if (ret)
 		goto out_free_virtqs;
+
+	/* Assign random mac to VF*/
+	if (sdev->pci->type == SNAP_VIRTIO_NET_VF) {
+		ret = snap_virtio_net_query_device(sdev, &nattr);
+		if (ret)
+			goto out_free_virtqs;
+		eth_random_addr((uint8_t *)&nattr.mac);
+		ret = snap_virtio_net_modify_device(sdev,
+						    SNAP_VIRTIO_MOD_DEV_CFG,
+						    &nattr);
+		if (ret)
+			goto out_free_virtqs;
+	}
 
 	sdev->dd_data = vndev;
 	vndev->vdev.sdev = sdev;

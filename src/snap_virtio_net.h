@@ -114,4 +114,15 @@ to_net_device_attr(struct snap_virtio_device_attr *vattr)
 	return container_of(vattr, struct snap_virtio_net_device_attr, vattr);
 }
 
+static inline void eth_random_addr(uint8_t *addr)
+{
+	uint64_t rand = random();
+
+	rand = rand << 32 | random();
+
+	memcpy(addr, (uint8_t *)&rand, 6);
+	addr[0] &= 0xfe;        /* clear multicast bit */
+	addr[0] |= 0x02;        /* set local assignment bit (IEEE802) */
+}
+
 #endif
