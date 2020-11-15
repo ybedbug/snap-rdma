@@ -532,29 +532,42 @@ def main():
                               help='List NVMe subsystems')
     p.set_defaults(func=subsystem_nvme_list)
 
-    def dpu_exec(args):
-        file_args = None
+    def storage_admin(args):
         params = {
-            'file': args.file,
+            'protocol': args.protocol,
+            'op': args.op,
         }
-        if args.args:
-            file_args = []
-            for i in args.args.strip().split(' '):
-                file_args.append(i)
-            params['args'] = file_args
-        result = args.client.call('dpu_exec', params)
+        if args.transport:
+            params['transport'] = args.transport
+        if args.policy:
+            params['policy'] = args.policy
+        if args.qn:
+            params['qn'] = args.qn
+        if args.hostqn:
+            params['hostqn'] = args.hostqn
+        if args.path:
+            params['paths'] = args.path
+
+        result = args.client.call('storage_admin', params)
         print(json.dumps(result, indent=2))
-    p = subparsers.add_parser('dpu_exec',
-                              help='Execute a program file with provide arguments')
-    p.add_argument('file', help='Executable program file name', type=str)
-    p.add_argument('-a', dest='args', help="""whitespace-separated list of
-                   arguments to file enclosed in quotes. This parameter
-                   can be ommited. Example:
-                   '--op=connect --paths=2 --policy=round-robin --protocol=nvme --qn=sub0 '
-                   '--hostqn=nqn.2020-10.snic.rsws05:1 --transport=rdma '
-                   '--paths=adrfam:ipv4/traddr:1.1.1.1/trsvcid:4420,adrfam:ipv4/traddr:1.1.1.2/trsvcid:4421' etc""",
-                   required=False)
-    p.set_defaults(func=dpu_exec)
+    p = subparsers.add_parser('storage_admin',
+                              help='Execute a storage_admin command on ARM')
+    p.add_argument('protocol', help='Storage protocol to use', type=str,
+                   choices=['nvme'])
+    p.add_argument('op', help='Operation to be run on ARM', type=str,
+                   choices=['connect', 'disconnect', 'discover'])
+    p.add_argument('--transport', help="Transport type to use",
+                   choices=['rdma', 'tcp'], required=False, type=str)
+    p.add_argument('--policy', help="IO policy to use", required=False,
+                   type=str)
+    p.add_argument('--qn', help="Remote qualified name", required=False,
+                   type=str)
+    p.add_argument('--hostqn', help="Host qualified name", required=False,
+                   type=str)
+    p.add_argument('--path', action="append",
+                   help="Path(s) for remote", required=False,
+                   type=str)
+    p.set_defaults(func=storage_admin)
 
     def call_rpc_func(args):
         args.func(args)
