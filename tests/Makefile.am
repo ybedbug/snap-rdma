@@ -15,7 +15,8 @@ noinst_PROGRAMS = \
 		snap_create_destroy_virtio_ctrl \
 		snap_sample_device \
 		snap_sample_uio_driver \
-		snap_rpc_client_open_close
+		snap_rpc_client_open_close \
+		snap_open_close_channel
 
 
 LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
@@ -60,6 +61,10 @@ snap_query_virtio_device_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
 snap_create_destroy_virtio_queue_CFLAGS = $(LOCAL_CFLAGS)
 snap_create_destroy_virtio_queue_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_virtio_queue.c
 snap_create_destroy_virtio_queue_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
+
+snap_open_close_channel_CFLAGS = $(LOCAL_CFLAGS)
+snap_open_close_channel_SOURCES = $(SNAP_TEST_FILES) snap_open_close_channel.c
+snap_open_close_channel_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
 
 #cant use $(top_srcdir) here because of bug in configure which does not parse
 #variables to make foo.Po files. TODO: consider changing blk to .la
