@@ -19,6 +19,15 @@ static int snap_copy_roce_address(struct snap_device *sdev,
 static int snap_query_functions_info(struct snap_context *sctx,
 		enum snap_emulation_type type, int vhca_id, uint8_t *out, int outlen);
 
+int snap_device_mark_dirty_page(struct snap_device *sdev, uint64_t guest_pa,
+				int length)
+{
+	if (!sdev->channel)
+		return -EINVAL;
+
+	return snap_channel_mark_dirty_page(sdev->channel, guest_pa, length);
+}
+
 static int snap_general_tunneled_cmd(struct snap_device *sdev, void *in,
 		size_t inlen, void *out, size_t outlen, int retries)
 {

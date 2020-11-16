@@ -1,5 +1,11 @@
 #include "snap_channel.h"
 
+int snap_channel_mark_dirty_page(struct snap_channel *schanne, uint64_t guest_pa,
+				 int length)
+{
+	return 0;
+}
+
 struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
 				       void *data)
 {
