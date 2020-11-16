@@ -3164,6 +3164,14 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		}
 	}
 
+	if (attr->flags & SNAP_DEVICE_FLAGS_HOST_CHANNEL) {
+		sdev->channel = snap_channel_open(attr->ops, attr->mig_data);
+		if (!sdev->channel) {
+			errno = EINVAL;
+			goto out_free_channel;
+		}
+	}
+
 	if (sdev->pci->hotplug)
 		sdev->pci->hotplug->obj->sdev = sdev;
 
@@ -3173,6 +3181,9 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 
 	return sdev;
 
+out_free_channel:
+	if (sdev->mdev.channel)
+		snap_destroy_event_channel(sdev->mdev.channel);
 out_free_tunnel:
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
@@ -3200,6 +3211,8 @@ void snap_close_device(struct snap_device *sdev)
 	SNAP_TAILQ_REMOVE_SAFE(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
+	if (sdev->channel)
+		snap_channel_close(sdev->channel);
 	if (sdev->mdev.channel)
 		snap_destroy_event_channel(sdev->mdev.channel);
 	if (sdev->mdev.vtunnel)

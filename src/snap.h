@@ -47,6 +47,7 @@
 #include <infiniband/verbs.h>
 
 #include "mlx5_snap.h"
+#include "snap_channel.h"
 
 #define PFX "snap: "
 
@@ -100,10 +101,12 @@ enum snap_emulation_type {
 
 enum snap_device_attr_flags {
 	SNAP_DEVICE_FLAGS_EVENT_CHANNEL = 1 << 0,
+	SNAP_DEVICE_FLAGS_HOST_CHANNEL = 1 << 1,
 };
 
 struct snap_context;
 struct snap_hotplug_device;
+struct snap_migration_ops;
 
 enum snap_event_type {
 	SNAP_EVENT_NVME_DEVICE_CHANGE,
@@ -125,6 +128,10 @@ struct snap_device_attr {
 	int         vf_id;
 	uint32_t    flags; /* Use enum snap_device_attr_flags */
 	uint32_t    counter_set_id;
+
+	/* for live migration */
+	struct snap_migration_ops	*ops;
+	void				*mig_data;
 };
 
 struct snap_cross_mkey {
@@ -190,6 +197,9 @@ struct snap_device {
 	uint32_t			dma_rkey;
 	/* for BF-2 usage only */
 	uint32_t			crossed_vhca_mkey;
+
+	/* for live migration support */
+	struct snap_channel		*channel;
 };
 
 struct __attribute__((packed)) snap_nvme_registers {
@@ -388,4 +398,21 @@ int snap_device_get_events(struct snap_device *sdev, int num_events,
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 					       struct snap_device *target_sdev);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
+
+/* Live migration support */
+struct snap_migration_ops {
+	int (*quiesce)(void *data);
+	int (*unquiesce)(void *data);
+	int (*freeze)(void *data);
+	int (*unfreeze)(void *data);
+	int (*get_state_size)(void *data);
+	int (*copy_state)(void *data, void *buff, int len,
+			  bool copy_from_buffer);
+	int (*start_dirty_pages_track)(void *data);
+	int (*stop_dirty_pages_track)(void *data);
+};
+
+int snap_device_mark_dirty_page(struct snap_device *sdev, uint64_t guest_pa,
+				int length);
+
 #endif

@@ -12,6 +12,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_virtio_blk.h \
 		     snap_virtio_net.h \
 		     mlx5_snap.h \
+		     snap_channel.h \
 		     snap_dma.h
 
 libsnap_la_SOURCES = snap.c \
@@ -19,6 +20,7 @@ libsnap_la_SOURCES = snap.c \
 		     snap_virtio_blk.c \
 		     snap_virtio_net.c \
 		     snap_virtio_common.c \
+		     snap_channel.c \
 		     snap_dma.c
 
 libsnap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS)
