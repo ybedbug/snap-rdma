@@ -26,13 +26,39 @@ of controllers that are associated with it.
       "nqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
       "serial_number": "MNC12",
       "model_number": "NVIDIA NVMe SNAP Controller",
-      "controllers": [{"name": "NvmeEmu0", "pci_bdf": "83:00.1"}, {"name": "NvmeEmu1", "pci_bdf": "83:00.2"}]
+      "controllers": [
+        {
+          "name": "NvmeEmu0",
+          "cntlid": 0,
+          "pci_bdf": "83:00.1",
+          "pci_index": 0
+        },
+        {
+          "name": "NvmeEmu1",
+          "pci_bdf": "83:00.2",
+          "cntlid": 1,
+          "pci_index": 1
+        }
+      ]
     },
     {
       "nqn": "nqn.2014.08.org.nvmexpress.snap:cnode2",
       "serial_number": "MNC14",
       "model_number": "Mellanox NVMe SNAP Controller",
-      "controllers": [{"name": "NvmeEmu4", "pci_bdf": "88:00.1"}, {"name": "NvmeEmu5", "pci_bdf": "88:00.2"}]
+      "controllers": [
+        {
+          "name": "NvmeEmu4",
+          "cntlid": 0,
+          "pci_bdf": "88:00.1",
+          "pci_index": 0
+        },
+        {
+          "name": "NvmeEmu5",
+          "cntlid": 1,
+          "pci_bdf": "88:00.2"
+          "pci_index": 1
+        }
+      ]
     }
   ]
 }

@@ -280,13 +280,34 @@ def main():
     p.set_defaults(func=controller_virtio_blk_bdev_detach)
 
     def controller_nvme_delete(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.name is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.name is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
         params = {
-            'name': args.name,
         }
+        if args.name:
+            params['name'] = args.name
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
         args.client.call('controller_nvme_delete', params)
     p = subparsers.add_parser('controller_nvme_delete',
                               help='Destroy NVMe SNAP controller')
-    p.add_argument('name', help='Controller Name', type=str)
+    p.add_argument('-c', '--name', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--name\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--name\' is not set',
+                   default=-1, type=int, required=False)
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
@@ -374,28 +395,70 @@ def main():
     p.set_defaults(func=emulation_managers_list)
 
     def controller_nvme_namespace_detach(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.ctrl is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.ctrl is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
         params = {
-            'ctrl': args.ctrl,
             'nsid': args.nsid,
         }
+        if args.ctrl:
+            params['ctrl'] = args.ctrl
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
         args.client.call('controller_nvme_namespace_detach', params)
     p = subparsers.add_parser('controller_nvme_namespace_detach',
                               help='Delete NVMe emulation attached namespace')
-    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.add_argument('-c', '--ctrl', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--ctrl\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--ctrl\' is not set',
+                   default=-1, type=int, required=False)
     p.add_argument('nsid', help='Namespace id (NSID) to delete', type=int)
     p.set_defaults(func=controller_nvme_namespace_detach)
 
     def controller_nvme_namespace_attach(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.ctrl is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.ctrl is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
         params = {
-            'ctrl': args.ctrl,
             'bdev_type': args.bdev_type,
             'bdev': args.bdev,
             'nsid': args.nsid,
         }
+        if args.ctrl:
+            params['ctrl'] = args.ctrl
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
         args.client.call('controller_nvme_namespace_attach', params)
     p = subparsers.add_parser('controller_nvme_namespace_attach',
                               help='Add new NVMe emulation namespace')
-    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.add_argument('-c', '--ctrl', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--ctrl\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--ctrl\' is not set',
+                   default=-1, type=int, required=False)
     p.add_argument('bdev_type', help='Block device type', type=str,
                    choices=["spdk"])
     p.add_argument('bdev', help='Block device to use as backend', type=str)
@@ -403,15 +466,36 @@ def main():
     p.set_defaults(func=controller_nvme_namespace_attach)
 
     def controller_nvme_namespace_list(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.ctrl is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.ctrl is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
         params = {
-            'ctrl': args.ctrl,
         }
+        if args.ctrl:
+            params['ctrl'] = args.ctrl
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
         result = args.client.call('controller_nvme_namespace_list', params)
         print(json.dumps(result, indent=2))
     p = subparsers.add_parser('controller_nvme_namespace_list',
                               help='List attached namespaces on '
                                    'NVMe controller')
-    p.add_argument('ctrl', help='Controller Name', type=str)
+    p.add_argument('-c', '--ctrl', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--ctrl\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--ctrl\' is not set',
+                   default=-1, type=int, required=False)
     p.set_defaults(func=controller_nvme_namespace_list)
 
     def subsystem_nvme_create(args):

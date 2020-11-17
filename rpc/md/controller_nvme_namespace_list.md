@@ -38,18 +38,19 @@ controller name, or alternatively by its subsystem NQN and controller ID.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "result": [
-    {
-      "nsid": 1,
-      "bdev": "Null0",
-      "bdev_type": "spdk"
-    },
-    {
-      "nsid": 2,
-      "bdev": "Malloc0",
-      "bdev_type": "spdk"
-    }
-  ]
+  "result": {
+    "name": "NvmeEmu2pf0",
+    "cntlid": 0,
+    "Namespaces": [
+      {
+        "nsid": 1,
+        "bdev": "Null0",
+      },
+      {
+        "nsid": 2,
+        "bdev": "Malloc0",
+    ]
+  }
 }
 
 
