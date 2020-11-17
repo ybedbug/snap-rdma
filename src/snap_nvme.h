@@ -121,6 +121,7 @@ struct snap_nvme_device_attr {
 	struct snap_nvme_registers		bar;
 	uint64_t				modifiable_fields;//mask of snap_nvme_device_modify
 	int					num_of_vfs;
+	uint32_t				crossed_vhca_mkey;
 };
 
 struct snap_nvme_device {

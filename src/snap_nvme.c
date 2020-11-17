@@ -82,6 +82,11 @@ int snap_nvme_query_device(struct snap_device *sdev,
 		attr->modifiable_fields = SNAP_NVME_DEV_MOD_BAR;
 	else
 		attr->modifiable_fields = 0;
+
+	attr->crossed_vhca_mkey = DEVX_GET(nvme_device_emulation,
+					   device_emulation_out,
+					   emulated_device_crossed_vhca_mkey);
+
 out_free:
 	free(out);
 	return ret;
