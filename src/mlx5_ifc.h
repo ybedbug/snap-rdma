@@ -2702,7 +2702,7 @@ struct mlx5_ifc_virtio_device_bits {
 
 	u8	   device_status[0x8];
 	u8	   config_generation[0x8];
-	u8	   reserved_at_116[0x10];
+	u8	   pci_bdf[0x10];
 
 	u8	   notify_off_multiplier[0x20];
 

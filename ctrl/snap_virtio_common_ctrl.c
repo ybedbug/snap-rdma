@@ -180,7 +180,7 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 
 	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
 		ret = snap_virtio_ctrl_stop(ctrl);
-		if (!ret) {
+		if (!ret && ctrl->bar_curr->pci_bdf) {
 			/*
 			 * When done with reset process, need to set enabled bit
 			 * back to `1` which signal FW to update `device_status`
