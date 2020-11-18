@@ -314,6 +314,8 @@ def main():
             params['max_namespaces'] = args.max_namespaces
         if args.quirks != -1:
             params['quirks'] = args.quirks
+        if args.rdma_device:
+            params['rdma_device'] = args.rdma_device
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -338,6 +340,9 @@ def main():
     p.add_argument('-q', '--quirks', help='Bitmask for enabling specific NVMe '
                    'driver quirks in order to work with non NVMe spec compliant drivers',
                    default=-1, type=int, required=False)
+    p.add_argument('-r', '--rdma_device', help='BlueField1 compatibility option. Should be '
+                   'SF hca name. Usually "mlx5_2"',
+                   type=str, required=False)
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):

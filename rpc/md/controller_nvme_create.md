@@ -30,7 +30,8 @@ unique controller ID.
     "nr_io_queues": 32,
     "mdts": 4,
     "max_namespaces": 0,
-    "quirks": 0
+    "quirks": 0,
+    "rdma_device" : "mlx5_2"
   }
 }
 
