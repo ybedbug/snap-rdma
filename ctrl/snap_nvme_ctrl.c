@@ -56,23 +56,6 @@ static int snap_nvme_ctrl_bar_read(struct snap_nvme_ctrl *ctrl)
 	return 0;
 }
 
-static int snap_nvme_ctrl_bar_write(struct snap_nvme_ctrl *ctrl)
-{
-	struct snap_device *sdev = ctrl->sdev;
-	struct snap_nvme_device_attr attr = {};
-	int ret;
-
-	/* copy ctrl bar to host bar (sdev) */
-	memcpy(attr.bar.regs, &ctrl->bar, sizeof(ctrl->bar));
-	ret = snap_nvme_modify_device(sdev, SNAP_NVME_DEV_MOD_BAR, &attr);
-	if (snap_unlikely(ret)) {
-		snap_error("sdev 0x%p modify host BAR. ret=%d\n", sdev, ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static int snap_nvme_ctrl_set_initial_bar(struct snap_nvme_ctrl *ctrl)
 {
 	struct snap_device *sdev = ctrl->sdev;
@@ -173,7 +156,7 @@ static void snap_register_change_cb(void *ctx, unsigned int reg,
 {
 	struct snap_nvme_ctrl *ctrl = (struct snap_nvme_ctrl *)ctx;
 
-	snap_debug("%s [0x%llx] <- 0x%llx bar change detected", reg_desc,
+	snap_debug("%s [0x%lx] <- 0x%lx bar change detected", reg_desc,
 		   prev_val, new_val);
 
 	switch (reg) {
@@ -187,7 +170,7 @@ static void snap_register_change_cb(void *ctx, unsigned int reg,
 	case NVME_REG_CSTS:
 		break;
 	default:
-		snap_error("0x%X <- 0x%llx unsupported bar change detected",
+		snap_error("0x%X <- 0x%lx unsupported bar change detected",
 			   reg, new_val);
 	}
 }

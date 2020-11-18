@@ -8,7 +8,7 @@
 
 int main(int argc, char **argv)
 {
-	int ret = 0, i, opt, num_namespaces = 10, lba = 9, md;
+	int ret = 0, i, opt, num_namespaces = 10, lba = 9, md = 0;
 	struct snap_device_attr attr = {};
 	struct snap_context *sctx;
 	struct snap_device *sdev;

@@ -48,8 +48,8 @@ AC_PREFIX_DEFAULT(/usr/local/snap)
 
 # debug mode
 
-#BASE_CFLAGS="-g -O2 -Wall -Werror"
-BASE_CFLAGS="-g -O2"
+BASE_CFLAGS="-g -O2 -Wall -Werror"
+#BASE_CFLAGS="-g -O2"
 
 AC_ARG_ENABLE(debug,
 	      AC_HELP_STRING([--enable-debug], [Enable debug mode build]),

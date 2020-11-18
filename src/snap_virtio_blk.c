@@ -363,7 +363,6 @@ snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
 int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
 {
-	uint64_t allowed_mask = 0;
 	int ret;
 
 	if (!vbq->virtq.mod_allowed_mask) {

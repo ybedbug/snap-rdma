@@ -472,7 +472,7 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 	cq_base = *(uint64_t *)(ctrl->sdev->pci->bar.data +
 			SNAP_SAMPLE_DEV_REG_CQPA);
 
-	printf("creating completion queue with base at 0x%0llx\n", cq_base);
+	printf("creating completion queue with base at 0x%0lx\n", cq_base);
 	cq_attr.type = SNAP_NVME_RAW_MODE;
 	cq_attr.id = 0;
 	cq_attr.msix = 0;
@@ -485,7 +485,7 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 		goto teardown_device;
 	}
 
-	printf("creating submission queue with base at 0x%0llx\n", sq_base);
+	printf("creating submission queue with base at 0x%0lx\n", sq_base);
 	sq_attr.type = SNAP_NVME_RAW_MODE;
 	sq_attr.id = 0;
 	sq_attr.queue_depth = SNAP_SAMPLE_DEV_QUEUE_DEPTH;

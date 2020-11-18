@@ -275,8 +275,6 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 
 	return vnq;
 
-destroy_queue:
-	snap_devx_obj_destroy(vnq->virtq.virtq);
 out_umem:
 	snap_virtio_teardown_virtq_umem(&vnq->virtq);
 out:

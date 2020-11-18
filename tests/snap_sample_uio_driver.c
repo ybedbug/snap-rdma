@@ -246,8 +246,8 @@ static void driver_run_ping_pong(struct sample_driver *drv, unsigned n_iters, in
 {
 	struct snap_sample_device_cqe *cqe;
 	struct snap_sample_device_sqe *sqe;
-	int i, rc;
-	void *va;
+	int i;
+	void *va = NULL;
 	uint64_t pa;
 
 	if (do_dma) {
@@ -346,7 +346,6 @@ static void usage()
 
 int main(int argc, char **argv)
 {
-	int rc;
 	struct sample_driver *drv;
 	char test_name[16] = {};
 	int opt, do_dma = 0;
@@ -355,7 +354,7 @@ int main(int argc, char **argv)
 	while ((opt = getopt(argc, argv, "hrt:n:")) != -1) {
 		switch (opt) {
 			case 't':
-				strncpy(test_name, optarg, sizeof(test_name));
+				strncpy(test_name, optarg, sizeof(test_name) - 1);
 				break;
 			case 'r':
 				do_dma = 1;

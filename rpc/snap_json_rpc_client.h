@@ -49,6 +49,7 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <pthread.h>
 
 #define SNAP_JSON_RPC_RECV_BUF_SIZE_INIT (8 * 1024)
 #define SNAP_JSON_RPC_RECV_BUF_MAX_SIZE (128 * 1024)

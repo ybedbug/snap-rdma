@@ -71,7 +71,7 @@ static int snap_init_teardown_helper(struct snap_context *sctx,
 int main(int argc, char **argv)
 {
 	struct snap_context *sctx;
-	int ret = 0, i, dev_count, opt, dev_type = 0;
+	int ret = 0, opt, dev_type = 0;
 
 	while ((opt = getopt(argc, argv, "t:")) != -1) {
 		switch (opt) {

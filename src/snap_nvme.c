@@ -29,7 +29,6 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(nvme_device_emulation)] = {0};
 	uint8_t *out;
-	struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_in;
 	uint8_t *device_emulation_out;
 	uint64_t dev_allowed;
@@ -136,8 +135,8 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 
 	/* we'll modify only allowed fields */
 	if (mask & ~sdev->mod_allowed_mask) {
-		snap_error("failed modify NVMe sdev 0x%p mask=0x%llx "
-			   "allowed_mask=0x%llx\n", sdev, mask,
+		snap_error("failed modify NVMe sdev 0x%p mask=0x%lx "
+			   "allowed_mask=0x%lx\n", sdev, mask,
 			   sdev->mod_allowed_mask);
 		return -EINVAL;
 	}
@@ -630,7 +629,6 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 		    DEVX_ST_SZ_BYTES(nvme_sq)] = {0};
-	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *out_sq;
 	uint64_t dev_allowed;
 	int ret;

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <glob.h>
+#include <libgen.h>
 
 #include "host_uio.h"
 

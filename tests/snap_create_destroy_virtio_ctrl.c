@@ -85,8 +85,8 @@ int main(int argc, char **argv)
 	struct snap_virtio_ctrl_bar_cbs bar_cbs = {};
 	struct snap_blk_dev_attrs bdev_attrs = {0};
 	struct snap_virtio_net_ctrl_attr net_attr = {};
-	struct snap_blk_dev *bdev;
-	enum snap_virtio_ctrl_type type;
+	struct snap_blk_dev *bdev = NULL;
+	enum snap_virtio_ctrl_type type = SNAP_VIRTIO_BLK_CTRL;
 	int pf_id = 0;
 	struct snap_context *sctx = NULL;
 

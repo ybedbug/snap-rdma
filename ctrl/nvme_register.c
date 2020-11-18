@@ -103,7 +103,7 @@ static int nvme_reg_cap_mpsmax(uint64_t cap)
 
 static void nvme_reg_cap_dump(struct nvme_register_desc *reg, uint64_t cap)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%llx {MQES:%d CQR:%d AMS:%d TO:%d "
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {MQES:%d CQR:%d AMS:%d TO:%d "
 	       "DSTRD:%d NSSRS:%d CSS:%d BPS:%d MPSMIN:%d MPSMAX:%d}\n",
 	       reg->name, reg->desc, reg->offset, reg->offset + reg->size, cap,
 	       nvme_reg_cap_mqes(cap), nvme_reg_cap_cqr(cap),
@@ -133,7 +133,7 @@ static int nvme_reg_vs_mjr(uint32_t vs)
 
 static void nvme_reg_vs_dump(struct nvme_register_desc *reg, uint64_t vs)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%llx {%d.%d.%d}\n",
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {%d.%d.%d}\n",
 	       reg->name, reg->desc, reg->offset, reg->offset + reg->size, vs,
 	       nvme_reg_vs_mjr(vs), nvme_reg_vs_mnr(vs), nvme_reg_vs_ter(vs));
 }
@@ -176,7 +176,7 @@ static int nvme_reg_cc_iocqes(uint32_t cc)
 
 static void nvme_reg_cc_dump(struct nvme_register_desc *reg, uint64_t cc)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%llx {EN:%d CSS:%d MPS:%d AMS:%d "
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {EN:%d CSS:%d MPS:%d AMS:%d "
 	       "SHN:%d IOSQES:%d IOCQES:%d}\n", reg->name, reg->desc,
 	       reg->offset, reg->offset + reg->size, cc, nvme_reg_cc_en(cc),
 	       nvme_reg_cc_css(cc), nvme_reg_cc_mps(cc), nvme_reg_cc_ams(cc),
@@ -211,7 +211,7 @@ static int nvme_reg_csts_pp(uint32_t csts)
 
 static void nvme_reg_csts_dump(struct nvme_register_desc *reg, uint64_t csts)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%llx {RDY:%d CFS:%d SHST:%d "
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {RDY:%d CFS:%d SHST:%d "
 	       "NSSRO:%d PP:%d}\n", reg->name, reg->desc,
 	       reg->offset, reg->offset + reg->size, csts,
 	       nvme_reg_csts_rdy(csts), nvme_reg_csts_cfs(csts),
@@ -231,7 +231,7 @@ static int nvme_reg_aqa_acqs(uint32_t aqa)
 
 static void nvme_reg_aqa_dump(struct nvme_register_desc *reg, uint64_t aqa)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%llx {ASQS:%d ACQS:%d}\n",
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {ASQS:%d ACQS:%d}\n",
 	       reg->name, reg->desc, reg->offset, reg->offset + reg->size, aqa,
 	       nvme_reg_aqa_asqs(aqa), nvme_reg_aqa_acqs(aqa));
 }
@@ -245,7 +245,7 @@ static uint64_t nvme_register_get_value(struct nvme_register_desc *reg,
 		return *((uint64_t *)(bar + reg->offset));
 }
 
-static void nvme_register_set_value(struct nvme_register_desc *reg, void *bar,
+__attribute__ ((unused)) static void nvme_register_set_value(struct nvme_register_desc *reg, void *bar,
 		uint64_t new_value)
 {
 	if (reg->size == 4)
@@ -299,6 +299,7 @@ out_err:
 	return -EINVAL;
 }
 
+#if 0
 static const char *nvme_reg_str(unsigned int reg)
 {
 	switch (reg) {
@@ -337,6 +338,7 @@ static const char *nvme_reg_str(unsigned int reg)
 	}
 }
 
+#endif
 void nvme_register_identify_change(struct nvme_bar *prev,
 		struct nvme_bar *curr, nvme_register_change_cb_t change_cb,
 		void *ctx)

@@ -93,7 +93,7 @@ err:
 	return ret;
 }
 
-static int snap_virtio_ctrl_bars_teardown(struct snap_virtio_ctrl *ctrl)
+static void snap_virtio_ctrl_bars_teardown(struct snap_virtio_ctrl *ctrl)
 {
 	snap_virtio_ctrl_bar_destroy(ctrl, ctrl->bar_prev);
 	snap_virtio_ctrl_bar_destroy(ctrl, ctrl->bar_curr);

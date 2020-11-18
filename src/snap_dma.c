@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <arpa/inet.h>
 
 #include "snap.h"
 #include "snap_dma.h"
@@ -1218,7 +1219,7 @@ static struct snap_dma_q_ops verb_ops = {
 /* DV implementation */
 static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dma_completion *comp)
 {
-	if (comp || (dv_qp->n_outstanding + 1) & (SNAP_DMA_Q_TX_MOD_COUNT - 1) == 0)
+	if (comp || ((dv_qp->n_outstanding + 1) & (SNAP_DMA_Q_TX_MOD_COUNT - 1)) == 0)
 		return MLX5_WQE_CTRL_CQ_UPDATE;
 	else
 		return 0;
@@ -1247,7 +1248,7 @@ static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
 	dv_obj.cq.out = &dv_cq->cq;
 	rc = mlx5dv_init_obj(&dv_obj, MLX5DV_OBJ_CQ);
 
-	snap_debug("dv_cq: cqn = 0x%x, cqe_size = %d, cqe_count = %d comp_mask = 0x0%x\n",
+	snap_debug("dv_cq: cqn = 0x%x, cqe_size = %d, cqe_count = %d comp_mask = 0x0%lx\n",
 		   dv_cq->cq.cqn, dv_cq->cq.cqe_size, dv_cq->cq.cqe_cnt,
 		   dv_cq->cq.comp_mask);
 	return rc;
@@ -1646,7 +1647,7 @@ static struct snap_dma_q_ops dv_ops = {
 };
 
 /* GGA */
-static void dump_gga_wqe(int op, volatile uint32_t *wqe)
+__attribute__ ((unused)) static void dump_gga_wqe(int op, volatile uint32_t *wqe)
 {
 	int i;
 

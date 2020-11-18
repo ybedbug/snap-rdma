@@ -203,7 +203,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 
 static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg);
 
-static inline uint32_t cmd_buf_size(size_max, seg_max)
+static inline uint32_t cmd_buf_size(int size_max, int seg_max)
 {
 	return req_buf_size(size_max, seg_max) +
 	       sizeof(struct split_tunnel_comp) +
@@ -239,7 +239,6 @@ static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
 {
 	uint32_t n_descs = VIRTIO_NUM_DESC(seg_max);
-	uint32_t comp_size = sizeof(struct split_tunnel_comp);
 	uint32_t n_cmds = vq_priv->snap_attr.vattr.size;
 	int err = 0;
 	uint32_t buf_size, descs_mr_size;
@@ -611,7 +610,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 {
 	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
 	struct blk_virtq_priv *vq = cmd->vq_priv;
-	int ret, len, qid = vq->vq_ctx.idx;
+	int ret, len;
 	struct virtio_blk_outhdr *req_hdr_p;
 	uint64_t num_blocks;
 	uint32_t blk_size;
@@ -713,7 +712,6 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 				  enum virtq_cmd_sm_op_status status)
 {
-	struct blk_virtq_priv *vq = cmd->vq_priv;
 	int i, ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
@@ -768,7 +766,6 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
 static bool sm_write_status(struct blk_virtq_cmd *cmd,
 			    enum virtq_cmd_sm_op_status status)
 {
-	struct blk_virtq_priv *vq = cmd->vq_priv;
 	int ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK)
@@ -800,7 +797,6 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
 static void sm_send_completion(struct blk_virtq_cmd *cmd,
 			       enum virtq_cmd_sm_op_status status)
 {
-	struct virtio_blk_outhdr *req_hdr_p;
 	int ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
@@ -809,7 +805,6 @@ static void sm_send_completion(struct blk_virtq_cmd *cmd,
 		return;
 	}
 
-	req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
 	cmd->tunnel_comp->avail_idx = cmd->avail_idx;
 	cmd->tunnel_comp->len = cmd->total_in_len;
 	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,

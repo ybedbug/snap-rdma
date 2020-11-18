@@ -18,7 +18,7 @@ struct snap_context *snap_ctx_open(int emulation_types, const char *manager)
 	for (i = 0; i < dev_count; i++) {
 		sctx = snap_open(list[i]);
 		if (sctx &&
-		    sctx->emulation_caps & emulation_types == emulation_types) {
+		    (sctx->emulation_caps & emulation_types) == emulation_types) {
 			if (manager && strcmp(sctx->context->device->name, manager))
 				sctx = NULL;
 			else

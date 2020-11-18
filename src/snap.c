@@ -252,7 +252,6 @@ static int snap_query_functions_info(struct snap_context *sctx,
 {
 	struct ibv_context *context = sctx->context;
 	uint8_t in[DEVX_ST_SZ_BYTES(query_emulated_functions_info_in)] = {0};
-	int opmod, ret;
 
 	DEVX_SET(query_emulated_functions_info_in, in, opcode,
 		 MLX5_CMD_OP_QUERY_EMULATED_FUNCTIONS_INFO);
@@ -533,7 +532,7 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 
 }
 
-static int snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
+static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		uint8_t *out)
 {
 	virtio->max_emulated_virtqs = DEVX_GET(query_hca_cap_out,
@@ -908,7 +907,6 @@ static int snap_modify_qp_to_init(struct mlx5_snap_devx_obj *qp,
 	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(rst2init_qp_out)] = {0};
 	void *qpc = DEVX_ADDR_OF(rst2init_qp_in, in, qpc);
-	int ret;
 
 	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
 	DEVX_SET(rst2init_qp_in, in, qpn, qp_num);
@@ -941,7 +939,6 @@ static int snap_modify_qp_to_rtr(struct mlx5_snap_devx_obj *qp,
 	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
 	uint8_t mac[6];
 	uint8_t gid[16];
-	int ret;
 
 	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
 	DEVX_SET(init2rtr_qp_in, in, qpn, qp_num);
@@ -1009,7 +1006,6 @@ static int snap_modify_qp_to_rts(struct mlx5_snap_devx_obj *qp,
 	uint32_t in[DEVX_ST_SZ_DW(rtr2rts_qp_in)] = {0};
 	uint32_t out[DEVX_ST_SZ_DW(rtr2rts_qp_out)] = {0};
 	void *qpc = DEVX_ADDR_OF(rtr2rts_qp_in, in, qpc);
-	int ret;
 
 	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
 	DEVX_SET(rtr2rts_qp_in, in, qpn, qp_num);
@@ -1150,7 +1146,7 @@ static int snap_clone_qp(struct snap_device *sdev,
 static int snap_fte_reset(struct mlx5_snap_flow_table_entry *fte)
 {
 	struct mlx5_snap_flow_table *ft = fte->fg->ft;
-	int i, ret;
+	int ret;
 
 	ret = snap_devx_obj_destroy(fte->fte);
 	if (ret)
@@ -1752,7 +1748,6 @@ out_unlock:
 static int snap_init_tx_steering(struct snap_device *sdev)
 {
 	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
-	struct mlx5_snap_flow_group *fg;
 
 	/* FT6 creation (match source QPN) */
 	sdev->mdev.tx = snap_create_root_flow_table(sdev, FS_FT_NIC_TX_RDMA);
@@ -2084,7 +2079,6 @@ static int snap_create_rdma_steering(struct snap_device *sdev,
 		struct ibv_context *context)
 {
 	uint8_t match[DEVX_ST_SZ_BYTES(fte_match_param)] = {0};
-	int ret;
 
 	/*
 	 * Create FT5 table that will forward everything to emulated function.

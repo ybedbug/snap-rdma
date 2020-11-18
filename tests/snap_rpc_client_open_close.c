@@ -16,10 +16,10 @@ int main(int argc, char **argv)
 	while ((opt = getopt(argc, argv, "n:f:l:")) != -1) {
 		switch (opt) {
 		case 'n':
-			strncpy(name, optarg, sizeof(name));
+			strncpy(name, optarg, sizeof(name) - 1);
 			break;
 		case 'f':
-			strncpy(fname, optarg, sizeof(fname));
+			strncpy(fname, optarg, sizeof(fname) - 1);
 			break;
 		case 'l':
 			loops = atoi(optarg);
@@ -59,8 +59,13 @@ int main(int argc, char **argv)
 		goto out_close_file;
 	}
 
-	fread(buf, sizeof(char), buf_len, jsonfile);
-	printf("The file called %s contains this text:\n%s\n", fname, buf);
+	if (fread(buf, sizeof(char), buf_len, jsonfile) != buf_len && errno != 0) {
+		printf("failed to read from buffer\n");
+		ret = -errno;
+		goto out_close_file;
+
+	}
+	printf("The file called %s contains this text:\n%s\n", fname, (char *)buf);
 
 	while (i++ < loops) {
 		ret = snap_json_rpc_client_send_req(client, buf, buf_len);
@@ -84,7 +89,7 @@ int main(int argc, char **argv)
 			goto out_free;
 		}
 
-		printf("got %d bytes rsp from client:\n%s\n", rsp->length, rsp->buf);
+		printf("got %lu bytes rsp from client:\n%s\n", rsp->length, rsp->buf);
 		snap_json_rpc_put_response(rsp);
 	}
 

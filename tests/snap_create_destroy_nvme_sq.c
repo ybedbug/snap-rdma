@@ -159,7 +159,7 @@ int main(int argc, char **argv)
 							}
 						}
 						if (modify) {
-							uint64_t mask;
+							uint64_t mask = 0;
 
 							memset(&sq_attr, 0, sizeof(sq_attr));
 							/* modify qpn/state separately */
@@ -178,10 +178,10 @@ int main(int argc, char **argv)
 								sq_attr.state = SNAP_NVME_SQ_STATE_ERR;
 							}
 							if (!snap_nvme_modify_sq(sq, mask, &sq_attr)) {
-								fprintf(stdout, "Modify NVMe sq id=%d, mask=%d\n", j, mask);
+								fprintf(stdout, "Modify NVMe sq id=%d, mask=%lx\n", j, mask);
 								fflush(stdout);
 							} else {
-								fprintf(stderr, "Failed to Modify NVMe sq id=%d, mask=%d\n", j, mask);
+								fprintf(stderr, "Failed to Modify NVMe sq id=%d, mask=%lx\n", j, mask);
 								fflush(stderr);
 							}
 							if (sq_attr.qp)

@@ -8,10 +8,8 @@
 static int snap_open_close_pf_helper(struct snap_context *sctx,
 	enum snap_emulation_type type, bool ev)
 {
-	struct snap_device *sdev;
 	int i;
 	struct snap_pfs_ctx *pfs;
-	struct snap_pci *spfs;
 	enum snap_pci_type ptype;
 
 	if (type == SNAP_NVME) {

@@ -11,7 +11,7 @@ int main(int argc, char **argv)
 	struct snap_device_attr attr = {};
 	struct snap_context *sctx;
 	struct snap_device *sdev;
-	int ret;
+	int ret = 0;
 
 	sctx = snap_ctx_open(SNAP_NVME, NULL);
 	if (!sctx) {
