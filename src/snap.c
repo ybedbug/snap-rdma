@@ -3258,8 +3258,3 @@ void snap_close(struct snap_context *sctx)
 	free(sctx);
 	ibv_close_device(context);
 }
-
-inline int snap_get_vhca_id(struct snap_device *sdev)
-{
-	return sdev->pci->mpci.vhca_id;
-}

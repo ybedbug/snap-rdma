@@ -325,5 +325,8 @@ int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
 
-inline int snap_get_vhca_id(struct snap_device *sdev);
+static inline int snap_get_vhca_id(struct snap_device *sdev)
+{
+	return sdev->pci->mpci.vhca_id;
+}
 #endif
