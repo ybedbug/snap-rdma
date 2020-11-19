@@ -539,6 +539,11 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		out, capability.virtio_emulation_cap.max_num_virtio_queues);
 	virtio->max_tunnel_desc = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_tunnel_desc);
+	virtio->queue_period_upon_cqe = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.queue_period_upon_cqe);
+	virtio->queue_period_upon_event =
+		DEVX_GET(query_hca_cap_out, out,
+		capability.virtio_emulation_cap.queue_period_upon_event);
 	virtio->umem_1_buffer_param_a = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.umem_1_buffer_param_a);
 	virtio->umem_1_buffer_param_b = DEVX_GET(query_hca_cap_out,

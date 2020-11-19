@@ -353,6 +353,11 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, max_tunnel_desc, vattr->max_tunnel_desc);
 	DEVX_SET(virtio_q, virtq_ctx, event_qpn_or_msix, vattr->event_qpn_or_msix);
 	DEVX_SET(virtio_q, virtq_ctx, offload_type, offload_type);
+	DEVX_SET(virtio_q, virtq_ctx, queue_period_mode,
+		 vattr->queue_period_mode);
+	DEVX_SET(virtio_q, virtq_ctx, queue_period, vattr->queue_period);
+	DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
+		 vattr->queue_max_count);
 	if (umem[0].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_size, umem[0].size);
@@ -423,6 +428,7 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	struct snap_device *sdev = virtq->virtq->sdev;
 	uint8_t *in;
 	uint8_t *virtq_in;
+	uint8_t *virtq_ctx;
 	uint64_t fields_to_modify = 0;
 	int inlen, state;
 
@@ -456,6 +462,7 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_Q);
 		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+		virtq_ctx = DEVX_ADDR_OF(virtio_net_q, virtq_in, virtqc);
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_STATE) {
 			state = snap_virtio_queue_state_to_mlx_state(vattr->state);
@@ -463,6 +470,16 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 				return state;
 			fields_to_modify = MLX5_VIRTIO_NET_Q_MODIFY_STATE;
 			DEVX_SET(virtio_net_q, virtq_in, state, state);
+		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_PERIOD) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_PERIOD;
+			DEVX_SET(virtio_q, virtq_ctx, queue_period_mode,
+				 vattr->queue_period_mode);
+			DEVX_SET(virtio_q, virtq_ctx, queue_period, vattr->queue_period);
+			DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
+				 vattr->queue_max_count);
+
 		}
 		DEVX_SET64(virtio_net_q, virtq_in, modify_field_select,
 			   fields_to_modify);
@@ -572,8 +589,9 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		dev_allowed = DEVX_GET64(virtio_net_q, virtq_out, modify_field_select);
 		if (dev_allowed & MLX5_VIRTIO_NET_Q_MODIFY_STATE)
 			attr->modifiable_fields = SNAP_VIRTIO_NET_QUEUE_MOD_STATE;
-		else
-			attr->modifiable_fields = 0;
+
+		if (dev_allowed & SNAP_VIRTIO_NET_QUEUE_PERIOD)
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_PERIOD;
 	}
 
 	return 0;

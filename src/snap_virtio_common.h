@@ -73,6 +73,12 @@ enum snap_virtio_features {
 	SNAP_VIRTIO_F_VERSION_1		= 1ULL << 32,
 };
 
+enum snap_virtq_period_mode {
+	SNAP_VIRTQ_PERIOD_DEFAULT	= 0,
+	SNAP_VIRTQ_PERIOD_UPON_EVENT	= 1,
+	SNAP_VIRTQ_PERIOD_UPON_CQE	= 2,
+};
+
 struct snap_virtio_queue_attr {
 	enum snap_virtq_type		type;
 	enum snap_virtq_event_mode	ev_mode;
@@ -92,6 +98,10 @@ struct snap_virtio_queue_attr {
 	struct ibv_pd			*pd;
 
 	enum snap_virtq_state		state; /* query and modify */
+
+	enum snap_virtq_period_mode	queue_period_mode;
+	uint16_t			queue_period;
+	uint16_t			queue_max_count;
 
 	/* Query: */
 	uint32_t			dma_mkey;

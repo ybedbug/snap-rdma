@@ -271,6 +271,8 @@ struct snap_virtio_caps {
 	uint64_t	features; //mask of snap_virtio_features
 	uint32_t	max_emulated_virtqs;
 	uint16_t	max_tunnel_desc;
+	bool		queue_period_upon_cqe;
+	bool		queue_period_upon_event;
 
 	/*
 	 * According to PRM for each created virtq, one must provide 3 UMEMs:

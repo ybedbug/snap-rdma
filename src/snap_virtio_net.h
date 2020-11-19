@@ -40,6 +40,7 @@ struct snap_virtio_net_device;
 
 enum snap_virtio_net_queue_modify {
 	SNAP_VIRTIO_NET_QUEUE_MOD_STATE	= 1 << 0,
+	SNAP_VIRTIO_NET_QUEUE_PERIOD	= 1 << 5,
 };
 
 struct snap_virtio_net_queue_attr {
