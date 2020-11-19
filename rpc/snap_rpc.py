@@ -449,6 +449,8 @@ def main():
             params['subnqn'] = args.subnqn
         if args.cntlid != -1:
             params['cntlid'] = args.cntlid
+        if args.qn:
+            params['qn'] = args.qn
         args.client.call('controller_nvme_namespace_attach', params)
     p = subparsers.add_parser('controller_nvme_namespace_attach',
                               help='Add new NVMe emulation namespace')
@@ -463,6 +465,7 @@ def main():
                    choices=["spdk"])
     p.add_argument('bdev', help='Block device to use as backend', type=str)
     p.add_argument('nsid', help='Namespace id (NSID)', type=int)
+    p.add_argument('-q', '--qn', help='QN of remote target which provide this ns', type=str)
     p.set_defaults(func=controller_nvme_namespace_attach)
 
     def controller_nvme_namespace_list(args):
