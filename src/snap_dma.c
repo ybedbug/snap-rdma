@@ -1668,6 +1668,7 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 	uint16_t comp_idx;
 	int cq_up;
 
+	comp_idx = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
 	cq_up = snap_dv_get_cq_update(dv_qp, comp);
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
 	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
@@ -1683,7 +1684,6 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 
-	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
 	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
 	return 0;
 }
