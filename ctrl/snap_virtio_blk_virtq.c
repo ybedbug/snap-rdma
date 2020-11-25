@@ -1,9 +1,11 @@
 #include <linux/virtio_ring.h>
 #include <linux/virtio_blk.h>
 #include <linux/virtio_pci.h>
+#include "snap_channel.h"
 #include "snap_virtio_blk_virtq.h"
 #include "snap_dma.h"
 #include "snap_virtio_blk.h"
+#include "snap_virtio_blk_ctrl.h"
 
 #define NUM_HDR_FTR_DESCS 2
 
@@ -184,6 +186,34 @@ struct blk_virtq_priv {
 	int pg_id;
 	struct snap_virtio_blk_ctrl_queue *vbq;
 };
+
+static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
+					uint32_t len, bool is_completion)
+{
+	struct snap_virtio_ctrl_queue *vq = &cmd->vq_priv->vbq->common;
+	int rc;
+
+	if (snap_likely(!vq->log_writes_to_host))
+		return;
+
+	if (is_completion) {
+		/* spec 2.6 Split Virtqueues
+		 * mark all of the device area as dirty, in the worst case
+		 * it will cost an extra page or two. Device area size is
+		 * calculated according to the spec. */
+		pa = cmd->vq_priv->snap_attr.vattr.device;
+		len = 6 + 8 * cmd->vq_priv->snap_attr.vattr.size;
+	}
+	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
+	if (!vq->ctrl->lm_channel) {
+		snap_error("dirty memory logging enabled but migration channel"
+			   "is not present\n");
+		return;
+	}
+	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
+	if (rc)
+		snap_error("mark drity page failed: pa 0x%lx len %u\n", pa, len);
+}
 
 static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 				  enum virtq_cmd_sm_op_status status);
@@ -598,6 +628,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		cmd->total_in_len += len;
 		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
 			       cmd->descs[1].addr, len);
+		virtq_mark_dirty_mem(cmd, cmd->descs[1].addr, len, false);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->buf,
 				       len,
@@ -658,6 +689,8 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 	for (i = 0; i < cmd->num_desc - NUM_HDR_FTR_DESCS; i++) {
 		virtq_log_data(cmd, "WRITE_DATA: pa 0x%llx len %u\n",
 			       cmd->descs[i + 1].addr, cmd->descs[i + 1].len);
+		virtq_mark_dirty_mem(cmd, cmd->descs[i + 1].addr,
+				     cmd->descs[i + 1].len, false);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->req_buf + offset,
 				       cmd->descs[i + 1].len,
@@ -710,6 +743,8 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
 	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
 		       cmd->descs[cmd->num_desc - 1].addr,
 		       sizeof(struct virtio_blk_outftr));
+	virtq_mark_dirty_mem(cmd, cmd->descs[cmd->num_desc - 1].addr,
+			     sizeof(struct virtio_blk_outftr), false);
 	ret = snap_dma_q_write(cmd->vq_priv->dma_q, &cmd->aux->blk_req_ftr,
 			       sizeof(struct virtio_blk_outftr),
 			       cmd->mr->lkey,
@@ -743,12 +778,13 @@ static void sm_send_completion(struct blk_virtq_cmd *cmd,
 	cmd->aux->tunnel_comp.avail_idx = cmd->avail_idx;
 	cmd->aux->tunnel_comp.len = cmd->total_in_len;
 	virtq_log_data(cmd, "SEND_COMP: avail_idx %d len %d send_size %lu\n",
-	                cmd->aux->tunnel_comp.avail_idx,
-	                cmd->aux->tunnel_comp.len,
-	                sizeof(struct split_tunnel_comp));
+		       cmd->aux->tunnel_comp.avail_idx,
+		       cmd->aux->tunnel_comp.len,
+		       sizeof(struct split_tunnel_comp));
+	virtq_mark_dirty_mem(cmd, 0, 0, true);
 	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
-	                &cmd->aux->tunnel_comp,
-	                sizeof(struct split_tunnel_comp));
+					 &cmd->aux->tunnel_comp,
+					 sizeof(struct split_tunnel_comp));
 	if (ret) {
 		ERR_ON_CMD(cmd, "failed to second completion\n");
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;

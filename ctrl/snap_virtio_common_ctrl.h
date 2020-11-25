@@ -114,6 +114,7 @@ struct snap_virtio_ctrl_queue {
 	int index;
 	struct snap_pg *pg;
 	struct snap_pg_q_entry pg_q;
+	bool log_writes_to_host;
 	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
 };
 
@@ -155,6 +156,8 @@ struct snap_virtio_ctrl {
 	struct snap_virtio_device_attr *bar_prev;
 	struct ibv_pd *lb_pd;
 	struct snap_pg_ctx pg_ctx;
+	bool log_writes_to_host;
+	struct snap_channel *lm_channel;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
@@ -170,4 +173,6 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  const struct snap_virtio_ctrl_attr *attr);
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl);
 
+/* live migration support */
+void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 #endif

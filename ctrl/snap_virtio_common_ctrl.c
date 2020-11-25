@@ -137,6 +137,7 @@ snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
 
 	vq->ctrl = ctrl;
 	vq->index = index;
+	vq->log_writes_to_host = ctrl->log_writes_to_host;
 	snap_virtio_ctrl_sched_q(ctrl, vq);
 
 	return vq;
@@ -442,4 +443,30 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 	pthread_mutex_destroy(&ctrl->state_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);
 	snap_close_device(ctrl->sdev);
+}
+
+/**
+ * snap_virtio_ctrl_log_write() - Enable/disable dirty memory tracking
+ * @ctrl:    virtio controller
+ * @enable:  toggle dirty memory tracking
+ *
+ * The function toggles dirty memory tracking by the controller. The tracking
+ * itself should be implemented by the virtio queue implementation of the
+ * specific controller. The queue should use snap_channel_mark_dirty_page()
+ * to report dirty memory to the migration channel.
+ *
+ * The function should be called by the start/stop_dirty_pages_track migration
+ * channel callbacks.
+ */
+void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable)
+{
+	int i;
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		if (ctrl->queues[i])
+			ctrl->queues[i]->log_writes_to_host = enable;
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+	ctrl->log_writes_to_host = enable;
 }
