@@ -215,7 +215,7 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
 		goto out;
 
-	for (i = 0; i < ctrl->num_queues; i++) {
+	for (i = 0; i < ctrl->max_queues; i++) {
 		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
 
 		if (vq->enable) {
@@ -255,7 +255,7 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STOPPED)
 		goto out;
 
-	for (i = 0; i < ctrl->num_queues; i++) {
+	for (i = 0; i < ctrl->max_queues; i++) {
 		if (ctrl->queues[i]) {
 			snap_virtio_ctrl_queue_destroy(ctrl->queues[i]);
 			ctrl->queues[i] = NULL;
@@ -355,6 +355,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	int ret = 0;
 	struct snap_device_attr sdev_attr = {0};
 	uint32_t npgs;
+	uint32_t num_queues = 1;
 
 	if (!sctx) {
 		ret = -ENODEV;
@@ -372,11 +373,11 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	sdev_attr.vf_id = attr->vf_id;
 	switch (attr->type) {
 	case SNAP_VIRTIO_BLK_CTRL:
-		ctrl->num_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
+		num_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
 		sdev_attr.type = attr->pci_type;
 		break;
 	case SNAP_VIRTIO_NET_CTRL:
-		ctrl->num_queues = sctx->virtio_net_caps.max_emulated_virtqs;
+		num_queues = sctx->virtio_net_caps.max_emulated_virtqs;
 		sdev_attr.type = attr->pci_type;
 		break;
 	default:
@@ -391,6 +392,13 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto err;
 	}
 
+	/*
+	 * Limit num_queues by both max supported by FW, and num dedicated
+	 * msix. `-1` for dedicated MSIX for config changes channel.
+	 */
+	ctrl->max_queues = snap_min(num_queues,
+				    ctrl->sdev->pci->pci_attr.num_msix - 1);
+
 	ctrl->bar_ops = bar_ops;
 	ctrl->bar_cbs = *attr->bar_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
@@ -404,7 +412,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto teardown_bars;
 
 	ctrl->q_ops = q_ops;
-	ctrl->queues = calloc(ctrl->num_queues, sizeof(*ctrl->queues));
+	ctrl->queues = calloc(ctrl->max_queues, sizeof(*ctrl->queues));
 	if (!ctrl->queues) {
 		ret = -ENOMEM;
 		goto mutex_destroy;

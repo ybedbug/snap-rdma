@@ -11,7 +11,7 @@ snap_virtio_net_ctrl_bar_create(struct snap_virtio_ctrl *vctrl)
 		goto err;
 
 	/* Allocate queue attributes slots on bar */
-	vnbar->queues = vctrl->num_queues;
+	vnbar->queues = vctrl->max_queues;
 	vnbar->q_attrs = calloc(vnbar->queues, sizeof(*vnbar->q_attrs));
 	if (!vnbar->q_attrs)
 		goto free_vnbar;

@@ -32,7 +32,7 @@ snap_virtio_blk_ctrl_bar_create(struct snap_virtio_ctrl *vctrl)
 		goto err;
 
 	/* Allocate queue attributes slots on bar */
-	vbbar->queues = vctrl->num_queues;
+	vbbar->queues = vctrl->max_queues;
 	vbbar->q_attrs = calloc(vbbar->queues, sizeof(*vbbar->q_attrs));
 	if (!vbbar->q_attrs)
 		goto free_vbbar;
@@ -120,7 +120,6 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 				     const struct snap_virtio_blk_device_attr *bar,
 				     const struct snap_virtio_blk_registers *regs)
 {
-	const struct snap_virtio_caps *vblk_caps;
 	bool ret = true;
 	const struct snap_pci *spci = ctrl->common.sdev->pci;
 	struct snap_virtio_blk_registers regs_whitelist = {};
@@ -130,11 +129,9 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	if (!memcmp(regs, &regs_whitelist, sizeof(regs_whitelist)))
 		return true;
 
-	vblk_caps = &ctrl->common.sdev->sctx->virtio_blk_caps;
-
-	if (regs->max_queues > vblk_caps->max_emulated_virtqs) {
-		snap_error("Cannot create %d queues (max %d)\n", regs->max_queues,
-			   vblk_caps->max_emulated_virtqs);
+	if (regs->max_queues > ctrl->common.max_queues) {
+		snap_error("Cannot create %d queues (max %lu)\n", regs->max_queues,
+			   ctrl->common.max_queues);
 		return false;
 	} else if (regs->max_queues > spci->pci_attr.num_msix - 1) {
 		snap_error("No sufficient msix for %d queues (max %d)\n",
@@ -205,7 +202,6 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 	uint16_t extra_flags = 0;
 	int ret;
 	uint64_t new_ftrs;
-	const struct snap_pci *spci = ctrl->common.sdev->pci;
 
 	/* Get last bar values as a reference */
 	ret = snap_virtio_blk_query_device(ctrl->common.sdev, &bar);
@@ -220,13 +216,18 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 	}
 
 	/*
-	 * if max_queues value wasn't configured on neither hotplug nor
-	 * ctrl creation - just configure to max possible number
+	 * If max_queues was not initialized correctly on bar,
+	 * and user didn't specify specific value for it, just
+	 * use the maximal value possible
 	 */
-	if (!regs->max_queues && !bar.vattr.max_queues) {
-		regs->max_queues = spci->pci_attr.num_msix - 1;
-		snap_warn("No num_queues. Setting to max possible (%d)\n",
-			  regs->max_queues);
+	if (!regs->max_queues) {
+		if (bar.vattr.max_queues < 1 ||
+		    bar.vattr.max_queues > ctrl->common.max_queues) {
+			snap_warn("Invalid num_queues detected on bar. "
+				  "Clamping down to max possible (%lu)\n",
+				  ctrl->common.max_queues);
+			regs->max_queues = ctrl->common.max_queues;
+		}
 	}
 
 	if (regs_mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {

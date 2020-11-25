@@ -144,7 +144,7 @@ struct snap_virtio_ctrl {
 	enum snap_virtio_ctrl_state state;
 	pthread_mutex_t state_lock;
 	struct snap_device *sdev;
-	size_t num_queues;
+	size_t max_queues;
 	size_t enabled_queues;
 	struct snap_virtio_ctrl_queue **queues;
 	struct snap_virtio_queue_ops *q_ops;
