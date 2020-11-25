@@ -40,12 +40,12 @@ int main(int argc, char **argv)
 			uint64_t guest_pa = 4096 * (i + 1);
 
 			if (snap_channel_mark_dirty_page(schannel, guest_pa, 4096)) {
-				fprintf(stderr, "failed to mark dirty page 0x%llx\n",
+				fprintf(stderr, "failed to mark dirty page 0x%lx\n",
 					guest_pa);
 				fflush(stderr);
 				ret = -EAGAIN;
 			} else if (verbose) {
-				fprintf(stdout, "marked dirty page 0x%llx successfully\n",
+				fprintf(stdout, "marked dirty page 0x%lx successfully\n",
 					guest_pa);
 				fflush(stdout);
 			}

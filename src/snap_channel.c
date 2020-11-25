@@ -29,4 +29,5 @@ out:
 void snap_channel_close(struct snap_channel *channel)
 {
 	free(channel);
+	return 0;
 }
