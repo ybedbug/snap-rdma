@@ -335,7 +335,7 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 	attr.msix_vector = vbq->attr->vattr.msix_vector;
 	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
 
-	vbq->q_impl = blk_virtq_create(blk_ctrl->bdev_ops, blk_ctrl->bdev,
+	vbq->q_impl = blk_virtq_create(vbq, blk_ctrl->bdev_ops, blk_ctrl->bdev,
 				       vctrl->sdev, &attr);
 	if (!vbq->q_impl) {
 		snap_error("controller failed to create blk virtq\n");

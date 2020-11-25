@@ -93,7 +93,9 @@ struct blk_virtq_start_attr {
 	int pg_id;
 };
 
-struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
+struct snap_virtio_blk_ctrl_queue *vbq;
+struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
+				       struct snap_bdev_ops *bdev_ops,
 				       void *bdev, struct snap_device *snap_dev,
 				       struct blk_virtq_create_attr *attr);
 void blk_virtq_destroy(struct blk_virtq_ctx *q);

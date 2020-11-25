@@ -182,6 +182,7 @@ struct blk_virtq_priv {
 	int seg_max;
 	int size_max;
 	int pg_id;
+	struct snap_virtio_blk_ctrl_queue *vbq;
 };
 
 static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
@@ -865,6 +866,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 /**
  * blk_virtq_create() - Creates a new blk virtq object, along with RDMA QPs.
+ * @vbq:	parent virt queue
  * @bdev_ops:	operations provided by bdev
  * @bdev:	Backend block device
  * @snap_dev:	Snap device on top virtq is created
@@ -880,7 +882,8 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
  *
  * Return: NULL on failure, new block virtqueue context on success
  */
-struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
+struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
+				       struct snap_bdev_ops *bdev_ops,
 				       void *bdev, struct snap_device *snap_dev,
 				       struct blk_virtq_create_attr *attr)
 {
@@ -905,6 +908,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 	vq_priv->size_max = attr->size_max;
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
 	vq_priv->swq_state = BLK_SW_VIRTQ_RUNNING;
+	vq_priv->vbq = vbq;
 
 	vq_priv->cmd_arr = alloc_blk_virtq_cmd_arr(attr->size_max,
 						   attr->seg_max, vq_priv);
