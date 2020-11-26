@@ -8,8 +8,8 @@ Create new NVMe controller over specific PCI function on host for a
 specific NVM subsystem.
 
 To specify the PCI function to open controller upon, either "pci_bdf"
-("84:00.2") or "pci_index" (0) must be provided, but not both.
-The mapping for pci_bdf and pci_index can be queried by running
+("84:00.2") or "pf_id" (0) must be provided, but not both.
+The mapping for pci_bdf and pf_id can be queried by running
 emulation_functions_list method.
 
 The response contains a uniquely identified controller name, and its

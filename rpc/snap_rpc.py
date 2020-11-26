@@ -311,11 +311,11 @@ def main():
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
-        if args.pci_bdf is None and args.pci_index == -1:
-            raise JsonRpcSnapException("Either pci_bdf or pci_index must "
+        if args.pci_bdf is None and args.pf_id == -1:
+            raise JsonRpcSnapException("Either pci_bdf or pf_id must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pci_index != -1:
-            raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
+        if args.pci_bdf is not None and args.pf_id != -1:
+            raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
                                        "both configured")
         params = {
             'nqn': args.nqn,
@@ -323,8 +323,10 @@ def main():
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
-        if args.pci_index != -1:
-            params['pci_index'] = args.pci_index
+        if args.pf_id != -1:
+            params['pf_id'] = args.pf_id
+        if args.pf_id != -1 and args.vf_id != -1:
+            params['vf_id'] = args.vf_id
         if args.conf:
             params['conf_file'] = args.conf
         if args.nr_io_queues != -1:
@@ -345,10 +347,13 @@ def main():
     p.add_argument('nqn', help='NVMe subsystem nqn', type=str)
     p.add_argument('emu_manager', help='Emulation manager', type=str)
     p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
-                   'Must be set if \'--pci_index\' is not set',
+                   'Must be set if \'--pf_id\' is not set',
                    type=str, required=False)
-    p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
+    p.add_argument('--pf_id', help='PCI PF index to start emulation on. '
                    'Must be set if \'--pci_bdf\' is not set',
+                   default=-1, type=int, required=False)
+    p.add_argument('--vf_id', help='PCI VF index to start emulation on. '
+                   '\'--pf_id\' must also be set to take effect',
                    default=-1, type=int, required=False)
     p.add_argument('-c', '--conf', help='JSON configuration file to use',
                    type=str, required=False)
