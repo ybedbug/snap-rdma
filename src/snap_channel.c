@@ -40,8 +40,7 @@ out:
 	return NULL;
 }
 
-void snap_channel_close(struct snap_channel *channel)
+void snap_channel_close(struct snap_channel *schannel)
 {
-	free(channel);
-	return 0;
+	free(schannel);
 }

@@ -50,7 +50,7 @@ struct snap_channel {
 
 struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
 				       void *data);
-int snap_channel_close(struct snap_channel *channel);
+void snap_channel_close(struct snap_channel *schannel);
 int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_pa,
 				 int length);
 
