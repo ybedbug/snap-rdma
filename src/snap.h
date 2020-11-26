@@ -400,6 +400,64 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 
 /* Live migration support */
+
+/**
+ * struct snap_migration_ops - completion handle and callback
+ * for live migration support
+ *
+ * This structure should be allocated by the snap-controller and can be
+ * passed to communication primitives.
+ *
+ * In order to fulfil the above requirements, each SNAP controller must
+ * implement basic migration operations. Since these operations are generic,
+ * it will be passed during the creation of the snap_device that will create
+ * an internal communication channel. Using these callbacks, the internal
+ * communication channel will be able to master the migration process for the
+ * controller that is represented by this snap_device. By passing these
+ * callbacks, each SNAP controller actually gives supervisor permissions to the
+ * communication channel to change its operational states, save/restore the
+ * internal controller state and start/stop dirty pages tracking.
+ *
+ * @quiesce: This operation will stop the device from issuing DMA requests.
+ * Once successfully returned, the device is not allowed to initiate any
+ * operation that might dirty new pages nor changing other devices state.
+ * The device can still receive requests that might change its internal state.
+ * @unquiesce: This operation is counterpart of the quiesce operation.
+ * Once successfully returned, the device is allowed issuing DMA operations
+ * and change other devices state.
+ * @freeze: This operation will notify the device to stop reacting to incoming
+ * requests.Once successfully returned, the device internal state is not
+ * allowed to change until it is unfreezed again.
+ * @unfreeze: This operation is counterpart of the freeze operation.
+ * Once successfully returned, the device is allowed to react to incoming
+ * requests that might change its internal state.
+ * @get_state_size: Query for internal device state size. In case the
+ * controller is unfreezed, device state can be changed. Controllers that
+ * don't support tracking for state changes while running will return 0 for
+ * this query unless device is freezed. For controllers that track internal
+ * state while running, the implementation is controller specific.
+ * The returned size, in bytes, will inform the migration SW on the upcoming
+ * amount of data that should be copied from the controller.
+ * @copy_state: This operation will be used to save and restore device state.
+ * During "saving" procedure, the controller will copy the internal device
+ * state to a given buffer. The migration SW will query the state size prior
+ * running this operation during "saving" states.
+ * During "restore" procedure, the migration SW will copy the migrated state to
+ * the controller. In this stage, the controller must be freezed and quiesced.
+ * @start_dirty_pages_track: This operation will be used to inform the
+ * controller to start tracking and reporting dirty pages to the communication
+ * channel. A controller can track dirty pages only while running. For live
+ * migration, capable controllers should be able to start tracking dirty pages
+ * during "Pre-copy" phase and stop tracking during "Stop-and-Copy" phase.
+ * @stop_dirty_pages_track: This operation will be used to inform the
+ * controller to stop tracking and reporting dirty pages. For live migration,
+ * capable controllers should be able to start tracking dirty pages during
+ * "Pre-copy" phase and stop tracking during "Stop-and-Copy" phase.
+ * @get_dirty_pages_size: This operation will query for internal size.
+ * @get_dirty_pages: This operation will query for dirty pages.
+ * The hypervisor will be able to collect these dirty pages using the
+ * dma key provided upon opening.
+ */
 struct snap_migration_ops {
 	int (*quiesce)(void *data);
 	int (*unquiesce)(void *data);

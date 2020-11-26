@@ -43,6 +43,16 @@
 
 struct snap_migration_ops;
 
+/**
+ * struct snap_channel - internal struct holds the information of the
+ * communication channel
+ *
+ * @ops: migration ops struct of functions that contains the basic migration
+ * operations (provided by the controller).
+ * @data: controller_data that will be associated with the
+ * caller or application.
+ */
+
 struct snap_channel {
 	const struct snap_migration_ops *ops;
 	void *data;
