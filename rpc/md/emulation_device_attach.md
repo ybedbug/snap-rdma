@@ -1,30 +1,25 @@
 # NAME
 
-emulation_device_attach_virtio_blk - Plug new VirtIO BLK emulated device to host.
+emulation_device_attach - Plug new emulated device as PF on host.
 
 # DESCRIPTION
 
-Attach (plug) new VirtIO BLK emulated device.
-For acquiring block device attributes, block device must be provided,
-while queue-level attributes are kept configurable.
-For pci attributes flexibility, num_msix, total_vf, subsystem_id and
-subsystem_vendor_id are configurable. All other PCI attributes fields
-are pre-determined by Virtio Specification (v1.1).
-
+Attach (plug) new emulated device as host's new PF, as many PCI
+configuration space parameters may be defined.
 The function returns the new PF entry, as will be shown from now on
-in emulation_list() RPC command.
+in emulation_device_list() RPC command.
 
 # Request object
 
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "emulation_device_attach_virtio_blk",
+  "method": "emulation_device_attach",
 
   "params": {
     "emulation_manager": "mlx5_0",
-    "bdev_type": "spdk",
-    "bdev": "Null0",
+    "id": 0x6002,
+    "vid": 0x15b3,
     "ssid": 0,
     "ssvid": 0,
     "num_queues": 8,

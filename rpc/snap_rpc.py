@@ -139,12 +139,23 @@ def main():
                    default=-1, type=int, required=False)
     p.set_defaults(func=emulation_device_detach)
 
-    def emulation_device_attach_virtio_blk(args):
+    def emulation_device_attach(args):
         params = {
             'emulation_manager': args.emu_manager,
-            'ssid': args.ssid,
-            'ssvid': args.ssvid,
+            'device_type': args.type,
         }
+        if args.id:
+            params['id'] = args.id
+        if args.vid:
+            params['vid'] = args.vid
+        if args.ssid:
+            params['ssid'] = args.ssid
+        if args.ssvid:
+            params['ssvid'] = args.ssvid
+        if args.revid:
+            params['revid'] = args.revid
+        if args.class_code:
+            params['class_code'] = args.class_code
         if args.bdev_type:
             params['bdev_type'] = args.bdev_type
         if args.bdev:
@@ -157,14 +168,22 @@ def main():
             params['total_vf'] = args.total_vf
         if args.num_msix:
             params['num_msix'] = args.num_msix
-        result = args.client.call('emulation_device_attach_virtio_blk', params)
+        result = args.client.call('emulation_device_attach', params)
         print(json.dumps(result, indent=2))
-    p = subparsers.add_parser('emulation_device_attach_virtio_blk',
+    p = subparsers.add_parser('emulation_device_attach',
                               help='Attach (plug) VirtIO BLK SNAP device '
                                    'to host')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
-    p.add_argument('--ssid', help='Subsystem ID', type=int, default=0)
-    p.add_argument('--ssvid', help='Subsystem Vendor ID', type=int, default=0)
+    p.add_argument('type', help='Device type', type=str,
+                   choices=['nvme', 'virtio_blk'])
+    p.add_argument('--id', help='Device ID', type=int, required=False)
+    p.add_argument('--vid', help='Vendor ID', type=int, required=False)
+    p.add_argument('--ssid', help='Subsystem Device ID', type=int,
+                   required=False)
+    p.add_argument('--ssvid', help='Subsystem Vendor ID', type=int,
+                   required=False)
+    p.add_argument('--revid', help='Revision ID', type=int, required=False)
+    p.add_argument('--class_code', help='Class Code', type=int, required=False)
     p.add_argument('--bdev_type', help='Block device type', type=str,
                    choices=["spdk", "none"], required=False)
     p.add_argument('--bdev', help='Block device to use as backend', type=str,
@@ -175,7 +194,7 @@ def main():
                    required=False)
     p.add_argument('--num_msix', help='MSI-X vector size', type=int,
                    required=False)
-    p.set_defaults(func=emulation_device_attach_virtio_blk)
+    p.set_defaults(func=emulation_device_attach)
 
     def controller_virtio_blk_delete(args):
         params = {
