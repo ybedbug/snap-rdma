@@ -2943,14 +2943,19 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto unbind_vhca_id;
 	}
 
-	ret = snap_query_functions_info(sctx, attr->type, SNAP_UNINITIALIZED_VHCA_ID,
-					out, output_size);
-	if (ret)
-		goto free_cmd;
+	do {
+		/* Lazy polling until new PF is enumerated by host */
+		usleep(50000);
+		ret = snap_query_functions_info(sctx, attr->type,
+						SNAP_UNINITIALIZED_VHCA_ID,
+						out, output_size);
+		if (ret)
+			goto free_cmd;
 
-	ret = snap_pf_get_pci_info(pf, out);
-	if (ret)
-		goto free_cmd;
+		ret = snap_pf_get_pci_info(pf, out);
+		if (ret)
+			goto free_cmd;
+	} while (!pf->pci_bdf.raw);
 
 	free(out);
 
