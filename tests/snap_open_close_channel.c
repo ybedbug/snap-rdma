@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <signal.h>
 
 #include "snap.h"
 #include "snap_channel.h"
@@ -56,14 +57,22 @@ static struct snap_migration_ops test_ops = {
 	.stop_dirty_pages_track = test_stop_dirty_pages_track,
 };
 
+static bool keep_running;
+
+static void signal_handler(int dummy)
+{
+	keep_running = false;
+}
+
 int main(int argc, char **argv)
 {
 	struct snap_channel *schannel;
 	struct snap_migration_ops *ops;
 	int ret = 0, i, opt, num_pages = 100;
 	bool dirty = false, verbose = false, fail_ops = false;
+	struct sigaction act;
 
-	while ((opt = getopt(argc, argv, "vdfn:")) != -1) {
+	while ((opt = getopt(argc, argv, "vdfkn:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dirty = true;
@@ -77,8 +86,12 @@ int main(int argc, char **argv)
 		case 'f':
 			fail_ops = true;
 			break;
+		case 'k':
+			keep_running = true;
+			break;
 		default:
-			printf("Usage: snap_open_close_channel [-d (dirty page logging)] [-v (verbosity)] [-f (fail ops)] [-n <num_pages>]\n");
+			printf("Usage: snap_open_close_channel [-d (dirty page logging)] "
+			       "[-v (verbosity)] [-f (fail ops)] [-n <num_pages>] [-k (keep_running)]\n");
 			exit(1);
 		}
 	}
@@ -99,6 +112,17 @@ int main(int argc, char **argv)
 		fflush(stderr);
 		ret = -errno;
 		goto out;
+	}
+
+	if (keep_running) {
+		memset(&act, 0, sizeof(act));
+		act.sa_handler = signal_handler;
+		sigaction(SIGINT, &act, 0);
+		sigaction(SIGPIPE, &act, 0);
+		sigaction(SIGTERM, &act, 0);
+
+		while (keep_running)
+			usleep(200000);
 	}
 
 	if (dirty) {
