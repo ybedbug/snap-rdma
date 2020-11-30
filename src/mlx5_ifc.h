@@ -2751,7 +2751,7 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   reserved_at_42[0xe];
 	u8	   vhca_id[0x10];
 
-	u8	   reserved_at_60[0x20];
+	u8	   emulated_device_crossed_vhca_mkey[0x20];
 
 	struct mlx5_ifc_virtio_device_bits virtio_device;
 

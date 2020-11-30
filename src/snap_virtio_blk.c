@@ -65,6 +65,10 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 	attr->max_blk_queues = DEVX_GET(virtio_blk_device_emulation,
 					device_emulation_out,
 					virtio_blk_config.num_queues);
+	attr->crossed_vhca_mkey = DEVX_GET(virtio_blk_device_emulation,
+					   device_emulation_out,
+					   emulated_device_crossed_vhca_mkey);
+
 	attr->vattr.enabled = DEVX_GET(virtio_blk_device_emulation,
 				       device_emulation_out, enabled);
 	attr->modifiable_fields = 0;

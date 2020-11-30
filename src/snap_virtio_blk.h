@@ -68,6 +68,7 @@ struct snap_virtio_blk_device_attr {
 	uint32_t				seg_max;
 	uint32_t				blk_size;
 	uint16_t				max_blk_queues;
+	uint32_t				crossed_vhca_mkey;
 };
 
 struct snap_virtio_blk_device {
