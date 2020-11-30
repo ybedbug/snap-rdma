@@ -2,15 +2,15 @@
 #include "snap_channel.h"
 
 /**
- * snap_device_mark_dirty_page() - Report on a new contiguous memory region
- * that was dirtied by a snap device.
+ * snap_channel_mark_dirty_page() - Report on a new contiguous memory region
+ * that was dirtied by a snap controller.
  * @schannel: snap channel
  * @guest_pa: guest base physical address that was dirtied by the device
  * @length: length in bytes of the dirtied memory for the reported transaction
  *
  * Return: Returns 0 on success, Or negative error value otherwise.
  */
-int snap_channel_mark_dirty_page(struct snap_channel *schanne, uint64_t guest_pa,
+int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_pa,
 				 int length)
 {
 	return 0;

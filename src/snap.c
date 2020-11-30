@@ -19,15 +19,6 @@ static int snap_copy_roce_address(struct snap_device *sdev,
 static int snap_query_functions_info(struct snap_context *sctx,
 		enum snap_emulation_type type, int vhca_id, uint8_t *out, int outlen);
 
-int snap_device_mark_dirty_page(struct snap_device *sdev, uint64_t guest_pa,
-				int length)
-{
-	if (!sdev->channel)
-		return -EINVAL;
-
-	return snap_channel_mark_dirty_page(sdev->channel, guest_pa, length);
-}
-
 static int snap_general_tunneled_cmd(struct snap_device *sdev, void *in,
 		size_t inlen, void *out, size_t outlen, int retries)
 {
@@ -3173,14 +3164,6 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		}
 	}
 
-	if (attr->flags & SNAP_DEVICE_FLAGS_HOST_CHANNEL) {
-		sdev->channel = snap_channel_open(attr->ops, attr->mig_data);
-		if (!sdev->channel) {
-			errno = EINVAL;
-			goto out_free_channel;
-		}
-	}
-
 	if (sdev->pci->hotplug)
 		sdev->pci->hotplug->obj->sdev = sdev;
 
@@ -3190,9 +3173,6 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 
 	return sdev;
 
-out_free_channel:
-	if (sdev->mdev.channel)
-		snap_destroy_event_channel(sdev->mdev.channel);
 out_free_tunnel:
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
@@ -3220,8 +3200,6 @@ void snap_close_device(struct snap_device *sdev)
 	SNAP_TAILQ_REMOVE_SAFE(&sctx->device_list, sdev, entry);
 	pthread_mutex_unlock(&sctx->lock);
 
-	if (sdev->channel)
-		snap_channel_close(sdev->channel);
 	if (sdev->mdev.channel)
 		snap_destroy_event_channel(sdev->mdev.channel);
 	if (sdev->mdev.vtunnel)
