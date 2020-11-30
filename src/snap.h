@@ -126,6 +126,11 @@ struct snap_device_attr {
 	uint32_t		flags; /* Use enum snap_device_attr_flags */
 };
 
+struct snap_cross_mkey {
+	struct mlx5dv_devx_obj *devx_obj;
+	uint32_t mkey;
+};
+
 struct snap_pci_bar {
 	void				*data;
 	unsigned int			size;
@@ -326,6 +331,11 @@ int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs);
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
+
+struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
+					       uint32_t target_mkey,
+					       uint16_t target_vhca_id);
+int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 
 static inline int snap_get_vhca_id(struct snap_device *sdev)
 {

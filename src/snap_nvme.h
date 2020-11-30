@@ -136,11 +136,6 @@ struct snap_nvme_device {
 	struct snap_nvme_sq			*sqs;
 };
 
-struct snap_cross_mkey {
-	struct mlx5dv_devx_obj *devx_obj;
-	uint32_t mkey;
-};
-
 int snap_nvme_init_device(struct snap_device *sdev);
 int snap_nvme_teardown_device(struct snap_device *sdev);
 int snap_nvme_query_device(struct snap_device *sdev,
@@ -162,9 +157,4 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 	struct snap_nvme_sq_attr *attr);
 int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_nvme_sq_attr *attr);
-
-struct snap_cross_mkey *snap_nvme_create_cross_mkey(struct ibv_pd *pd,
-						    uint32_t target_mkey,
-						    uint16_t target_vhca_id);
-int snap_nvme_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 #endif
