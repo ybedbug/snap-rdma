@@ -475,10 +475,13 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->hotplug_supported = true;
 
 	if (DEVX_GET(query_hca_cap_out, out,
-		capability.cmd_hca_cap.crossing_vhca_mkey))
+		capability.cmd_hca_cap.crossing_vhca_mkey)) {
 		sctx->nvme_caps.crossing_vhca_mkey = true;
-	else
+		sctx->virtio_blk_caps.crossing_vhca_mkey = true;
+	} else {
 		sctx->nvme_caps.crossing_vhca_mkey = false;
+		sctx->virtio_blk_caps.crossing_vhca_mkey = false;
+	}
 
 	return 0;
 }
