@@ -41,6 +41,11 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include <linux/if_ether.h>
+#include <netdb.h>
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
+
 /**
  * struct snap_migration_ops - completion handle and callback
  * for live migration support
@@ -110,6 +115,57 @@ struct snap_migration_ops {
 	int (*stop_dirty_pages_track)(void *data);
 };
 
+#define SNAP_CHANNEL_RDMA_IP "SNAP_RDMA_IP"
+#define SNAP_CHANNEL_RDMA_PORT "SNAP_RDMA_PORT"
+
+struct mlx5_snap_cm_req {
+	__u16				pci_bdf;
+};
+
+enum mlx5_snap_opcode {
+	MLX5_SNAP_CMD_START_LOG		= 0x00,
+	MLX5_SNAP_CMD_STOP_LOG		= 0x01,
+	MLX5_SNAP_CMD_GET_LOG_SZ	= 0x02,
+	MLX5_SNAP_CMD_REPORT_LOG	= 0x03,
+	MLX5_SNAP_CMD_FREEZE_DEV	= 0x04,
+	MLX5_SNAP_CMD_UNFREEZE_DEV	= 0x05,
+	MLX5_SNAP_CMD_QUIESCE_DEV	= 0x06,
+	MLX5_SNAP_CMD_UNQUIESCE_DEV	= 0x07,
+	MLX5_SNAP_CMD_GET_STATE_SZ	= 0x08,
+	MLX5_SNAP_CMD_READ_STATE	= 0x09,
+	MLX5_SNAP_CMD_WRITE_STATE	= 0x0a,
+};
+
+struct mlx5_snap_completion {
+	__u16	command_id;
+	__u16	status;
+	__u32	reserved32;
+	__u64	reserved64;
+};
+
+struct mlx5_snap_common_command {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u64			addr;
+	__u32			length;
+	__u32			key;
+	__u32			cdw5;
+	__u32			cdw6;
+	__u32			cdw7;
+	__u32			cdw8;
+	__u32			cdw9;
+	__u32			cdw10;
+	__u32			cdw11;
+	__u32			cdw12;
+	__u32			cdw13;
+	__u32			cdw14;
+	__u32			cdw15;
+};
+
+#define SNAP_CHANNEL_QUEUE_SIZE 64
+#define SNAP_CHANNEL_DESC_SIZE sizeof(struct mlx5_snap_common_command)
+
 /**
  * struct snap_channel - internal struct holds the information of the
  *                       communication channel
@@ -120,8 +176,23 @@ struct snap_migration_ops {
  *        caller or application.
  */
 struct snap_channel {
-	const struct snap_migration_ops *ops;
-	void *data;
+	const struct snap_migration_ops		*ops;
+	void					*data;
+
+	/* CM stuff */
+	pthread_t				cmthread;
+	struct rdma_event_channel		*cm_channel;
+	struct rdma_cm_id			*cm_id; /* connection */
+	struct rdma_cm_id			*listener; /* listener */
+	struct ibv_pd				*pd;
+	struct ibv_cq				*cq;
+	pthread_t				cqthread;
+	struct ibv_comp_channel			*channel;
+	struct ibv_qp				*qp;
+	char					recv_buf[SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_DESC_SIZE];
+	struct ibv_mr				*recv_mr;
+	struct ibv_sge				recv_sgl[SNAP_CHANNEL_QUEUE_SIZE];
+	struct ibv_recv_wr			recv_wr[SNAP_CHANNEL_QUEUE_SIZE];
 };
 
 struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
