@@ -46,6 +46,10 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 
+#define snap_channel_error printf
+#define snap_channel_warn  printf
+#define snap_channel_info  printf
+
 /**
  * struct snap_migration_ops - completion handle and callback
  * for live migration support
