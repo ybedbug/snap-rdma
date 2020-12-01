@@ -141,12 +141,14 @@ enum mlx5_snap_opcode {
 };
 
 enum mlx5_snap_cmd_status {
-	MLX5_SNAP_SC_SUCCESS		= 0x0,
-	MLX5_SNAP_SC_INVALID_OPCODE	= 0x1,
-	MLX5_SNAP_SC_INVALID_FIELD	= 0x2,
-	MLX5_SNAP_SC_CMDID_CONFLICT	= 0x3,
-	MLX5_SNAP_SC_DATA_XFER_ERROR	= 0x4,
-	MLX5_SNAP_SC_INTERNAL		= 0x5,
+	MLX5_SNAP_SC_SUCCESS			= 0x0,
+	MLX5_SNAP_SC_INVALID_OPCODE		= 0x1,
+	MLX5_SNAP_SC_INVALID_FIELD		= 0x2,
+	MLX5_SNAP_SC_CMDID_CONFLICT		= 0x3,
+	MLX5_SNAP_SC_DATA_XFER_ERROR		= 0x4,
+	MLX5_SNAP_SC_INTERNAL			= 0x5,
+	MLX5_SNAP_SC_ALREADY_STARTED_LOG	= 0x6,
+	MLX5_SNAP_SC_ALREADY_STOPPED_LOG	= 0x7,
 };
 
 struct mlx5_snap_completion {
@@ -196,9 +198,38 @@ struct mlx5_snap_common_command {
 	__u32			cdw15;
 };
 
-#define SNAP_CHANNEL_QUEUE_SIZE 64
+#define SNAP_CHANNEL_QUEUE_SIZE	64
 #define SNAP_CHANNEL_DESC_SIZE sizeof(struct mlx5_snap_common_command)
 #define SNAP_CHANNEL_RSP_SIZE sizeof(struct mlx5_snap_completion)
+
+#define SNAP_CHANNEL_BITMAP_ELEM_SZ sizeof(uint8_t)
+#define SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ 1048576
+
+/*
+ * Inital bitmap size is 1MB (will cover 32GB guest memory in case the page
+ * size is 4KB since each bit represents a page
+ */
+#define SNAP_CHANNEL_INITIAL_BITMAP_SIZE \
+	(SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ * SNAP_CHANNEL_BITMAP_ELEM_SZ)
+
+/**
+ * struct snap_dirty pages - internal struct holds the information of the
+ *                           dirty pages in a bit per page manner.
+ *
+ * @page_size: the page size that is represented by a bit, given by the host.
+ * @bmap_num_elements: size of the bmap array, initial equals to
+ *                     SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ. increase by x2
+ *                     factor when required.
+ * @lock: bitmap lock.
+ * @bmap: dirty pages bitmap array with bmap_num_elements elements.
+ */
+struct snap_dirty_pages {
+	int		page_size;
+	uint64_t	bmap_num_elements;
+	uint64_t	highest_dirty_element;
+	pthread_mutex_t	lock;
+	uint8_t		*bmap;
+};
 
 /**
  * struct snap_channel - internal struct holds the information of the
@@ -208,10 +239,12 @@ struct mlx5_snap_common_command {
  *       operations (provided by the controller).
  * @data: controller_data that will be associated with the
  *        caller or application.
+ * @dirty_pages: dirty pages struct, used to track dirty pages.
  */
 struct snap_channel {
 	const struct snap_migration_ops		*ops;
 	void					*data;
+	struct snap_dirty_pages			dirty_pages;
 
 	/* CM stuff */
 	pthread_t				cmthread;

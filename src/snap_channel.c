@@ -10,25 +10,45 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 		struct mlx5_snap_completion *cqe)
 {
 	struct mlx5_snap_start_dirty_log_command *dirty_cmd;
+	struct snap_dirty_pages *dirty_pages;
 	int ret;
 
 	dirty_cmd = (struct mlx5_snap_start_dirty_log_command *)cmd;
 	snap_channel_info("schannel 0x%p start track with %u page size\n",
 			  schannel, dirty_cmd->page_size);
 
-	/* prepare the bitmap DB according to the given page size in the cmd */
+	if (schannel->dirty_pages.bmap) {
+		errno = EPERM;
+		snap_channel_error("dirty pages logging have been started\n");
+		cqe->status = MLX5_SNAP_SC_ALREADY_STARTED_LOG;
+		goto out;
+	}
+	dirty_pages = &schannel->dirty_pages;
+	dirty_pages->bmap = calloc(1, SNAP_CHANNEL_INITIAL_BITMAP_SIZE);
+	if (!dirty_pages->bmap) {
+		errno = ENOMEM;
+		snap_channel_error("failed to allocate dirty pages bitmap\n");
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+		goto out;
+	}
+
+	dirty_pages->bmap_num_elements = SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ;
+	dirty_pages->highest_dirty_element = 0;
+	dirty_pages->page_size = dirty_cmd->page_size;
 
 	ret = schannel->ops->start_dirty_pages_track(schannel->data);
 	if (ret) {
 		snap_channel_info("schannel 0x%p failed to start track\n",
 				  schannel);
+		free(dirty_pages->bmap);
+		dirty_pages->bmap = NULL;
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	} else {
 		snap_channel_info("schannel 0x%p started dirty track\n",
 				  schannel);
 		cqe->status = MLX5_SNAP_SC_SUCCESS;
 	}
-
+out:
 	return 0;
 }
 
@@ -640,10 +660,18 @@ struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
 		errno = ENOMEM;
 		goto out;
 	}
+	/* for dirty pages tracking */
+	schannel->dirty_pages.bmap = NULL;
+	if (pthread_mutex_init(&schannel->dirty_pages.lock, NULL) != 0) {
+		errno = ENOMEM;
+		snap_channel_error("mutex init failed\n");
+		goto out_free;
+	}
 
+	/* for communication channel */
 	schannel->cm_channel = rdma_create_event_channel();
 	if (!schannel->cm_channel)
-		goto out_free;
+		goto out_free_mutex;
 
 	ret = rdma_create_id(schannel->cm_channel, &schannel->listener, schannel,
 			     RDMA_PS_TCP);
@@ -690,6 +718,8 @@ out_destroy_id:
 	rdma_destroy_id(schannel->listener);
 out_free_cm_channel:
 	rdma_destroy_event_channel(schannel->cm_channel);
+out_free_mutex:
+	pthread_mutex_destroy(&schannel->dirty_pages.lock);
 out_free:
 	free(schannel);
 out:
@@ -704,9 +734,12 @@ out:
  */
 void snap_channel_close(struct snap_channel *schannel)
 {
+	if (schannel->dirty_pages.bmap)
+		free(schannel->dirty_pages.bmap);
 	pthread_cancel(schannel->cmthread);
 	pthread_join(schannel->cmthread, NULL);
 	rdma_destroy_id(schannel->listener);
 	rdma_destroy_event_channel(schannel->cm_channel);
+	pthread_mutex_destroy(&schannel->dirty_pages.lock);
 	free(schannel);
 }
