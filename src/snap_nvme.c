@@ -167,8 +167,10 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,
 			   modify_field_select, MLX5_NVME_DEVICE_MODIFY_BAR);
 
-	return mlx5dv_devx_obj_modify(sdev->mdev.device_emulation->obj, in,
-				      in_size, out, sizeof(out));
+	ret = mlx5dv_devx_obj_modify(sdev->mdev.device_emulation->obj, in,
+				     in_size, out, sizeof(out));
+	free(in);
+	return ret;
 }
 
 /**
