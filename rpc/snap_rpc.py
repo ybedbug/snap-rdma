@@ -475,6 +475,8 @@ def main():
             params['cntlid'] = args.cntlid
         if args.qn:
             params['qn'] = args.qn
+        if args.protocol:
+            params['protocol'] = args.protocol
         args.client.call('controller_nvme_namespace_attach', params)
     p = subparsers.add_parser('controller_nvme_namespace_attach',
                               help='Add new NVMe emulation namespace')
@@ -485,11 +487,11 @@ def main():
     p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
                    ' Must be set if \'--ctrl\' is not set',
                    default=-1, type=int, required=False)
-    p.add_argument('bdev_type', help='Block device type', type=str,
-                   choices=["spdk"])
+    p.add_argument('bdev_type', help='Block device type', type=str)
     p.add_argument('bdev', help='Block device to use as backend', type=str)
     p.add_argument('nsid', help='Namespace id (NSID)', type=int)
     p.add_argument('-q', '--qn', help='QN of remote target which provide this ns', type=str)
+    p.add_argument('-p', '--protocol', help='protocol used', type=str)
     p.set_defaults(func=controller_nvme_namespace_attach)
 
     def controller_nvme_namespace_list(args):

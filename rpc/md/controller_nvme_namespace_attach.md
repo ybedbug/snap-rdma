@@ -21,7 +21,8 @@ or alternatively by its subsystem NQN and controller ID.
     "bdev": "Null0",
     "bdev_type": "spdk",
     "nsid": 1,
-    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
+    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt",
+    "protocol": "nvme"
   }
 }
 
@@ -38,7 +39,8 @@ or alternatively by its subsystem NQN and controller ID.
     "bdev": "Null0",
     "bdev_type": "spdk",
     "nsid": 1,
-    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
+    "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt",
+    "protocol": "nvme"
   }
 }
 

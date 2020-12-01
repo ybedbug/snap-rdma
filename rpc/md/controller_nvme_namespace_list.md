@@ -46,13 +46,16 @@ controller name, or alternatively by its subsystem NQN and controller ID.
         "nsid": 1,
         "bdev": "Null0",
         "bdev_type": "spdk",
-        "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
+        "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt",
+        "protocol": "nvme"
       },
       {
         "nsid": 2,
         "bdev": "Malloc0",
         "bdev_type": "spdk",
-        "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt"
+        "qn": "nqn.2014.08.org.nvmexpress.spdk:tgt",
+        "protocol": "nvme"
+      }
     ]
   }
 }
