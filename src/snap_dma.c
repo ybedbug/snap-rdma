@@ -36,7 +36,7 @@
 #define SNAP_DMA_Q_RX_CQE_SIZE  128
 #define SNAP_DMA_Q_TX_CQE_SIZE  64
 #define SNAP_MLX5_RECV_WQE_BB   16
-#define SNAP_DMA_Q_TX_MOD_COUNT 16   /* must be power of 2 */
+#define SNAP_DMA_Q_TX_MOD_COUNT 16
 
 /* GGA specific */
 
@@ -1219,7 +1219,7 @@ static struct snap_dma_q_ops verb_ops = {
 /* DV implementation */
 static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dma_completion *comp)
 {
-	if (comp || ((dv_qp->n_outstanding + 1) & (SNAP_DMA_Q_TX_MOD_COUNT - 1)) == 0)
+	if (comp || dv_qp->n_outstanding + 1 >= SNAP_DMA_Q_TX_MOD_COUNT)
 		return MLX5_WQE_CTRL_CQ_UPDATE;
 	else
 		return 0;
