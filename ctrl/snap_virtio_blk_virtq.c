@@ -687,6 +687,8 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			len = cmd->descs[1].len;
 		else
 			len = VIRTIO_BLK_ID_BYTES;
+
+		cmd->total_in_len += len;
 		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
 			       cmd->descs[1].addr, len);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
