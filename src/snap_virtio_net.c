@@ -168,6 +168,7 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 			goto out_free_virtqs;
 		mac = (uint8_t *)&nattr.mac;
 		eth_random_addr(&mac[2]);
+		nattr.mac = be64toh(nattr.mac);
 		ret = snap_virtio_net_modify_device(sdev,
 						    SNAP_VIRTIO_MOD_DEV_CFG,
 						    &nattr);
