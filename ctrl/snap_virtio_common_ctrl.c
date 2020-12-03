@@ -289,12 +289,12 @@ static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
 						    ctrl->bar_curr->num_of_vfs);
 		if (ret)
 			return ret;
-	}
-
-	ret = snap_rescan_vfs(ctrl->sdev->pci, ctrl->bar_curr->num_of_vfs);
-	if (ret) {
-		snap_error("Failed to rescan vfs\n");
-		return ret;
+	} else {
+		ret = snap_rescan_vfs(ctrl->sdev->pci, ctrl->bar_curr->num_of_vfs);
+		if (ret) {
+			snap_error("Failed to rescan vfs\n");
+			return ret;
+		}
 	}
 
 	return 0;
