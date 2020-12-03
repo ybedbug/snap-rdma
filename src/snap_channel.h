@@ -147,6 +147,26 @@ struct mlx5_snap_completion {
 	__u64	reserved64;
 };
 
+struct mlx5_snap_start_dirty_log_command {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u64			addr;
+	__u32			length;
+	__u32			key;
+	__u32			page_size;
+	__u32			cdw6;
+	__u32			cdw7;
+	__u32			cdw8;
+	__u32			cdw9;
+	__u32			cdw10;
+	__u32			cdw11;
+	__u32			cdw12;
+	__u32			cdw13;
+	__u32			cdw14;
+	__u32			cdw15;
+};
+
 struct mlx5_snap_common_command {
 	__u8			opcode;
 	__u8			flags;
