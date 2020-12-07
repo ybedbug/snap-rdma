@@ -63,10 +63,47 @@ static int snap_channel_get_dirty_size(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
+	struct snap_dirty_pages *dirty_pages;
+
+	dirty_pages = &schannel->dirty_pages;
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	/* In case we've already cached the dirty pages, don't cache more. */
+	if (dirty_pages->copy_bmap_num_elements) {
+		cqe->result = dirty_pages->copy_bmap_num_elements * SNAP_CHANNEL_BITMAP_ELEM_SZ;
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+		goto out_unlock_copy;
+	}
 	/*
 	 * copy current dirty "valid" bitmap to a bounce buffer and return the
-	 * size of the buffer.
+	 * size of the buffer. Also reset the "valid" bitmap.
 	 */
+	pthread_mutex_lock(&dirty_pages->lock);
+	if (dirty_pages->highest_dirty_element) {
+		dirty_pages->copy_bmap_num_elements = dirty_pages->highest_dirty_element;
+		dirty_pages->copy_bmap = calloc(dirty_pages->highest_dirty_element,
+						SNAP_CHANNEL_BITMAP_ELEM_SZ);
+		if (!dirty_pages->copy_bmap) {
+			errno = ENOMEM;
+			snap_channel_error("failed to allocate copy bitmap\n");
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			goto out_unlock;
+		}
+		memcpy(dirty_pages->copy_bmap, dirty_pages->bmap,
+		       dirty_pages->highest_dirty_element * SNAP_CHANNEL_BITMAP_ELEM_SZ);
+		/* reset the bitmap */
+		memset(dirty_pages->bmap, 0,
+		       dirty_pages->highest_dirty_element * SNAP_CHANNEL_BITMAP_ELEM_SZ);
+		dirty_pages->highest_dirty_element = 0;
+		cqe->result = dirty_pages->copy_bmap_num_elements * SNAP_CHANNEL_BITMAP_ELEM_SZ;
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	} else {
+		cqe->result = 0;
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
+out_unlock:
+	pthread_mutex_unlock(&dirty_pages->lock);
+out_unlock_copy:
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
 
 	return 0;
 }
@@ -75,28 +112,80 @@ static int snap_channel_freeze_device(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	return schannel->ops->freeze(schannel->data);
+	int ret;
+
+	ret = schannel->ops->freeze(schannel->data);
+	if (!ret) {
+		snap_channel_info("schannel 0x%p freezed device success\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	} else {
+		snap_channel_error("schannel 0x%p failed to freeze device\n",
+				   schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	}
+
+	return 0;
 }
 
 static int snap_channel_unfreeze_device(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	return schannel->ops->unfreeze(schannel->data);
+	int ret;
+
+	ret = schannel->ops->unfreeze(schannel->data);
+	if (!ret) {
+		snap_channel_info("schannel 0x%p unfreezed device success\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	} else {
+		snap_channel_error("schannel 0x%p failed to unfreeze device\n",
+				   schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	}
+
+	return 0;
 }
 
 static int snap_channel_quiesce_device(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	return schannel->ops->quiesce(schannel->data);
+	int ret;
+
+	ret = schannel->ops->quiesce(schannel->data);
+	if (!ret) {
+		snap_channel_info("schannel 0x%p quiesce device success\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	} else {
+		snap_channel_error("schannel 0x%p failed to quiesce device\n",
+				   schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	}
+
+	return 0;
 }
 
 static int snap_channel_unquiesce_device(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	return schannel->ops->unquiesce(schannel->data);
+	int ret;
+
+	ret = schannel->ops->unquiesce(schannel->data);
+	if (!ret) {
+		snap_channel_info("schannel 0x%p unquiesce device success\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	} else {
+		snap_channel_error("schannel 0x%p failed to unquiesce device\n",
+				   schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	}
+
+	return 0;
 }
 
 static int snap_channel_get_state_size(struct snap_channel *schannel,
@@ -106,7 +195,15 @@ static int snap_channel_get_state_size(struct snap_channel *schannel,
 	int size;
 
 	size = schannel->ops->get_state_size(schannel->data);
-	snap_channel_info("schannel 0x%p state size is %d\n", schannel, size);
+	if (size < 0) {
+		snap_channel_error("failed to get state size\n");
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	} else {
+		snap_channel_info("schannel 0x%p state size is %d\n", schannel,
+				  size);
+		cqe->result = size;
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
 
 	return 0;
 }
@@ -668,10 +765,17 @@ struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
 		goto out_free;
 	}
 
+	schannel->dirty_pages.copy_bmap = NULL;
+	if (pthread_mutex_init(&schannel->dirty_pages.copy_lock, NULL) != 0) {
+		errno = ENOMEM;
+		snap_channel_error("copy mutex init failed\n");
+		goto out_free_mutex;
+	}
+
 	/* for communication channel */
 	schannel->cm_channel = rdma_create_event_channel();
 	if (!schannel->cm_channel)
-		goto out_free_mutex;
+		goto out_free_copy_mutex;
 
 	ret = rdma_create_id(schannel->cm_channel, &schannel->listener, schannel,
 			     RDMA_PS_TCP);
@@ -718,6 +822,8 @@ out_destroy_id:
 	rdma_destroy_id(schannel->listener);
 out_free_cm_channel:
 	rdma_destroy_event_channel(schannel->cm_channel);
+out_free_copy_mutex:
+	pthread_mutex_destroy(&schannel->dirty_pages.copy_lock);
 out_free_mutex:
 	pthread_mutex_destroy(&schannel->dirty_pages.lock);
 out_free:
@@ -740,6 +846,7 @@ void snap_channel_close(struct snap_channel *schannel)
 	pthread_join(schannel->cmthread, NULL);
 	rdma_destroy_id(schannel->listener);
 	rdma_destroy_event_channel(schannel->cm_channel);
+	pthread_mutex_destroy(&schannel->dirty_pages.copy_lock);
 	pthread_mutex_destroy(&schannel->dirty_pages.lock);
 	free(schannel);
 }

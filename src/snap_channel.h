@@ -229,6 +229,9 @@ struct snap_dirty_pages {
 	uint64_t	highest_dirty_element;
 	pthread_mutex_t	lock;
 	uint8_t		*bmap;
+	uint64_t	copy_bmap_num_elements;
+	pthread_mutex_t	copy_lock;
+	uint8_t		*copy_bmap;
 };
 
 /**
