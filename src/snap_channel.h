@@ -140,11 +140,20 @@ enum mlx5_snap_opcode {
 	MLX5_SNAP_CMD_WRITE_STATE	= 0x0a,
 };
 
+enum mlx5_snap_cmd_status {
+	MLX5_SNAP_SC_SUCCESS		= 0x0,
+	MLX5_SNAP_SC_INVALID_OPCODE	= 0x1,
+	MLX5_SNAP_SC_INVALID_FIELD	= 0x2,
+	MLX5_SNAP_SC_CMDID_CONFLICT	= 0x3,
+	MLX5_SNAP_SC_DATA_XFER_ERROR	= 0x4,
+	MLX5_SNAP_SC_INTERNAL		= 0x5,
+};
+
 struct mlx5_snap_completion {
 	__u16	command_id;
 	__u16	status;
+	__u64	result;
 	__u32	reserved32;
-	__u64	reserved64;
 };
 
 struct mlx5_snap_start_dirty_log_command {
@@ -189,6 +198,7 @@ struct mlx5_snap_common_command {
 
 #define SNAP_CHANNEL_QUEUE_SIZE 64
 #define SNAP_CHANNEL_DESC_SIZE sizeof(struct mlx5_snap_common_command)
+#define SNAP_CHANNEL_RSP_SIZE sizeof(struct mlx5_snap_completion)
 
 /**
  * struct snap_channel - internal struct holds the information of the
@@ -213,6 +223,10 @@ struct snap_channel {
 	pthread_t				cqthread;
 	struct ibv_comp_channel			*channel;
 	struct ibv_qp				*qp;
+	char					rsp_buf[SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_RSP_SIZE];
+	struct ibv_mr				*rsp_mr;
+	struct ibv_sge				rsp_sgl[SNAP_CHANNEL_QUEUE_SIZE];
+	struct ibv_send_wr			rsp_wr[SNAP_CHANNEL_QUEUE_SIZE];
 	char					recv_buf[SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_DESC_SIZE];
 	struct ibv_mr				*recv_mr;
 	struct ibv_sge				recv_sgl[SNAP_CHANNEL_QUEUE_SIZE];

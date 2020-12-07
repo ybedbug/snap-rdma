@@ -1,23 +1,47 @@
+#include <unistd.h>
+
 #include "snap_channel.h"
 
 #define SNAP_CHANNEL_POLL_BATCH 16
 #define SNAP_CHANNEL_MAX_COMPLETIONS 64
 
 static int snap_channel_start_dirty_track(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
+	struct mlx5_snap_start_dirty_log_command *dirty_cmd;
+	int ret;
+
+	dirty_cmd = (struct mlx5_snap_start_dirty_log_command *)cmd;
+	snap_channel_info("schannel 0x%p start track with %u page size\n",
+			  schannel, dirty_cmd->page_size);
+
 	/* prepare the bitmap DB according to the given page size in the cmd */
-	return schannel->ops->start_dirty_pages_track(schannel->data);
+
+	ret = schannel->ops->start_dirty_pages_track(schannel->data);
+	if (ret) {
+		snap_channel_info("schannel 0x%p failed to start track\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	} else {
+		snap_channel_info("schannel 0x%p started dirty track\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
+
+	return 0;
 }
 
 static int snap_channel_stop_dirty_track(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return schannel->ops->stop_dirty_pages_track(schannel->data);
 }
 
 static int snap_channel_get_dirty_size(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	/*
 	 * copy current dirty "valid" bitmap to a bounce buffer and return the
@@ -28,31 +52,36 @@ static int snap_channel_get_dirty_size(struct snap_channel *schannel,
 }
 
 static int snap_channel_freeze_device(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return schannel->ops->freeze(schannel->data);
 }
 
 static int snap_channel_unfreeze_device(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return schannel->ops->unfreeze(schannel->data);
 }
 
 static int snap_channel_quiesce_device(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return schannel->ops->quiesce(schannel->data);
 }
 
 static int snap_channel_unquiesce_device(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return schannel->ops->unquiesce(schannel->data);
 }
 
 static int snap_channel_get_state_size(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	int size;
 
@@ -63,62 +92,85 @@ static int snap_channel_get_state_size(struct snap_channel *schannel,
 }
 
 static int snap_channel_read_state(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return 0;
 }
 
 static int snap_channel_write_state(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
 {
 	return 0;
 }
 
 static int snap_channel_process_cmd(struct snap_channel *schannel,
-		struct mlx5_snap_common_command *cmd)
+		struct mlx5_snap_common_command *cmd, __u64 idx)
 {
+	struct ibv_send_wr *send_wr, *bad_wr = NULL;
+	struct mlx5_snap_completion *cqe;
 	__u8 opcode = cmd->opcode;
-	int ret;
+	int ret = 0;
 
-	snap_channel_info("schannel 0x%p got CMD opcode %u\n", schannel, opcode);
+	snap_channel_info("schannel 0x%p got CMD opcode %u id %u\n", schannel,
+			  opcode, cmd->command_id);
+
+	send_wr = &schannel->rsp_wr[idx];
+	cqe = (struct mlx5_snap_completion *) (schannel->rsp_buf +
+			idx * SNAP_CHANNEL_RSP_SIZE);
+
+	cqe->command_id = cmd->command_id;
 
 	switch (opcode) {
 	case MLX5_SNAP_CMD_START_LOG:
-		ret = snap_channel_start_dirty_track(schannel, cmd);
+		ret = snap_channel_start_dirty_track(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_STOP_LOG:
-		ret = snap_channel_stop_dirty_track(schannel, cmd);
+		ret = snap_channel_stop_dirty_track(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_GET_LOG_SZ:
-		ret = snap_channel_get_dirty_size(schannel, cmd);
+		ret = snap_channel_get_dirty_size(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_FREEZE_DEV:
-		ret = snap_channel_freeze_device(schannel, cmd);
+		ret = snap_channel_freeze_device(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_UNFREEZE_DEV:
-		ret = snap_channel_unfreeze_device(schannel, cmd);
+		ret = snap_channel_unfreeze_device(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_QUIESCE_DEV:
-		ret = snap_channel_quiesce_device(schannel, cmd);
+		ret = snap_channel_quiesce_device(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_UNQUIESCE_DEV:
-		ret = snap_channel_unquiesce_device(schannel, cmd);
+		ret = snap_channel_unquiesce_device(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_GET_STATE_SZ:
-		ret = snap_channel_get_state_size(schannel, cmd);
+		ret = snap_channel_get_state_size(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_READ_STATE:
-		ret = snap_channel_read_state(schannel, cmd);
+		ret = snap_channel_read_state(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_WRITE_STATE:
-		ret = snap_channel_write_state(schannel, cmd);
+		ret = snap_channel_write_state(schannel, cmd, cqe);
 		break;
 	default:
+		cqe->status = MLX5_SNAP_SC_INVALID_OPCODE;
 		snap_channel_error("got unexpected opcode %u", opcode);
-		return -EINVAL;
+		break;
 	}
 
-	return ret;
+	/* some internal error happened during processing cmd */
+	if (ret)
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+
+	ret = ibv_post_send(schannel->qp, send_wr, &bad_wr);
+	if (ret) {
+		snap_channel_error("schannel 0x%p failed to post send",
+				   schannel);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int snap_channel_recv_handler(struct snap_channel *schannel,
@@ -127,17 +179,22 @@ static int snap_channel_recv_handler(struct snap_channel *schannel,
 	struct ibv_recv_wr *recv_wr = &schannel->recv_wr[idx];
 	struct ibv_recv_wr *bad_wr;
 	struct mlx5_snap_common_command *cmd;
-	int ret;
+	int ret, retry = 5;
 
 	cmd = (struct mlx5_snap_common_command *) (schannel->recv_buf +
 			idx * SNAP_CHANNEL_DESC_SIZE);
-	ret = snap_channel_process_cmd(schannel, cmd);
-	if (!ret) {
-		ret = ibv_post_recv(schannel->qp, recv_wr, &bad_wr);
-		if (ret)
-			snap_channel_error("schannel failed posting rdma recv,"
-					   " ret = %d index %lld\n", ret, idx);
+retry:
+	/* error means that rsp failed to be posted, retry as best effort */
+	ret = snap_channel_process_cmd(schannel, cmd, idx);
+	if (ret && retry-- > 0) {
+		usleep(200000);
+		goto retry;
 	}
+
+	ret = ibv_post_recv(schannel->qp, recv_wr, &bad_wr);
+	if (ret)
+		snap_channel_error("schannel failed posting rdma recv,"
+				   " ret = %d index %lld\n", ret, idx);
 
 	return ret;
 }
@@ -255,11 +312,38 @@ static void *cq_thread(void *arg)
 static void snap_channel_clean_buffers(struct snap_channel *schannel)
 {
 	ibv_dereg_mr(schannel->recv_mr);
+	ibv_dereg_mr(schannel->rsp_mr);
 }
 
 static int snap_channel_setup_buffers(struct snap_channel *schannel)
 {
 	int i, ret;
+
+	schannel->rsp_mr = ibv_reg_mr(schannel->pd, schannel->rsp_buf,
+				      SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_RSP_SIZE,
+				      IBV_ACCESS_LOCAL_WRITE);
+	if (!schannel->rsp_mr) {
+		snap_channel_error("schannel 0x%p rsp_buf reg_mr failed\n",
+				   schannel);
+		return errno;
+	}
+
+	for (i = 0; i < SNAP_CHANNEL_QUEUE_SIZE; i++) {
+		struct ibv_sge *rsp_sgl = &schannel->rsp_sgl[i];
+		struct ibv_send_wr *rsp_wr = &schannel->rsp_wr[i];
+
+		rsp_sgl->addr = (uint64_t)(schannel->rsp_buf + i * SNAP_CHANNEL_RSP_SIZE);
+		rsp_sgl->length = SNAP_CHANNEL_RSP_SIZE;
+		rsp_sgl->lkey = schannel->rsp_mr->lkey;
+
+		rsp_wr->wr_id = i;
+		rsp_wr->next = NULL;
+		rsp_wr->opcode = IBV_WR_SEND;
+		rsp_wr->send_flags = IBV_SEND_SIGNALED;
+		rsp_wr->sg_list = rsp_sgl;
+		rsp_wr->num_sge = 1;
+		rsp_wr->imm_data = 0;
+	}
 
 	schannel->recv_mr = ibv_reg_mr(schannel->pd, schannel->recv_buf,
 			SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_DESC_SIZE,
@@ -267,7 +351,8 @@ static int snap_channel_setup_buffers(struct snap_channel *schannel)
 	if (!schannel->recv_mr) {
 		snap_channel_error("schannel 0x%p recv_buf reg_mr failed\n",
 				   schannel);
-		return errno;
+		ret = errno;
+		goto out_dereg_rsp_mr;
 	}
 
 	for (i = 0; i < SNAP_CHANNEL_QUEUE_SIZE; i++) {
@@ -296,6 +381,9 @@ static int snap_channel_setup_buffers(struct snap_channel *schannel)
 
 out_dereg_mr:
 	ibv_dereg_mr(schannel->recv_mr);
+out_dereg_rsp_mr:
+	ibv_dereg_mr(schannel->rsp_mr);
+
 	return ret;
 }
 
