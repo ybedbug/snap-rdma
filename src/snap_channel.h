@@ -222,7 +222,10 @@ struct mlx5_snap_common_command {
 #define SNAP_CHANNEL_RSP_SIZE sizeof(struct mlx5_snap_completion)
 
 #define SNAP_CHANNEL_BITMAP_ELEM_SZ sizeof(uint8_t)
+#define SNAP_CHANNEL_BITMAP_ELEM_BIT_SZ (8 * SNAP_CHANNEL_BITMAP_ELEM_SZ)
 #define SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ 1048576
+
+#define snap_channel_max(a, b) (((a) > (b)) ? (a):(b))
 
 /*
  * Inital bitmap size is 1MB (will cover 32GB guest memory in case the page

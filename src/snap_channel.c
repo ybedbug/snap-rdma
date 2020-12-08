@@ -6,6 +6,8 @@
 
 #define SNAP_CHANNEL_POLL_BATCH 16
 #define SNAP_CHANNEL_MAX_COMPLETIONS 64
+/* aligns x to y, y must be a power of 2 */
+#define ALIGN(x, y)  (((x)+(y)-1) & ~((y)-1))
 
 static int snap_channel_rdma_rw(struct snap_channel *schannel,
 		uint64_t local_addr, uint32_t lkey, int len,
@@ -945,6 +947,11 @@ static void snap_channel_clean_qp(struct snap_channel *schannel)
 	ibv_dealloc_pd(schannel->pd);
 }
 
+static inline void write_bit(uint8_t *int_block, int nbit)
+{
+	*int_block = *int_block | (1 << nbit);
+}
+
 static int snap_channel_cm_event_handler(struct rdma_cm_id *cm_id,
 					 struct rdma_cm_event *event)
 {
@@ -1034,6 +1041,23 @@ static int snap_channel_bind_id(struct rdma_cm_id *cm_id, struct addrinfo *res)
 	return 0;
 }
 
+static int snap_channel_get_num_elements(uint64_t start_address, int length, int element_size)
+{
+	uint64_t aligned_pa;
+	int len_to_next_element;
+
+	/* align to element size (ceiling) */
+	aligned_pa = ALIGN(start_address, element_size);
+	if (aligned_pa == start_address)
+		return (length - 1) / element_size + 1;
+	/* the length to next element */
+	len_to_next_element = aligned_pa - start_address;
+	if (length <= len_to_next_element)
+		return 1;
+	/* length > len_to_next_element, thus, we dirty at least 2 pages (+2) */
+	return ((length - 1) - len_to_next_element) / element_size + 2;
+}
+
 /**
  * snap_channel_mark_dirty_page() - Report on a new contiguous memory region
  * that was dirtied by a snap controller.
@@ -1046,7 +1070,46 @@ static int snap_channel_bind_id(struct rdma_cm_id *cm_id, struct addrinfo *res)
 int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_pa,
 				 int length)
 {
-	return 0;
+	int i, bit_num, ret = 0;
+	int page_size, num_dirty_pages, bytes_per_element, num_elements;
+	uint64_t start_page, cur_page, start_element, cur_element, end_element;
+
+	pthread_mutex_lock(&schannel->dirty_pages.lock);
+	if (!schannel->dirty_pages.bmap) {
+		errno = EPERM;
+		snap_channel_error("dirty pages logging have not been started\n");
+		goto out_unlock;
+	}
+	page_size = schannel->dirty_pages.page_size;
+	start_page = guest_pa / page_size;
+	num_dirty_pages = snap_channel_get_num_elements(guest_pa, length, page_size);
+
+	bytes_per_element = page_size * SNAP_CHANNEL_BITMAP_ELEM_BIT_SZ;
+	start_element = guest_pa / bytes_per_element;
+	num_elements = snap_channel_get_num_elements(guest_pa, length, bytes_per_element);
+
+	end_element = start_element + num_elements;
+	snap_channel_info("total dirty bits: %d, end_element: %ld\n", num_dirty_pages, end_element);
+
+	/* realloc case */
+	if (end_element > schannel->dirty_pages.bmap_num_elements) {
+		snap_channel_error("page is out of range\n");
+		ret = -1;
+		goto out_unlock;
+	}
+	/* write to the dirty_pages.bmap */
+	for (i = 0; i < num_dirty_pages; i++) {
+		cur_page = start_page + i;
+		cur_element = cur_page / SNAP_CHANNEL_BITMAP_ELEM_BIT_SZ;
+		bit_num = cur_page % SNAP_CHANNEL_BITMAP_ELEM_BIT_SZ;
+		write_bit(&schannel->dirty_pages.bmap[cur_element], bit_num);
+		snap_channel_info("\tcur_element %ld bit_num %d UP\n", cur_element, bit_num);
+	}
+	schannel->dirty_pages.highest_dirty_element = snap_channel_max(end_element,
+					schannel->dirty_pages.highest_dirty_element);
+out_unlock:
+	pthread_mutex_unlock(&schannel->dirty_pages.lock);
+	return ret;
 }
 
 static void snap_channel_reset_dirty_pages(struct snap_channel *schannel)
