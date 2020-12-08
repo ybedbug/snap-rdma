@@ -122,7 +122,8 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 	if (devx_v)
 		*roce_en = true;
 
-	*mtu = port_attr.active_mtu;
+	/* When active mtu is invalid, default to 1K MTU. */
+	*mtu = port_attr.active_mtu ? port_attr.active_mtu : IBV_MTU_1024;
 	return 0;
 }
 
