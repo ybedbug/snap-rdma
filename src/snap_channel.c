@@ -1,9 +1,67 @@
 #include <unistd.h>
+#include <semaphore.h>
+#include <time.h>
 
 #include "snap_channel.h"
 
 #define SNAP_CHANNEL_POLL_BATCH 16
 #define SNAP_CHANNEL_MAX_COMPLETIONS 64
+
+static int snap_channel_rdma_rw(struct snap_channel *schannel,
+		uint64_t local_addr, uint32_t lkey, int len,
+		uint64_t remote_addr, uint32_t rkey, int opcode)
+{
+	struct ibv_send_wr rdma_wr = {};
+	struct ibv_send_wr *bad_wr;
+	struct timespec ts;
+	sem_t sem;
+	struct ibv_sge sge;
+	int ret;
+
+	ret = sem_init(&sem, 0, 0);
+	if (ret) {
+		snap_channel_error("failed to init sem\n");
+		return ret;
+	}
+	sge.addr = local_addr;
+	sge.length = len;
+	sge.lkey = lkey;
+
+	rdma_wr.opcode = opcode;
+	rdma_wr.wr.rdma.rkey = rkey;
+	rdma_wr.wr.rdma.remote_addr = remote_addr;
+	rdma_wr.send_flags = IBV_SEND_SIGNALED;
+	rdma_wr.sg_list = &sge;
+	rdma_wr.num_sge = 1;
+	rdma_wr.next = NULL;
+	rdma_wr.wr_id = (uintptr_t)&sem;
+
+	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+		snap_channel_error("failed to get system time\n");
+		ret = -EAGAIN;
+		goto out_sem;
+	}
+	ts.tv_sec += 5; //set 5 seconds timeout
+
+	ret = ibv_post_send(schannel->qp, &rdma_wr, &bad_wr);
+	if (ret) {
+		snap_channel_error("schannel 0x%p failed to post rdma\n",
+				   schannel);
+		goto out_sem;
+	}
+
+	if (sem_timedwait(&sem, &ts) == -1) {
+		ret = errno;
+		snap_channel_error("schannel 0x%p failed to semwait\n",
+				   schannel);
+		goto out_sem;
+	}
+
+out_sem:
+	sem_destroy(&sem);
+
+	return ret;
+}
 
 static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
@@ -103,6 +161,57 @@ static int snap_channel_get_dirty_size(struct snap_channel *schannel,
 out_unlock:
 	pthread_mutex_unlock(&dirty_pages->lock);
 out_unlock_copy:
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
+
+	return 0;
+}
+
+static int snap_channel_report_dirty_pages(struct snap_channel *schannel,
+		struct mlx5_snap_common_command *cmd,
+		struct mlx5_snap_completion *cqe)
+{
+	struct snap_dirty_pages *dirty_pages;
+	__u32 length;
+	int ret;
+
+	dirty_pages = &schannel->dirty_pages;
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	length = dirty_pages->copy_bmap_num_elements * SNAP_CHANNEL_BITMAP_ELEM_SZ;
+	if (cmd->length != length) {
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		goto out_unlock;
+	}
+
+	if (length) {
+		struct ibv_mr *mr;
+
+		mr = ibv_reg_mr(schannel->pd, dirty_pages->copy_bmap, length,
+				IBV_ACCESS_LOCAL_WRITE);
+		if (!mr) {
+			snap_channel_error("schannel 0x%p bitmap reg_mr failed\n",
+					   schannel);
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			goto out_unlock;
+		}
+		ret = snap_channel_rdma_rw(schannel, (uintptr_t)dirty_pages->copy_bmap,
+					   mr->lkey, length, cmd->addr,
+					   cmd->key, IBV_WC_RDMA_WRITE);
+		if (ret) {
+			ibv_dereg_mr(mr);
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			goto out_unlock;
+		}
+
+		/* dereg prev MR */
+		if (dirty_pages->copy_mr)
+			ibv_dereg_mr(dirty_pages->copy_mr);
+		dirty_pages->copy_mr = mr;
+	} else {
+		snap_channel_info("schannel 0x%p no dirty pages to report\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
+out_unlock:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
 
 	return 0;
@@ -249,6 +358,9 @@ static int snap_channel_process_cmd(struct snap_channel *schannel,
 	case MLX5_SNAP_CMD_GET_LOG_SZ:
 		ret = snap_channel_get_dirty_size(schannel, cmd, cqe);
 		break;
+	case MLX5_SNAP_CMD_REPORT_LOG:
+		ret = snap_channel_report_dirty_pages(schannel, cmd, cqe);
+		break;
 	case MLX5_SNAP_CMD_FREEZE_DEV:
 		ret = snap_channel_freeze_device(schannel, cmd, cqe);
 		break;
@@ -272,7 +384,7 @@ static int snap_channel_process_cmd(struct snap_channel *schannel,
 		break;
 	default:
 		cqe->status = MLX5_SNAP_SC_INVALID_OPCODE;
-		snap_channel_error("got unexpected opcode %u", opcode);
+		snap_channel_error("got unexpected opcode %u\n", opcode);
 		break;
 	}
 
@@ -280,9 +392,10 @@ static int snap_channel_process_cmd(struct snap_channel *schannel,
 	if (ret)
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 
+	send_wr->wr_id = opcode;
 	ret = ibv_post_send(schannel->qp, send_wr, &bad_wr);
 	if (ret) {
-		snap_channel_error("schannel 0x%p failed to post send",
+		snap_channel_error("schannel 0x%p failed to post send\n",
 				   schannel);
 		return ret;
 	}
@@ -319,6 +432,8 @@ retry:
 static int snap_channel_handle_completion(struct ibv_wc *wc,
 		struct snap_channel *schannel)
 {
+	sem_t *sem;
+	__u8 opcode;
 	int ret;
 
 	if (wc->status == IBV_WC_SUCCESS) {
@@ -338,6 +453,25 @@ static int snap_channel_handle_completion(struct ibv_wc *wc,
 			break;
 		case IBV_WC_SEND:
 			/* nothing to do in send completion */
+			opcode = wc->wr_id;
+			if (opcode == MLX5_SNAP_CMD_REPORT_LOG) {
+				pthread_mutex_lock(&schannel->dirty_pages.copy_lock);
+				if (schannel->dirty_pages.copy_bmap_num_elements) {
+					schannel->dirty_pages.copy_bmap_num_elements = 0;
+					free(schannel->dirty_pages.copy_bmap);
+					schannel->dirty_pages.copy_bmap = NULL;
+				}
+				if (schannel->dirty_pages.copy_mr) {
+					ibv_dereg_mr(schannel->dirty_pages.copy_mr);
+					schannel->dirty_pages.copy_mr = NULL;
+				}
+				pthread_mutex_unlock(&schannel->dirty_pages.copy_lock);
+			}
+			break;
+		case IBV_WC_RDMA_READ:
+		case IBV_WC_RDMA_WRITE:
+			sem = (sem_t *)wc->wr_id;
+			sem_post(sem);
 			break;
 		default:
 			snap_channel_error("Received an unexpected completion "
@@ -347,7 +481,7 @@ static int snap_channel_handle_completion(struct ibv_wc *wc,
 	} else if (wc->status == IBV_WC_WR_FLUSH_ERR) {
 		snap_channel_info("received IBV_WC_WR_FLUSH_ERR comp status\n");
 	} else {
-		snap_channel_error("received %d comp status", wc->status);
+		snap_channel_error("received %d comp status\n", wc->status);
 	}
 
 	return 0;
@@ -453,7 +587,6 @@ static int snap_channel_setup_buffers(struct snap_channel *schannel)
 		rsp_sgl->length = SNAP_CHANNEL_RSP_SIZE;
 		rsp_sgl->lkey = schannel->rsp_mr->lkey;
 
-		rsp_wr->wr_id = i;
 		rsp_wr->next = NULL;
 		rsp_wr->opcode = IBV_WR_SEND;
 		rsp_wr->send_flags = IBV_SEND_SIGNALED;
