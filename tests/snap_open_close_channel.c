@@ -57,6 +57,12 @@ static struct snap_migration_ops test_ops = {
 	.stop_dirty_pages_track = test_stop_dirty_pages_track,
 };
 
+static void usage(char *name)
+{
+	printf("%s [-d (dirty page logging)] [-v (verbosity)] [-f (fail ops)]"
+		"[-n <num_pages>] [-s <start_pa>]\n", name);
+}
+
 static bool keep_running;
 
 static void signal_handler(int dummy)
@@ -68,11 +74,12 @@ int main(int argc, char **argv)
 {
 	struct snap_channel *schannel;
 	struct snap_migration_ops *ops;
+	uint64_t start_address = 0;
 	int ret = 0, i, opt, num_pages = 100;
 	bool dirty = false, verbose = false, fail_ops = false;
 	struct sigaction act;
 
-	while ((opt = getopt(argc, argv, "vdfkn:")) != -1) {
+	while ((opt = getopt(argc, argv, "vdfkn:s:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dirty = true;
@@ -89,10 +96,13 @@ int main(int argc, char **argv)
 		case 'k':
 			keep_running = true;
 			break;
+		case 's':
+			start_address = atol(optarg);
+			break;
 		default:
-			printf("Usage: snap_open_close_channel [-d (dirty page logging)] "
-			       "[-v (verbosity)] [-f (fail ops)] [-n <num_pages>] [-k (keep_running)]\n");
-			exit(1);
+			usage("snap_open_close_channel");
+			ret = EINVAL;
+			goto out;
 		}
 	}
 
@@ -127,7 +137,7 @@ int main(int argc, char **argv)
 
 	if (dirty) {
 		for (i = 0; i < num_pages; i++) {
-			uint64_t guest_pa = 4096 * (i + 1);
+			uint64_t guest_pa = start_address + 4096 * i;
 
 			if (snap_channel_mark_dirty_page(schannel, guest_pa, 4096)) {
 				fprintf(stderr, "failed to mark dirty page 0x%lx\n",
