@@ -9,6 +9,12 @@
 /* aligns x to y, y must be a power of 2 */
 #define ALIGN(x, y)  (((x)+(y)-1) & ~((y)-1))
 
+
+static inline bool is_power_of_two(uint x)
+{
+	return (x != 0) && ((x & (x - 1)) == 0);
+}
+
 static int snap_channel_rdma_rw(struct snap_channel *schannel,
 		uint64_t local_addr, uint32_t lkey, int len,
 		uint64_t remote_addr, uint32_t rkey, int opcode)
@@ -74,6 +80,12 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 	int ret;
 
 	dirty_cmd = (struct mlx5_snap_start_dirty_log_command *)cmd;
+	if (!is_power_of_two(dirty_cmd->page_size)) {
+		errno = EINVAL;
+		snap_channel_error("page_size must be a power of 2\n");
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		goto out;
+	}
 	snap_channel_info("schannel 0x%p start track with %u page size\n",
 			  schannel, dirty_cmd->page_size);
 
@@ -83,14 +95,14 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 		errno = EPERM;
 		snap_channel_error("dirty pages logging have been started\n");
 		cqe->status = MLX5_SNAP_SC_ALREADY_STARTED_LOG;
-		goto out;
+		goto out_unlock;
 	}
 	dirty_pages->bmap = calloc(1, SNAP_CHANNEL_INITIAL_BITMAP_SIZE);
 	if (!dirty_pages->bmap) {
 		errno = ENOMEM;
 		snap_channel_error("failed to allocate dirty pages bitmap\n");
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
-		goto out;
+		goto out_unlock;
 	}
 
 	dirty_pages->bmap_num_elements = SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ;
@@ -109,8 +121,9 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 				  schannel);
 		cqe->status = MLX5_SNAP_SC_SUCCESS;
 	}
-out:
+out_unlock:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
+out:
 	return 0;
 }
 
