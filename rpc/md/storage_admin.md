@@ -17,11 +17,10 @@ Will return the output from the result (errno) and output (stdout/stderr) of the
   "params": {
     "op": "connect",
     "protocol": "nvme",
-    "transport": "rdma",
     "policy": "default",
     "qn": "sub0",
     "hostqn": "nqn.bf1",
-    "paths": ["adrfam:ipv4/traddr=1.1.1.1/trsvcid=4420","adrfam:ipv4/traddr=2.2.2.2/trsvcid=4421"]
+    "paths": ["transport=rdma/adrfam=ipv4/traddr=1.1.1.1/trsvcid=4420","transport=rdma/adrfam=ipv4/traddr=2.2.2.2/trsvcid=4421"]
   }
 }
 
@@ -32,7 +31,7 @@ Will return the output from the result (errno) and output (stdout/stderr) of the
   "id": 1,
   "result": {
     "status": 0,
-    "output": "/dev/nvme0n1,/dev/nvme0n2"
+    "output": "type=kernel:dev=/dev/nvme0n1:block_size=512,type=kernel:dev=..."
   }
 }
 

@@ -574,8 +574,6 @@ def main():
             'protocol': args.protocol,
             'op': args.op,
         }
-        if args.transport:
-            params['transport'] = args.transport
         if args.policy:
             params['policy'] = args.policy
         if args.qn:
@@ -584,6 +582,10 @@ def main():
             params['hostqn'] = args.hostqn
         if args.path:
             params['paths'] = args.path
+        if args.dev:
+            params['dev'] = args.dev
+        if args.type:
+            params['type'] = args.type
 
         result = args.client.call('storage_admin', params)
         print(json.dumps(result, indent=2))
@@ -592,9 +594,7 @@ def main():
     p.add_argument('protocol', help='Storage protocol to use', type=str,
                    choices=['nvme'])
     p.add_argument('op', help='Operation to be run on ARM', type=str,
-                   choices=['connect', 'disconnect', 'discover'])
-    p.add_argument('--transport', help="Transport type to use",
-                   choices=['rdma', 'tcp'], required=False, type=str)
+                   choices=['connect', 'disconnect', 'discover', 'get_bdev_info'])
     p.add_argument('--policy', help="IO policy to use", required=False,
                    type=str)
     p.add_argument('--qn', help="Remote qualified name", required=False,
@@ -604,6 +604,9 @@ def main():
     p.add_argument('--path', action="append",
                    help="Path(s) for remote", required=False,
                    type=str)
+    p.add_argument('--dev', help="Block Device", required=False, type=str)
+    p.add_argument('--type', help="Block Device Type",
+                   choices=['kernel', 'spdk'], required=False, type=str)
     p.set_defaults(func=storage_admin)
 
     def call_rpc_func(args):
