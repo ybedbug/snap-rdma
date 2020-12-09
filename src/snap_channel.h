@@ -36,15 +36,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <string.h>
 #include <stdbool.h>
-#include <errno.h>
-#include <pthread.h>
-
-#include <linux/if_ether.h>
-#include <netdb.h>
-#include <infiniband/verbs.h>
-#include <rdma/rdma_cma.h>
 
 #define snap_channel_error(_fmt, ...) \
 	do { \
@@ -114,10 +106,6 @@
  * controller to stop tracking and reporting dirty pages. For live migration,
  * capable controllers should be able to start tracking dirty pages during
  * "Pre-copy" phase and stop tracking during "Stop-and-Copy" phase.
- * @get_dirty_pages_size: This operation will query for internal size.
- * @get_dirty_pages: This operation will query for dirty pages.
- * The hypervisor will be able to collect these dirty pages using the
- * dma key provided upon opening.
  */
 struct snap_migration_ops {
 	int (*quiesce)(void *data);
@@ -131,204 +119,72 @@ struct snap_migration_ops {
 	int (*stop_dirty_pages_track)(void *data);
 };
 
-#define SNAP_CHANNEL_RDMA_IP "SNAP_RDMA_IP"
-#define SNAP_CHANNEL_RDMA_PORT "SNAP_RDMA_PORT"
-
-struct mlx5_snap_cm_req {
-	__u16				pci_bdf;
-};
-
-enum mlx5_snap_opcode {
-	MLX5_SNAP_CMD_START_LOG		= 0x00,
-	MLX5_SNAP_CMD_STOP_LOG		= 0x01,
-	MLX5_SNAP_CMD_GET_LOG_SZ	= 0x02,
-	MLX5_SNAP_CMD_REPORT_LOG	= 0x03,
-	MLX5_SNAP_CMD_FREEZE_DEV	= 0x04,
-	MLX5_SNAP_CMD_UNFREEZE_DEV	= 0x05,
-	MLX5_SNAP_CMD_QUIESCE_DEV	= 0x06,
-	MLX5_SNAP_CMD_UNQUIESCE_DEV	= 0x07,
-	MLX5_SNAP_CMD_GET_STATE_SZ	= 0x08,
-	MLX5_SNAP_CMD_READ_STATE	= 0x09,
-	MLX5_SNAP_CMD_WRITE_STATE	= 0x0a,
-};
-
-enum mlx5_snap_cmd_status {
-	MLX5_SNAP_SC_SUCCESS			= 0x0,
-	MLX5_SNAP_SC_INVALID_OPCODE		= 0x1,
-	MLX5_SNAP_SC_INVALID_FIELD		= 0x2,
-	MLX5_SNAP_SC_CMDID_CONFLICT		= 0x3,
-	MLX5_SNAP_SC_DATA_XFER_ERROR		= 0x4,
-	MLX5_SNAP_SC_INTERNAL			= 0x5,
-	MLX5_SNAP_SC_ALREADY_STARTED_LOG	= 0x6,
-	MLX5_SNAP_SC_ALREADY_STOPPED_LOG	= 0x7,
-};
-
-struct mlx5_snap_completion {
-	__u16	command_id;
-	__u16	status;
-	__u64	result;
-	__u32	reserved32;
-};
-
-struct mlx5_snap_start_dirty_log_command {
-	__u8			opcode;
-	__u8			flags;
-	__u16			command_id;
-	__u64			addr;
-	__u32			length;
-	__u32			key;
-	__u32			page_size;
-	__u32			cdw6;
-	__u32			cdw7;
-	__u32			cdw8;
-	__u32			cdw9;
-	__u32			cdw10;
-	__u32			cdw11;
-	__u32			cdw12;
-	__u32			cdw13;
-	__u32			cdw14;
-	__u32			cdw15;
-};
-
-struct mlx5_snap_rw_command {
-	__u8			opcode;
-	__u8			flags;
-	__u16			command_id;
-	__u64			addr;
-	__u32			length;
-	__u32			key;
-	__u64			offset;
-	__u32			cdw7;
-	__u32			cdw8;
-	__u32			cdw9;
-	__u32			cdw10;
-	__u32			cdw11;
-	__u32			cdw12;
-	__u32			cdw13;
-	__u32			cdw14;
-	__u32			cdw15;
-};
-
-struct mlx5_snap_common_command {
-	__u8			opcode;
-	__u8			flags;
-	__u16			command_id;
-	__u64			addr;
-	__u32			length;
-	__u32			key;
-	__u32			cdw5;
-	__u32			cdw6;
-	__u32			cdw7;
-	__u32			cdw8;
-	__u32			cdw9;
-	__u32			cdw10;
-	__u32			cdw11;
-	__u32			cdw12;
-	__u32			cdw13;
-	__u32			cdw14;
-	__u32			cdw15;
-};
-
-#define SNAP_CHANNEL_QUEUE_SIZE	64
-#define SNAP_CHANNEL_DESC_SIZE sizeof(struct mlx5_snap_common_command)
-#define SNAP_CHANNEL_RSP_SIZE sizeof(struct mlx5_snap_completion)
-
-#define SNAP_CHANNEL_BITMAP_ELEM_SZ sizeof(uint8_t)
-#define SNAP_CHANNEL_BITMAP_ELEM_BIT_SZ (8 * SNAP_CHANNEL_BITMAP_ELEM_SZ)
-#define SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ 1048576
-
-#define snap_channel_max(a, b) (((a) > (b)) ? (a):(b))
-
-/*
- * Inital bitmap size is 1MB (will cover 32GB guest memory in case the page
- * size is 4KB since each bit represents a page
- */
-#define SNAP_CHANNEL_INITIAL_BITMAP_SIZE \
-	(SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ * SNAP_CHANNEL_BITMAP_ELEM_SZ)
-
-/**
- * struct snap_dirty pages - internal struct holds the information of the
- *                           dirty pages in a bit per page manner.
- *
- * @page_size: the page size that is represented by a bit, given by the host.
- * @bmap_num_elements: size of the bmap array, initial equals to
- *                     SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ. increase by x2
- *                     factor when required. one-based.
- * @highest_dirty_element: the highest dirty element, so we don't have to copy
- *                         the whole bitmap. one-based.
- * @lock: bitmap lock.
- * @bmap: dirty pages bitmap array with bmap_num_elements elements.
- */
-struct snap_dirty_pages {
-	int		page_size;
-	uint64_t	bmap_num_elements;
-	uint64_t	highest_dirty_element;
-	pthread_mutex_t	lock;
-	uint8_t		*bmap;
-	uint64_t	copy_bmap_num_elements;
-	pthread_mutex_t	copy_lock;
-	uint8_t		*copy_bmap;
-	struct ibv_mr	*copy_mr;
-};
-
-/**
- * struct snap_internal_state - struct that holds the information of the
- *                              internal device state.
- *
- * @page_size: the page size that is represented by a bit, given by the host.
- * @bmap_num_elements: size of the bmap array, initial equals to
- *                     SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ. increase by x2
- *                     factor when required.
- * @lock: bitmap lock.
- * @bmap: dirty pages bitmap array with bmap_num_elements elements.
- */
-struct snap_internal_state {
-	uint32_t	state_size;
-	pthread_mutex_t	lock;
-	void		*state;
-	struct ibv_mr	*state_mr;
-};
-
 /**
  * struct snap_channel - internal struct holds the information of the
  *                       communication channel
  *
  * @ops: migration ops struct of functions that contains the basic migration
  *       operations (provided by the controller).
+ * @channel: channel ops struct that is provided by the specific channel
+ *           implementation
  * @data: controller_data that will be associated with the
  *        caller or application.
  * @dirty_pages: dirty pages struct, used to track dirty pages.
  */
 struct snap_channel {
 	const struct snap_migration_ops		*ops;
+	const struct snap_channel_ops		*channel_ops;
 	void					*data;
-	struct snap_dirty_pages			dirty_pages;
-	struct snap_internal_state		state;
-
-	/* CM stuff */
-	pthread_t				cmthread;
-	struct rdma_event_channel		*cm_channel;
-	struct rdma_cm_id			*cm_id; /* connection */
-	struct rdma_cm_id			*listener; /* listener */
-	struct ibv_pd				*pd;
-	struct ibv_cq				*cq;
-	pthread_t				cqthread;
-	struct ibv_comp_channel			*channel;
-	struct ibv_qp				*qp;
-	char					rsp_buf[SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_RSP_SIZE];
-	struct ibv_mr				*rsp_mr;
-	struct ibv_sge				rsp_sgl[SNAP_CHANNEL_QUEUE_SIZE];
-	struct ibv_send_wr			rsp_wr[SNAP_CHANNEL_QUEUE_SIZE];
-	char					recv_buf[SNAP_CHANNEL_QUEUE_SIZE * SNAP_CHANNEL_DESC_SIZE];
-	struct ibv_mr				*recv_mr;
-	struct ibv_sge				recv_sgl[SNAP_CHANNEL_QUEUE_SIZE];
-	struct ibv_recv_wr			recv_wr[SNAP_CHANNEL_QUEUE_SIZE];
 };
 
-struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
+/* API that is used by the controller */
+struct snap_channel *snap_channel_open(const char *name, struct snap_migration_ops *ops,
 				       void *data);
 void snap_channel_close(struct snap_channel *schannel);
 int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_pa,
 				 int length);
+
+/* API that is used by the channel provider */
+
+/**
+ * struct snap_channel_ops - holds specific channel implementation
+ *
+ * Migration channel implementation must provide following fields:
+ *
+ * @name: name of the migration channel implementation
+ * @open: open migration channel
+ * @close: close migration channel
+ * @mark_dirty_page: mark dirty pages
+ *
+ * For example to create foo_channel one should do:
+ * static const struct snap_channel_ops foo_ops = {
+ *      .name = "foo_channel",
+ *      .open = foo_channel_open,
+ *      .close = foo_channel_close,
+ *      .mark_dirty_page = foo_mark_dirty_page
+ * };
+ * SNAP_CHANNEL_DECLARE(foo_channel, foo_ops);
+ */
+struct snap_channel_ops {
+	const char *name;
+	struct snap_channel *(*open)(struct snap_migration_ops *ops, void *data);
+	void (*close)(struct snap_channel *schannel);
+	int (*mark_dirty_page)(struct snap_channel *schannel, uint64_t guest_pa,
+			       int length);
+};
+
+void snap_channel_register(const struct snap_channel_ops *ops);
+
+/*
+ * Convinience macro that creates a constructor function that will
+ * register a snap channel
+ */
+#define SNAP_CHANNEL_DECLARE(channel_name, channel_ops)                        \
+	extern const struct snap_channel_ops snap_channel_##channel_name       \
+		__attribute__((alias(#channel_ops)));                          \
+	static __attribute__((constructor)) void snap_channel_register_##channel_name(void) \
+	{                                                                      \
+		snap_channel_register(&channel_ops);                           \
+	}
 
 #endif
