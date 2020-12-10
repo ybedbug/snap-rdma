@@ -9,6 +9,8 @@
 #define SNAP_INITIALIZE_HCA_RETRY_CNT 100
 #define SNAP_TEARDOWN_HCA_RETRY_CNT 5
 #define SNAP_GENERAL_CMD_USEC_WAIT 50000
+#define SNAP_PCI_ENUMERATE_TIME_WAIT 50000
+#define SNAP_PCI_ENUMERATE_MAX_RETRIES 40
 #define SNAP_UNINITIALIZED_VHCA_ID -1
 
 static int snap_query_functions_info(struct snap_context *sctx,
@@ -2894,7 +2896,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	struct snap_pfs_ctx *pfs_ctx;
 	struct snap_hotplug_device *hotplug;
 	struct snap_pci *pf = NULL;
-	int ret, output_size, i;
+	int ret, output_size, i, retries;
 
 	if (attr->type == SNAP_NVME) {
 		pfs_ctx = &sctx->nvme_pfs;
@@ -2946,9 +2948,19 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto unbind_vhca_id;
 	}
 
+	retries = 0;
 	do {
 		/* Lazy polling until new PF is enumerated by host */
-		usleep(50000);
+		if (retries++ > SNAP_PCI_ENUMERATE_MAX_RETRIES) {
+			snap_warn("Finishing hotplug before PCI enumeration "
+				  "is completed. PCI Enumeration might "
+				  "be blocked\n");
+			snap_warn("Please create a controller on PF id %d "
+				  "so enumeration can be completed", pf->id);
+			break;
+		}
+
+		usleep(SNAP_PCI_ENUMERATE_TIME_WAIT);
 		ret = snap_query_functions_info(sctx, attr->type,
 						SNAP_UNINITIALIZED_VHCA_ID,
 						out, output_size);
