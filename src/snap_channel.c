@@ -1093,9 +1093,18 @@ int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_p
 
 	/* realloc case */
 	if (end_element > schannel->dirty_pages.bmap_num_elements) {
-		snap_channel_error("page is out of range\n");
-		ret = -1;
-		goto out_unlock;
+		while (end_element >= schannel->dirty_pages.bmap_num_elements)
+			schannel->dirty_pages.bmap_num_elements <<= 1;
+		schannel->dirty_pages.bmap = realloc(schannel->dirty_pages.bmap,
+			schannel->dirty_pages.bmap_num_elements * SNAP_CHANNEL_BITMAP_ELEM_SZ);
+		if (!schannel->dirty_pages.bmap) {
+			ret = -ENOMEM;
+			snap_channel_error("unable to realloc dirty pages bitmap\n");
+			schannel->dirty_pages.bmap_num_elements = 0;
+			goto out_unlock;
+		}
+		snap_channel_info("reallocated memory, now the size is %ld\n",
+				  schannel->dirty_pages.bmap_num_elements);
 	}
 	/* write to the dirty_pages.bmap */
 	for (i = 0; i < num_dirty_pages; i++) {
