@@ -75,13 +75,14 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 	snap_channel_info("schannel 0x%p start track with %u page size\n",
 			  schannel, dirty_cmd->page_size);
 
-	if (schannel->dirty_pages.bmap) {
+	dirty_pages = &schannel->dirty_pages;
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	if (dirty_pages->bmap) {
 		errno = EPERM;
 		snap_channel_error("dirty pages logging have been started\n");
 		cqe->status = MLX5_SNAP_SC_ALREADY_STARTED_LOG;
 		goto out;
 	}
-	dirty_pages = &schannel->dirty_pages;
 	dirty_pages->bmap = calloc(1, SNAP_CHANNEL_INITIAL_BITMAP_SIZE);
 	if (!dirty_pages->bmap) {
 		errno = ENOMEM;
@@ -107,6 +108,7 @@ static int snap_channel_start_dirty_track(struct snap_channel *schannel,
 		cqe->status = MLX5_SNAP_SC_SUCCESS;
 	}
 out:
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
 	return 0;
 }
 
@@ -114,7 +116,38 @@ static int snap_channel_stop_dirty_track(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	return schannel->ops->stop_dirty_pages_track(schannel->data);
+	struct snap_dirty_pages *dirty_pages;
+	int ret;
+
+	snap_channel_info("schannel 0x%p stop tracking\n", schannel);
+
+	dirty_pages = &schannel->dirty_pages;
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	if (!dirty_pages->bmap) {
+		errno = EPERM;
+		snap_channel_error("dirty pages logging already stopped or "
+				   "didn't start\n");
+		cqe->status = MLX5_SNAP_SC_ALREADY_STOPPED_LOG;
+		goto out;
+	}
+
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
+	/* on success, all the dirty pages were reported to the channel */
+	ret = schannel->ops->stop_dirty_pages_track(schannel->data);
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	if (ret) {
+		snap_channel_info("schannel 0x%p failed to stop tracking\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	} else {
+		snap_channel_info("schannel 0x%p started dirty track\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
+
+out:
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
+	return 0;
 }
 
 static int snap_channel_get_dirty_size(struct snap_channel *schannel,
@@ -973,8 +1006,22 @@ out:
  */
 void snap_channel_close(struct snap_channel *schannel)
 {
-	if (schannel->dirty_pages.bmap)
+	/* destroy bitmaps if exist */
+	pthread_mutex_lock(&schannel->dirty_pages.lock);
+	if (schannel->dirty_pages.bmap) {
 		free(schannel->dirty_pages.bmap);
+		schannel->dirty_pages.bmap = NULL;
+	}
+	if (schannel->dirty_pages.copy_bmap) {
+		free(schannel->dirty_pages.copy_bmap);
+		schannel->dirty_pages.copy_bmap = NULL;
+	}
+	if (schannel->dirty_pages.copy_mr) {
+		ibv_dereg_mr(schannel->dirty_pages.copy_mr);
+		schannel->dirty_pages.copy_mr = NULL;
+	}
+	pthread_mutex_unlock(&schannel->dirty_pages.lock);
+
 	pthread_cancel(schannel->cmthread);
 	pthread_join(schannel->cmthread, NULL);
 	rdma_destroy_id(schannel->listener);
