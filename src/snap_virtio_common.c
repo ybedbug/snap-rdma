@@ -491,6 +491,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qp->qp_num);
 			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vhca_id);
 		}
+		DEVX_SET(virtio_blk_q, virtq_in, hw_available_index, attr->hw_available_index);
+		DEVX_SET(virtio_blk_q, virtq_in, hw_used_index, attr->hw_used_index);
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
 		struct snap_virtio_net_queue_attr *attr;
@@ -509,6 +511,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_net_q, virtq_in, tso_ipv6, attr->tso_ipv6);
 		DEVX_SET(virtio_net_q, virtq_in, tx_csum, attr->tx_csum);
 		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
+		DEVX_SET(virtio_net_q, virtq_in, hw_available_index, attr->hw_available_index);
+		DEVX_SET(virtio_net_q, virtq_in, hw_used_index, attr->hw_used_index);
 	} else {
 		errno = EINVAL;
 		goto out;
