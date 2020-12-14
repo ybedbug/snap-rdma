@@ -266,7 +266,7 @@ struct snap_dirty_pages {
  * @bmap: dirty pages bitmap array with bmap_num_elements elements.
  */
 struct snap_internal_state {
-	uint64_t	state_size;
+	uint32_t	state_size;
 	pthread_mutex_t	lock;
 	void		*state;
 	struct ibv_mr	*state_mr;

@@ -334,7 +334,17 @@ static int snap_channel_get_state_size(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
-	int size;
+	struct snap_internal_state *state = &schannel->state;
+	int ret, size;
+
+	pthread_mutex_lock(&state->lock);
+	if (state->state_size) {
+		snap_channel_info("schannel 0x%p state size is already set to %u\n",
+				  schannel, state->state_size);
+		cqe->result = state->state_size;
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+		goto out_unlock;
+	}
 
 	size = schannel->ops->get_state_size(schannel->data);
 	if (size < 0) {
@@ -343,9 +353,29 @@ static int snap_channel_get_state_size(struct snap_channel *schannel,
 	} else {
 		snap_channel_info("schannel 0x%p state size is %d\n", schannel,
 				  size);
+		if (size) {
+			state->state = calloc(size, 1);
+			if (!state->state) {
+				errno = ENOMEM;
+				snap_channel_error("failed to allocate state\n");
+				cqe->status = MLX5_SNAP_SC_INTERNAL;
+				goto out_unlock;
+			}
+			ret = schannel->ops->copy_state(schannel->data,
+							state->state,
+							size, false);
+			if (ret) {
+				snap_channel_error("failed to copy state to buffer\n");
+				cqe->status = MLX5_SNAP_SC_INTERNAL;
+				goto out_unlock;
+			}
+		}
+		state->state_size = size;
 		cqe->result = size;
 		cqe->status = MLX5_SNAP_SC_SUCCESS;
 	}
+out_unlock:
+	pthread_mutex_unlock(&state->lock);
 
 	return 0;
 }
@@ -354,6 +384,60 @@ static int snap_channel_read_state(struct snap_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
 		struct mlx5_snap_completion *cqe)
 {
+	struct snap_internal_state *state = &schannel->state;
+	struct mlx5_snap_rw_command *rw;
+	__u32 length;
+	int ret;
+
+	rw = (struct mlx5_snap_rw_command *)cmd;
+	length = rw->length;
+
+	if (rw->offset) {
+		snap_channel_error("state offset is not supported\n");
+		cqe->status = MLX5_SNAP_SC_INTERNAL;
+		goto out;
+	}
+	pthread_mutex_lock(&state->lock);
+
+	if (state->state_size < length) {
+		snap_channel_error("invalid state length asked\n");
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		goto out_unlock;
+	}
+
+	if (length) {
+		struct ibv_mr *mr;
+
+		mr = ibv_reg_mr(schannel->pd, state->state, length,
+				IBV_ACCESS_LOCAL_WRITE);
+		if (!mr) {
+			snap_channel_error("schannel 0x%p state reg_mr failed\n",
+					   schannel);
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			goto out_unlock;
+		}
+		ret = snap_channel_rdma_rw(schannel, (uintptr_t)state->state,
+					   mr->lkey, length, rw->addr,
+					   rw->key, IBV_WC_RDMA_WRITE);
+		if (ret) {
+			ibv_dereg_mr(mr);
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			goto out_unlock;
+		}
+
+		/* dereg prev MR */
+		if (state->state_mr)
+			ibv_dereg_mr(state->state_mr);
+		state->state_mr = mr;
+	} else {
+		snap_channel_info("schannel 0x%p no state to report\n",
+				  schannel);
+		cqe->status = MLX5_SNAP_SC_SUCCESS;
+	}
+
+out_unlock:
+	pthread_mutex_unlock(&state->lock);
+out:
 	return 0;
 }
 
