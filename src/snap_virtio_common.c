@@ -40,6 +40,8 @@ void snap_virtio_get_device_attr(struct snap_device *sdev,
 				  pci_bdf);
 	vattr->status = DEVX_GET(virtio_device, device_configuration,
 				 device_status);
+	vattr->config_generation = DEVX_GET(virtio_device, device_configuration,
+					    config_generation);
 }
 
 int snap_virtio_query_device(struct snap_device *sdev,

@@ -164,6 +164,7 @@ struct snap_virtio_device_attr {
 	uint8_t				status;
 	bool				enabled;
 	uint16_t			num_of_vfs;
+	uint8_t				config_generation;
 };
 
 struct snap_virtio_device {
