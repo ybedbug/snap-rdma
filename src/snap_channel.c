@@ -879,6 +879,104 @@ int snap_channel_mark_dirty_page(struct snap_channel *schannel, uint64_t guest_p
 	return 0;
 }
 
+static void snap_channel_reset_dirty_pages(struct snap_channel *schannel)
+{
+	struct snap_dirty_pages *dirty_pages = &schannel->dirty_pages;
+
+	pthread_mutex_lock(&dirty_pages->copy_lock);
+	if (dirty_pages->copy_bmap) {
+		free(dirty_pages->copy_bmap);
+		dirty_pages->copy_bmap = NULL;
+	}
+	if (schannel->dirty_pages.copy_mr) {
+		ibv_dereg_mr(schannel->dirty_pages.copy_mr);
+		dirty_pages->copy_mr = NULL;
+	}
+	dirty_pages->copy_bmap_num_elements = 0;
+	pthread_mutex_unlock(&dirty_pages->copy_lock);
+
+	pthread_mutex_destroy(&dirty_pages->copy_lock);
+
+	pthread_mutex_lock(&dirty_pages->lock);
+	if (dirty_pages->bmap) {
+		free(dirty_pages->bmap);
+		dirty_pages->bmap = NULL;
+	}
+	dirty_pages->highest_dirty_element = 0;
+	dirty_pages->bmap_num_elements = 0;
+	dirty_pages->page_size = 0;
+	pthread_mutex_unlock(&dirty_pages->lock);
+
+	pthread_mutex_destroy(&dirty_pages->lock);
+}
+
+static int snap_channel_init_dirty_pages(struct snap_channel *schannel)
+{
+	struct snap_dirty_pages *dirty_pages = &schannel->dirty_pages;
+	int ret;
+
+	dirty_pages->page_size = 0;
+	dirty_pages->bmap_num_elements = 0;
+	dirty_pages->highest_dirty_element = 0;
+	dirty_pages->bmap = NULL;
+	dirty_pages->copy_bmap_num_elements = 0;
+	dirty_pages->copy_bmap = NULL;
+	dirty_pages->copy_mr = NULL;
+
+	ret = pthread_mutex_init(&dirty_pages->lock, NULL);
+	if (ret) {
+		snap_channel_error("dirty pages mutex init failed\n");
+		goto out;
+	}
+
+	ret = pthread_mutex_init(&dirty_pages->copy_lock, NULL);
+	if (ret) {
+		snap_channel_error("dirty pages copy_mutex init failed\n");
+		goto out_free_mutex;
+	}
+
+	return 0;
+
+out_free_mutex:
+	pthread_mutex_destroy(&dirty_pages->lock);
+out:
+	return ret;
+}
+
+static int snap_channel_init_internal_state(struct snap_channel *schannel)
+{
+	struct snap_internal_state *state = &schannel->state;
+	int ret;
+
+	state->state_size = 0;
+	state->state = NULL;
+	state->state_mr = NULL;
+	ret = pthread_mutex_init(&state->lock, NULL);
+	if (ret)
+		snap_channel_error("state mutex init failed\n");
+
+	return ret;
+}
+
+static void snap_channel_reset_internal_state(struct snap_channel *schannel)
+{
+	struct snap_internal_state *state = &schannel->state;
+
+	pthread_mutex_lock(&state->lock);
+	if (state->state) {
+		free(state->state);
+		state->state = NULL;
+		state->state_size = 0;
+	}
+	if (state->state_mr) {
+		ibv_dereg_mr(state->state_mr);
+		state->state_mr = NULL;
+	}
+	pthread_mutex_unlock(&state->lock);
+
+	pthread_mutex_destroy(&state->lock);
+}
+
 /**
  * snap_channel_open() - Opens a channel that will listen to host commands.
  * This channel is dedicated for live migration communication between device
@@ -923,25 +1021,25 @@ struct snap_channel *snap_channel_open(struct snap_migration_ops *ops,
 		errno = ENOMEM;
 		goto out;
 	}
-	/* for dirty pages tracking */
-	schannel->dirty_pages.bmap = NULL;
-	if (pthread_mutex_init(&schannel->dirty_pages.lock, NULL) != 0) {
-		errno = ENOMEM;
-		snap_channel_error("mutex init failed\n");
+
+	ret = snap_channel_init_internal_state(schannel);
+	if (ret) {
+		errno = ret;
+		snap_channel_error("init internal state failed\n");
 		goto out_free;
 	}
 
-	schannel->dirty_pages.copy_bmap = NULL;
-	if (pthread_mutex_init(&schannel->dirty_pages.copy_lock, NULL) != 0) {
-		errno = ENOMEM;
-		snap_channel_error("copy mutex init failed\n");
-		goto out_free_mutex;
+	ret = snap_channel_init_dirty_pages(schannel);
+	if (ret) {
+		errno = ret;
+		snap_channel_error("init dirty pages failed\n");
+		goto out_reset_state;
 	}
 
 	/* for communication channel */
 	schannel->cm_channel = rdma_create_event_channel();
 	if (!schannel->cm_channel)
-		goto out_free_copy_mutex;
+		goto out_reset_dirty_pages;
 
 	ret = rdma_create_id(schannel->cm_channel, &schannel->listener, schannel,
 			     RDMA_PS_TCP);
@@ -988,10 +1086,10 @@ out_destroy_id:
 	rdma_destroy_id(schannel->listener);
 out_free_cm_channel:
 	rdma_destroy_event_channel(schannel->cm_channel);
-out_free_copy_mutex:
-	pthread_mutex_destroy(&schannel->dirty_pages.copy_lock);
-out_free_mutex:
-	pthread_mutex_destroy(&schannel->dirty_pages.lock);
+out_reset_dirty_pages:
+	snap_channel_reset_dirty_pages(schannel);
+out_reset_state:
+	snap_channel_reset_internal_state(schannel);
 out_free:
 	free(schannel);
 out:
@@ -1006,27 +1104,11 @@ out:
  */
 void snap_channel_close(struct snap_channel *schannel)
 {
-	/* destroy bitmaps if exist */
-	pthread_mutex_lock(&schannel->dirty_pages.lock);
-	if (schannel->dirty_pages.bmap) {
-		free(schannel->dirty_pages.bmap);
-		schannel->dirty_pages.bmap = NULL;
-	}
-	if (schannel->dirty_pages.copy_bmap) {
-		free(schannel->dirty_pages.copy_bmap);
-		schannel->dirty_pages.copy_bmap = NULL;
-	}
-	if (schannel->dirty_pages.copy_mr) {
-		ibv_dereg_mr(schannel->dirty_pages.copy_mr);
-		schannel->dirty_pages.copy_mr = NULL;
-	}
-	pthread_mutex_unlock(&schannel->dirty_pages.lock);
-
 	pthread_cancel(schannel->cmthread);
 	pthread_join(schannel->cmthread, NULL);
 	rdma_destroy_id(schannel->listener);
 	rdma_destroy_event_channel(schannel->cm_channel);
-	pthread_mutex_destroy(&schannel->dirty_pages.copy_lock);
-	pthread_mutex_destroy(&schannel->dirty_pages.lock);
+	snap_channel_reset_dirty_pages(schannel);
+	snap_channel_reset_internal_state(schannel);
 	free(schannel);
 }
