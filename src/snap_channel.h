@@ -241,7 +241,9 @@ struct mlx5_snap_common_command {
  * @page_size: the page size that is represented by a bit, given by the host.
  * @bmap_num_elements: size of the bmap array, initial equals to
  *                     SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ. increase by x2
- *                     factor when required.
+ *                     factor when required. one-based.
+ * @highest_dirty_element: the highest dirty element, so we don't have to copy
+ *                         the whole bitmap. one-based.
  * @lock: bitmap lock.
  * @bmap: dirty pages bitmap array with bmap_num_elements elements.
  */
