@@ -107,6 +107,12 @@ snap_sample_uio_driver_SOURCES = snap_sample_uio_driver.c \
 				 snap_sample_device.h \
 				 $(UIO_FILES)
 
+pkglib_LTLIBRARIES = sample_channel.la
+
+sample_channel_la_SOURCES = sample_channel.c
+sample_channel_la_CFLAGS = $(LOCAL_CFLAGS)
+sample_channel_la_LDFLAGS =  -avoid-version -module -shared -export-dynamic
+
 if HAVE_GTEST
 noinst_PROGRAMS += gtest_snap_rdma
 
@@ -120,6 +126,7 @@ gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  test_snap_dma.cc \
 			  tests_common.h \
 			  tests_common.cc \
+			  test_sample_channel.cc \
 			  $(UIO_FILES)
 
 gtest_snap_rdma_LDFLAGS = $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)

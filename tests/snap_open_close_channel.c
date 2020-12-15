@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 	else
 		ops = &test_ops;
 
-	schannel = snap_channel_open("rdma_migration_channel", ops, NULL);
+	schannel = snap_channel_open("rdma_channel", ops, NULL);
 	if (!schannel) {
 		if (fail_ops) {
 			fprintf(stdout, "failed to open snap channel as expected. Exiting...\n");
