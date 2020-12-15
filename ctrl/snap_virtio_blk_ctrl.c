@@ -121,7 +121,6 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 				     const struct snap_virtio_blk_registers *regs)
 {
 	bool ret = true;
-	const struct snap_pci *spci = ctrl->common.sdev->pci;
 	struct snap_virtio_blk_registers regs_whitelist = {};
 
 	/* If only capacity is asked to be changed, allow it */
@@ -132,10 +131,6 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	if (regs->max_queues > ctrl->common.max_queues) {
 		snap_error("Cannot create %d queues (max %lu)\n", regs->max_queues,
 			   ctrl->common.max_queues);
-		return false;
-	} else if (regs->max_queues > spci->pci_attr.num_msix - 1) {
-		snap_error("No sufficient msix for %d queues (max %d)\n",
-			   regs->max_queues, spci->pci_attr.num_msix - 1);
 		return false;
 	}
 

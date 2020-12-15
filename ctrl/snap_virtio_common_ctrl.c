@@ -355,7 +355,6 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	int ret = 0;
 	struct snap_device_attr sdev_attr = {0};
 	uint32_t npgs;
-	uint32_t num_queues = 1;
 
 	if (!sctx) {
 		ret = -ENODEV;
@@ -373,11 +372,11 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	sdev_attr.vf_id = attr->vf_id;
 	switch (attr->type) {
 	case SNAP_VIRTIO_BLK_CTRL:
-		num_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
+		ctrl->max_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
 		sdev_attr.type = attr->pci_type;
 		break;
 	case SNAP_VIRTIO_NET_CTRL:
-		num_queues = sctx->virtio_net_caps.max_emulated_virtqs;
+		ctrl->max_queues = sctx->virtio_net_caps.max_emulated_virtqs;
 		sdev_attr.type = attr->pci_type;
 		break;
 	default:
@@ -391,13 +390,6 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		ret = -ENODEV;
 		goto err;
 	}
-
-	/*
-	 * Limit num_queues by both max supported by FW, and num dedicated
-	 * msix. `-1` for dedicated MSIX for config changes channel.
-	 */
-	ctrl->max_queues = snap_min(num_queues,
-				    ctrl->sdev->pci->pci_attr.num_msix - 1);
 
 	ctrl->bar_ops = bar_ops;
 	ctrl->bar_cbs = *attr->bar_cbs;
