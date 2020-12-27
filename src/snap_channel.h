@@ -46,9 +46,21 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 
-#define snap_channel_error printf
-#define snap_channel_warn  printf
-#define snap_channel_info  printf
+#define snap_channel_error(_fmt, ...) \
+	do { \
+		fprintf(stderr, "%s:%d ERR " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
+		fflush(stderr); \
+	 } while (0)
+#define snap_channel_warn(_fmt, ...) \
+	do { \
+		fprintf(stdout, "%s:%d WARN " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
+		fflush(stdout); \
+	 } while (0)
+#define snap_channel_info(_fmt, ...) \
+	do { \
+		fprintf(stdout, "%s:%d INFO " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
+		fflush(stdout); \
+	 } while (0)
 
 /**
  * struct snap_migration_ops - completion handle and callback
