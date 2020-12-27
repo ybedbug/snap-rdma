@@ -155,7 +155,7 @@ static int snap_channel_stop_dirty_track(struct snap_channel *schannel,
 				  schannel);
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	} else {
-		snap_channel_info("schannel 0x%p started dirty track\n",
+		snap_channel_info("schannel 0x%p stop dirty track\n",
 				  schannel);
 		cqe->status = MLX5_SNAP_SC_SUCCESS;
 	}
@@ -243,7 +243,7 @@ static int snap_channel_report_dirty_pages(struct snap_channel *schannel,
 		}
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)dirty_pages->copy_bmap,
 					   mr->lkey, length, cmd->addr,
-					   cmd->key, IBV_WC_RDMA_WRITE);
+					   cmd->key, IBV_WR_RDMA_WRITE);
 		if (ret) {
 			ibv_dereg_mr(mr);
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
@@ -366,9 +366,10 @@ static int snap_channel_get_state_size(struct snap_channel *schannel,
 		snap_channel_error("failed to get state size\n");
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	} else {
-		snap_channel_info("schannel 0x%p state size is %d\n", schannel,
-				  size);
 		if (size) {
+			snap_channel_info("schannel 0x%p state size is %d\n",
+					  schannel, size);
+
 			state->state = calloc(size, 1);
 			if (!state->state) {
 				errno = ENOMEM;
@@ -433,7 +434,7 @@ static int snap_channel_read_state(struct snap_channel *schannel,
 		}
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)state->state,
 					   mr->lkey, length, rw->addr,
-					   rw->key, IBV_WC_RDMA_WRITE);
+					   rw->key, IBV_WR_RDMA_WRITE);
 		if (ret) {
 			ibv_dereg_mr(mr);
 			cqe->status = MLX5_SNAP_SC_DATA_XFER_ERROR;
@@ -513,7 +514,7 @@ static int snap_channel_write_state(struct snap_channel *schannel,
 
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)state->state,
 					   mr->lkey, length, rw->addr,
-					   rw->key, IBV_WC_RDMA_READ);
+					   rw->key, IBV_WR_RDMA_READ);
 		if (ret) {
 			free(state->state);
 			state->state = NULL;
