@@ -33,6 +33,7 @@
 #ifndef SNAP_VIRTIO_NET_H
 #define SNAP_VIRTIO_NET_H
 
+#include <sys/time.h>
 #include "snap.h"
 #include "snap_virtio_common.h"
 
@@ -117,6 +118,9 @@ to_net_device_attr(struct snap_virtio_device_attr *vattr)
 
 static inline void eth_random_addr(uint8_t *addr)
 {
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	srandom(t.tv_sec + t.tv_usec);
 	uint64_t rand = random();
 
 	rand = rand << 32 | random();
