@@ -13,6 +13,9 @@
 #define SNAP_PCI_ENUMERATE_MAX_RETRIES 40
 #define SNAP_UNINITIALIZED_VHCA_ID -1
 
+static int snap_copy_roce_address(struct snap_device *sdev,
+		struct ibv_context *context, int idx);
+
 static int snap_query_functions_info(struct snap_context *sctx,
 		enum snap_emulation_type type, int vhca_id, uint8_t *out, int outlen);
 
@@ -942,13 +945,11 @@ static int snap_modify_qp_to_init(struct mlx5_snap_devx_obj *qp,
 
 static int snap_modify_qp_to_rtr(struct mlx5_snap_devx_obj *qp,
 				 uint32_t qp_num, struct ibv_qp_attr *qp_attr,
-				 int attr_mask)
+				 struct mlx5dv_ah *dv_ah, int attr_mask)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
 	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
-	uint8_t mac[6];
-	uint8_t gid[16];
 
 	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
 	DEVX_SET(init2rtr_qp_in, in, qpn, qp_num);
@@ -980,19 +981,15 @@ static int snap_modify_qp_to_rtr(struct mlx5_snap_devx_obj *qp,
 	if (attr_mask & IBV_QP_AV) {
 		DEVX_SET(qpc, qpc, primary_address_path.tclass,
 			 qp_attr->ah_attr.grh.traffic_class);
-		/* set destination mac */
-		memcpy(gid, qp_attr->ah_attr.grh.dgid.raw, 16);
+		/* set destination gid, mac and udp port */
 		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-		       gid,
+		       qp_attr->ah_attr.grh.dgid.raw,
 		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
-		mac[0] = gid[8] ^ 0x02;
-		mac[1] = gid[9];
-		mac[2] = gid[10];
-		mac[3] = gid[13];
-		mac[4] = gid[14];
-		mac[5] = gid[15];
 		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
-		       mac, 6);
+		       dv_ah->av->rmac, 6);
+		/* av uses rlid to return udp source port */
+		DEVX_SET(qpc, qpc, primary_address_path.udp_sport,
+			 htobe16(dv_ah->av->rlid));
 
 		DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
 			 qp_attr->ah_attr.grh.sgid_index);
@@ -1037,7 +1034,8 @@ static int snap_modify_qp_to_rts(struct mlx5_snap_devx_obj *qp,
 }
 
 static int snap_modify_qp(struct mlx5_snap_devx_obj *qp, uint32_t qp_num,
-			  struct ibv_qp_attr *qp_attr, int attr_mask)
+			  struct ibv_qp_attr *qp_attr, struct mlx5dv_ah *dv_ah,
+			  int attr_mask)
 {
 	int ret;
 
@@ -1050,7 +1048,7 @@ static int snap_modify_qp(struct mlx5_snap_devx_obj *qp, uint32_t qp_num,
 		ret = snap_modify_qp_to_init(qp, qp_num, qp_attr, attr_mask);
 		break;
 	case IBV_QPS_RTR:
-		ret = snap_modify_qp_to_rtr(qp, qp_num, qp_attr, attr_mask);
+		ret = snap_modify_qp_to_rtr(qp, qp_num, qp_attr, dv_ah, attr_mask);
 		break;
 	case IBV_QPS_RTS:
 		ret = snap_modify_qp_to_rts(qp, qp_num, qp_attr, attr_mask);
@@ -1068,13 +1066,10 @@ static int snap_clone_qp(struct snap_device *sdev,
 	struct ibv_qp_attr hw_qp_attr = {};
 	struct ibv_qp_attr attr = {};
 	struct ibv_qp_init_attr init_attr = {};
-	union ibv_gid tmp_gid;
 	int ret, attr_mask;
-
-	/* TODO: remove this WA !! works only for dma_q */
-	ret = ibv_query_gid(qp->context, 1, 0, &tmp_gid);
-	if (ret)
-		return ret;
+	struct ibv_ah *ah;
+	struct mlx5dv_obj  av_obj;
+	struct mlx5dv_ah   dv_ah;
 
 	attr_mask = IBV_QP_PKEY_INDEX |
 		    IBV_QP_PORT |
@@ -1091,16 +1086,34 @@ static int snap_clone_qp(struct snap_device *sdev,
 		    IBV_QP_SQ_PSN |
 		    IBV_QP_MAX_QP_RD_ATOMIC;
 
-
 	ret = ibv_query_qp(qp, &attr, attr_mask, &init_attr);
 	if (ret)
 		return ret;
+
+	if (attr.ah_attr.grh.sgid_index) {
+		ret = snap_copy_roce_address(sdev, qp->context, attr.ah_attr.grh.sgid_index);
+		if (ret)
+			return ret;
+	}
+
+	/* rmac is not a part of av_attr, in order to get it
+	 * we have to create ah and convert it to the dv ah
+	 * which has rmac
+	 */
+	ah = ibv_create_ah(qp->pd, &attr.ah_attr);
+	if (!ah)
+		return -1;
+
+	av_obj.ah.in = ah;
+	av_obj.ah.out = &dv_ah;
+	mlx5dv_init_obj(&av_obj, MLX5DV_OBJ_AH);
+	ibv_destroy_ah(ah);
 
 	hw_qp_attr.qp_state = IBV_QPS_INIT;
 	hw_qp_attr.pkey_index = attr.pkey_index;
 	hw_qp_attr.port_num = attr.port_num;
 	hw_qp_attr.qp_access_flags = attr.qp_access_flags;
-	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr, NULL,
 			     IBV_QP_STATE |
 			     IBV_QP_PKEY_INDEX |
 			     IBV_QP_PORT |
@@ -1116,11 +1129,8 @@ static int snap_clone_qp(struct snap_device *sdev,
 	hw_qp_attr.max_dest_rd_atomic = attr.max_dest_rd_atomic;
 	hw_qp_attr.min_rnr_timer = attr.min_rnr_timer;
 
-	/* TODO: remove the below line. This is WA */
-	memcpy(attr.ah_attr.grh.dgid.raw, tmp_gid.raw, 16);
-
 	memcpy(&hw_qp_attr.ah_attr, &attr.ah_attr, sizeof(attr.ah_attr));
-	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr, &dv_ah,
 			     IBV_QP_STATE |
 			     IBV_QP_PATH_MTU |
 			     IBV_QP_DEST_QPN |
@@ -1138,7 +1148,7 @@ static int snap_clone_qp(struct snap_device *sdev,
 	hw_qp_attr.sq_psn = attr.sq_psn;
 	hw_qp_attr.rnr_retry = attr.rnr_retry;
 	hw_qp_attr.max_rd_atomic = attr.max_rd_atomic;
-	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr,
+	ret = snap_modify_qp(hw_qp->mqp, qp->qp_num, &hw_qp_attr, NULL,
 			     IBV_QP_STATE |
 			     IBV_QP_TIMEOUT |
 			     IBV_QP_RETRY_CNT |
@@ -2020,8 +2030,8 @@ int snap_teardown_device(struct snap_device *sdev)
 	return snap_disable_hca(sdev);
 }
 
-static int snap_set_device_address(struct snap_device *sdev,
-		struct ibv_context *context)
+static int snap_copy_roce_address(struct snap_device *sdev,
+		struct ibv_context *context, int idx)
 {
 	uint8_t qin[DEVX_ST_SZ_BYTES(query_roce_address_in)] = {0};
 	uint8_t qout[DEVX_ST_SZ_BYTES(query_roce_address_out)] = {0};
@@ -2029,14 +2039,9 @@ static int snap_set_device_address(struct snap_device *sdev,
 	uint8_t out[DEVX_ST_SZ_BYTES(set_roce_address_out)] = {0};
 	int ret;
 
-	/*
-	 * Set the emulated function ("host function") address according to
-	 * the networing function address (gid index 0 used for loopback
-	 * address).
-	 */
 	DEVX_SET(query_roce_address_in, qin, opcode,
 		 MLX5_CMD_OP_QUERY_ROCE_ADDRESS);
-	DEVX_SET(query_roce_address_in, qin, roce_address_index, 0);
+	DEVX_SET(query_roce_address_in, qin, roce_address_index, idx);
 
 	ret = mlx5dv_devx_general_cmd(context, qin, sizeof(qin), qout,
 				      sizeof(qout));
@@ -2045,7 +2050,7 @@ static int snap_set_device_address(struct snap_device *sdev,
 
 	DEVX_SET(set_roce_address_in, in, opcode,
 		 MLX5_CMD_OP_SET_ROCE_ADDRESS);
-	DEVX_SET(set_roce_address_in, in, roce_address_index, 0);
+	DEVX_SET(set_roce_address_in, in, roce_address_index, idx);
 	DEVX_SET(set_roce_address_in, in, vhca_port_num, 0);
 
 	memcpy(DEVX_ADDR_OF(set_roce_address_in, in, roce_address),
@@ -2054,6 +2059,17 @@ static int snap_set_device_address(struct snap_device *sdev,
 
 	return snap_general_tunneled_cmd(sdev, in, sizeof(in), out,
 					 sizeof(out), 0);
+}
+
+static int snap_set_device_address(struct snap_device *sdev,
+		struct ibv_context *context)
+{
+	/*
+	 * Set the emulated function ("host function") address according to
+	 * the networing function address (gid index 0 used for loopback
+	 * address).
+	 */
+	return snap_copy_roce_address(sdev, context, 0);
 }
 
 static void snap_destroy_rdma_steering(struct snap_device *sdev)
