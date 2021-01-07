@@ -148,8 +148,6 @@ static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 	struct snap_virtio_ctrl *ctrl = vq->ctrl;
 
 	snap_virtio_ctrl_desched_q(vq);
-	if (ctrl->q_ops->suspend)
-		ctrl->q_ops->suspend(vq);
 	ctrl->q_ops->destroy(vq);
 }
 
