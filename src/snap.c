@@ -2569,7 +2569,7 @@ snap_create_device_object(struct snap_context *sctx,
 	}
 
 	DEVX_SET(device, device_in, total_vf, attr->max_vfs);
-	DEVX_SET(device, device_in, initial_registers_valid, 1);
+	DEVX_SET(device, device_in, initial_registers_valid, !attr->use_default_regs);
 	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
 	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
 	DEVX_SET(device, device_in, pci_params.revision_id, attr->pci_attr.revision_id);
