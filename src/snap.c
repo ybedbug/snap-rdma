@@ -2425,6 +2425,10 @@ static void snap_set_nvme_hotplug_device(struct snap_hotplug_attr *attr,
 {
 	DEVX_SET(device, device_in, device_type,
 		 MLX5_HOTPLUG_DEVICE_TYPE_NVME);
+	DEVX_SET64(device, device_in, emulation_initial_regs.nvme.cap,
+		   htobe64(attr->regs.nvme.cap.raw));
+	DEVX_SET(device, device_in, emulation_initial_regs.nvme.vs,
+		 htobe32(attr->regs.nvme.vs.raw));
 }
 
 static void snap_set_virtio_net_hotplug_device(struct snap_hotplug_attr *attr,

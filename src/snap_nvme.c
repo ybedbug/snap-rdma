@@ -160,8 +160,7 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 		 sdev->pci->mpci.vhca_id);
 
 	memcpy(DEVX_ADDR_OF(nvme_device_emulation, device_emulation_in,
-			    register_data), attr->bar.regs,
-	       sdev->pci->bar.size);
+			    register_data), &attr->bar, sdev->pci->bar.size);
 
 	if (mask & SNAP_NVME_DEV_MOD_BAR)
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,

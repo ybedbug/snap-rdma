@@ -188,8 +188,46 @@ struct snap_device {
 	uint32_t			dma_rkey;
 };
 
-struct snap_nvme_registers {
-	uint8_t			regs[0x50];
+struct __attribute__((packed)) snap_nvme_registers {
+	union {
+		uint64_t raw;
+		struct {
+			uint64_t mqes:16;
+			uint64_t cqr:1;
+			uint64_t ams:2;
+			uint64_t:5;
+			uint64_t to:8;
+			uint64_t dstrd:4;
+			uint64_t nssrs:1;
+			uint64_t css:8;
+			uint64_t bps:1;
+			uint64_t:2;
+			uint64_t mpsmin:4;
+			uint64_t mpsmax:4;
+			uint64_t:8;
+		} bits;
+	} cap;
+	union {
+		uint32_t raw;
+		struct {
+			uint32_t ter:8;
+			uint32_t mnr:8;
+			uint32_t mjr:16;
+		} bits;
+	} vs;
+	uint32_t intms;
+	uint32_t intmc;
+	uint32_t cc;
+	uint32_t csts;
+	uint32_t nssr;
+	uint32_t aqa;
+	uint32_t asq;
+	uint32_t acq;
+	uint32_t cmbloc;
+	uint32_t cmbsz;
+	uint32_t bpinfo;
+	uint32_t bprsel;
+	uint32_t bpmbl;
 };
 
 struct snap_virtio_net_registers {

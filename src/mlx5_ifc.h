@@ -2585,7 +2585,21 @@ struct mlx5_ifc_device_pci_parameters_bits {
 };
 
 struct mlx5_ifc_nvme_initial_registers_bits {
-	u8	reserved_at_0[0x600];
+	u8	cap[0x40];
+	u8	vs[0x20];
+	u8	intms[0x20];
+	u8	intmc[0x20];
+	u8	cc[0x20];
+	u8	csts[0x20];
+	u8	nssr[0x20];
+	u8	aqa[0x20];
+	u8	asq[0x20];
+	u8	acq[0x20];
+	u8	cmbloc[0x20];
+	u8	cmbsz[0x20];
+	u8	bpinfo[0x20];
+	u8	bprsel[0x20];
+	u8	bpmbl[0x20];
 };
 
 struct mlx5_ifc_virtio_net_config_bits {

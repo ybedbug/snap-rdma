@@ -656,7 +656,7 @@ static void ctrl_progress_commands(struct sample_controller *ctrl)
 		return;
 
 	memset(&attr, 0, sizeof(attr));
-	memcpy(attr.bar.regs + SNAP_SAMPLE_DEV_REG_CST, &cmd, sizeof(cmd));
+	memcpy((uint8_t *)&attr.bar + SNAP_SAMPLE_DEV_REG_CST, &cmd, sizeof(cmd));
 	rc = snap_nvme_modify_device(ctrl->sdev, SNAP_NVME_DEV_MOD_BAR, &attr);
 	if (rc)
 		printf("Failed to write commands response\n");
