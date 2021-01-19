@@ -45,7 +45,7 @@ struct snap_virtio_blk_queue_attr {
 	uint64_t			modifiable_fields;//mask of snap_virtio_blk_queue_modify
 	struct ibv_qp			*qp;
 	uint16_t			hw_available_index;
-	uint8_t				hw_used_index;
+	uint16_t			hw_used_index;
 
 	struct snap_virtio_queue_attr   vattr;
 };
