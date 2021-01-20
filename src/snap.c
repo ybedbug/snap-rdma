@@ -10,7 +10,7 @@
 #define SNAP_TEARDOWN_HCA_RETRY_CNT 5
 #define SNAP_GENERAL_CMD_USEC_WAIT 50000
 #define SNAP_PCI_ENUMERATE_TIME_WAIT 50000
-#define SNAP_PCI_ENUMERATE_MAX_RETRIES 40
+#define SNAP_PCI_ENUMERATE_MAX_RETRIES 100
 #define SNAP_UNINITIALIZED_VHCA_ID -1
 
 static int snap_copy_roce_address(struct snap_device *sdev,
@@ -2991,6 +2991,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		if (ret)
 			goto free_cmd;
 	} while (!pf->pci_bdf.raw);
+	snap_debug("PCI enumeration done, retries: %d\n", retries);
 
 	free(out);
 
