@@ -264,6 +264,8 @@ def main():
             params['serial'] = args.serial
         if args.force_in_order:
             params['force_in_order'] = args.force_in_order
+        if args.suspend:
+            params['suspend'] = args.suspend
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -289,6 +291,9 @@ def main():
     p.add_argument('--serial', help='Serial number for the controller',
                    type=str, required=False)
     p.add_argument('--force_in_order', help='Force handle I/O completions in-order ',
+                   required=False, action='store_true')
+    p.add_argument('--suspend', help='Created controller is in the SUSPENDED state. '
+                   'The controller must be explicitely resumed ',
                    required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_create)
 
