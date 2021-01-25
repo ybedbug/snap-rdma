@@ -1,12 +1,12 @@
 Source: mlnx-libsnap
 Section: unknown
 Priority: optional
-Maintainer: Andrii Holovchenko <andriih@mellanox.com>
+Maintainer: Andrii Holovchenko <andriih@nvidia.com>
 Build-Depends: debhelper (>= 10), autotools-dev
 Standards-Version: 4.1.2
-Homepage: www.mellanox.com
+Homepage: www.nvidia.com
 
 Package: mlnx-libsnap
-Architecture: arm64
+Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, librdmacm1
 Description: Library that assists in common tasks when interacting with the emulating hardware in order to present a SNAP device to an external host or a VM.
