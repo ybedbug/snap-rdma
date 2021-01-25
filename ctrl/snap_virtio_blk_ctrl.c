@@ -598,6 +598,7 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 {
 	struct snap_virtio_blk_ctrl *ctrl;
 	int ret;
+	int flags;
 
 	ctrl = calloc(1, sizeof(*ctrl));
 	if (!ctrl) {
@@ -641,9 +642,19 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	if (ret)
 		goto close_ctrl;
 
-	ret = snap_virtio_blk_ctrl_bar_setup(ctrl, &attr->regs,
-					     SNAP_VIRTIO_MOD_PCI_COMMON_CFG |
-					     SNAP_VIRTIO_MOD_DEV_CFG);
+	if (attr->common.suspended) {
+		/* creating controller in the suspended state means that
+		 * there will be a state restore that will override current
+		 * bar config. Also it means that host is not going to touch
+		 * anything. So let state restore do actual configuration
+		 */
+		ctrl->common.state = SNAP_VIRTIO_CTRL_SUSPENDED;
+		flags = 0;
+		snap_info("creating virtio block controller in the SUSPENDED state\n");
+	} else
+		flags = SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_DEV_CFG;
+
+	ret = snap_virtio_blk_ctrl_bar_setup(ctrl, &attr->regs, flags);
 	if (ret)
 		goto teardown_dev;
 

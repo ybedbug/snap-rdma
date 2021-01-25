@@ -121,6 +121,7 @@ struct snap_virtio_ctrl_attr {
 	struct ibv_pd *pd;
 	uint32_t npgs;
 	bool force_in_order;
+	bool suspended;
 };
 
 struct snap_virtio_ctrl_queue {
