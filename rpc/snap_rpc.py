@@ -196,6 +196,28 @@ def main():
                    required=False)
     p.set_defaults(func=emulation_device_attach)
 
+    def controller_virtio_blk_suspend(args):
+        params = {
+            'name': args.name,
+        }
+
+        args.client.call('controller_virtio_blk_suspend', params)
+    p = subparsers.add_parser('controller_virtio_blk_suspend',
+                              help='Suspend VirtIO BLK SNAP controller')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_virtio_blk_suspend)
+
+    def controller_virtio_blk_resume(args):
+        params = {
+            'name': args.name,
+        }
+
+        args.client.call('controller_virtio_blk_resume', params)
+    p = subparsers.add_parser('controller_virtio_blk_resume',
+                              help='Resume VirtIO BLK SNAP controller')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_virtio_blk_resume)
+
     def controller_virtio_blk_delete(args):
         params = {
             'name': args.name,
