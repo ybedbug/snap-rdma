@@ -69,8 +69,8 @@ struct snap_bdev_ops {
 		       struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	void *(*dma_malloc)(size_t size);
 	void (*dma_free)(void *buf);
-	int (*get_num_blocks)(void *ctx);
-	int (*get_block_size)(void *ctx);
+	uint64_t (*get_num_blocks)(void *ctx);
+	uint32_t (*get_block_size)(void *ctx);
 	const char *(*get_bdev_name)(void *ctx);
 };
 

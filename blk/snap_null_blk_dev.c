@@ -58,12 +58,14 @@ static void snap_null_blk_dev_dma_free(void *buf) {
 	free(buf);
 }
 
-static int snap_null_blk_dev_get_num_blocks(void *ctx) {
+static uint64_t snap_null_blk_dev_get_num_blocks(void *ctx)
+{
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
 	return bdev->attrs.size_b;
 }
 
-static int snap_null_blk_dev_get_block_size(void *ctx) {
+static uint32_t snap_null_blk_dev_get_block_size(void *ctx)
+{
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
 	return bdev->attrs.blk_size;
 }
