@@ -218,6 +218,25 @@ def main():
     p.add_argument('name', help='Controller Name', type=str)
     p.set_defaults(func=controller_virtio_blk_resume)
 
+    def controller_virtio_blk_state(args):
+        params = {
+            'name': args.name,
+        }
+
+        if args.save and args.restore:
+            raise JsonRpcSnapException("save and restore cannnot be both configured")
+        if args.save:
+            params['save'] = args.save
+        if args.restore:
+            params['restore'] = args.restore
+
+        args.client.call('controller_virtio_blk_state', params)
+    p = subparsers.add_parser('controller_virtio_blk_state', help='Save or restore controller state')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.add_argument('--save', help='save state to the given file', type=str, required=False)
+    p.add_argument('--restore', help='retore state from the given file', type=str, required=False)
+    p.set_defaults(func=controller_virtio_blk_state)
+
     def controller_virtio_blk_delete(args):
         params = {
             'name': args.name,
