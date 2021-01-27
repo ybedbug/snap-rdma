@@ -2916,7 +2916,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	struct snap_pfs_ctx *pfs_ctx;
 	struct snap_hotplug_device *hotplug;
 	struct snap_pci *pf = NULL;
-	int ret, output_size, i, retries;
+	int ret, output_size, i, retries, max_retries;
 
 	if (attr->type == SNAP_NVME) {
 		pfs_ctx = &sctx->nvme_pfs;
@@ -2969,9 +2969,15 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	}
 
 	retries = 0;
+
+	if (attr->pci_enumerate_max_retries)
+		max_retries = attr->pci_enumerate_max_retries;
+	else
+		max_retries = SNAP_PCI_ENUMERATE_MAX_RETRIES;
+
 	do {
 		/* Lazy polling until new PF is enumerated by host */
-		if (retries++ > SNAP_PCI_ENUMERATE_MAX_RETRIES) {
+		if (retries++ > max_retries) {
 			snap_warn("Finishing hotplug before PCI enumeration "
 				  "is completed. PCI Enumeration might "
 				  "be blocked\n");

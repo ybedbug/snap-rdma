@@ -277,6 +277,7 @@ struct snap_hotplug_attr {
 	bool				use_default_regs;
 	union snap_device_registers	regs;
 	uint16_t			max_vfs;
+	uint16_t			pci_enumerate_max_retries;
 };
 
 struct snap_hotplug_device {
