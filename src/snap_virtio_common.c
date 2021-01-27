@@ -295,6 +295,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	struct mlx5_snap_devx_obj *virtq;
 	int virtq_type, ev_mode, inlen, offload_type, ret;
 	uint32_t pd_id;
+	uint32_t virtio_q_mkey;
 
 	if (vattr->type == SNAP_VIRTQ_SPLIT_MODE) {
 		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
@@ -329,6 +330,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
 		struct snap_virtio_blk_queue_attr *attr;
 		int vhca_id;
+		struct snap_virtio_blk_device_attr blk_dev_attr;
 
 		attr = to_blk_queue_attr(vattr);
 		in = in_blk;
@@ -346,6 +348,16 @@ snap_virtio_create_queue(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qp->qp_num);
 			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vhca_id);
 		}
+
+		ret = snap_virtio_blk_query_device(sdev, &blk_dev_attr);
+		if (ret) {
+			snap_error("Failed to query blk device attr\n");
+			errno = -EINVAL;
+			goto out;
+		}
+		virtio_q_mkey = blk_dev_attr.crossed_vhca_mkey;
+		vattr->dma_mkey = virtio_q_mkey;
+		DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, virtio_q_mkey);
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
 		struct snap_virtio_net_queue_attr *attr;
@@ -582,7 +594,6 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 		vattr->size = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_size);
 		vattr->idx = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_index);
-		vattr->dma_mkey = DEVX_GET(virtio_blk_q, virtq_out, virtqc.virtio_q_mkey);
 
 		state = DEVX_GET(virtio_blk_q, virtq_out, state);
 		if (state == MLX5_VIRTIO_Q_STATE_INIT)
