@@ -152,6 +152,8 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_ENABLED = 1 << 2,
 	SNAP_VIRTIO_MOD_PCI_COMMON_CFG = 1 << 3,
 	SNAP_VIRTIO_MOD_DEV_CFG = 1 << 4,
+	SNAP_VIRTIO_MOD_ALL = 1 << 6,
+	SNAP_VIRTIO_MOD_QUEUE_CFG = 1 << 7,
 };
 
 struct snap_virtio_device_attr {
@@ -165,6 +167,9 @@ struct snap_virtio_device_attr {
 	bool				enabled;
 	uint16_t			num_of_vfs;
 	uint8_t				config_generation;
+	uint8_t				device_feature_select;
+	uint8_t				driver_feature_select;
+	uint16_t			queue_select;
 };
 
 struct snap_virtio_device {

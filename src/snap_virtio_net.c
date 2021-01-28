@@ -69,7 +69,10 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ENABLED;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_CFG;
-
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ALL)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ALL;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_QUEUE_CFG;
 	}
 	attr->mtu = DEVX_GET(virtio_net_device_emulation,
 			     device_emulation_out, virtio_net_config.mtu);

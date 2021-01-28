@@ -42,6 +42,12 @@ void snap_virtio_get_device_attr(struct snap_device *sdev,
 				 device_status);
 	vattr->config_generation = DEVX_GET(virtio_device, device_configuration,
 					    config_generation);
+	vattr->device_feature_select = DEVX_GET(virtio_device, device_configuration,
+						device_feature_select);
+	vattr->driver_feature_select = DEVX_GET(virtio_device, device_configuration,
+						driver_feature_select);
+	vattr->queue_select = DEVX_GET(virtio_device, device_configuration,
+				       queue_select);
 }
 
 int snap_virtio_query_device(struct snap_device *sdev,
@@ -94,19 +100,81 @@ int snap_virtio_query_device(struct snap_device *sdev,
 				     inlen, out, outlen);
 }
 
+static void snap_virtio_net_modify_queues(void *in, struct snap_virtio_device_attr *attr)
+{
+	struct snap_virtio_net_device_attr *nattr = to_net_device_attr(attr);
+	int i;
+	void *q;
+
+	for (i = 0; i < attr->max_queues; i++) {
+		q = DEVX_ADDR_OF(virtio_net_device_emulation, in, virtio_q_configuration[i]);
+
+		DEVX_SET(virtio_q_layout, q, queue_size,
+			 nattr->q_attrs[i].vattr.size);
+		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
+			 nattr->q_attrs[i].vattr.msix_vector);
+		DEVX_SET(virtio_q_layout, q, queue_enable,
+			 nattr->q_attrs[i].vattr.enable);
+		DEVX_SET(virtio_q_layout, q, queue_notify_off,
+			 nattr->q_attrs[i].vattr.notify_off);
+
+		DEVX_SET64(virtio_q_layout, q, queue_desc,
+			   nattr->q_attrs[i].vattr.desc);
+		DEVX_SET64(virtio_q_layout, q, queue_driver,
+			   nattr->q_attrs[i].vattr.driver);
+		DEVX_SET64(virtio_q_layout, q, queue_device,
+			   nattr->q_attrs[i].vattr.device);
+	}
+}
+
+static void snap_virtio_blk_modify_queues(void *in, struct snap_virtio_device_attr *attr)
+{
+	struct snap_virtio_blk_device_attr *battr = to_blk_device_attr(attr);
+	int i;
+	void *q;
+
+	snap_debug("modify queues, %d queues\n", attr->max_queues);
+	for (i = 0; i < attr->max_queues; i++) {
+		snap_debug("size: %u msix %u enable %u notify %u desc 0x%lx avail 0x%lx used 0x%lx\n",
+			   battr->q_attrs[i].vattr.size,
+			   battr->q_attrs[i].vattr.msix_vector,
+			   battr->q_attrs[i].vattr.enable,
+			   battr->q_attrs[i].vattr.notify_off,
+			   battr->q_attrs[i].vattr.desc,
+			   battr->q_attrs[i].vattr.driver,
+			   battr->q_attrs[i].vattr.device);
+
+		q = DEVX_ADDR_OF(virtio_blk_device_emulation, in, virtio_q_configuration[i]);
+		snap_debug("offset %ld\n", q - in);
+
+		DEVX_SET(virtio_q_layout, q, queue_size,
+			 battr->q_attrs[i].vattr.size);
+		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
+			 battr->q_attrs[i].vattr.msix_vector);
+		DEVX_SET(virtio_q_layout, q, queue_enable,
+			 battr->q_attrs[i].vattr.enable);
+		DEVX_SET(virtio_q_layout, q, queue_notify_off,
+			 battr->q_attrs[i].vattr.notify_off);
+
+		DEVX_SET64(virtio_q_layout, q, queue_desc,
+			   battr->q_attrs[i].vattr.desc);
+		DEVX_SET64(virtio_q_layout, q, queue_driver,
+			   battr->q_attrs[i].vattr.driver);
+		DEVX_SET64(virtio_q_layout, q, queue_device,
+			   battr->q_attrs[i].vattr.device);
+	}
+}
+
 int snap_virtio_modify_device(struct snap_device *sdev,
 		enum snap_emulation_type type,
 		uint64_t mask, struct snap_virtio_device_attr *attr)
 {
-	uint8_t in_blk[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
-	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
 	uint64_t fields_to_modify = 0;
 	uint8_t *in;
 	int inlen;
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	uint8_t *device_emulation_in;
+	int ret;
 
 	if (type == SNAP_VIRTIO_BLK &&
 	    (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
@@ -120,29 +188,39 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		return -EINVAL;
 
 	//we'll modify only allowed fields
+	snap_debug("mask 0x%0lx vs allowed 0x%0lx\n", mask, sdev->mod_allowed_mask);
 	if (mask & ~sdev->mod_allowed_mask)
 		return -EINVAL;
 
+	inlen = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+	if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG)
+		inlen += attr->max_queues * DEVX_ST_SZ_BYTES(virtio_q_layout);
+
 	if (type == SNAP_VIRTIO_BLK) {
-		in = in_blk;
-		inlen = sizeof(in_blk);
-		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 		struct snap_virtio_blk_device_attr *battr = to_blk_device_attr(attr);
+
+		inlen += DEVX_ST_SZ_BYTES(virtio_blk_device_emulation);
+		in = calloc(1, inlen);
+		if (!in)
+			return -ENOMEM;
+
+		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
 
-		if (mask & SNAP_VIRTIO_MOD_DEV_STATUS) {
+		if (mask & (SNAP_VIRTIO_MOD_DEV_STATUS | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
 		}
-		if (mask & SNAP_VIRTIO_MOD_ENABLED) {
+		if (mask & (SNAP_VIRTIO_MOD_ENABLED | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 enabled, attr->enabled);
 		}
-		if (mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
+		if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
 			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 				   virtio_device.device_feature, attr->device_feature);
@@ -151,7 +229,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_device.max_queue_size, attr->max_queue_size);
 		}
-		if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+		if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
 			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_blk_config.capacity, battr->capacity);
@@ -164,32 +242,69 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_blk_config.num_queues, battr->max_blk_queues);
 		}
+
+		if (mask & SNAP_VIRTIO_MOD_ALL) {
+			/* note: mod all overwrites all flags except queue_cfg */
+			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
+			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
+				   virtio_device.driver_feature, attr->driver_feature);
+
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.msix_config,
+				 attr->msix_config);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.config_generation,
+				 attr->config_generation);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.driver_feature_select,
+				 attr->driver_feature_select);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.device_feature_select,
+				 attr->device_feature_select);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.queue_select,
+				 attr->queue_select);
+		}
+
+		if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG) {
+			snap_virtio_blk_modify_queues(device_emulation_in, attr);
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG;
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.num_queues, attr->max_queues);
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 virtio_device.max_queue_size, attr->max_queue_size);
+		}
+
 		DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
 	} else {
-		in = in_net;
-		inlen = sizeof(in_net);
-		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 		struct snap_virtio_net_device_attr *nattr = to_net_device_attr(attr);
+
+		inlen += DEVX_ST_SZ_BYTES(virtio_net_device_emulation);
+		in = calloc(1, inlen);
+		if (!in)
+			return -ENOMEM;
+
+		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
-		if (mask & SNAP_VIRTIO_MOD_DEV_STATUS) {
+		if (mask & (SNAP_VIRTIO_MOD_DEV_STATUS|SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
 		}
-		if (mask & SNAP_VIRTIO_MOD_LINK_STATUS) {
+		if (mask & (SNAP_VIRTIO_MOD_LINK_STATUS | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_LINK;
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				virtio_net_config.status, nattr->status);
 		}
-		if (mask & SNAP_VIRTIO_MOD_ENABLED) {
+		if (mask & (SNAP_VIRTIO_MOD_ENABLED | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ENABLED;
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 enabled, attr->enabled);
 		}
-		if (mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
+		if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |=
 				MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
 			DEVX_SET64(virtio_net_device_emulation,
@@ -197,7 +312,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 				   virtio_device.device_feature,
 				   attr->device_feature);
 		}
-		if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+		if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
 			DEVX_SET(virtio_net_device_emulation,
 				 device_emulation_in,
@@ -215,6 +330,38 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 				 device_emulation_in,
 				 virtio_net_config.mtu, nattr->mtu);
 		}
+
+		if (mask & SNAP_VIRTIO_MOD_ALL) {
+			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
+			DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
+				   virtio_device.driver_feature, attr->driver_feature);
+
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.msix_config,
+				 attr->msix_config);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.config_generation,
+				 attr->config_generation);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.driver_feature_select,
+				 attr->driver_feature_select);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.device_feature_select,
+				 attr->device_feature_select);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.queue_select,
+				 attr->queue_select);
+		}
+
+		if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG) {
+			snap_virtio_net_modify_queues(device_emulation_in, attr);
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG;
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.num_queues, attr->max_queues);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.max_queue_size, attr->max_queue_size);
+		}
+
 		DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
 	}
@@ -224,8 +371,12 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
 		 sdev->mdev.device_emulation->obj_id);
 
-	return snap_devx_obj_modify(sdev->mdev.device_emulation, in, inlen,
-				    out, sizeof(out));
+	ret = snap_devx_obj_modify(sdev->mdev.device_emulation, in, inlen,
+				   out, sizeof(out));
+
+	snap_debug("ret %d in %p inlen %d modify 0x%0lx\n", ret, in, inlen, fields_to_modify);
+	free(in);
+	return ret;
 }
 
 static int snap_virtio_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
