@@ -75,6 +75,8 @@ struct snap_virtio_net_device_attr {
 	unsigned int				queues;
 
 	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
+
+	uint32_t				crossed_vhca_mkey;
 };
 
 struct snap_virtio_net_device {

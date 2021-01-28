@@ -75,6 +75,9 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 				       device_emulation_out, virtio_net_config.mac_47_16) << 16;
 	attr->mac |= DEVX_GET(virtio_net_device_emulation,
 			      device_emulation_out, virtio_net_config.mac_15_0);
+	attr->crossed_vhca_mkey = DEVX_GET(virtio_net_device_emulation,
+					   device_emulation_out,
+					   emulated_device_crossed_vhca_mkey);
 
 out_free:
 	free(out);

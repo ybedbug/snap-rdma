@@ -356,11 +356,10 @@ snap_virtio_create_queue(struct snap_device *sdev,
 			goto out;
 		}
 		virtio_q_mkey = blk_dev_attr.crossed_vhca_mkey;
-		vattr->dma_mkey = virtio_q_mkey;
-		DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, virtio_q_mkey);
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
 		struct snap_virtio_net_queue_attr *attr;
+		struct snap_virtio_net_device_attr net_dev_attr;
 
 		attr = to_net_queue_attr(vattr);
 		in = in_net;
@@ -376,10 +375,21 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_net_q, virtq_in, tso_ipv6, attr->tso_ipv6);
 		DEVX_SET(virtio_net_q, virtq_in, tx_csum, attr->tx_csum);
 		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
+
+		ret = snap_virtio_net_query_device(sdev, &net_dev_attr);
+		if (ret) {
+			snap_error("Failed to query net device attr\n");
+			errno = -EINVAL;
+			goto out;
+		}
+		virtio_q_mkey = net_dev_attr.crossed_vhca_mkey;
 	} else {
 		errno = EINVAL;
 		goto out;
 	}
+
+	vattr->dma_mkey = virtio_q_mkey;
+
 	DEVX_SET64(virtio_q, virtq_ctx, desc_addr, vattr->desc);
 	DEVX_SET64(virtio_q, virtq_ctx, available_addr, vattr->driver);
 	DEVX_SET64(virtio_q, virtq_ctx, used_addr, vattr->device);
@@ -409,6 +419,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
 		 vattr->queue_max_count);
 	DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
+	DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, virtio_q_mkey);
 
 	if (umem[0].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);
@@ -621,7 +632,6 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 		vattr->size = DEVX_GET(virtio_net_q, virtq_out, virtqc.queue_size);
 		vattr->idx = DEVX_GET(virtio_net_q, virtq_out, virtqc.queue_index);
-		vattr->dma_mkey = DEVX_GET(virtio_net_q, virtq_out, virtqc.virtio_q_mkey);
 
 		state = DEVX_GET(virtio_blk_q, virtq_out, state);
 		if (state == MLX5_VIRTIO_Q_STATE_INIT)

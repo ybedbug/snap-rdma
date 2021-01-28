@@ -2744,12 +2744,22 @@ struct mlx5_ifc_virtio_q_layout_bits {
 struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
-	u8	   resources_on_emulation_manager[0x1];
-	u8	   enabled[0x1];
-	u8	   reserved_at_42[0xe];
+	u8	   reserved_at_40[0x10];
 	u8	   vhca_id[0x10];
 
-	u8	   reserved_at_60[0x20];
+	u8	   enabled[0x1];
+	u8	   resources_on_emulation_manager[0x1];
+	u8	   reserved_at_62[0x1e];
+
+	u8	   reserved_at_80[0x40];
+
+	u8	   emulated_device_crossed_vhca_mkey[0x20];
+
+	u8	   reserved_at_e0[0x20];
+
+	struct mlx5_ifc_device_pci_parameters_bits pci_params;
+
+	u8	   reserved_at_180[0x80];
 
 	struct mlx5_ifc_virtio_device_bits virtio_device;
 
