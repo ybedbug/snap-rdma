@@ -2618,6 +2618,8 @@ void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
 						 subsystem_vendor_id);
 	pci_attr->num_msix = DEVX_GET(device_pci_parameters,
 				      pci_params_out, num_msix);
+	pci_attr->num_of_vfs = DEVX_GET(device_pci_parameters,
+					pci_params_out, num_of_vfs);
 }
 
 static int snap_query_device_emulation(struct snap_device *sdev)

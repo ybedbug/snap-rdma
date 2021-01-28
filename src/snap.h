@@ -144,6 +144,7 @@ struct snap_pci_attr {
 	uint16_t			subsystem_id;
 	uint16_t			subsystem_vendor_id;
 	uint16_t			num_msix;
+	uint16_t			num_of_vfs;
 };
 
 union snap_pci_bdf {
