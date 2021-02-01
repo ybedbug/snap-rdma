@@ -34,7 +34,6 @@
 #define SNAP_VIRTIO_NET_H
 
 #include <sys/time.h>
-#include "snap.h"
 #include "snap_virtio_common.h"
 
 struct snap_virtio_net_device;

@@ -1,4 +1,3 @@
-#include "snap.h"
 #include "snap_virtio_net.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_common.h"
@@ -288,7 +287,6 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	struct mlx5_snap_devx_obj *virtq;
 	int virtq_type, ev_mode, inlen, offload_type, ret;
 	uint32_t pd_id;
-	uint32_t virtio_q_mkey;
 
 	if (vattr->type == SNAP_VIRTQ_SPLIT_MODE) {
 		virtq_type = MLX5_VIRTIO_QUEUE_TYPE_SPLIT;
@@ -323,7 +321,6 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
 		struct snap_virtio_blk_queue_attr *attr;
 		int vhca_id;
-		struct snap_virtio_blk_device_attr blk_dev_attr;
 
 		attr = to_blk_queue_attr(vattr);
 		in = in_blk;
@@ -341,18 +338,9 @@ snap_virtio_create_queue(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qp->qp_num);
 			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vhca_id);
 		}
-
-		ret = snap_virtio_blk_query_device(sdev, &blk_dev_attr);
-		if (ret) {
-			snap_error("Failed to query blk device attr\n");
-			errno = -EINVAL;
-			goto out;
-		}
-		virtio_q_mkey = blk_dev_attr.crossed_vhca_mkey;
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
 		struct snap_virtio_net_queue_attr *attr;
-		struct snap_virtio_net_device_attr net_dev_attr;
 
 		attr = to_net_queue_attr(vattr);
 		in = in_net;
@@ -368,20 +356,10 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_net_q, virtq_in, tso_ipv6, attr->tso_ipv6);
 		DEVX_SET(virtio_net_q, virtq_in, tx_csum, attr->tx_csum);
 		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
-
-		ret = snap_virtio_net_query_device(sdev, &net_dev_attr);
-		if (ret) {
-			snap_error("Failed to query net device attr\n");
-			errno = -EINVAL;
-			goto out;
-		}
-		virtio_q_mkey = net_dev_attr.crossed_vhca_mkey;
 	} else {
 		errno = EINVAL;
 		goto out;
 	}
-
-	vattr->dma_mkey = virtio_q_mkey;
 
 	DEVX_SET64(virtio_q, virtq_ctx, desc_addr, vattr->desc);
 	DEVX_SET64(virtio_q, virtq_ctx, available_addr, vattr->driver);
@@ -412,7 +390,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
 		 vattr->queue_max_count);
 	DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
-	DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, virtio_q_mkey);
+	DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, vattr->dma_mkey);
 
 	if (umem[0].devx_umem) {
 		DEVX_SET(virtio_q, virtq_ctx, umem_1_id, umem[0].devx_umem->umem_id);

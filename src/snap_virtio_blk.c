@@ -275,6 +275,8 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
+	struct snap_cross_mkey *snap_cross_mkey;
+	struct snap_virtio_blk_device_attr blk_dev_attr = {};
 	int ret;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
@@ -300,10 +302,25 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 	else
 		goto out_umem;
 
+	ret = snap_virtio_blk_query_device(sdev, &blk_dev_attr);
+	if (ret) {
+		snap_error("Failed to query blk device attr\n");
+		goto destroy_counter;
+	}
+
+	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd,
+						blk_dev_attr.crossed_vhca_mkey, snap_get_vhca_id(sdev));
+	if (!snap_cross_mkey) {
+		snap_error("Failed to create snap MKey Entry for blk queue\n");
+		goto destroy_counter;
+	}
+	attr->vattr.dma_mkey = snap_cross_mkey->mkey;
+	vbq->virtq.snap_cross_mkey = snap_cross_mkey;
+
 	vbq->virtq.virtq = snap_virtio_create_queue(sdev, &attr->vattr,
 						    vbq->virtq.umem);
 	if (!vbq->virtq.virtq)
-		goto out_umem;
+		goto destroy_mkey;
 
 	if (sdev->mdev.channel) {
 		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
@@ -324,6 +341,10 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 destroy_queue:
 	snap_devx_obj_destroy(vbq->virtq.virtq);
+destroy_mkey:
+	snap_destroy_cross_mkey(vbq->virtq.snap_cross_mkey);
+destroy_counter:
+	snap_devx_obj_destroy(vbq->virtq.ctrs_obj);
 out_umem:
 	snap_virtio_teardown_virtq_umem(&vbq->virtq);
 out:
@@ -340,13 +361,17 @@ out:
  */
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 {
-	int q_ret, ctrs_ret;
+	int mkey_ret, q_ret, ctrs_ret;
 
 	vbq->virtq.virtq->consume_event = NULL;
 
+	mkey_ret = snap_destroy_cross_mkey(vbq->virtq.snap_cross_mkey);
 	q_ret = snap_devx_obj_destroy(vbq->virtq.virtq);
 	ctrs_ret = snap_devx_obj_destroy(vbq->virtq.ctrs_obj);
 	snap_virtio_teardown_virtq_umem(&vbq->virtq);
+
+	if (mkey_ret)
+		return mkey_ret;
 
 	if (q_ret)
 		return q_ret;

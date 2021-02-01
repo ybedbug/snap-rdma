@@ -33,7 +33,6 @@
 #ifndef SNAP_VIRTIO_BLK_H
 #define SNAP_VIRTIO_BLK_H
 
-#include "snap.h"
 #include "snap_virtio_common.h"
 
 struct snap_virtio_blk_device;

@@ -39,6 +39,8 @@
 #include <pthread.h>
 #include <linux/types.h>
 
+#include "snap.h"
+
 #define SNAP_VIRTIO_UMEM_ALIGN 4096
 
 enum snap_virtq_type {
@@ -140,6 +142,8 @@ struct snap_virtio_queue {
 	struct snap_virtio_umem			umem[3];
 	uint64_t				mod_allowed_mask;
 	struct mlx5_snap_devx_obj		*ctrs_obj;
+
+	struct snap_cross_mkey			*snap_cross_mkey;
 };
 
 enum snap_virtio_dev_modify {
