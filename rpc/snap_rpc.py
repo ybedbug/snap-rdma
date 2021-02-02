@@ -298,6 +298,19 @@ def main():
     p.add_argument('name', help='Controller Name', type=str)
     p.set_defaults(func=controller_virtio_blk_bdev_detach)
 
+    def controller_virtio_blk_get_debugstat(args):
+        params = {
+        }
+        if args.name:
+            params['name'] = args.name
+        result = args.client.call('controller_virtio_blk_get_debugstat', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('controller_virtio_blk_get_debugstat',
+                              help='Get debug statistics from VirtIO BLK controller')
+    p.add_argument('-c', '--name', help='Controller Name', type=str,
+                   required=False)
+    p.set_defaults(func=controller_virtio_blk_get_debugstat)
+
     def controller_nvme_delete(args):
         if args.subnqn is None and args.cntlid != -1:
             raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
