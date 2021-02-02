@@ -36,6 +36,7 @@
 #include "snap.h"
 #include <sys/uio.h>
 #include "snap_blk_ops.h"
+#include "snap_virtio_common_ctrl.h"
 
 /**
  * struct blk_virtq_ctx - Main struct for blk_virtq
@@ -85,6 +86,8 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q);
 void blk_virtq_start(struct blk_virtq_ctx *q,
 		     struct blk_virtq_start_attr *attr);
 int blk_virtq_progress(struct blk_virtq_ctx *q);
+int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
+			    struct snap_virtio_queue_debugstat *q_debugstat);
 int blk_virtq_suspend(struct blk_virtq_ctx *q);
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);
 

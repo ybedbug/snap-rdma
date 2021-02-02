@@ -108,6 +108,26 @@ struct snap_virtio_queue_attr {
 	uint32_t			dma_mkey;
 };
 
+struct snap_virtio_queue_debugstat {
+	uint32_t				qid;
+	uint32_t				hw_available_index;
+	uint32_t				sw_available_index;
+	uint32_t				hw_used_index;
+	uint32_t				sw_used_index;
+	uint64_t				hw_received_descs;
+	uint64_t				hw_completed_descs;
+};
+
+struct snap_virtio_ctrl_debugstat {
+	uint32_t				network_error;
+	uint32_t				bad_descriptor_error;
+	uint32_t				invalid_buffer;
+	uint32_t				desc_list_exceed_limit;
+	uint32_t				internal_error;
+	size_t					num_queues;
+	struct snap_virtio_queue_debugstat	*queues;
+};
+
 struct snap_virtio_umem {
 	void			*buf;
 	int			size;

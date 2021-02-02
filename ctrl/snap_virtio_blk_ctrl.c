@@ -268,6 +268,46 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 	return ret;
 }
 
+static int
+snap_virtio_blk_ctrl_queue_get_debugstat(struct snap_virtio_ctrl_queue *vq,
+			struct snap_virtio_queue_debugstat *q_debugstat)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+
+	return blk_virtq_get_debugstat(vbq->q_impl, q_debugstat);
+}
+
+int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
+			struct snap_virtio_ctrl_debugstat *ctrl_debugstat)
+{
+	int i;
+	int enabled_queues = 0;
+	int ret = 0;
+
+	pthread_mutex_lock(&ctrl->common.state_lock);
+	if (ctrl->common.state != SNAP_VIRTIO_CTRL_STARTED)
+		goto out;
+
+	for (i = 0; i < ctrl->common.max_queues; i++) {
+		struct snap_virtio_ctrl_queue *vq = ctrl->common.queues[i];
+
+		if (!vq)
+			continue;
+
+		ret = snap_virtio_blk_ctrl_queue_get_debugstat(vq,
+				&ctrl_debugstat->queues[enabled_queues]);
+		if (ret)
+			goto out;
+		enabled_queues++;
+	}
+	ctrl_debugstat->num_queues = enabled_queues;
+
+out:
+	pthread_mutex_unlock(&ctrl->common.state_lock);
+
+	return ret;
+}
+
 static struct snap_virtio_ctrl_queue*
 snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 {
