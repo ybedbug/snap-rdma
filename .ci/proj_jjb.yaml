@@ -1,0 +1,99 @@
+- scm:
+    name: mlnx-libsnap
+    scm:
+      - git:
+          url: git@github.com:Mellanox/snap-rdma.git
+          branches:
+              - origin/master
+
+- job-template:
+    name: "{jjb_proj}"
+    project-type: pipeline
+    properties:
+        - github:
+            url: "{jjb_git}"
+        - build-discarder:
+            days-to-keep: 50
+            num-to-keep: 20
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: true
+    sandbox: true
+    parameters:
+        - bool:
+            name: "build_dockers"
+            default: false
+            description: "Rebuild docker containers"
+        - string:
+            name: "conf_file"
+            default: ".ci/job_matrix.yaml"
+            description: "Regex to select job config file"
+        - bool:
+            name: "do_release"
+            default: false
+            description: "Release rpm"
+        - string:
+            name: "release_dir"
+            default: "/auto/mtrswgwork/swx_devops/{jjb_proj}"
+            description: "Location to release rpm to"
+        - string:
+            name: "script"
+            default: "{jjb_jenkinsfile}"
+            description: "Jenkinsfile to load on trigger"
+        - string:
+            name: "REPO_URL"
+            default: "http://swx-repos.mtr.labs.mlnx:8081/repository"
+            description: "Repository manager URL"
+        - string:
+            name: "GPG_KEY_PATH"
+            default: "/auto/mtrswgwork/swx_devops/swx-debs-keyring/mellanox-debs-keyring.key"
+            description: "GPG key file location"
+        - string:
+            name: "DEBUG"
+            default: 0
+            description: "Enable debug prints and traces, valid values are 0-9"
+    triggers:
+        - generic-webhook-trigger:
+            post-content-params:
+                - type: JSONPath
+                  key: action
+                  value: $.action
+                - type: JSONPath
+                  key: pr_num
+                  value: $.number
+                - type: JSONPath
+                  key: pr_url
+                  value: $.pull_request.html_url
+                - type: JSONPath
+                  key: merged
+                  value: $.pull_request.merged
+                - type: JSONPath
+                  key: target_branch
+                  value: $.pull_request.base.ref
+                - type: JSONPath
+                  key: source_branch
+                  value: $.pull_request.head.ref
+            regex-filter-text: $action $merged $target_branch
+            regex-filter-expression: ^closed true master$
+            print-post-content: false
+            print-contrib-var: true
+            cause: Triggered by merge of <a href="$pr_url">PR$pr_num</a> into $target_branch
+            token: mlnx-libsnap-release
+            silent-response: true
+    pipeline-scm:
+        scm:
+            - mlnx-libsnap
+        script-path: "$script"
+
+- project:
+    name: proj_name
+    jjb_email: 'andiih@nvidia.com'
+    jjb_proj: 'mlnx-libsnap-release'
+    jjb_git: 'git@github.com:Mellanox/snap-rdma.git'
+    jjb_owner: 'andriih@nvidia.com'
+    jjb_jenkinsfile: '.ci/Jenkinsfile.shlib'
+    jobs:
+        - "{jjb_proj}"

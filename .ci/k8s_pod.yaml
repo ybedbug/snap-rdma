@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "snap-rdma-username-debug"
+spec:
+  containers:
+  - command:
+    - cat
+    image: harbor.mellanox.com/swx-storage/snap-rdma/aarch64/ubuntu2004ofed52:latest
+    imagePullPolicy: "Always"
+    name: "ubuntu2004ofed52"
+    resources:
+      limits:
+        memory: "2048Mi"
+        hugepages-2Mi: "1024Mi"
+      requests: {}
+    securityContext:
+      privileged: true
+    tty: true
+    volumeMounts:
+    - mountPath: "/.autodirect/sw/release"
+      name: "volume-3"
+      readOnly: false
+    - mountPath: "/auto/sw/release/sw_acceleration"
+      name: "volume-4"
+      readOnly: false
+    - mountPath: "/auto/sw_tools"
+      name: "volume-1"
+      readOnly: false
+    - mountPath: "/hpc/local"
+      name: "volume-0"
+      readOnly: false
+    - mountPath: "/.autodirect/mtrswgwork"
+      name: "volume-2"
+      readOnly: false
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  hostNetwork: true
+  nodeSelector:
+    kubernetes.io/arch: "arm64"
+  restartPolicy: "Never"
+  securityContext:
+    runAsGroup: 0
+    runAsUser: 0
+  volumes:
+  - hostPath:
+      path: "/hpc/local"
+    name: "volume-0"
+  - hostPath:
+      path: "/.autodirect/mtrswgwork"
+    name: "volume-2"
+  - hostPath:
+      path: "/auto/sw_tools"
+    name: "volume-1"
+  - emptyDir:
+      medium: ""
+    name: "workspace-volume"
+  - hostPath:
+      path: "/.autodirect/sw/release"
+    name: "volume-3"
+  - hostPath:
+      path: "/auto/sw/release/sw_acceleration"
+    name: "volume-4"
+

@@ -1,0 +1,63 @@
+FROM centos:8.3.2011
+ARG _UID=6213
+ARG _GID=11429
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ENV LANG=en_US.utf-8
+USER root
+
+
+RUN dnf clean all && rm -r /var/cache/dnf
+
+RUN yum install -y \
+    epel-release
+
+RUN yum install -y \
+    atk \
+    autoconf \
+    automake \
+    cairo \
+    ethtool \
+    gcc-gfortran \
+    gcc-c++ \
+    git \
+    gtk2 \
+    libmnl \
+    libnl3 \
+    libtool \
+    lsof \
+    make \
+    numactl-libs \
+    libuuid-devel \
+    pciutils \
+    perl \
+    rpm-build \
+    sudo \
+    tcl \
+    tcsh \
+    tk \
+    glibc-langpack-en \
+    environment-modules \
+    libusbx fuse-libs \
+    chrpath flex graphviz tcl bison tk swig \
+    python3-pip \
+    numactl-devel openssl-devel libaio-devel libaio \
+    wget
+
+RUN cd /etc/yum.repos.d && wget https://linux.mellanox.com/public/repo/mlnx_ofed/latest/rhel8.3/mellanox_mlnx_ofed.repo
+RUN yum install -y mlnx-ofed-basic-user-only.noarch
+RUN pip3 -qq install gitlint
+RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/checkpatch.pl && chmod +x checkpatch.pl
+RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/spelling.txt
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+RUN mkdir -p $_HOME
+RUN groupadd -f -g "$_GID" "$_LOGIN"
+RUN useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN"
+RUN chown $_LOGIN $_HOME
+
+ENV MODULEPATH /hpc/local/etc/modulefiles
+SHELL ["/bin/bash"] 
+
+USER "${_LOGIN}"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]

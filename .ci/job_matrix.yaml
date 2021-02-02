@@ -1,0 +1,90 @@
+---
+job: snap-rdma
+
+registry_host: harbor.mellanox.com
+registry_path: /swx-storage/snap-rdma
+registry_auth: swx-storage
+
+credentials:
+  - {credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+failFast: false
+kubernetes:
+  cloud: swx-k8s-spray
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+  - {mountPath: /auto/sw_tools, hostPath: /auto/sw_tools}
+  - {mountPath: /auto/mtrswgwork, hostPath: /auto/mtrswgwork}
+  - {mountPath: /auto/sw/release/mlnx_ofed, hostPath: /auto/sw/release/mlnx_ofed}
+  - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
+
+runs_on_dockers:
+  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed52', arch: 'x86_64'}
+  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed52', arch: 'aarch64'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed52', arch: 'x86_64'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed52', arch: 'aarch64'}
+  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'toolbox', category: 'tool', arch: 'x86_64',}
+  - {url: '$registry_host/toolbox/ngci-centos:7.9.2009', name: 'blackduck', category: 'tool', arch: 'x86_64'}
+
+steps:
+
+  - name: Build distro package
+    containerSelector:
+      - "{name: 'centos83ofed52', variant:1}"
+      - "{name: 'ubuntu2004ofed52', variant:1}"
+    run: |
+      .ci/build.sh
+
+  - name: Upload distro package
+    credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d'
+    containerSelector:
+      - "{name: 'centos83ofed52', variant:1}"
+      - "{name: 'ubuntu2004ofed52', variant:1}"
+    run: |
+      .ci/upload.sh
+
+  - name: Code style check
+    containerSelector: "{name: 'toolbox'}"
+    run: |
+      .ci/code_style_check.sh
+
+  - name: Coverity scan
+    containerSelector: "{name: 'toolbox'}"
+    archiveArtifacts: 'cov_build/html/**/*'
+    run: |
+      .ci/cov.sh
+
+  - name: Commit message check
+    containerSelector: "{name: 'toolbox'}"
+    run: |
+      if test -n "$ghprbPullId"; then
+        .ci/gitlint/run_gitlint.sh
+      else
+        echo no ghprbPullId found, skipping...
+      fi
+
+  - name: Check autotools build
+    containerSelector: "{name: 'toolbox'}"
+    run: |
+      ./autogen.sh
+      ./configure
+      make -j 3 all
+      make -j 3 install
+
+  - name: Blackduck scan source
+    enable: false
+    containerSelector: "{name: 'blackduck'}"
+    shell: action
+    module: ngci
+    run: NGCIBlackDuckScan
+    args:
+      projectName: "NGCIBlackDuckScan"
+      projectVersion: "snap-rdma"
+      projectVersion: "1.0"
+      projectSrcPath: "src"
+      attachArtifact: true
+      reportName: "BlackDuck report"
+      scanMode: "source"
+    env:
+      SPRING_APPLICATION_JSON: '{"blackduck.url":"https://blackduck.mellanox.com/","blackduck.api.token":"ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="}'
