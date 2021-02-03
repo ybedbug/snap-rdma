@@ -85,6 +85,7 @@ struct snap_nvme_sq_attr {
 	struct snap_nvme_cq		*cq;
 	enum snap_nvme_sq_state		state;
 	uint8_t				log_entry_size;
+	uint32_t            counter_set_id;
 };
 
 struct snap_nvme_sq {
@@ -135,6 +136,44 @@ struct snap_nvme_device {
 	struct snap_nvme_sq			*sqs;
 };
 
+struct snap_nvme_sq_counters
+{
+    uint32_t data_read;
+    uint32_t data_write;
+    uint16_t cmd_read;
+    uint16_t cmd_write;
+    uint32_t error_cqes;
+    uint16_t integrity_errors;
+    uint16_t fabric_errors;
+    uint16_t busy_time;
+    uint16_t power_cycle;
+    uint16_t power_on_hours;
+    uint16_t unsafe_shutdowns;
+    uint16_t error_information_log_entries;
+
+    struct mlx5_snap_devx_obj *obj;
+};
+
+struct snap_nvme_ctrl_counters
+{
+    uint32_t data_read;
+    uint32_t data_write;
+    uint16_t cmd_read;
+    uint16_t cmd_write;
+    uint32_t error_cqes;
+    uint32_t flrs;
+    uint32_t bad_doorbells;
+    uint16_t integrity_errors;
+    uint16_t fabric_errors;
+    uint16_t busy_time;
+    uint16_t power_cycle;
+    uint16_t power_on_hours;
+    uint16_t unsafe_shutdowns;
+    uint16_t error_information_log_entries;
+
+    struct mlx5_snap_devx_obj *obj;
+};
+
 int snap_nvme_init_device(struct snap_device *sdev);
 int snap_nvme_teardown_device(struct snap_device *sdev);
 int snap_nvme_query_device(struct snap_device *sdev,
@@ -156,4 +195,15 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 	struct snap_nvme_sq_attr *attr);
 int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_nvme_sq_attr *attr);
+
+struct snap_nvme_sq_counters*
+snap_nvme_create_sq_counters(struct snap_device *sdev);
+int snap_nvme_query_sq_counters(struct snap_nvme_sq_counters *sqc);
+int snap_nvme_destroy_sq_counters(struct snap_nvme_sq_counters *sqc);
+
+struct snap_nvme_ctrl_counters*
+snap_nvme_create_ctrl_counters(struct snap_context *sctx);
+int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc);
+int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc);
+
 #endif

@@ -581,6 +581,41 @@ def main():
                               help='List NVMe subsystems')
     p.set_defaults(func=subsystem_nvme_list)
 
+    def controller_nvme_get_iostat(args):
+        params = {
+        }
+        if args.name:
+            params['name'] = args.name
+
+        result = args.client.call('controller_nvme_get_iostat', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_nvme_get_iostat',
+                        help='Return NVMe SNAP controller I/O statistics')
+    p.add_argument('-c', '--name', help='Controller Name', 
+                   type=str, required=False)
+    
+    p.set_defaults(func=controller_nvme_get_iostat)
+    
+    def controller_nvme_get_debugstat(args):
+        params = {
+                'fw_counters': args.fw_counters
+        }
+        if args.name:
+            params['name'] = args.name
+
+        result = args.client.call('controller_nvme_get_debugstat', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_nvme_get_debugstat',
+                help='Return NVMe SNAP controller debug statistics')
+    p.add_argument('-c', '--name', help='Controller Name',
+                   type=str, required=False)
+    p.add_argument('-fw', '--firmware', dest='fw_counters', 
+                   action='store_true', 
+                   help='Force using firmware counters (relevant for CC mode')
+    p.set_defaults(fw_counters=False)
+
+    p.set_defaults(func=controller_nvme_get_debugstat)
+            
     def storage_admin(args):
         params = {
             'protocol': args.protocol,

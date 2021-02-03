@@ -67,12 +67,12 @@ AC_CONFIG_FILES([Makefile
                  rpc/Makefile
                  tests/Makefile])
 
-AC_CHECK_FILE([debian/changelog],
-              [],
-              [AC_CONFIG_FILES([debian/changelog])])
+if test ! -e debian/changelog; then
+    AC_CONFIG_FILES([debian/changelog])
+fi
 
-AC_CHECK_FILE([mlnx-libsnap.spec],
-              [],
-              [AC_CONFIG_FILES([mlnx-libsnap.spec])])
+if test ! -e mlnx-libsnap.spec; then
+    AC_CONFIG_FILES([mlnx-libsnap.spec])
+fi
 
 AC_OUTPUT

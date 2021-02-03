@@ -3902,6 +3902,56 @@ struct mlx5_ifc_dr_action_hw_copy_bits {
 	u8	 reserved_at_38[0x8];
 };
 
+struct mlx5_ifc_nvme_sq_counters_bits {
+    u8     modify_field_select[0x40];
+
+    u8     reserved_at_40[0x40];
+
+    u8     data_read[0x20];
+    u8     data_write[0x20];
+    u8     cmd_read[0x10];
+    u8     cmd_write[0x10];
+    u8     error_cqes[0x20];
+
+    u8     integrity_errors[0x10];
+    u8     fabric_errors[0x10];
+    u8     busy_time[0x10];
+    u8     power_cycle[0x10];
+    u8     power_on_hours[0x10];
+    u8     unsafe_shutdowns[0x10];
+    u8     error_information_log_entries[0x10];
+    u8     reserved_at_170[0x10];
+
+    u8     nvme_pci_errors[0x20];
+
+    u8     reserved_at_1a0[0x660];
+};
+
+struct mlx5_ifc_nvme_ctrl_counters_bits {
+    u8     modify_field_select[0x40];
+
+    u8     reserved_at_40[0x40];
+
+    u8     data_read[0x20];
+    u8     data_write[0x20];
+    u8     cmd_read[0x10];
+    u8     cmd_write[0x10];
+    u8     error_cqes[0x20];
+
+    u8     flrs[0x20];
+    u8     bad_doorbells[0x20];
+    u8     integrity_errors[0x10];
+    u8     fabric_errors[0x10];
+    u8     busy_time[0x10];
+    u8     power_cycle[0x10];
+    u8     power_on_hours[0x10];
+    u8     unsafe_shutdowns[0x10];
+    u8     error_information_log_entries[0x10];
+    u8     reserved_at_1B0[0x10];
+
+    u8     reserved_at_1c0[0x660];
+};
+
 enum {
 	MLX5_DR_ACTION_MDFY_HW_FLD_L2_0		= 0,
 	MLX5_DR_ACTION_MDFY_HW_FLD_L2_1		= 1,

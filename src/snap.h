@@ -120,10 +120,11 @@ struct snap_event {
 };
 
 struct snap_device_attr {
-	enum snap_pci_type	type;
-	int			pf_id;
-	int			vf_id;
-	uint32_t		flags; /* Use enum snap_device_attr_flags */
+	enum snap_pci_type type;
+	int         pf_id;
+	int         vf_id;
+	uint32_t    flags; /* Use enum snap_device_attr_flags */
+	uint32_t    counter_set_id;
 };
 
 struct snap_cross_mkey {

@@ -2769,7 +2769,8 @@ out_err:
 }
 
 static struct mlx5_snap_devx_obj*
-snap_create_nvme_device_emulation(struct snap_device *sdev)
+snap_create_nvme_device_emulation(struct snap_device *sdev,
+                                  struct snap_device_attr *attr)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(nvme_device_emulation)] = {0};
@@ -2793,6 +2794,10 @@ snap_create_nvme_device_emulation(struct snap_device *sdev)
 	DEVX_SET(nvme_device_emulation, device_emulation_in,
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.nvme_need_tunnel ? 0 : 1);
+	if (attr->counter_set_id) {
+	    DEVX_SET(nvme_device_emulation, device_emulation_in, counter_set_id,
+	             attr->counter_set_id);
+	}
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2811,7 +2816,8 @@ out_err:
 }
 
 static struct mlx5_snap_devx_obj*
-snap_create_device_emulation(struct snap_device *sdev)
+snap_create_device_emulation(struct snap_device *sdev,
+                             struct snap_device_attr *attr)
 {
 	if (!sdev->pci->plugged)
 		return NULL;
@@ -2819,7 +2825,7 @@ snap_create_device_emulation(struct snap_device *sdev)
 	switch (sdev->pci->type) {
 	case SNAP_NVME_PF:
 	case SNAP_NVME_VF:
-		return snap_create_nvme_device_emulation(sdev);
+		return snap_create_nvme_device_emulation(sdev, attr);
 	case SNAP_VIRTIO_NET_PF:
 	case SNAP_VIRTIO_NET_VF:
 		return snap_create_virtio_net_device_emulation(sdev);
@@ -3129,7 +3135,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		sdev->pci = &pfs->pfs[attr->pf_id].vfs[attr->vf_id];
 	} else
 		sdev->pci = &pfs->pfs[attr->pf_id];
-	sdev->mdev.device_emulation = snap_create_device_emulation(sdev);
+	sdev->mdev.device_emulation = snap_create_device_emulation(sdev, attr);
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
 		goto out_free_mutex;
