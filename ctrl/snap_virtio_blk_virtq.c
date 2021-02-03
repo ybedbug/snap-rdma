@@ -1183,7 +1183,8 @@ void blk_virtq_start(struct blk_virtq_ctx *q,
 	priv->pg_id = attr->pg_id;
 }
 
-struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx) {
+struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
+{
 	struct blk_virtq_priv *vpriv = ctx->priv;
 	return vpriv->dma_q;
 }

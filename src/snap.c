@@ -1233,9 +1233,9 @@ snap_fte_init(struct snap_device *sdev, struct mlx5_snap_flow_group *fg,
 
 		fte->fte->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
-                if (!fte->fte->obj) {
+		if (!fte->fte->obj) {
 			free(fte->fte);
-                        goto out_err;
+			goto out_err;
 		}
 	} else {
 		fte->fte = snap_devx_obj_create(sdev, in, sizeof(in), out,
@@ -1327,7 +1327,7 @@ static int snap_create_rdma_dev_qp_flow(struct snap_device *sdev,
 	return 0;
 
 out_free_matcher:
-        mlx5dv_destroy_flow_matcher(hw_qp->rdma_matcher);
+	mlx5dv_destroy_flow_matcher(hw_qp->rdma_matcher);
 out_free:
 	free(match_mask);
 out_err:
@@ -1550,7 +1550,7 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type,
 
 		ft->ft->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						     out, sizeof(out));
-                if (!ft->ft->obj) {
+		if (!ft->ft->obj) {
 			free(ft->ft);
 			goto out_free_ftes;
 		}
@@ -1558,8 +1558,8 @@ snap_create_flow_table(struct snap_device *sdev, uint32_t table_type,
 		ft->table_id = DEVX_GET(create_flow_table_out, out, table_id);
 		ft->table_type = table_type;
 		ft->level = ft_level;
-	        ft->ft->vtunnel = NULL;
-	        ft->ft->sdev = NULL;
+		ft->ft->vtunnel = NULL;
+		ft->ft->sdev = NULL;
 		ft->ft->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
 	} else {
 		ft->ft = snap_devx_obj_create(sdev, in, sizeof(in), out,
@@ -1700,7 +1700,7 @@ snap_create_flow_group(struct snap_device *sdev,
 
 		fg->fg->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						     out, sizeof(out));
-                if (!fg->fg->obj) {
+		if (!fg->fg->obj) {
 			free(fg->fg);
 			goto out_free_bitmap;
 		}
@@ -1711,7 +1711,7 @@ snap_create_flow_group(struct snap_device *sdev,
 				      sizeof(out), sdev->mdev.vtunnel,
 				      DEVX_ST_SZ_BYTES(destroy_flow_group_in),
 				      DEVX_ST_SZ_BYTES(destroy_flow_group_out));
-	        if (!fg->fg)
+		if (!fg->fg)
 			goto out_free_bitmap;
 
 		fg->group_id = DEVX_GET(create_flow_group_out, out, group_id);

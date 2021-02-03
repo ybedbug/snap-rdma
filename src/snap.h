@@ -60,8 +60,8 @@
 		(type *)((char *)__mptr - offsetof(type, member)); })
 #endif
 
-#define snap_min(a,b) (((a)<(b))?(a):(b))
-#define snap_max(a,b) (((a)>(b))?(a):(b))
+#define snap_min(a, b) (((a) < (b)) ? (a) : (b))
+#define snap_max(a, b) (((a) > (b)) ? (a) : (b))
 
 #define snap_likely(x) __builtin_expect(!!(x), 1)
 #define snap_unlikely(x) __builtin_expect(!!(x), 0)

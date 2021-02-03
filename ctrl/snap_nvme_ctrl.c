@@ -146,7 +146,7 @@ void snap_nvme_ctrl_close(struct snap_nvme_ctrl *ctrl)
 	free(ctrl);
 }
 
-static void snap_nvme_ctrl_modify_config(struct snap_nvme_ctrl * ctrl,
+static void snap_nvme_ctrl_modify_config(struct snap_nvme_ctrl *ctrl,
 		uint32_t new_val, uint32_t prev_val)
 {
 }

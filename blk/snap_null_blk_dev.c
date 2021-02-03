@@ -50,11 +50,13 @@ static int snap_null_blk_dev_discard(void *ctx,
 	return 0;
 }
 
-static void *snap_null_blk_dev_dma_malloc(size_t size) {
+static void *snap_null_blk_dev_dma_malloc(size_t size)
+{
 	return calloc(1, size);
 }
 
-static void snap_null_blk_dev_dma_free(void *buf) {
+static void snap_null_blk_dev_dma_free(void *buf)
+{
 	free(buf);
 }
 
@@ -70,7 +72,8 @@ static uint32_t snap_null_blk_dev_get_block_size(void *ctx)
 	return bdev->attrs.blk_size;
 }
 
-static const char *snap_null_blk_dev_get_bdev_name(void *ctx) {
+static const char *snap_null_blk_dev_get_bdev_name(void *ctx)
+{
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
 	return bdev->name;
 }
