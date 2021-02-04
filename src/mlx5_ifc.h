@@ -3677,13 +3677,18 @@ enum {
 	MLX5_VIRTIO_NET_Q_MODIFY_STATE = 1 << 0,
 };
 
+enum {
+	MLX5_VIRTIO_NET_Q_DIRTY_BIT_MAP = 1 << 0,
+	MLX5_VIRTIO_NET_Q_DIRTY_BYTE_MAP = 1 << 1,
+};
+
 /* Virtio net emulation related structures */
 struct mlx5_ifc_virtio_net_q_bits {
 	u8	   modify_field_select[0x40];
 
 	u8	   reserved_at_40[0x20];
 
-	u8	   tisn_or_qpn_vhca_id[0x10];
+	u8	   vhca_id[0x10];
 	u8	   reserved_at_70[0x10];
 
 	u8	   tso_ipv4[0x1];
@@ -3691,19 +3696,21 @@ struct mlx5_ifc_virtio_net_q_bits {
 	u8	   tx_csum[0x1];
 	u8	   rx_csum[0x1];
 	u8	   reserved_at_84[0x6];
-	u8	   dirty_bitmap_dump_enable[0x1];
+	u8	   dirty_map_dump_enable[0x1];
 	u8	   vhost_log_page[0x5];
 	u8	   reserved_at_90[0xc];
 	u8	   state[0x4];
 
-	u8	   reserved_at_a0[0x8];
+	u8	   dirty_map_mode[0x2];
+	u8	   reserved_at_a2[0x3];
+	u8	   queue_feature_bit_mask_2_0[0x3];
 	u8	   tisn_or_qpn[0x18];
 
-	u8	   dirty_bitmap_mkey[0x20];
+	u8	   dirty_map_mkey[0x20];
 
-	u8	   dirty_bitmap_size[0x20];
+	u8	   dirty_map_size[0x20];
 
-	u8	   dirty_bitmap_addr[0x40];
+	u8	   dirty_map_addr[0x40];
 
 	u8	   hw_available_index[0x10];
 	u8	   hw_used_index[0x10];

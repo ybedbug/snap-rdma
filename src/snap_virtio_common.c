@@ -351,7 +351,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_NET_Q;
 		DEVX_SET(virtio_net_q, virtq_in, tisn_or_qpn, attr->tisn_or_qpn);
 		if (attr->tisn_or_qpn)
-			DEVX_SET(virtio_net_q, virtq_in, tisn_or_qpn_vhca_id, attr->vhca_id);
+			DEVX_SET(virtio_net_q, virtq_in, vhca_id, attr->vhca_id);
 		DEVX_SET(virtio_net_q, virtq_in, tso_ipv4, attr->tso_ipv4);
 		DEVX_SET(virtio_net_q, virtq_in, tso_ipv6, attr->tso_ipv6);
 		DEVX_SET(virtio_net_q, virtq_in, tx_csum, attr->tx_csum);
