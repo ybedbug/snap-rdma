@@ -133,6 +133,7 @@ struct blk_virtq_cmd {
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool use_dmem;
 	struct ibv_mr *req_mr;
+	blk_virtq_io_cmd_stat_t *io_cmd_stat;
 };
 
 /**
@@ -243,6 +244,8 @@ static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			 sizeof(struct split_tunnel_comp));
 	cmd->tunnel_comp = (struct split_tunnel_comp *)
 			   (cmd->req_buf + req_buf_size(size_max, seg_max));
+
+	cmd->io_cmd_stat = NULL;
 }
 
 static int init_virtq_cmds_mem(uint32_t size_max, uint32_t seg_max,
@@ -463,7 +466,10 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 	if (snap_unlikely(status != SNAP_BDEV_OP_SUCCESS)) {
 		snap_error("Failed iov completion!\n");
 		op_status = VIRTQ_CMD_SM_OP_ERR;
+		cmd->io_cmd_stat->fail++;
 	}
+	else
+	    cmd->io_cmd_stat->success++;
 
 	blk_virtq_cmd_progress(cmd, op_status);
 }
@@ -637,9 +643,12 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		return true;
 	}
 
+	cmd->io_cmd_stat = NULL;
+
 	req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
 	switch (req_hdr_p->type) {
 	case VIRTIO_BLK_T_OUT:
+	    cmd->io_cmd_stat = &vq->vq_ctx.io_stat.write;
 		cmd->total_seg_len = set_iovecs(cmd);
 		cmd->state = VIRTQ_CMD_STATE_T_OUT_IOV_DONE;
 		ret = bdev->ops->write(bdev->ctx, cmd->iovecs,
@@ -649,6 +658,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				       &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
 		break;
 	case VIRTIO_BLK_T_IN:
+	    cmd->io_cmd_stat = &vq->vq_ctx.io_stat.read;
 		cmd->total_seg_len = set_iovecs(cmd);
 		cmd->state = VIRTQ_CMD_STATE_T_IN_IOV_DONE;
 		ret = bdev->ops->read(bdev->ctx, cmd->iovecs,
@@ -658,6 +668,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				      &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
 		break;
 	case VIRTIO_BLK_T_FLUSH:
+	    cmd->io_cmd_stat = &vq->vq_ctx.io_stat.flush;
 		req_hdr_p = (struct virtio_blk_outhdr *)cmd->req_buf;
 		if (req_hdr_p->sector != 0) {
 			ERR_ON_CMD(cmd, "sector must be zero for flush "
@@ -705,6 +716,12 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
 		return true;
+	}
+
+	if (cmd->io_cmd_stat) {
+	    cmd->io_cmd_stat->total++;
+	    if (ret)
+	        cmd->io_cmd_stat->fail++;
 	}
 
 	if (ret) {

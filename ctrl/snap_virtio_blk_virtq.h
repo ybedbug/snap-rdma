@@ -44,10 +44,24 @@
  * @fatal_err:	Fatal error flag
  * @priv:	Opaque privte struct used for implementation
  */
+
+typedef struct blk_virtq_io_cmd_stat {
+    uint64_t total;
+    uint64_t success;
+    uint64_t fail;
+} blk_virtq_io_cmd_stat_t;
+
+typedef struct blk_virtq_io_stat {
+    blk_virtq_io_cmd_stat_t read;
+    blk_virtq_io_cmd_stat_t write;
+    blk_virtq_io_cmd_stat_t flush;
+} blk_virtq_io_stat_t;
+
 struct blk_virtq_ctx {
-	int idx;
-	bool fatal_err;
-	void *priv;
+    int idx;
+    bool fatal_err;
+    void *priv;
+    blk_virtq_io_stat_t io_stat;
 };
 
 /**

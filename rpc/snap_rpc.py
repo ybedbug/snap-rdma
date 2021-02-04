@@ -580,7 +580,7 @@ def main():
     p = subparsers.add_parser('subsystem_nvme_list',
                               help='List NVMe subsystems')
     p.set_defaults(func=subsystem_nvme_list)
-
+    
     def controller_nvme_get_iostat(args):
         params = {
         }
@@ -616,6 +616,20 @@ def main():
 
     p.set_defaults(func=controller_nvme_get_debugstat)
             
+    def controller_virtio_blk_get_iostat(args):
+        params = {
+        }
+        if args.name:
+            params['name'] = args.name
+
+        result = args.client.call('controller_virtio_blk_get_iostat', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_virtio_blk_get_iostat',
+                              help='Return VirtIO BLK SNAP controller I/O statistics')
+    p.add_argument('-c', '--name', help='Controller Name', 
+                   type=str, required=False)
+    p.set_defaults(func=controller_virtio_blk_get_iostat)
+    
     def storage_admin(args):
         params = {
             'protocol': args.protocol,
@@ -635,7 +649,7 @@ def main():
             params['type'] = args.type
 
         result = args.client.call('storage_admin', params)
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result, indent=2))        
     p = subparsers.add_parser('storage_admin',
                               help='Execute a storage_admin command on ARM')
     p.add_argument('protocol', help='Storage protocol to use', type=str,
