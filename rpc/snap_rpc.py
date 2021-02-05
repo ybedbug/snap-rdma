@@ -280,10 +280,9 @@ def main():
     p = subparsers.add_parser('controller_virtio_blk_bdev_attach',
                               help='Attach bdev to VirtIO BLK controller')
     p.add_argument('name', help='Controller Name', type=str)
-    p.add_argument('--bdev_type', help='Block device type', type=str,
-                   choices=["spdk"], required=True)
-    p.add_argument('--bdev', help='Block device to use as backend', type=str,
-                   required=True)
+    p.add_argument('bdev_type', help='Block device type', type=str,
+                   choices=["spdk"])
+    p.add_argument('bdev', help='Block device to use as backend', type=str)
     p.add_argument('--size_max', help='size_max PCI register value', type=int)
     p.add_argument('--seg_max', help='seg_max PCI register value', type=int)
     p.set_defaults(func=controller_virtio_blk_bdev_attach)
