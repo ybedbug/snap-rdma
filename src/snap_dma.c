@@ -63,6 +63,13 @@ struct mlx5_dma_wqe {
 	struct mlx5_wqe_data_seg scatter;
 };
 
+struct snap_roce_caps {
+	bool is_supported;
+	uint8_t roce_version;
+	bool fl_when_roce_disabled;
+	bool fl_when_roce_enabled;
+};
+
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 				     size_t len, uint32_t lkey);
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp);
@@ -75,6 +82,50 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 static struct snap_dma_q_ops verb_ops;
 static struct snap_dma_q_ops dv_ops;
 static struct snap_dma_q_ops gga_ops;
+
+static int fill_roce_caps(struct ibv_context *context,
+			  struct snap_roce_caps *roce_caps)
+{
+
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	roce_caps->is_supported = DEVX_GET(query_hca_cap_out, out,
+						capability.cmd_hca_cap.roce);
+	if (!roce_caps->is_supported)
+		goto out;
+
+	memset(in, 0, sizeof(in));
+	memset(out, 0, sizeof(out));
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod, MLX5_SET_HCA_CAP_OP_MOD_ROCE);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	roce_caps->roce_version = DEVX_GET(query_hca_cap_out, out,
+					   capability.roce_cap.roce_version);
+	roce_caps->fl_when_roce_disabled = DEVX_GET(query_hca_cap_out,
+			out, capability.roce_cap.fl_rc_qp_when_roce_disabled);
+	roce_caps->fl_when_roce_enabled = DEVX_GET(query_hca_cap_out,
+			out, capability.roce_cap.fl_rc_qp_when_roce_enabled);
+out:
+	snap_debug("RoCE Caps: supported %d ver %d flwd %d flwe %d\n",
+		   roce_caps->is_supported, roce_caps->roce_version,
+		   roce_caps->fl_when_roce_disabled,
+		   roce_caps->fl_when_roce_enabled);
+	return 0;
+}
 
 static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 		      bool *ib_en, uint16_t *lid, enum ibv_mtu *mtu)
@@ -440,7 +491,7 @@ static int snap_modify_lb_qp_to_init(struct ibv_qp *qp,
 
 static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask,
-				    bool roce_enabled)
+				    bool force_loopback)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
@@ -505,7 +556,7 @@ static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 			else
 				DEVX_SET(qpc, qpc, primary_address_path.hop_limit, 64);
 
-			if (!roce_enabled)
+			if (force_loopback)
 				DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
 		} else {
 			DEVX_SET(qpc, qpc, primary_address_path.rlid,
@@ -553,46 +604,13 @@ static int snap_modify_lb_qp_to_rts(struct ibv_qp *qp,
 	return ret;
 }
 
-static int snap_connect_loop_qp(struct snap_dma_q *q)
+static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
+				 bool ib_en, uint16_t lid,
+				 bool roce_en, bool force_loopback,
+				 union ibv_gid *sw_gid, union ibv_gid *fw_gid)
 {
 	struct ibv_qp_attr attr;
-	union ibv_gid sw_gid, fw_gid;
 	int rc, flags_mask;
-	bool roce_en, ib_en;
-	uint16_t lid;
-	enum ibv_mtu mtu;
-
-	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
-			&ib_en, &lid, &mtu);
-	if (rc)
-		return rc;
-
-	if (roce_en) {
-		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-				   SNAP_DMA_QP_GID_INDEX, &sw_gid);
-		if (rc) {
-			/*
-			 * In case roce enabled, but GIDs cannot be found,
-			 * only loopback QPs are allowed. Treat such case
-			 * the same way as if roce was disabled
-			 */
-			roce_en = 0;
-			rc = 0;
-		} else {
-			rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-					   SNAP_DMA_QP_GID_INDEX, &fw_gid);
-			if (rc) {
-				/*
-				 * If querying SW QP GIDs was successful,
-				 * there is no reason why it will fail for
-				 * FW QP, so treat such scenario as an error
-				 */
-				snap_error("Failed to get FW QP gid[%d]\n",
-					   SNAP_DMA_QP_GID_INDEX);
-				return rc;
-			}
-		}
-	}
 
 	memset(&attr, 0, sizeof(attr));
 	attr.qp_state = IBV_QPS_INIT;
@@ -640,20 +658,22 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		     IBV_QP_MAX_DEST_RD_ATOMIC |
 		     IBV_QP_MIN_RNR_TIMER;
 
-	if (roce_en)
-		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid.raw,
-		       sizeof(fw_gid.raw));
-	rc = snap_modify_lb_qp_to_rtr(q->sw_qp.qp, &attr, flags_mask, roce_en);
+	if (roce_en && !force_loopback)
+		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid->raw,
+		       sizeof(fw_gid->raw));
+	rc = snap_modify_lb_qp_to_rtr(q->sw_qp.qp, &attr, flags_mask,
+				      force_loopback);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
 		return rc;
 	}
 
-	if (roce_en)
-		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid.raw,
-		       sizeof(sw_gid.raw));
+	if (roce_en && !force_loopback)
+		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid->raw,
+		       sizeof(sw_gid->raw));
 	attr.dest_qp_num = q->sw_qp.qp->qp_num;
-	rc = snap_modify_lb_qp_to_rtr(q->fw_qp.qp, &attr, flags_mask, roce_en);
+	rc = snap_modify_lb_qp_to_rtr(q->fw_qp.qp, &attr, flags_mask,
+				      force_loopback);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTR errno=%d\n", rc);
 		return rc;
@@ -688,6 +708,62 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	}
 
 	return 0;
+}
+
+static int snap_connect_loop_qp(struct snap_dma_q *q)
+{
+	union ibv_gid sw_gid, fw_gid;
+	int rc;
+	bool roce_en = false, ib_en = false;
+	uint16_t lid = 0;
+	enum ibv_mtu mtu = IBV_MTU_1024;
+	bool force_loopback = false;
+	struct snap_roce_caps roce_caps;
+
+	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
+			&ib_en, &lid, &mtu);
+	if (rc)
+		return rc;
+
+	/* If IB is supported, can immediately advance to QP activation */
+	if (ib_en)
+	    return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL, NULL);
+
+	rc = fill_roce_caps(q->sw_qp.qp->context, &roce_caps);
+	if (rc)
+		return rc;
+
+	/* If neither IB nor RoCE are supported, we cannot continue */
+	if (!roce_caps.is_supported)
+		return -ENOTSUP;
+
+	/* Check if force-loopback is supported based on roce caps */
+	if ((roce_en && roce_caps.fl_when_roce_enabled) ||
+	    (!roce_en && roce_caps.fl_when_roce_disabled)) {
+		force_loopback = true;
+	} else if (roce_en) {
+		/*
+		 * If force loopback is unsupported try to acquire GIDs and
+		 * open a non-fl QP
+		 */
+		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+				   SNAP_DMA_QP_GID_INDEX, &sw_gid);
+		if (!rc)
+			rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+					   SNAP_DMA_QP_GID_INDEX, &fw_gid);
+		if (rc) {
+			snap_error("Failed to get gid[%d] for loop QP\n",
+				   SNAP_DMA_QP_GID_INDEX);
+			return rc;
+		}
+	} else {
+		snap_error("RoCE is disabled and force-loopback option "
+			   "is not supported. Cannot create queue\n");
+		return -ENOTSUP;
+	}
+
+	return snap_activate_loop_qp(q, mtu, ib_en, lid, roce_en,
+				     force_loopback, &sw_gid, &fw_gid);
 }
 
 /**

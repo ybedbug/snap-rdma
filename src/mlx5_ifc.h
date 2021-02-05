@@ -1490,6 +1490,35 @@ struct mlx5_ifc_hotplug_cap_bits {
 	u8	 reserved_at_40[0x7c0];
 };
 
+struct mlx5_ifc_roce_cap_bits {
+	u8	   roce_apm[0x1];
+	u8	   rts2rts_primary_eth_prio[0x1];
+	u8	   roce_rx_allow_untagged[0x1];
+	u8	   rts2rts_src_addr_index_for_vlan_valid_vlan_id[0x1];
+	u8	   sw_r_roce_src_udp_port[0x01];
+	u8	   fl_rc_qp_when_roce_disabled[0x01];
+	u8	   fl_rc_qp_when_roce_enabled[0x01];
+	u8	   reserved_at_0[0x19];
+
+	u8	   reserved_at_32[0x60];
+
+	u8	   reserved_at_128[0xc];
+	u8	   l3_type[0x4];
+	u8	   reserved_at_144[0x8];
+	u8	   roce_version[0x8];
+
+	u8	   reserved_at_160[0x10];
+	u8	   r_roce_dest_udp_port[0x10];
+
+	u8	   r_roce_max_src_udp_port[0x10];
+	u8	   r_roce_min_src_udp_port[0x10];
+
+	u8	   reserved_at_224[0x10];
+	u8	   roce_address_table_size[0x10];
+
+	u8	   reserved_at_256[0x700];
+};
+
 union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_atomic_caps_bits atomic_caps;
 	struct mlx5_ifc_cmd_hca_cap_bits cmd_hca_cap;
@@ -1500,6 +1529,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_nvme_emulation_cap_bits nvme_emulation_cap;
 	struct mlx5_ifc_virtio_emulation_cap_bits virtio_emulation_cap;
 	struct mlx5_ifc_hotplug_cap_bits hotplug_cap;
+	struct mlx5_ifc_roce_cap_bits roce_cap;
 	u8	 reserved_at_0[0x8000];
 };
 
@@ -1574,6 +1604,7 @@ enum mlx5_cap_type {
 
 enum {
 	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE	      = 0x0 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_ROCE		      = 0x4 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_NIC_FLOW_TABLE	      = 0x7 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_ESW_FLOW_TABLE	      = 0x8 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_DEVICE_MEMORY	       = 0xf << 1,
