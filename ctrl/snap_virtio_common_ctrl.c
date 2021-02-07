@@ -8,11 +8,14 @@
  * According to virtio v0.95 spec., driver is not obligated to wait
  * for device to finish the RESET command, which may cause race conditions
  * to occur between driver and controller.
- * Issue is solved by using the extra internal `enabled` bit:
- *  - FW set bit to `0` on driver reset.
- *  - Controller set it back to `1` once finished.
+ * Issue is solved by using the extra internal `reset` bit:
+ *  - FW set bit to `1` on driver reset.
+ *  - Controller set it back to `0` once finished.
  */
 #define SNAP_VIRTIO_CTRL_RESET_DETECTED(vctrl) \
+		(vctrl->bar_curr->reset)
+
+#define SNAP_VIRTIO_CTRL_FLR_DETECTED(vctrl) \
 		(!vctrl->bar_curr->enabled)
 
 /*
@@ -44,6 +47,7 @@ static inline void snap_virtio_ctrl_bar_copy(struct snap_virtio_ctrl *ctrl,
 	ctrl->bar_ops->copy(orig, copy);
 	copy->status = orig->status;
 	copy->enabled = orig->enabled;
+	copy->reset = orig->reset;
 	copy->num_of_vfs = orig->num_of_vfs;
 }
 
@@ -203,14 +207,14 @@ static int snap_virtio_ctrl_reset(struct snap_virtio_ctrl *ctrl)
 
 	if (ctrl->bar_curr->pci_bdf) {
 		/*
-		 * When done with reset process, need to set enabled bit
-		 * back to `1` which signal FW to update `device_status`
+		 * When done with reset process, need to set reset bit
+		 * back to `0` which signal FW to update `device_status`
 		 * if needed. Host driver might be waiting for device
 		 * RESET process completion by polling device_status
 		 * until reading `0`.
 		 */
-		ctrl->bar_curr->enabled = 1;
-		ret = snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_ENABLED,
+		ctrl->bar_curr->reset = 0;
+		ret = snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_RESET,
 						  ctrl->bar_curr);
 		/* The status should be 0 if Driver reset device. */
 		ctrl->bar_curr->status = 0;
@@ -235,6 +239,18 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 			ret = snap_virtio_ctrl_reset(ctrl);
 		} else
 			ctrl->pending_reset = true;
+	} else if (SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl)) {
+		struct snap_context *sctx = ctrl->sdev->sctx;
+		void *dd_data = ctrl->sdev->dd_data;
+
+		snap_info("virtio controller FLR detected\n");
+		snap_close_device(ctrl->sdev);
+
+		ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
+		if (ctrl->sdev)
+			ctrl->sdev->dd_data = dd_data;
+		else
+			ret = -ENODEV;
 	} else {
 		ret = snap_virtio_ctrl_validate(ctrl);
 		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
@@ -562,10 +578,10 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 		return;
 
 	/* Handle device_status changes */
-	if ((ctrl->bar_curr->status != ctrl->bar_prev->status) ||
-	    (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl))) {
+	if (ctrl->bar_curr->status != ctrl->bar_prev->status ||
+	    SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl) ||
+	    SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl))
 		snap_virtio_ctrl_change_status(ctrl);
-	}
 
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
 		snap_virtio_ctrl_change_num_vfs(ctrl);
@@ -606,7 +622,6 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  const struct snap_virtio_ctrl_attr *attr)
 {
 	int ret = 0;
-	struct snap_device_attr sdev_attr = {0};
 	uint32_t npgs;
 
 	if (!sctx) {
@@ -621,24 +636,24 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		npgs = attr->npgs;
 	}
 
-	sdev_attr.pf_id = attr->pf_id;
-	sdev_attr.vf_id = attr->vf_id;
+	ctrl->sdev_attr.pf_id = attr->pf_id;
+	ctrl->sdev_attr.vf_id = attr->vf_id;
 	switch (attr->type) {
 	case SNAP_VIRTIO_BLK_CTRL:
 		ctrl->max_queues = sctx->virtio_blk_caps.max_emulated_virtqs;
-		sdev_attr.type = attr->pci_type;
+		ctrl->sdev_attr.type = attr->pci_type;
 		break;
 	case SNAP_VIRTIO_NET_CTRL:
 		ctrl->max_queues = sctx->virtio_net_caps.max_emulated_virtqs;
-		sdev_attr.type = attr->pci_type;
+		ctrl->sdev_attr.type = attr->pci_type;
 		break;
 	default:
 		ret = -EINVAL;
 		goto err;
 	};
 	if (attr->event)
-		sdev_attr.flags |= SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
-	ctrl->sdev = snap_open_device(sctx, &sdev_attr);
+		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
+	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
 		ret = -ENODEV;
 		goto err;

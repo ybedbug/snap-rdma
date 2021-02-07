@@ -1482,7 +1482,7 @@ enum {
 enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_STATUS = 1 << 0,
 	MLX5_VIRTIO_DEVICE_MODIFY_LINK = 1 << 1,
-	MLX5_VIRTIO_DEVICE_MODIFY_ENABLED = 1 << 2,
+	MLX5_VIRTIO_DEVICE_MODIFY_RESET = 1 << 2,
 	MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG = 1 << 3,
 	MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG = 1 << 4,
 	MLX5_VIRTIO_DEVICE_MODIFY_ALL = 1 << 6,
@@ -2797,7 +2797,8 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
-	u8	   reserved_at_62[0x1e];
+	u8	   reset[0x1];
+	u8	   reserved_at_62[0x1d];
 
 	u8	   reserved_at_80[0x40];
 
@@ -2824,7 +2825,8 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
-	u8	   reserved_at_62[0x1e];
+	u8	   reset[0x1];
+	u8	   reserved_at_62[0x1d];
 
 	u8	   reserved_at_80[0x40];
 

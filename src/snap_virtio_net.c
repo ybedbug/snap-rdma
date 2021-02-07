@@ -59,6 +59,8 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 
 	attr->vattr.enabled = DEVX_GET(virtio_net_device_emulation,
 				       device_emulation_out, enabled);
+	attr->vattr.reset = DEVX_GET(virtio_net_device_emulation,
+				     device_emulation_out, reset);
 	attr->modifiable_fields = 0;
 	dev_allowed = DEVX_GET64(virtio_net_device_emulation,
 				 device_emulation_out, modify_field_select);
@@ -67,8 +69,8 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_STATUS;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_LINK)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_LINK_STATUS;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ENABLED)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ENABLED;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_RESET)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_RESET;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_CFG;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ALL)

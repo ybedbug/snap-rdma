@@ -2710,6 +2710,7 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev)
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2752,6 +2753,7 @@ snap_create_virtio_blk_device_emulation(struct snap_device *sdev)
 	DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.virtio_blk_need_tunnel ? 0 : 1);
+	DEVX_SET(virtio_blk_device_emulation, device_emulation_in, enabled, 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));

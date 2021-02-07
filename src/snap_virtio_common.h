@@ -149,7 +149,7 @@ struct snap_virtio_queue {
 enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_DEV_STATUS = 1 << 0,
 	SNAP_VIRTIO_MOD_LINK_STATUS = 1 << 1,
-	SNAP_VIRTIO_MOD_ENABLED = 1 << 2,
+	SNAP_VIRTIO_MOD_RESET = 1 << 2,
 	SNAP_VIRTIO_MOD_PCI_COMMON_CFG = 1 << 3,
 	SNAP_VIRTIO_MOD_DEV_CFG = 1 << 4,
 	SNAP_VIRTIO_MOD_ALL = 1 << 6,
@@ -165,6 +165,7 @@ struct snap_virtio_device_attr {
 	uint16_t			pci_bdf;
 	uint8_t				status;
 	bool				enabled;
+	bool				reset;
 	uint16_t			num_of_vfs;
 	uint8_t				config_generation;
 	uint8_t				device_feature_select;
