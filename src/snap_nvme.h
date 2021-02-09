@@ -82,7 +82,6 @@ struct snap_nvme_sq_attr {
 	uint64_t			base_addr;
 	uint64_t			modifiable_fields;//mask of snap_nvme_sq_modify
 	struct ibv_qp			*qp;
-	uint32_t			emulated_device_dma_mkey;
 	struct snap_nvme_cq		*cq;
 	enum snap_nvme_sq_state		state;
 	uint8_t				log_entry_size;

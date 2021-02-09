@@ -105,6 +105,9 @@ struct sample_controller {
 	struct ibv_context *ib_ctx;
 	struct ibv_pd      *pd;
 
+	uint32_t                crossed_vhca_mkey;
+	struct snap_cross_mkey *mkey;
+
 	uint32_t last_cmd;
 	bool     enabled;
 };
@@ -413,6 +416,12 @@ static int ctrl_cmd_stop(struct sample_controller *ctrl)
 	/* Wait until all outstanding operations are completed */
 	snap_dma_q_flush(ctrl->dma_q);
 
+	rc = snap_destroy_cross_mkey(ctrl->mkey);
+	if (rc) {
+		printf("Failed to destroy crossing mkey\n");
+		rc = -1;
+	}
+
 	rc = snap_nvme_destroy_sq(ctrl->sq);
 	if (rc) {
 		printf("Failed to destroy sq\n");
@@ -540,14 +549,14 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 		goto free_dma_q;
 	}
 
-	memset(&sq_attr, 0, sizeof(sq_attr));
-	rc = snap_nvme_query_sq(ctrl->sq, &sq_attr);
-	if (rc) {
-		printf("failed to get dma key\n");
+	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, ctrl->crossed_vhca_mkey,
+                                        snap_get_vhca_id(ctrl->sdev));
+	if (!ctrl->mkey) {
+		printf("failed to create crossing mkey\n");
 		goto sq_to_err;
 	}
-	printf("dma key is 0x%x\n", sq_attr.emulated_device_dma_mkey);
-	ctrl->dma_rkey = sq_attr.emulated_device_dma_mkey;
+	printf("dma key is 0x%x\n", ctrl->mkey->mkey);
+	ctrl->dma_rkey = ctrl->mkey->mkey;
 
 	return 0;
 sq_to_err:
@@ -629,6 +638,7 @@ static void ctrl_progress_commands(struct sample_controller *ctrl)
 		return;
 	}
 	ctrl->enabled = attr.enabled;
+	ctrl->crossed_vhca_mkey = attr.crossed_vhca_mkey;
 
 	cmd = *(uint32_t *)(ctrl->sdev->pci->bar.data + SNAP_SAMPLE_DEV_REG_CMD);
 	if (ctrl->last_cmd == cmd)

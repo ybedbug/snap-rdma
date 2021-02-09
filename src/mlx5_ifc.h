@@ -3862,9 +3862,7 @@ struct mlx5_ifc_nvme_sq_bits {
 
 	u8	   counter_set_id[0x20];
 
-	u8	   reserved_at_160[0x20];
-
-	u8	   emulated_device_dma_mkey[0x20];
+	u8	   reserved_at_160[0x40];
 
 	u8	   nvme_cq_id[0x20];
 

@@ -645,8 +645,6 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 
 	out_sq = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 	attr->queue_depth = DEVX_GET(nvme_sq, out_sq, nvme_num_of_entries);
-	attr->emulated_device_dma_mkey = DEVX_GET(nvme_sq, out_sq,
-						  emulated_device_dma_mkey);
 	attr->state = DEVX_GET(nvme_sq, out_sq, network_state);
 	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
 	if (dev_allowed) {

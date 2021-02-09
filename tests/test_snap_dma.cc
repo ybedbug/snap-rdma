@@ -454,6 +454,8 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	struct snap_device *sdev;
 	struct snap_dma_q *q;
 	uint32_t xgvmi_rkey;
+	struct snap_cross_mkey *mkey;
+	struct snap_nvme_device_attr nvme_device_attr = {};
 
 	/* TODO: check that test is actually working and limit it to
 	 * the CX6 DX
@@ -510,15 +512,12 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 				SNAP_NVME_SQ_MOD_QPN,
 				&sq_attr));
 
-	memset(&sq_attr, 0, sizeof(sq_attr));
-	ASSERT_EQ(0, snap_nvme_query_sq(sq, &sq_attr));
+	ASSERT_EQ(0, snap_nvme_query_device(sdev, &nvme_device_attr));
+	mkey = snap_create_cross_mkey(m_pd, nvme_device_attr.crossed_vhca_mkey,
+					snap_get_vhca_id(sdev));
+	ASSERT_TRUE(mkey);
 
-	printf("sq dma_key=0x%x state=0x%x, mod_fields=0x%lx\n",
-			sq_attr.emulated_device_dma_mkey,
-			sq_attr.state,
-			sq_attr.modifiable_fields);
-
-	xgvmi_rkey = sq_attr.emulated_device_dma_mkey;
+	xgvmi_rkey = mkey->mkey;
 	ASSERT_NE(0, xgvmi_rkey);
 
 	void *va;
@@ -532,6 +531,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	dma_xfer_test(q, false, true, va, (void *)pa, xgvmi_rkey, m_bsize);
 
 	host_uio_dma_free(va);
+	snap_destroy_cross_mkey(mkey);
 	snap_dma_q_destroy(q);
 	snap_nvme_destroy_sq(sq);
 	snap_nvme_destroy_cq(cq);
