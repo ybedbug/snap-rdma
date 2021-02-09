@@ -3,7 +3,7 @@
     project-type: pipeline
     properties:
         - github:
-            url: "{jjb_git}"
+            url: "https://github.com/Mellanox/snap-rdma"
         - build-discarder:
             days-to-keep: 50
             num-to-keep: 20

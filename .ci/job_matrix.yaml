@@ -16,7 +16,7 @@ volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}
   - {mountPath: /auto/sw_tools, hostPath: /auto/sw_tools}
   - {mountPath: /auto/mtrswgwork, hostPath: /auto/mtrswgwork}
-  - {mountPath: /auto/sw/release/mlnx_ofed, hostPath: /auto/sw/release/mlnx_ofed}
+  - {mountPath: /.autodirect/sw/release/mlnx_ofed, hostPath: /.autodirect/sw/release/mlnx_ofed}
   - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
 
 runs_on_dockers:

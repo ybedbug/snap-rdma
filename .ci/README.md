@@ -45,15 +45,8 @@ Note: In this case one should pull project sources manually
 
 ## How to install kubectl on VDI machine for swx-k8 cluster
  1. Install kubectl using curl: https://v1-18.docs.kubernetes.io/docs/tasks/tools/install-kubectl/
- 2. Login to Rancher with your Mellanox account: https://rancher.mellanox.com/c/c-jl8wl/monitoring
- 3. Open and save "Kubeconfig File" (at the top right corner) to your ~/.kube/config
- 4. Install x509 certificate locally:
-    ```sh
-    git -c http.sslVerify=false clone https://it-gerrit.labs.mlnx/Certificates /tmp/Certificates
-    sudo cp /tmp/Certificates/CA-certificates/*.crt /etc/pki/ca-trust/source/anchors/
-    sudo update-ca-trust
-    ```
- 5. Check kubectl under your user account or under swx-jenkins:
+ 2. Login to **swx-k8s-spray** host and copy `/root/.kube/config` to your `~/.kube/config`
+ 3. Check kubectl under your user account or under swx-jenkins:
     ```sh
     kubectl get nodes
     ```
