@@ -359,7 +359,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	if (getenv(SNAP_DMA_Q_MODE)) {
 		attr->mode = atoi(getenv(SNAP_DMA_Q_MODE));
-		printf("*** dma_q mode is %d ****\n", attr->mode);
+		snap_info("dma_q mode is forced to be %d\n", attr->mode);
 	}
 
 	if (attr->mode == SNAP_DMA_Q_MODE_VERBS) {
@@ -370,6 +370,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->ops = &gga_ops;
 	} else
 		return -EINVAL;
+	snap_debug("Opening dma_q of type %d\n", attr->mode);
 
 	/* make sure that the completion is requested at least once */
 	if (attr->mode != SNAP_DMA_Q_MODE_VERBS &&
