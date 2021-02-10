@@ -191,12 +191,10 @@ struct snap_dirty_pages {
  * struct snap_internal_state - struct that holds the information of the
  *                              internal device state.
  *
- * @page_size: the page size that is represented by a bit, given by the host.
- * @bmap_num_elements: size of the bmap array, initial equals to
- *                     SNAP_CHANNEL_INITIAL_BITMAP_ARRAY_SZ. increase by x2
- *                     factor when required.
- * @lock: bitmap lock.
- * @bmap: dirty pages bitmap array with bmap_num_elements elements.
+ * @state_size: the state size in bytes.
+ * @lock: state lock.
+ * @state: the state information.
+ * @state_mr: state memory region.
  */
 struct snap_internal_state {
 	uint32_t	state_size;
