@@ -1005,7 +1005,10 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_bdev_ops *bdev_ops,
 					   num_descs * sizeof(struct vring_desc);
 	rdma_qp_create_attr.uctx = vq_priv;
 	rdma_qp_create_attr.rx_cb = blk_virtq_rx_cb;
-
+	if (snap_dev->sctx->compression_caps.dma_mmo_supported)
+		rdma_qp_create_attr.mode = SNAP_DMA_Q_MODE_GGA;
+	else
+		rdma_qp_create_attr.mode = SNAP_DMA_Q_MODE_DV;
 	vq_priv->dma_q = snap_dma_q_create(attr->pd, &rdma_qp_create_attr);
 	if (!vq_priv->dma_q) {
 		snap_error("failed creating rdma qp loop\n");
