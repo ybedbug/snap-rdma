@@ -21,20 +21,14 @@ static int rdma_port_idx;
 
 static int snap_channel_rdma_rw(struct snap_rdma_channel *schannel,
 		uint64_t local_addr, uint32_t lkey, int len,
-		uint64_t remote_addr, uint32_t rkey, int opcode)
+		uint64_t remote_addr, uint32_t rkey, int opcode,
+		struct ibv_send_wr *send_wr)
 {
 	struct ibv_send_wr rdma_wr = {};
 	struct ibv_send_wr *bad_wr;
-	struct timespec ts;
-	sem_t sem;
 	struct ibv_sge sge;
 	int ret;
 
-	ret = sem_init(&sem, 0, 0);
-	if (ret) {
-		snap_channel_error("failed to init sem\n");
-		return ret;
-	}
 	sge.addr = local_addr;
 	sge.length = len;
 	sge.lkey = lkey;
@@ -46,31 +40,15 @@ static int snap_channel_rdma_rw(struct snap_rdma_channel *schannel,
 	rdma_wr.sg_list = &sge;
 	rdma_wr.num_sge = 1;
 	rdma_wr.next = NULL;
-	rdma_wr.wr_id = (uintptr_t)&sem;
-
-	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
-		snap_channel_error("failed to get system time\n");
-		ret = -EAGAIN;
-		goto out_sem;
-	}
-	ts.tv_sec += 5; //set 5 seconds timeout
+	rdma_wr.wr_id = (uintptr_t)send_wr;
 
 	ret = ibv_post_send(schannel->qp, &rdma_wr, &bad_wr);
-	if (ret) {
+	if (ret)
 		snap_channel_error("schannel 0x%p failed to post rdma\n",
 				   schannel);
-		goto out_sem;
-	}
-
-	if (sem_timedwait(&sem, &ts) == -1) {
-		ret = errno;
-		snap_channel_error("schannel 0x%p failed to semwait\n",
-				   schannel);
-		goto out_sem;
-	}
-
-out_sem:
-	sem_destroy(&sem);
+	else
+		snap_channel_info("schannel 0x%p issued rdma %d op rkey 0x%x remote_addr 0x%lx len %d\n",
+				  schannel, opcode, rkey, remote_addr, len);
 
 	return ret;
 }
@@ -81,11 +59,11 @@ static int snap_channel_start_dirty_track(struct snap_rdma_channel *schannel,
 {
 	struct mlx5_snap_start_dirty_log_command *dirty_cmd;
 	struct snap_dirty_pages *dirty_pages;
-	int ret;
+	int ret = 0;
 
 	dirty_cmd = (struct mlx5_snap_start_dirty_log_command *)cmd;
 	if (!is_power_of_two(dirty_cmd->page_size)) {
-		errno = EINVAL;
+		ret = -EINVAL;
 		snap_channel_error("page_size must be a power of 2\n");
 		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
 		goto out;
@@ -96,14 +74,14 @@ static int snap_channel_start_dirty_track(struct snap_rdma_channel *schannel,
 	dirty_pages = &schannel->dirty_pages;
 	pthread_mutex_lock(&dirty_pages->copy_lock);
 	if (dirty_pages->bmap) {
-		errno = EPERM;
+		ret = -EPERM;
 		snap_channel_error("dirty pages logging have been started\n");
 		cqe->status = MLX5_SNAP_SC_ALREADY_STARTED_LOG;
 		goto out_unlock;
 	}
 	dirty_pages->bmap = calloc(1, SNAP_CHANNEL_INITIAL_BITMAP_SIZE);
 	if (!dirty_pages->bmap) {
-		errno = ENOMEM;
+		ret = -ENOMEM;
 		snap_channel_error("failed to allocate dirty pages bitmap\n");
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 		goto out_unlock;
@@ -128,7 +106,7 @@ static int snap_channel_start_dirty_track(struct snap_rdma_channel *schannel,
 out_unlock:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
 out:
-	return 0;
+	return ret;
 }
 
 static int snap_channel_stop_dirty_track(struct snap_rdma_channel *schannel,
@@ -136,14 +114,14 @@ static int snap_channel_stop_dirty_track(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_completion *cqe)
 {
 	struct snap_dirty_pages *dirty_pages;
-	int ret;
+	int ret = 0;
 
 	snap_channel_info("schannel 0x%p stop tracking\n", schannel);
 
 	dirty_pages = &schannel->dirty_pages;
 	pthread_mutex_lock(&dirty_pages->copy_lock);
 	if (!dirty_pages->bmap) {
-		errno = EPERM;
+		ret = -EPERM;
 		snap_channel_error("dirty pages logging already stopped or "
 				   "didn't start\n");
 		cqe->status = MLX5_SNAP_SC_ALREADY_STOPPED_LOG;
@@ -166,7 +144,7 @@ static int snap_channel_stop_dirty_track(struct snap_rdma_channel *schannel,
 
 out:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
-	return 0;
+	return ret;
 }
 
 static int snap_channel_get_dirty_size(struct snap_rdma_channel *schannel,
@@ -174,6 +152,7 @@ static int snap_channel_get_dirty_size(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_completion *cqe)
 {
 	struct snap_dirty_pages *dirty_pages;
+	int ret = 0;
 
 	dirty_pages = &schannel->dirty_pages;
 	pthread_mutex_lock(&dirty_pages->copy_lock);
@@ -193,7 +172,7 @@ static int snap_channel_get_dirty_size(struct snap_rdma_channel *schannel,
 		dirty_pages->copy_bmap = calloc(dirty_pages->highest_dirty_element,
 						SNAP_CHANNEL_BITMAP_ELEM_SZ);
 		if (!dirty_pages->copy_bmap) {
-			errno = ENOMEM;
+			ret = -ENOMEM;
 			snap_channel_error("failed to allocate copy bitmap\n");
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
 			goto out_unlock;
@@ -215,22 +194,24 @@ out_unlock:
 out_unlock_copy:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_report_dirty_pages(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
-		struct mlx5_snap_completion *cqe)
+		struct mlx5_snap_completion *cqe,
+		struct ibv_send_wr *send_wr)
 {
 	struct snap_dirty_pages *dirty_pages;
 	__u32 length;
-	int ret;
+	int ret = 0;
 
 	dirty_pages = &schannel->dirty_pages;
 	pthread_mutex_lock(&dirty_pages->copy_lock);
 	length = dirty_pages->copy_bmap_num_elements * SNAP_CHANNEL_BITMAP_ELEM_SZ;
 	if (cmd->length != length) {
 		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		ret = -EINVAL;
 		goto out_unlock;
 	}
 
@@ -247,7 +228,7 @@ static int snap_channel_report_dirty_pages(struct snap_rdma_channel *schannel,
 		}
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)dirty_pages->copy_bmap,
 					   mr->lkey, length, cmd->addr,
-					   cmd->key, IBV_WR_RDMA_WRITE);
+					   cmd->key, IBV_WR_RDMA_WRITE, send_wr);
 		if (ret) {
 			ibv_dereg_mr(mr);
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
@@ -259,14 +240,15 @@ static int snap_channel_report_dirty_pages(struct snap_rdma_channel *schannel,
 			ibv_dereg_mr(dirty_pages->copy_mr);
 		dirty_pages->copy_mr = mr;
 	} else {
-		snap_channel_info("schannel 0x%p no dirty pages to report\n",
-				  schannel);
-		cqe->status = MLX5_SNAP_SC_SUCCESS;
+		snap_channel_error("schannel 0x%p no dirty pages to report\n",
+				   schannel);
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		ret = -EINVAL;
 	}
 out_unlock:
 	pthread_mutex_unlock(&dirty_pages->copy_lock);
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_freeze_device(struct snap_rdma_channel *schannel,
@@ -286,7 +268,7 @@ static int snap_channel_freeze_device(struct snap_rdma_channel *schannel,
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_unfreeze_device(struct snap_rdma_channel *schannel,
@@ -306,7 +288,7 @@ static int snap_channel_unfreeze_device(struct snap_rdma_channel *schannel,
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_quiesce_device(struct snap_rdma_channel *schannel,
@@ -326,7 +308,7 @@ static int snap_channel_quiesce_device(struct snap_rdma_channel *schannel,
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_unquiesce_device(struct snap_rdma_channel *schannel,
@@ -346,7 +328,7 @@ static int snap_channel_unquiesce_device(struct snap_rdma_channel *schannel,
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_get_state_size(struct snap_rdma_channel *schannel,
@@ -354,7 +336,7 @@ static int snap_channel_get_state_size(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_completion *cqe)
 {
 	struct snap_internal_state *state = &schannel->state;
-	int ret, size;
+	int ret = 0, size;
 
 	pthread_mutex_lock(&state->lock);
 	if (state->state_size) {
@@ -368,6 +350,7 @@ static int snap_channel_get_state_size(struct snap_rdma_channel *schannel,
 	size = schannel->base.ops->get_state_size(schannel->base.data);
 	if (size < 0) {
 		snap_channel_error("failed to get state size\n");
+		ret = -EINVAL;
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 	} else {
 		if (size) {
@@ -376,7 +359,7 @@ static int snap_channel_get_state_size(struct snap_rdma_channel *schannel,
 
 			state->state = calloc(size, 1);
 			if (!state->state) {
-				errno = ENOMEM;
+				ret = -ENOMEM;
 				snap_channel_error("failed to allocate state\n");
 				cqe->status = MLX5_SNAP_SC_INTERNAL;
 				goto out_unlock;
@@ -397,12 +380,13 @@ static int snap_channel_get_state_size(struct snap_rdma_channel *schannel,
 out_unlock:
 	pthread_mutex_unlock(&state->lock);
 
-	return 0;
+	return ret;
 }
 
 static int snap_channel_read_state(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
-		struct mlx5_snap_completion *cqe)
+		struct mlx5_snap_completion *cqe,
+		struct ibv_send_wr *send_wr)
 {
 	struct snap_internal_state *state = &schannel->state;
 	struct mlx5_snap_rw_command *rw;
@@ -415,6 +399,7 @@ static int snap_channel_read_state(struct snap_rdma_channel *schannel,
 	if (rw->offset) {
 		snap_channel_error("state offset is not supported\n");
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
+		ret = -EINVAL;
 		goto out;
 	}
 	pthread_mutex_lock(&state->lock);
@@ -422,6 +407,7 @@ static int snap_channel_read_state(struct snap_rdma_channel *schannel,
 	if (state->state_size < length) {
 		snap_channel_error("invalid state length asked\n");
 		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		ret = -EINVAL;
 		goto out_unlock;
 	}
 
@@ -434,14 +420,17 @@ static int snap_channel_read_state(struct snap_rdma_channel *schannel,
 			snap_channel_error("schannel 0x%p state reg_mr failed\n",
 					   schannel);
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			ret = -EINVAL;
 			goto out_unlock;
 		}
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)state->state,
 					   mr->lkey, length, rw->addr,
-					   rw->key, IBV_WR_RDMA_WRITE);
+					   rw->key, IBV_WR_RDMA_WRITE,
+					   send_wr);
 		if (ret) {
 			ibv_dereg_mr(mr);
 			cqe->status = MLX5_SNAP_SC_DATA_XFER_ERROR;
+			ret = -EINVAL;
 			goto out_unlock;
 		}
 
@@ -453,29 +442,32 @@ static int snap_channel_read_state(struct snap_rdma_channel *schannel,
 	} else {
 		snap_channel_info("schannel 0x%p no state to report\n",
 				  schannel);
-		cqe->status = MLX5_SNAP_SC_SUCCESS;
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		ret = -EINVAL;
 	}
 
 out_unlock:
 	pthread_mutex_unlock(&state->lock);
 out:
-	return 0;
+	return ret;
 }
 
 static int snap_channel_write_state(struct snap_rdma_channel *schannel,
 		struct mlx5_snap_common_command *cmd,
-		struct mlx5_snap_completion *cqe)
+		struct mlx5_snap_completion *cqe,
+		struct ibv_send_wr *send_wr)
 {
 	struct snap_internal_state *state = &schannel->state;
 	struct mlx5_snap_rw_command *rw;
 	__u32 length;
-	int ret;
+	int ret = 0;
 
 	rw = (struct mlx5_snap_rw_command *)cmd;
 	length = rw->length;
 
 	if (rw->offset) {
 		snap_channel_error("state offset is not supported\n");
+		ret = -EINVAL;
 		cqe->status = MLX5_SNAP_SC_INTERNAL;
 		goto out;
 	}
@@ -498,7 +490,7 @@ static int snap_channel_write_state(struct snap_rdma_channel *schannel,
 
 		state->state = calloc(length, 1);
 		if (!state->state) {
-			errno = ENOMEM;
+			ret = -ENOMEM;
 			snap_channel_error("failed to alloc resume state\n");
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
 			goto out_unlock;
@@ -513,12 +505,13 @@ static int snap_channel_write_state(struct snap_rdma_channel *schannel,
 			state->state = NULL;
 			state->state_size = 0;
 			cqe->status = MLX5_SNAP_SC_INTERNAL;
+			ret = -EINVAL;
 			goto out_unlock;
 		}
 
 		ret = snap_channel_rdma_rw(schannel, (uintptr_t)state->state,
 					   mr->lkey, length, rw->addr,
-					   rw->key, IBV_WR_RDMA_READ);
+					   rw->key, IBV_WR_RDMA_READ, send_wr);
 		if (ret) {
 			free(state->state);
 			state->state = NULL;
@@ -544,30 +537,40 @@ static int snap_channel_write_state(struct snap_rdma_channel *schannel,
 	} else {
 		snap_channel_info("schannel 0x%p no state to write\n",
 				  schannel);
-		cqe->status = MLX5_SNAP_SC_SUCCESS;
+		cqe->status = MLX5_SNAP_SC_INVALID_FIELD;
+		ret = -EINVAL;
 	}
 
 out_unlock:
 	pthread_mutex_unlock(&state->lock);
 out:
-
-	return 0;
+	return ret;
 }
 
 static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
-		struct mlx5_snap_common_command *cmd, __u64 idx)
+		struct mlx5_snap_common_command *cmd)
 {
 	struct ibv_send_wr *send_wr, *bad_wr = NULL;
 	struct mlx5_snap_completion *cqe;
 	__u8 opcode = cmd->opcode;
+	 __u64 idx;
 	int ret = 0;
+	bool send_rsp = true;
 
-	snap_channel_info("schannel 0x%p got CMD opcode %u id %u\n", schannel,
+	snap_channel_info("schannel 0x%p got CMD opcode %u id %u\n",
+			  schannel, opcode, cmd->command_id);
+
+	if (SNAP_CHANNEL_QUEUE_SIZE < cmd->command_id) {
+		snap_channel_error("schannel 0x%p invalid CMDID opcode %u id %u\n", schannel,
 			  opcode, cmd->command_id);
+		return -EINVAL;
+	}
 
+	idx = cmd->command_id - 1;
 	send_wr = &schannel->rsp_wr[idx];
 	cqe = (struct mlx5_snap_completion *) (schannel->rsp_buf +
 			idx * SNAP_CHANNEL_RSP_SIZE);
+	cqe->status = MLX5_SNAP_SC_SUCCESS;
 
 	cqe->command_id = cmd->command_id;
 
@@ -582,7 +585,9 @@ static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
 		ret = snap_channel_get_dirty_size(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_REPORT_LOG:
-		ret = snap_channel_report_dirty_pages(schannel, cmd, cqe);
+		ret = snap_channel_report_dirty_pages(schannel, cmd, cqe, send_wr);
+		if (!ret)
+			send_rsp = false;
 		break;
 	case MLX5_SNAP_CMD_FREEZE_DEV:
 		ret = snap_channel_freeze_device(schannel, cmd, cqe);
@@ -600,10 +605,14 @@ static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
 		ret = snap_channel_get_state_size(schannel, cmd, cqe);
 		break;
 	case MLX5_SNAP_CMD_READ_STATE:
-		ret = snap_channel_read_state(schannel, cmd, cqe);
+		ret = snap_channel_read_state(schannel, cmd, cqe, send_wr);
+		if (!ret)
+			send_rsp = false;
 		break;
 	case MLX5_SNAP_CMD_WRITE_STATE:
-		ret = snap_channel_write_state(schannel, cmd, cqe);
+		ret = snap_channel_write_state(schannel, cmd, cqe, send_wr);
+		if (!ret)
+			send_rsp = false;
 		break;
 	default:
 		cqe->status = MLX5_SNAP_SC_INVALID_OPCODE;
@@ -611,16 +620,25 @@ static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
 		break;
 	}
 
-	/* some internal error happened during processing cmd */
-	if (ret)
-		cqe->status = MLX5_SNAP_SC_INTERNAL;
+	if (send_rsp) {
 
-	send_wr->wr_id = opcode;
-	ret = ibv_post_send(schannel->qp, send_wr, &bad_wr);
-	if (ret) {
-		snap_channel_error("schannel 0x%p failed to post send\n",
-				   schannel);
-		return ret;
+		/*
+		 * some internal error happened during processing cmd and
+		 * the status wasn't updated
+		 */
+		if (ret && cqe->status == MLX5_SNAP_SC_SUCCESS)
+			cqe->status = MLX5_SNAP_SC_INTERNAL;
+
+		snap_channel_info("schannel 0x%p posting cid %d response\n",
+				  schannel, cqe->command_id);
+
+		send_wr->wr_id = opcode;
+		ret = ibv_post_send(schannel->qp, send_wr, &bad_wr);
+		if (ret) {
+			snap_channel_error("schannel 0x%p failed to post send\n",
+					   schannel);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -638,7 +656,7 @@ static int snap_channel_recv_handler(struct snap_rdma_channel *schannel,
 			idx * SNAP_CHANNEL_DESC_SIZE);
 retry:
 	/* error means that rsp failed to be posted, retry as best effort */
-	ret = snap_channel_process_cmd(schannel, cmd, idx);
+	ret = snap_channel_process_cmd(schannel, cmd);
 	if (ret && retry-- > 0) {
 		usleep(200000);
 		goto retry;
@@ -655,7 +673,7 @@ retry:
 static int snap_channel_handle_completion(struct ibv_wc *wc,
 		struct snap_rdma_channel *schannel)
 {
-	sem_t *sem;
+	struct ibv_send_wr *send_wr, *bad_wr;
 	__u8 opcode;
 	int ret;
 
@@ -693,8 +711,14 @@ static int snap_channel_handle_completion(struct ibv_wc *wc,
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
-			sem = (sem_t *)wc->wr_id;
-			sem_post(sem);
+			snap_channel_info("received %d completion\n", wc->opcode);
+			send_wr = (struct ibv_send_wr *)wc->wr_id;
+			ret = ibv_post_send(schannel->qp, send_wr, &bad_wr);
+			if (ret) {
+				snap_channel_error("schannel 0x%p failed to post rw send\n",
+						   schannel);
+				return ret;
+			}
 			break;
 		default:
 			snap_channel_error("Received an unexpected completion "
