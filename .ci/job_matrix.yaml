@@ -48,6 +48,7 @@ steps:
     containerSelector: "{name: 'toolbox'}"
     run: |
       .ci/code_style_check.sh
+    archiveArtifacts: 'code_style/*.log'
 
   - name: Coverity scan
     containerSelector: "{name: 'toolbox'}"
@@ -73,7 +74,6 @@ steps:
       make -j 3 install
 
   - name: Blackduck scan source
-    enable: false
     containerSelector: "{name: 'blackduck'}"
     shell: action
     module: ngci
