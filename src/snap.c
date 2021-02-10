@@ -488,6 +488,19 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->virtio_blk_caps.crossing_vhca_mkey = false;
 	}
 
+	sctx->compression_caps.dma_mmo_supported =
+			DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.dma_mmo);
+	sctx->compression_caps.compress_supported =
+			DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.compress);
+	sctx->compression_caps.decompress_supported =
+			DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.decompress);
+	sctx->compression_caps.compress_min_block_size =
+			DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.compress_min_block_size);
+
 	return 0;
 }
 
