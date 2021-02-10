@@ -16,6 +16,9 @@ static inline bool is_power_of_two(uint x)
 	return (x != 0) && ((x & (x - 1)) == 0);
 }
 
+static pthread_mutex_t port_lock = PTHREAD_MUTEX_INITIALIZER;
+static int rdma_port_idx;
+
 static int snap_channel_rdma_rw(struct snap_rdma_channel *schannel,
 		uint64_t local_addr, uint32_t lkey, int len,
 		uint64_t remote_addr, uint32_t rkey, int opcode)
@@ -1318,9 +1321,17 @@ struct snap_channel *snap_rdma_channel_open(struct snap_migration_ops *ops,
 	if (!rdma_ip)
 		goto out_free_cmthread;
 
-	rdma_port = getenv(SNAP_CHANNEL_RDMA_PORT);
+	pthread_mutex_lock(&port_lock);
+	if (!rdma_port_idx)
+		rdma_port = getenv(SNAP_CHANNEL_RDMA_PORT_1);
+	else
+		rdma_port = getenv(SNAP_CHANNEL_RDMA_PORT_2);
+
 	if (!rdma_port)
 		goto out_free_cmthread;
+	rdma_port_idx++;
+	snap_channel_info("BINDING IP %s PORT %s\n", rdma_ip, rdma_port);
+	pthread_mutex_unlock(&port_lock);
 
 	ret = getaddrinfo(rdma_ip, rdma_port, &hints, &res);
 	if (ret)

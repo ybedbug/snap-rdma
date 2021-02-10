@@ -47,7 +47,8 @@
 #include <rdma/rdma_cma.h>
 
 #define SNAP_CHANNEL_RDMA_IP "SNAP_RDMA_IP"
-#define SNAP_CHANNEL_RDMA_PORT "SNAP_RDMA_PORT"
+#define SNAP_CHANNEL_RDMA_PORT_1 "SNAP_RDMA_PORT_1"
+#define SNAP_CHANNEL_RDMA_PORT_2 "SNAP_RDMA_PORT_2"
 
 struct mlx5_snap_cm_req {
 	__u16				pci_bdf;
