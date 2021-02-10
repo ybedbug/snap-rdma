@@ -560,7 +560,7 @@ static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
 	snap_channel_info("schannel 0x%p got CMD opcode %u id %u\n",
 			  schannel, opcode, cmd->command_id);
 
-	if (SNAP_CHANNEL_QUEUE_SIZE < cmd->command_id) {
+	if (cmd->command_id < 1 || SNAP_CHANNEL_QUEUE_SIZE < cmd->command_id) {
 		snap_channel_error("schannel 0x%p invalid CMDID opcode %u id %u\n", schannel,
 			  opcode, cmd->command_id);
 		return -EINVAL;
