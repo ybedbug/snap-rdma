@@ -738,10 +738,6 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	if (rc)
 		return rc;
 
-	/* If neither IB nor RoCE are supported, we cannot continue */
-	if (!roce_caps.is_supported)
-		return -ENOTSUP;
-
 	/* Check if force-loopback is supported based on roce caps */
 	if (roce_caps.resources_on_nvme_emulation_manager &&
 	    ((roce_en && roce_caps.fl_when_roce_enabled) ||
