@@ -2649,20 +2649,26 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	case SNAP_NVME_PF:
 	case SNAP_NVME_VF:
 		ret = snap_nvme_query_device(sdev, &nvme_attr);
-		if (!ret)
+		if (!ret) {
 			sdev->mod_allowed_mask = nvme_attr.modifiable_fields;
+			sdev->crossed_vhca_mkey = nvme_attr.crossed_vhca_mkey;
+		}
 		break;
 	case SNAP_VIRTIO_NET_PF:
 	case SNAP_VIRTIO_NET_VF:
 		ret = snap_virtio_net_query_device(sdev, &net_attr);
-		if (!ret)
+		if (!ret) {
 			sdev->mod_allowed_mask = net_attr.modifiable_fields;
+			sdev->crossed_vhca_mkey = net_attr.crossed_vhca_mkey;
+		}
 		break;
 	case SNAP_VIRTIO_BLK_PF:
 	case SNAP_VIRTIO_BLK_VF:
 		ret = snap_virtio_blk_query_device(sdev, &blk_attr);
-		if (!ret)
+		if (!ret) {
 			sdev->mod_allowed_mask = blk_attr.modifiable_fields;
+			sdev->crossed_vhca_mkey = blk_attr.crossed_vhca_mkey;
+		}
 		break;
 	default:
 		return EINVAL;
@@ -3328,17 +3334,20 @@ static int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 	return 0;
 }
 
+static inline int snap_get_vhca_id(struct snap_device *sdev)
+{
+	return sdev->pci->mpci.vhca_id;
+}
+
 /**
  * snap_create_cross_mkey() - Creates a new mkey
  * @pd - pd this mkey belongs to
- * @target_mkey - the mkey this key should point to
- * @target_vhca_id - the id of the vhca the mkey pointed by this key belongs to
+ * @target_sdev - The target emulation device
  *
  * @Return: created cross gvmi mkey
  */
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
-					       uint32_t target_mkey,
-					       uint16_t target_vhca_id)
+					       struct snap_device *target_sdev)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_mkey_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(create_mkey_out)] = {0};
@@ -3353,6 +3362,16 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 			   pd->handle);
 		return NULL;
 	}
+
+	/*
+	 * For BF-1, we don't support cross-gvmi mkey devx object,
+	 * instead we have the special context rkey
+	 */
+	if (target_sdev->mdev.vtunnel) {
+		cmkey->devx_obj = NULL;
+		cmkey->mkey = target_sdev->dma_rkey;
+		return cmkey;
+	};
 
 	snap_get_pd_id(pd, &pd_id);
 
@@ -3371,8 +3390,9 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, length64, 1);
 	/* TODO: change mkey_7_0 to increasing counter */
 	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
-	DEVX_SET(mkc, mkc, crossing_target_vhca_id, target_vhca_id);
-	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey, target_mkey);
+	DEVX_SET(mkc, mkc, crossing_target_vhca_id, snap_get_vhca_id(target_sdev));
+	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey,
+		 target_sdev->crossed_vhca_mkey);
 
 	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
 						 sizeof(out));
@@ -3390,9 +3410,10 @@ out_err:
 
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
 {
-	int ret;
+	int ret = 0;
 
-	ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
+	if (mkey->devx_obj)
+		ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
 	free(mkey);
 
 	return ret;

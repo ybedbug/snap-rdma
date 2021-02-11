@@ -549,8 +549,7 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 		goto free_dma_q;
 	}
 
-	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, ctrl->crossed_vhca_mkey,
-                                        snap_get_vhca_id(ctrl->sdev));
+	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, ctrl->sdev);
 	if (!ctrl->mkey) {
 		printf("failed to create crossing mkey\n");
 		goto sq_to_err;

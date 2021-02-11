@@ -276,7 +276,6 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
 	struct snap_cross_mkey *snap_cross_mkey;
-	struct snap_virtio_blk_device_attr blk_dev_attr = {};
 	int ret;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
@@ -302,14 +301,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 	else
 		goto out_umem;
 
-	ret = snap_virtio_blk_query_device(sdev, &blk_dev_attr);
-	if (ret) {
-		snap_error("Failed to query blk device attr\n");
-		goto destroy_counter;
-	}
-
-	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd,
-						blk_dev_attr.crossed_vhca_mkey, snap_get_vhca_id(sdev));
+	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
 	if (!snap_cross_mkey) {
 		snap_error("Failed to create snap MKey Entry for blk queue\n");
 		goto destroy_counter;

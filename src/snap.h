@@ -187,6 +187,8 @@ struct snap_device {
 
 	/* for BF-1 usage only */
 	uint32_t			dma_rkey;
+	/* for BF-2 usage only */
+	uint32_t			crossed_vhca_mkey;
 };
 
 struct __attribute__((packed)) snap_nvme_registers {
@@ -383,12 +385,6 @@ int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
 
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
-					       uint32_t target_mkey,
-					       uint16_t target_vhca_id);
+					       struct snap_device *target_sdev);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
-
-static inline int snap_get_vhca_id(struct snap_device *sdev)
-{
-	return sdev->pci->mpci.vhca_id;
-}
 #endif
