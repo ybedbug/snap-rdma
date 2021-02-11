@@ -64,6 +64,7 @@ struct mlx5_dma_wqe {
 };
 
 struct snap_roce_caps {
+	bool resources_on_nvme_emulation_manager;
 	bool is_supported;
 	uint8_t roce_version;
 	bool fl_when_roce_disabled;
@@ -99,6 +100,9 @@ static int fill_roce_caps(struct ibv_context *context,
 	if (ret)
 		return ret;
 
+	roce_caps->resources_on_nvme_emulation_manager =
+		 DEVX_GET(query_hca_cap_out, out,
+		 capability.cmd_hca_cap.resources_on_nvme_emulation_manager);
 	roce_caps->is_supported = DEVX_GET(query_hca_cap_out, out,
 						capability.cmd_hca_cap.roce);
 	if (!roce_caps->is_supported)
@@ -719,7 +723,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	uint16_t lid = 0;
 	enum ibv_mtu mtu = IBV_MTU_1024;
 	bool force_loopback = false;
-	struct snap_roce_caps roce_caps;
+	struct snap_roce_caps roce_caps = {0};
 
 	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
 			&ib_en, &lid, &mtu);
@@ -739,8 +743,9 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		return -ENOTSUP;
 
 	/* Check if force-loopback is supported based on roce caps */
-	if ((roce_en && roce_caps.fl_when_roce_enabled) ||
-	    (!roce_en && roce_caps.fl_when_roce_disabled)) {
+	if (roce_caps.resources_on_nvme_emulation_manager &&
+	    ((roce_en && roce_caps.fl_when_roce_enabled) ||
+	    (!roce_en && roce_caps.fl_when_roce_disabled))) {
 		force_loopback = true;
 	} else if (roce_en) {
 		/*
