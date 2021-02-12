@@ -1,0 +1,52 @@
+FROM debian:buster-20210208
+ARG _UID=6213
+ARG _GID=11429
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+USER root
+
+RUN apt-get update && \
+    apt-get install -y \
+        sudo \
+        automake \
+        default-jdk \
+        dh-make \
+        curl \
+        g++ \
+        git \
+        libcap2 \
+        libnuma-dev \
+        libtool \
+        make \
+        udev \
+        wget \
+        vim \
+        net-tools \
+        iputils-ping \
+        environment-modules \
+        libibverbs-dev \
+        libfile-fcntllock-perl \
+        dpkg-dev fakeroot gpg dpkg-sig dh-python \
+        ethtool libnl-route-3-dev python libnl-3-dev lsof pciutils kmod pkg-config libmnl0 \
+        chrpath flex gfortran graphviz dpatch libgfortran5 tcl bison tk swig \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN wget -qO - https://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | \
+    sudo apt-key add - && \
+    cd /etc/apt/sources.list.d && \
+    wget https://linux.mellanox.com/public/repo/mlnx_ofed/latest/debian10.3/mellanox_mlnx_ofed.list
+RUN apt update && apt install -y mlnx-ofed-basic-user-only
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+RUN mkdir -p $_HOME
+RUN groupadd -f -g "$_GID" "$_LOGIN"
+RUN useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN"
+RUN chown $_LOGIN $_HOME
+
+ENV MODULEPATH /hpc/local/etc/modulefiles
+SHELL ["/bin/bash"] 
+
+USER "${_LOGIN}"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]
