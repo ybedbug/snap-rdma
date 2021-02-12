@@ -11,11 +11,9 @@
         %define _branch "master"
 %endif
 
-%define dist .mlnx
-
 Name:	mlnx-libsnap
 Version:        %{scm_version}
-Release:        %{scm_rev}%{?dist}
+Release:        %{scm_rev}.mlnx%{?dist}
 
 Summary:	Software-defined Network Accelerated Processing (SNAP) user-space library based on RDMA
 
@@ -54,6 +52,9 @@ install -m 755 ./rpc/snap_rpc.py ${RPM_BUILD_ROOT}%{_sbindir}
 %doc README.md AUTHORS COPYING NEWS
 
 %changelog
+* Fri Feb 02 2021 Andrii Holovchenko <andriih@nvidia.com> [1.1.0]
+- Update release to include dist tag
+
 * Thu Jul 02 2020 Andrii Holovchenko <andriih@mellanox.com> [1.0.0]
 - Created Debian package
 - Renamed libsnap -> mlnx-libsnap
