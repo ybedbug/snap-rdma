@@ -27,20 +27,22 @@ upload_deb() {
 
 upload_rpm() {
 
+    releasever=$(rpm --eval "%{rhel}")
+
     shopt -s nullglob
 
     rpms_location=(${HOME}/rpmbuild/RPMS/${arch}/${name}-*${VER}-${REV}*.rpm)
     for rpm_location in ${rpms_location[@]}; do
         test -f $rpm_location
         rpm_name="${rpm_location##*/}"
-        upload_uri="${REPO_URL}/${repo_name}/${arch}/${rpm_name}"
+        upload_uri="${REPO_URL}/${repo_name}/${releasever}/${arch}/${rpm_name}"
         echo "INFO: Uploading ${rpm_name} to ${upload_uri}"
-        curl --user "${REPO_USER}:${REPO_PASS}" \
+        curl --fail --user "${REPO_USER}:${REPO_PASS}" \
             --upload-file $rpm_location \
             ${upload_uri}
 
         if test -n "$release_dir" ; then
-            upload_dir="${release_dir}/${repo_name}/${arch}/"
+            upload_dir="${release_dir}/${repo_name}/${releasever}/${arch}/"
             mkdir -p $upload_dir
             cp -f $rpm_location $upload_dir
         fi
@@ -50,14 +52,14 @@ upload_rpm() {
     for srpm_location in ${srpms_location[@]}; do
         test -f $srpm_location
         srpm_name="${srpm_location##*/}"
-        upload_uri="${REPO_URL}/${repo_name}/SRPMS/${srpm_name}"
+        upload_uri="${REPO_URL}/${repo_name}/${releasever}/SRPMS/${srpm_name}"
         echo "INFO: Uploading ${srpm_name} to ${upload_uri}"
         curl --user "${REPO_USER}:${REPO_PASS}" \
             --upload-file ${srpm_location} \
             ${upload_uri}
 
         if test -n "$release_dir" ; then
-            upload_dir="${release_dir}/${repo_name}/SRPMS/"
+            upload_dir="${release_dir}/${repo_name}/${releasever}/SRPMS/"
             mkdir -p $upload_dir
             cp -f $srpm_location $upload_dir
         fi
