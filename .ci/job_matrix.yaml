@@ -24,6 +24,8 @@ runs_on_dockers:
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed52', arch: 'aarch64'}
   - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed52', arch: 'x86_64'}
   - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed52', arch: 'aarch64'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed52', arch: 'x86_64'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed52', arch: 'aarch64'}
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'toolbox', category: 'tool', arch: 'x86_64',}
   - {url: '$registry_host/toolbox/ngci-centos:7.9.2009', name: 'blackduck', category: 'tool', arch: 'x86_64'}
 
@@ -31,12 +33,11 @@ steps:
 
   - name: Build distro package
     containerSelector:
-      - "{name: 'centos83ofed52', variant:1}"
-      - "{name: 'ubuntu2004ofed52', variant:1}"
     run: |
       .ci/build.sh
 
   - name: Upload distro package
+    enable: false
     credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d'
     containerSelector:
       - "{name: 'centos83ofed52', variant:1}"
