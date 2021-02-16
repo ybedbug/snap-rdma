@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include "snap_null_blk_dev.h"
 
-static int snap_null_blk_dev_read(void *ctx,
+static int snap_null_blk_dev_readv(void *ctx,
 				  struct iovec *iov, int iovcnt,
 				  uint64_t offset_blocks, uint64_t num_blocks,
 				  struct snap_bdev_io_done_ctx *done_ctx,
@@ -11,11 +11,31 @@ static int snap_null_blk_dev_read(void *ctx,
 	return 0;
 }
 
-static int snap_null_blk_dev_write(void *ctx,
+static int snap_null_blk_dev_writev(void *ctx,
 				   struct iovec *iov, int iovcnt,
 				   uint64_t offset_blocks, uint64_t num_blocks,
 				   struct snap_bdev_io_done_ctx *done_ctx,
 				   int thread_id)
+{
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
+	return 0;
+}
+
+static int snap_null_blk_dev_read(void *ctx,
+					void *buf,
+					uint64_t offset_blocks, uint64_t num_blocks,
+					struct snap_bdev_io_done_ctx *done_ctx,
+					int thread_id)
+{
+	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
+	return 0;
+}
+
+static int snap_null_blk_dev_write(void *ctx,
+					void *buf,
+					uint64_t offset_blocks, uint64_t num_blocks,
+					struct snap_bdev_io_done_ctx *done_ctx,
+					int thread_id)
 {
 	done_ctx->cb(SNAP_BDEV_OP_SUCCESS, done_ctx->user_arg);
 	return 0;
@@ -92,6 +112,8 @@ struct snap_blk_dev *snap_null_blk_dev_open(const char *name,
 		goto free_bdev;
 	memcpy(&bdev->attrs, attrs, sizeof(bdev->attrs));
 
+	bdev->ops.readv = snap_null_blk_dev_readv;
+	bdev->ops.writev = snap_null_blk_dev_writev;
 	bdev->ops.read = snap_null_blk_dev_read;
 	bdev->ops.write = snap_null_blk_dev_write;
 	bdev->ops.flush = snap_null_blk_dev_flush;

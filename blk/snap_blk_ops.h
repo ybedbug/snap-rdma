@@ -53,12 +53,18 @@ struct snap_bdev_io_done_ctx {
  * ToDo: add mechanism to tell which block operations are supported
  */
 struct snap_bdev_ops {
-	int (*read)(void *ctx, struct iovec *iov, int iovcnt,
+	int (*readv)(void *ctx, struct iovec *iov, int iovcnt,
 		    uint64_t offset_blocks, uint64_t num_blocks,
 		    struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
-	int (*write)(void *ctx, struct iovec *iov, int iovcnt,
+	int (*writev)(void *ctx, struct iovec *iov, int iovcnt,
 		     uint64_t offset_blocks, uint64_t num_blocks,
 		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
+	int (*read)(void *ctx, void *buf, uint64_t offset_blocks,
+			uint64_t num_blocks, struct snap_bdev_io_done_ctx *done_ctx,
+			int thread_id);
+	int (*write)(void *ctx, void *buf, uint64_t offset_blocks,
+			uint64_t num_blocks, struct snap_bdev_io_done_ctx *done_ctx,
+			int thread_id);
 	int (*flush)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
 		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
 	int (*write_zeroes)(void *ctx,
