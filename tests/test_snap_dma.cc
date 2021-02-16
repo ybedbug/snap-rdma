@@ -513,8 +513,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 				&sq_attr));
 
 	ASSERT_EQ(0, snap_nvme_query_device(sdev, &nvme_device_attr));
-	mkey = snap_create_cross_mkey(m_pd, nvme_device_attr.crossed_vhca_mkey,
-					snap_get_vhca_id(sdev));
+	mkey = snap_create_cross_mkey(m_pd, sdev);
 	ASSERT_TRUE(mkey);
 
 	xgvmi_rkey = mkey->mkey;
