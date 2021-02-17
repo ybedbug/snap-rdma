@@ -65,7 +65,7 @@ struct mlx5_dma_wqe {
 
 struct snap_roce_caps {
 	bool resources_on_nvme_emulation_manager;
-	bool is_supported;
+	bool roce_enabled;
 	uint8_t roce_version;
 	bool fl_when_roce_disabled;
 	bool fl_when_roce_enabled;
@@ -103,9 +103,11 @@ static int fill_roce_caps(struct ibv_context *context,
 	roce_caps->resources_on_nvme_emulation_manager =
 		 DEVX_GET(query_hca_cap_out, out,
 		 capability.cmd_hca_cap.resources_on_nvme_emulation_manager);
-	roce_caps->is_supported = DEVX_GET(query_hca_cap_out, out,
+	roce_caps->fl_when_roce_disabled = DEVX_GET(query_hca_cap_out, out,
+		 capability.cmd_hca_cap.fl_rc_qp_when_roce_disabled);
+	roce_caps->roce_enabled = DEVX_GET(query_hca_cap_out, out,
 						capability.cmd_hca_cap.roce);
-	if (!roce_caps->is_supported)
+	if (!roce_caps->roce_enabled)
 		goto out;
 
 	memset(in, 0, sizeof(in));
@@ -119,15 +121,13 @@ static int fill_roce_caps(struct ibv_context *context,
 
 	roce_caps->roce_version = DEVX_GET(query_hca_cap_out, out,
 					   capability.roce_cap.roce_version);
-	roce_caps->fl_when_roce_disabled = DEVX_GET(query_hca_cap_out,
-			out, capability.roce_cap.fl_rc_qp_when_roce_disabled);
 	roce_caps->fl_when_roce_enabled = DEVX_GET(query_hca_cap_out,
 			out, capability.roce_cap.fl_rc_qp_when_roce_enabled);
 out:
-	snap_debug("RoCE Caps: supported %d ver %d flwd %d flwe %d\n",
-		   roce_caps->is_supported, roce_caps->roce_version,
-		   roce_caps->fl_when_roce_disabled,
-		   roce_caps->fl_when_roce_enabled);
+	snap_debug("RoCE Caps: enabled %d ver %d fl allowed %d\n",
+		   roce_caps->roce_enabled, roce_caps->roce_version,
+		   roce_caps->roce_enabled ? roce_caps->fl_when_roce_enabled :
+		   roce_caps->fl_when_roce_disabled);
 	return 0;
 }
 
@@ -740,8 +740,8 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 
 	/* Check if force-loopback is supported based on roce caps */
 	if (roce_caps.resources_on_nvme_emulation_manager &&
-	    ((roce_en && roce_caps.fl_when_roce_enabled) ||
-	    (!roce_en && roce_caps.fl_when_roce_disabled))) {
+	    ((roce_caps.roce_enabled && roce_caps.fl_when_roce_enabled) ||
+	     (!roce_caps.roce_enabled && roce_caps.fl_when_roce_disabled))) {
 		force_loopback = true;
 	} else if (roce_en) {
 		/*
