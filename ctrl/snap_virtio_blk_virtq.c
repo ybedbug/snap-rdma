@@ -11,16 +11,16 @@
 
 #define BDEV_SECTOR_SIZE 512
 #define VIRTIO_NUM_DESC(seg_max) ((seg_max) + NUM_HDR_FTR_DESCS)
-#define ERR_ON_CMD(cmd, ...) snap_error(" on queue %d, on command %d err:"\
-					__VA_ARGS__,\
-					cmd->vq_priv->vq_ctx.idx, cmd->idx);
+#define ERR_ON_CMD(cmd, fmt, ...) \
+	snap_error("queue:%d cmd_idx:%d err: " fmt, \
+		   (cmd)->vq_priv->vq_ctx.idx, (cmd)->idx, ## __VA_ARGS__)
 
 /* uncomment to enable fast path debugging */
 //#define VIRTQ_DEBUG_DATA
 #ifdef VIRTQ_DEBUG_DATA
 #define virtq_log_data(cmd, fmt, ...) \
-	printf("qid:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx.idx, (cmd)->idx, \
-	       __VA_ARGS__)
+	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx.idx, (cmd)->idx, \
+	       ## __VA_ARGS__)
 #else
 #define virtq_log_data(cmd, fmt, ...)
 #endif
@@ -206,13 +206,13 @@ static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
 	}
 	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
-		snap_error("dirty memory logging enabled but migration channel"
-			   "is not present\n");
+		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel"
+			   " is not present\n");
 		return;
 	}
 	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
 	if (rc)
-		snap_error("mark drity page failed: pa 0x%lx len %u\n", pa, len);
+		ERR_ON_CMD(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
 }
 
 static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
