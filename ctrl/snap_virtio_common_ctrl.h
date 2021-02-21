@@ -174,5 +174,92 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl);
 
 /* live migration support */
+
+/**
+ * Virtio Controller State
+ *
+ * The virtio controller state consists of pci_common, device and queue
+ * configuration sections.
+ *
+ * Device configuration and part of the queue configuration are controller
+ * specific and should be filled by the controller implementation.
+ *
+ * Controller implementation is also going to be responsible for the restoring
+ * device specific state and queues.
+ *
+ * State format:
+ * <global_hdr><section_hdr><section>...<section_hdr><section>
+ *
+ * Each header and section are in the little endian (x86) order.
+ */
+
+/**
+ * struct snap_virtio_ctrl_section - state section header
+ *
+ * @len:   section length, including section header
+ * @name:  symbolic section name
+ */
+struct snap_virtio_ctrl_section {
+	uint16_t   len;
+	char       name[16];
+} __attribute__ ((packed));
+
+/**
+ * struct snap_virtio_ctrl_common_state - pci_common state
+ *
+ * The struct defines controller pci_common state as described
+ * in the virtio spec.
+ * NOTE: that device and driver features bits are expanded
+ *
+ * @ctlr_state:  this is an internal controller state. We keep it in order to
+ *               validate state restore operation.
+ */
+struct snap_virtio_ctrl_common_state {
+	uint32_t device_feature_select;
+	uint64_t device_feature;
+	uint32_t driver_feature_select;
+	uint64_t driver_feature;
+	uint16_t msix_config;
+	uint16_t num_queues;
+	uint16_t queue_select;
+	uint8_t device_status;
+	uint8_t config_generation;
+
+	enum snap_virtio_ctrl_state ctrl_state;
+} __attribute__ ((packed));
+
+/**
+ * struct snap_virtio_ctrl_queue_state - queue state
+ *
+ * The struct defines controller queue state as described in the
+ * virtio spec. In addition available and used indexes are saved.
+ *
+ * The queue state section consists of the array of queues, the
+ * size of the array is &struct snap_virtio_ctrl_common_state.num_queues
+ *
+ * @hw_available_index:  queue available index as reported by the controller.
+ *                       It is always less or equal to the driver available index
+ *                       because some commands may not have been processed by
+ *                       the controller.
+ * @hw_used_index:       queue used index as reported by the controller.
+ */
+struct snap_virtio_ctrl_queue_state {
+	uint16_t queue_size;
+	uint16_t queue_msix_vector;
+	uint16_t queue_enable;
+	uint16_t queue_notify_off;
+	uint64_t queue_desc;
+	uint64_t queue_driver;
+	uint64_t queue_device;
+
+	uint16_t hw_available_index;
+	uint16_t hw_used_index;
+} __attribute__ ((packed));
+
+int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_cfg_len,
+				unsigned *queue_cfg_len, unsigned *dev_cfg_len);
+int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len);
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len);
+
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 #endif
