@@ -436,12 +436,21 @@ static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 	blk_virtq_start(vbq->q_impl, &attr);
 }
 
+static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *vq,
+						struct snap_virtio_ctrl_queue_state *state)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+
+	return blk_virtq_get_state(vbq->q_impl, state);
+}
+
 static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.create = snap_virtio_blk_ctrl_queue_create,
 	.destroy = snap_virtio_blk_ctrl_queue_destroy,
 	.progress = snap_virtio_blk_ctrl_queue_progress,
 	.start = snap_virtio_blk_ctrl_queue_start,
 	.suspend = snap_virtio_blk_ctrl_queue_suspend,
+	.get_state = snap_virtio_blk_ctrl_queue_get_state
 };
 
 /**

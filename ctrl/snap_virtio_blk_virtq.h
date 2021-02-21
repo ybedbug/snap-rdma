@@ -66,6 +66,7 @@ struct blk_virtq_ctx {
 
 /**
  * struct blk_virtq_create_attr - Attributes given for virtq creation
+ *
  * @idx:	Virtqueue index
  * @size_max:	VIRTIO_BLK_F_SIZE_MAX (from virtio spec)
  * @seg_max:	VIRTIO_BLK_F_SEG_MAX (from virtio spec)
@@ -74,6 +75,9 @@ struct blk_virtq_ctx {
  * @desc:	Descriptor Area (from virtio spec Virtqueues section)
  * @driver	Driver Area
  * @device	Device Area
+ *
+ * @hw_available_index	initial value of the driver available index.
+ * @hw_used_index	initial value of the device used index
  */
 struct blk_virtq_create_attr {
 	int idx;
@@ -87,6 +91,8 @@ struct blk_virtq_create_attr {
 	uint16_t max_tunnel_desc;
 	uint16_t msix_vector;
 	bool virtio_version_1_0;
+	uint16_t hw_available_index;
+	uint16_t hw_used_index;
 };
 
 struct blk_virtq_start_attr {
@@ -106,6 +112,8 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat);
 int blk_virtq_suspend(struct blk_virtq_ctx *q);
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);
+int blk_virtq_get_state(struct blk_virtq_ctx *q,
+			struct snap_virtio_ctrl_queue_state *state);
 
 /* debug */
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx);

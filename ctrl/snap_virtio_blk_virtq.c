@@ -185,6 +185,7 @@ struct blk_virtq_priv {
 	int size_max;
 	int pg_id;
 	struct snap_virtio_blk_ctrl_queue *vbq;
+	uint16_t last_avail_idx;
 };
 
 static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
@@ -894,6 +895,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	}
 
 	priv->cmd_cntr++;
+	priv->last_avail_idx++;
 	cmd->state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
 	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->num_desc,
 		       data_len);
@@ -954,6 +956,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		goto release_priv;
 	}
 	vq_priv->cmd_cntr = 0;
+	vq_priv->last_avail_idx = attr->hw_available_index;
 
 	rdma_qp_create_attr.tx_qsize = attr->queue_size;
 	rdma_qp_create_attr.tx_elem_size = sizeof(struct split_tunnel_comp);
@@ -1241,6 +1244,45 @@ void blk_virtq_start(struct blk_virtq_ctx *q,
 	struct blk_virtq_priv *priv = q->priv;
 
 	priv->pg_id = attr->pg_id;
+}
+
+/**
+ * blk_virtq_get_state() - get hw state of the queue
+ * @q:      queue
+ * @state:  queue state to fill
+ *
+ * The function fills hw_avail and hw_used indexes as seen by the controller.
+ * Later the indexes can be used by the blk_virtq_create() to resume queue
+ * operations.
+ *
+ * All other queue fields are already available in the emulation object.
+ *
+ * NOTE: caller should suspend queue's polling group when calling from different
+ *       context.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int blk_virtq_get_state(struct blk_virtq_ctx *q,
+			struct snap_virtio_ctrl_queue_state *state)
+{
+	struct blk_virtq_priv *priv = q->priv;
+	struct snap_virtio_blk_queue_attr attr = {};
+	int ret;
+
+	ret = snap_virtio_blk_query_queue(priv->snap_vbq, &attr);
+	if (ret < 0) {
+		snap_error("failed to query blk queue %d\n", q->idx);
+		return ret;
+	}
+
+	/* Everything between last_avail_idx and hw_available_index has
+	 * not been touched by us. It means that the ordering still holds and
+	 * it is safe to ask hw to replay all these descriptors when queue is
+	 * created.
+	 */
+	state->hw_available_index = priv->last_avail_idx;
+	state->hw_used_index = attr.hw_used_index;
+	return 0;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
