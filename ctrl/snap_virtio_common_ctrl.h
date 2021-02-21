@@ -118,6 +118,8 @@ struct snap_virtio_ctrl_queue {
 	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
 };
 
+struct snap_virtio_ctrl_queue_state;
+
 struct snap_virtio_queue_ops {
 	struct snap_virtio_ctrl_queue *(*create)(struct snap_virtio_ctrl *ctrl,
 						 int index);
@@ -125,6 +127,8 @@ struct snap_virtio_queue_ops {
 	void (*progress)(struct snap_virtio_ctrl_queue *queue);
 	void (*start)(struct snap_virtio_ctrl_queue *queue);
 	void (*suspend)(struct snap_virtio_ctrl_queue *queue);
+	int (*get_state)(struct snap_virtio_ctrl_queue *queue,
+			 struct snap_virtio_ctrl_queue_state *state);
 };
 
 struct snap_virtio_ctrl_bar_ops {
@@ -138,6 +142,11 @@ struct snap_virtio_ctrl_bar_ops {
 		      uint64_t mask, struct snap_virtio_device_attr *attr);
 	struct snap_virtio_queue_attr *(*get_queue_attr)(
 			struct snap_virtio_device_attr *vbar, int index);
+	unsigned (*get_state_size)(struct snap_virtio_ctrl *ctrl);
+	int (*get_state)(struct snap_virtio_ctrl *ctrl,
+			 struct snap_virtio_device_attr *attr, void *buf,
+			 unsigned len);
+	void (*dump_state)(struct snap_virtio_ctrl *ctrl, void *buf, int len);
 };
 
 struct snap_virtio_ctrl {

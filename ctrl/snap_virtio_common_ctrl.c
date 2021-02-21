@@ -470,3 +470,211 @@ void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable)
 	snap_pgs_resume(&ctrl->pg_ctx);
 	ctrl->log_writes_to_host = enable;
 }
+
+/**
+ * snap_virtio_ctrl_state_size() - Get virtio controller state size
+ * @ctrl:              virtio controller
+ * @common_cfg_len:    on return holds size of the pci_common config section
+ * @queue_cfg_len:     on return holds size of the queue configuration section
+ * @dev_cfg_len:       on return holds size of the device configuration section
+ *
+ * Note: size of the section includes size of its header
+ *
+ * Return:
+ * Total state size including section headers
+ * < 0 on error
+ */
+int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_cfg_len,
+				unsigned *queue_cfg_len, unsigned *dev_cfg_len)
+{
+	if (ctrl->bar_ops->get_state_size)
+		*dev_cfg_len = ctrl->bar_ops->get_state_size(ctrl);
+	else
+		*dev_cfg_len = 0;
+
+	if (*dev_cfg_len)
+		*dev_cfg_len += sizeof(struct snap_virtio_ctrl_section);
+
+	*queue_cfg_len = ctrl->max_queues * sizeof(struct snap_virtio_ctrl_queue_state) +
+			 sizeof(struct snap_virtio_ctrl_section);
+
+	*common_cfg_len = sizeof(struct snap_virtio_ctrl_section) +
+			  sizeof(struct snap_virtio_ctrl_common_state);
+
+	snap_debug("common_cfg %d dev_cfg %d queue_cfg %d max_queue %d\n",
+		   *common_cfg_len, *dev_cfg_len, *queue_cfg_len, (int)ctrl->max_queues);
+
+	return sizeof(struct snap_virtio_ctrl_section) + *dev_cfg_len +
+	       *queue_cfg_len + *common_cfg_len;
+}
+
+static __attribute__ ((unused)) void dump_state(struct snap_virtio_ctrl *ctrl,
+						void *buf)
+{
+	struct snap_virtio_ctrl_section *hdr;
+	struct snap_virtio_ctrl_common_state *common_state;
+	struct snap_virtio_ctrl_queue_state *queue_state;
+	int i;
+	int total_len, len;
+
+	hdr = buf;
+	snap_info("--- %s %d bytes ---\n", hdr->name, hdr->len);
+	total_len = hdr->len;
+
+	hdr++;
+	len = hdr->len;
+	snap_info(">> %s %d bytes\n", hdr->name, hdr->len);
+	common_state = (struct snap_virtio_ctrl_common_state *)(hdr + 1);
+	snap_info(">>> ctrl_state: %d dev_ftr_sel: %d dev_ftrs: 0x%lx "
+		  "drv_ftr_sel: %d drv_ftrs: 0x%lx msi_x: 0x%0x num_queues: %d "
+		  "queue_select: %d status: 0x%0x config_gen: %d\n",
+		  common_state->ctrl_state,
+		  common_state->device_feature_select,
+		  common_state->device_feature,
+		  common_state->driver_feature_select,
+		  common_state->driver_feature,
+		  common_state->msix_config,
+		  common_state->num_queues,
+		  common_state->queue_select,
+		  common_state->device_status,
+		  common_state->config_generation);
+
+	hdr = (struct snap_virtio_ctrl_section *)(common_state + 1);
+	len += hdr->len;
+	snap_info(">> %s %d bytes\n", hdr->name, hdr->len);
+	queue_state = (struct snap_virtio_ctrl_queue_state *)(hdr + 1);
+	for (i = 0; i < common_state->num_queues; i++) {
+		snap_info(">>> size: %d msix: %d enable: %d notify_offset: %d "
+			  "desc 0x%lx driver 0x%lx device 0x%lx hw_avail_idx: %d "
+			  "hw_used_idx: %d\n",
+			  queue_state[i].queue_size,
+			  queue_state[i].queue_msix_vector,
+			  queue_state[i].queue_enable,
+			  queue_state[i].queue_notify_off,
+			  queue_state[i].queue_desc,
+			  queue_state[i].queue_driver,
+			  queue_state[i].queue_device,
+			  queue_state[i].hw_available_index,
+			  queue_state[i].hw_used_index);
+	}
+
+	if (len > total_len)
+		goto done;
+
+	hdr = (struct snap_virtio_ctrl_section *)((char *)hdr + hdr->len);
+	snap_info(">> %s %d bytes\n", hdr->name, hdr->len);
+	if (ctrl->bar_ops->dump_state)
+		ctrl->bar_ops->dump_state(ctrl, (void *)(hdr + 1), hdr->len);
+	else
+		snap_info("*** cannot handle %s section ***\n", hdr->name);
+
+done:
+	snap_info("--- state end ---\n");
+}
+
+/**
+ * snap_virtio_ctrl_state_save() - Save virtio controllerr state
+ * @ctrl:     virtio controller
+ * @buf:      buffer to save the controller state
+ * @len:      buffer length
+ *
+ * The function saves virtio state into the provided buffer. The buffer must
+ * be large enough to hold the state. snap_virtio_ctrl_state_size() can be used
+ * to find the minimum required buffer size.
+ *
+ * The function stops all queue polling groups while saving the state. As the
+ * result it must be called from the admin thread context. If called from another
+ * context, the caller is repsonsible for locking admin polling thread.
+ *
+ * NOTES:
+ *  - since function stops all queues, calling it freaquently will impact
+ *    performance.
+ *  - For snap_virtio_ctrl_state_restore() to work the controller state must be
+ *    either SNAP_VIRTIO_CTRL_STOPPED or SNAP_VIRTIO_CTRL_SUSPENDED
+ *
+ * Return:
+ * total state length or -errno on error
+ */
+int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len)
+{
+	unsigned dev_cfg_len, queue_cfg_len, common_cfg_len;
+	int total_len;
+	int i, ret;
+	struct snap_virtio_ctrl_section *ghdr, *hdr;
+	struct snap_virtio_ctrl_common_state *common_state;
+	struct snap_virtio_ctrl_queue_state *queue_state;
+
+	/* at the moment always allow saving state but limit restore */
+	total_len = snap_virtio_ctrl_state_size(ctrl, &common_cfg_len, &queue_cfg_len,
+						&dev_cfg_len);
+	if (len < total_len)
+		return -EINVAL;
+
+	ghdr = buf;
+	ghdr->len = total_len;
+	snprintf(ghdr->name, sizeof(ghdr->name), "VIRTIO_CTRL_CFG");
+
+	hdr = ghdr + 1;
+	common_state = (struct snap_virtio_ctrl_common_state *)(hdr + 1);
+
+	hdr->len = common_cfg_len;
+	snprintf(hdr->name, sizeof(hdr->name), "COMMON_PCI_CFG");
+
+	/* save common and device configs */
+	common_state->ctrl_state = ctrl->state;
+
+	common_state->device_feature_select = ctrl->bar_curr->device_feature_select;
+	common_state->driver_feature_select = ctrl->bar_curr->driver_feature_select;
+	common_state->queue_select = ctrl->bar_curr->queue_select;
+
+	common_state->device_feature = ctrl->bar_curr->device_feature;
+	common_state->driver_feature = ctrl->bar_curr->driver_feature;
+	common_state->msix_config = ctrl->bar_curr->msix_config;
+	common_state->num_queues = ctrl->bar_curr->max_queues;
+	common_state->device_status = ctrl->bar_curr->status;
+	common_state->config_generation = ctrl->bar_curr->config_generation;
+
+	/* save queue state for every queue */
+	hdr = (struct snap_virtio_ctrl_section *)(common_state + 1);
+	hdr->len = queue_cfg_len;
+	snprintf(hdr->name, sizeof(hdr->name), "QUEUES_CFG");
+	queue_state = (struct snap_virtio_ctrl_queue_state *)(hdr + 1);
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		struct snap_virtio_queue_attr *vq;
+		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
+		queue_state[i].queue_size = vq->size;
+		queue_state[i].queue_msix_vector = vq->msix_vector;
+		queue_state[i].queue_enable = vq->enable;
+		queue_state[i].queue_notify_off = vq->notify_off;
+		queue_state[i].queue_desc = vq->desc;
+		queue_state[i].queue_driver = vq->driver;
+		queue_state[i].queue_device = vq->device;
+		queue_state[i].hw_available_index = 0;
+		queue_state[i].hw_used_index = 0;
+
+		/* if enabled, call specific queue impl to get
+		 * hw_avail and used */
+		if (vq->enable && ctrl->q_ops->get_state) {
+			ret = ctrl->q_ops->get_state(ctrl->queues[i], &queue_state[i]);
+			if (ret) {
+				snap_pgs_resume(&ctrl->pg_ctx);
+				return -EINVAL;
+			}
+		}
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+
+	if (dev_cfg_len) {
+		hdr = (struct snap_virtio_ctrl_section *)((char *)hdr + hdr->len);
+		hdr->len = dev_cfg_len;
+		snprintf(hdr->name, sizeof(hdr->name), "DEVICE_CFG");
+		ret = ctrl->bar_ops->get_state(ctrl, ctrl->bar_curr, (void *)(hdr + 1), dev_cfg_len);
+		if (ret < 0)
+			return -EINVAL;
+	}
+
+	dump_state(ctrl, buf);
+	return total_len;
+}
