@@ -106,6 +106,50 @@ snap_virtio_blk_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 	return &vbbar->q_attrs[index].vattr;
 }
 
+static unsigned
+snap_virtio_blk_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
+{
+	/* use block device config definition from linux/virtio_blk.h */
+	return sizeof(struct virtio_blk_config);
+}
+
+static void
+snap_virtio_blk_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int len)
+{
+	struct virtio_blk_config *dev_cfg;
+
+	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl)) {
+		snap_info(">>> blk_config: state is truncated (%d < %d)\n", len,
+			  snap_virtio_blk_ctrl_bar_get_state_size(ctrl));
+		return;
+	}
+
+	dev_cfg = buf;
+	snap_info(">>> capacity: %llu size_max: %u seg_max: %u blk_size: %u num_queues: %u\n",
+		  dev_cfg->capacity, dev_cfg->size_max, dev_cfg->seg_max,
+		  dev_cfg->blk_size, dev_cfg->num_queues);
+}
+
+static int
+snap_virtio_blk_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
+				   struct snap_virtio_device_attr *vbar,
+				   void *buf, unsigned len)
+{
+	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
+	struct virtio_blk_config *dev_cfg;
+
+	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl))
+		return -EINVAL;
+
+	dev_cfg = buf;
+	dev_cfg->capacity = vbbar->capacity;
+	dev_cfg->size_max = vbbar->size_max;
+	dev_cfg->seg_max = vbbar->seg_max;
+	dev_cfg->blk_size = vbbar->blk_size;
+	dev_cfg->num_queues = vbbar->max_blk_queues;
+	return snap_virtio_blk_ctrl_bar_get_state_size(ctrl);
+}
+
 static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.create = snap_virtio_blk_ctrl_bar_create,
 	.destroy = snap_virtio_blk_ctrl_bar_destroy,
@@ -113,6 +157,9 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.update = snap_virtio_blk_ctrl_bar_update,
 	.modify = snap_virtio_blk_ctrl_bar_modify,
 	.get_queue_attr = snap_virtio_blk_ctrl_bar_get_queue_attr,
+	.get_state_size = snap_virtio_blk_ctrl_bar_get_state_size,
+	.dump_state = snap_virtio_blk_ctrl_bar_dump_state,
+	.get_state = snap_virtio_blk_ctrl_bar_get_state,
 };
 
 static bool
