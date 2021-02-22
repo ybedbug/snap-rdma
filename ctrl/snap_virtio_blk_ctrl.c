@@ -416,8 +416,17 @@ static void snap_virtio_blk_ctrl_queue_suspend(struct snap_virtio_ctrl_queue *vq
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
 	blk_virtq_suspend(vbq->q_impl);
-	while (!blk_virtq_is_suspended(vbq->q_impl))
-		blk_virtq_progress(vbq->q_impl);
+}
+
+static bool snap_virtio_blk_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+
+	if (!blk_virtq_is_suspended(vbq->q_impl))
+		return false;
+
+	snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
+	return true;
 }
 
 static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
@@ -450,6 +459,7 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.progress = snap_virtio_blk_ctrl_queue_progress,
 	.start = snap_virtio_blk_ctrl_queue_start,
 	.suspend = snap_virtio_blk_ctrl_queue_suspend,
+	.is_suspended = snap_virtio_blk_ctrl_queue_is_suspended,
 	.get_state = snap_virtio_blk_ctrl_queue_get_state
 };
 

@@ -896,6 +896,14 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 
+	/* If new commands are not dropped there is a risk of never
+	 * completing the flush */
+	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING)) {
+		virtq_log_data(cmd, "DROP_CMD: %d inline descs, rxlen %d\n",
+			       cmd->num_desc, data_len);
+		return;
+	}
+
 	if (split_hdr->num_desc) {
 		len = sizeof(struct vring_desc) * split_hdr->num_desc;
 		memcpy(cmd->descs, descs, len);
@@ -1052,12 +1060,13 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 
 	snap_debug("destroying queue %d\n", q->idx);
 
-	if (vq_priv->swq_state != BLK_SW_VIRTQ_SUSPENDED)
-		snap_error("Error destroying queue %d while not in suspended"
-			   " state\n", q->idx);
+	if (vq_priv->swq_state != BLK_SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
+		snap_warn("queue %d: destroying while not in the SUSPENDED state, "
+			  " %d commands outstanding\n",
+			  q->idx, vq_priv->cmd_cntr);
 
 	if (snap_virtio_blk_destroy_queue(vq_priv->snap_vbq))
-		snap_error("error destroying blk_virtq\n");
+		snap_error("queue %d: error destroying blk_virtq\n", q->idx);
 
 	snap_dma_q_destroy(vq_priv->dma_q);
 	free_blk_virtq_cmd_arr(vq_priv);
@@ -1164,6 +1173,29 @@ err:
 	return ret;
 }
 
+static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
+{
+	struct blk_virtq_priv *priv = q->priv;
+	struct snap_virtio_blk_queue_attr qattr = {};
+
+	/* TODO: add option to ignore commands in the bdev layer */
+	if (priv->cmd_cntr != 0)
+		return 0;
+
+	snap_dma_q_flush(priv->dma_q);
+
+	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
+	/* TODO: check with FLR/reset. I see modify fail where it should not */
+	if (snap_virtio_blk_modify_queue(priv->snap_vbq, SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
+					 &qattr)) {
+		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->idx);
+	}
+	/* at this point QP is in the error state and cannot be used anymore */
+	snap_info("queue %d: moving to the SUSPENDED state\n", q->idx);
+	priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
+	return 0;
+}
+
 /**
  * blk_virtq_progress() - Progress RDMA QPs,  Polls on QPs CQs
  * @q:	queue to progress
@@ -1176,18 +1208,18 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->priv;
 
-	/*
-	 * Don't read any new descriptors while flushing.
-	 * Still need to wait until all inflight requests
-	 * are finished before moving to suspend state.
-	 */
-	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING)) {
-		if (priv->cmd_cntr == 0)
-			priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
+	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_SUSPENDED))
 		return 0;
-	}
 
-	return snap_dma_q_progress(priv->dma_q);
+	snap_dma_q_progress(priv->dma_q);
+	/*
+	 * need to wait until all inflight requests
+	 * are finished before moving to the suspend state
+	 */
+	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING))
+		return blk_virtq_progress_suspend(q);
+
+	return 0;
 }
 
 /**
@@ -1210,10 +1242,17 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 	struct blk_virtq_priv *priv = q->priv;
 
 	if (priv->swq_state != BLK_SW_VIRTQ_RUNNING) {
-		snap_debug("Suspend for queue %d was already requested\n",
+		snap_debug("queue %d: suspend was already requested\n",
 			   q->idx);
 		return -EBUSY;
 	}
+
+	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n",
+		  q->idx, priv->cmd_cntr);
+
+	if (priv->vq_ctx.fatal_err)
+		snap_warn("queue %d: fatal error. Resuming or live migration"
+			  " will not be possible\n", q->idx);
 
 	priv->swq_state = BLK_SW_VIRTQ_FLUSHING;
 	return 0;
