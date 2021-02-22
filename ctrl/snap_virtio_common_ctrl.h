@@ -70,9 +70,10 @@ enum snap_virtio_common_device_status {
 	SNAP_VIRTIO_DEVICE_S_FAILED = 1 << 7,
 };
 
-/* Virtio controller states:
+/**
+ * enum snap_virtio_ctrl_state - Virtio controller internal state
  *
- *  - STOPPED: All on-demand resources (virtqueues) are cleaned.
+ *  @STOPPED: All on-demand resources (virtqueues) are cleaned.
  *    Can be reached from various contexts:
  *    - initial state after controller creation.
  *    - state to move after error/flr detection.
@@ -82,12 +83,24 @@ enum snap_virtio_common_device_status {
  *    - state to move after virtio RESET detection. In this case we must update
  *      FW ctrl is stopped by writing back `0` to `device_status`.
  *
- *  - STARTED: Controller is live and ready to handle IO requests. All
+ *  @STARTED: Controller is live and ready to handle IO requests. All
  *    requested on-demand resources (virtqueues) are created successfully.
+ *
+ *  @SUSPENED: All enabled queues are flushed and suspended. Internal controller
+ *    state will stay constant. DMA access to the host memory is stopped. The
+ *    state is equivalent of doing quiesce+freeze in live migration terms.
+ *    In order to do a safe shutdown, application should put controller in the
+ *    suspended state before controller is stopped.
+ *    NOTE: going to the suspened state is an async operation. Reverse operation
+ *    (resume) is a sync operation.
+ *
+ *  @SUSPENDING: indicates that suspend operation is in progress
  */
 enum snap_virtio_ctrl_state {
 	SNAP_VIRTIO_CTRL_STOPPED,
 	SNAP_VIRTIO_CTRL_STARTED,
+	SNAP_VIRTIO_CTRL_SUSPENDED,
+	SNAP_VIRTIO_CTRL_SUSPENDING
 };
 
 struct snap_virtio_ctrl_bar_cbs {
@@ -127,6 +140,7 @@ struct snap_virtio_queue_ops {
 	void (*progress)(struct snap_virtio_ctrl_queue *queue);
 	void (*start)(struct snap_virtio_ctrl_queue *queue);
 	void (*suspend)(struct snap_virtio_ctrl_queue *queue);
+	bool (*is_suspended)(struct snap_virtio_ctrl_queue *queue);
 	int (*get_state)(struct snap_virtio_ctrl_queue *queue,
 			 struct snap_virtio_ctrl_queue_state *state);
 };
@@ -172,6 +186,11 @@ struct snap_virtio_ctrl {
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
+
+bool snap_virtio_ctrl_is_suspended(struct snap_virtio_ctrl *ctrl);
+int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl);
+int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl);
+
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id);
