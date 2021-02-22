@@ -846,6 +846,13 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 			if (snap_unlikely(cmd->use_dmem))
 				virtq_rel_req_dbuf(cmd);
 			cmd->vq_priv->vq_ctx.fatal_err = -1;
+			/*
+			 * TODO: propagate fatal error to the controller.
+			 * At the moment attempt to resume/state copy
+			 * of such controller will have unpredictable
+			 * results.
+			 */
+			cmd->vq_priv->cmd_cntr--;
 			break;
 		default:
 			snap_error("reached invalid state %d\n", cmd->state);
