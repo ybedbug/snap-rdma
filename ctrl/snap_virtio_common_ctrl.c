@@ -138,7 +138,9 @@ snap_virtio_ctrl_queue_create(struct snap_virtio_ctrl *ctrl, int index)
 	vq->ctrl = ctrl;
 	vq->index = index;
 	vq->log_writes_to_host = ctrl->log_writes_to_host;
-	snap_virtio_ctrl_sched_q(ctrl, vq);
+
+	if (!snap_virtio_ctrl_is_suspended(ctrl))
+		snap_virtio_ctrl_sched_q(ctrl, vq);
 
 	return vq;
 }
@@ -173,27 +175,48 @@ static int snap_virtio_ctrl_device_error(struct snap_virtio_ctrl *ctrl)
 					   ctrl->bar_curr);
 }
 
+static int snap_virtio_ctrl_reset(struct snap_virtio_ctrl *ctrl)
+{
+	int ret = 0;
+
+	ret = snap_virtio_ctrl_stop(ctrl);
+	if (ret)
+		return ret;
+
+	if (ctrl->bar_curr->pci_bdf) {
+		/*
+		 * When done with reset process, need to set enabled bit
+		 * back to `1` which signal FW to update `device_status`
+		 * if needed. Host driver might be waiting for device
+		 * RESET process completion by polling device_status
+		 * until reading `0`.
+		 */
+		ctrl->bar_curr->enabled = 1;
+		ret = snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_ENABLED,
+						  ctrl->bar_curr);
+		/* The status should be 0 if Driver reset device. */
+		ctrl->bar_curr->status = 0;
+	}
+
+	return ret;
+}
+
 static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 
 	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
-		ret = snap_virtio_ctrl_stop(ctrl);
-		if (!ret && ctrl->bar_curr->pci_bdf) {
-			/*
-			 * When done with reset process, need to set enabled bit
-			 * back to `1` which signal FW to update `device_status`
-			 * if needed. Host driver might be waiting for device
-			 * RESET process completion by polling device_status
-			 * until reading `0`.
-			 */
-			ctrl->bar_curr->enabled = 1;
-			ret = snap_virtio_ctrl_bar_modify(ctrl,
-							  SNAP_VIRTIO_MOD_ENABLED,
-							  ctrl->bar_curr);
-			/* The status should be 0 if Driver reset device. */
-			ctrl->bar_curr->status = 0;
-		}
+		snap_info("virtio controller reset detected\n");
+		/*
+		 * suspending virtio queues may take some time. In such case
+		 * do reset once the controller is suspended.
+		 */
+		snap_virtio_ctrl_suspend(ctrl);
+		if (snap_virtio_ctrl_is_stopped(ctrl) ||
+		    snap_virtio_ctrl_is_suspended(ctrl)) {
+			ret = snap_virtio_ctrl_reset(ctrl);
+		} else
+			ctrl->pending_reset = true;
 	} else {
 		ret = snap_virtio_ctrl_validate(ctrl);
 		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
@@ -204,9 +227,23 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 	return ret;
 }
 
+/**
+ * snap_virtio_ctrl_start() - start virtio controller
+ * @ctrl:   virtio controller
+ *
+ * The function starts virtio controller. It enables all active queues and
+ * assigns them to polling groups.
+ *
+ * The function can also start controller in the SUSPENDED mode. In such case
+ * only placeholder queues are created but they are not activated.
+ *
+ * Return:
+ * 0 on success, -errno of error
+ */
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
+	int n_enabled = 0;
 	int i, j;
 	const struct snap_virtio_queue_attr *vq;
 
@@ -214,6 +251,15 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
 		goto out;
 
+	/* controller can be created in the suspended state */
+	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING) {
+		snap_error("cannot start controller while it is being suspended,"
+			   " ctrl state: %d\n", ctrl->state);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	snap_info("virtio controller start with %d queues\n", (int)ctrl->max_queues);
 	for (i = 0; i < ctrl->max_queues; i++) {
 		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
 
@@ -223,6 +269,7 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 				ret = -ENOMEM;
 				goto vq_cleanup;
 			}
+			n_enabled++;
 		}
 	}
 
@@ -233,7 +280,13 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 			goto vq_cleanup;
 		}
 	}
-	ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+
+	if (ctrl->state != SNAP_VIRTIO_CTRL_SUSPENDED) {
+		snap_info("virtio controller started with %d queues\n", n_enabled);
+		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	} else
+		snap_info("virtio controller SUSPENDED with %d queues\n", n_enabled);
+
 	goto out;
 
 vq_cleanup:
@@ -246,6 +299,22 @@ out:
 	return ret;
 }
 
+/**
+ * snap_virtio_ctrl_stop() - stop virtio controller
+ * @ctrl:   virtio controller
+ *
+ * The function stops virtio controller. All active queues are destroyed.
+ *
+ * The function shall be called once the controller has been suspended. Otherwise
+ * destroying a queue with outstanding commands can lead to unpredictable
+ * results. The check is not enforced yet in order preserve backward
+ * compatibility.
+ *
+ * TODO: return error if controller is not suspended
+ *
+ * Return:
+ * 0 on success, -errno of error
+ */
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 {
 	int i, ret = 0;
@@ -268,14 +337,79 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 	}
 
 	ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
+	snap_info("virtio controller stopped. state: %d\n", ctrl->state);
 out:
 	pthread_mutex_unlock(&ctrl->state_lock);
 	return ret;
 }
 
+/**
+ * snap_virtio_ctrl_is_stopped() - check if virtio controller is stopped
+ * @ctrl:   virtio controller
+ *
+ * Return:
+ * true if virtio controller is stopped
+ */
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl)
 {
 	return ctrl->state == SNAP_VIRTIO_CTRL_STOPPED;
+}
+
+/**
+ * snap_virtio_ctrl_is_suspended() - check if virtio controller is suspended
+ * @ctrl:   virtio controller
+ *
+ * Return:
+ * true if virtio controller is suspended
+ */
+bool snap_virtio_ctrl_is_suspended(struct snap_virtio_ctrl *ctrl)
+{
+	return ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDED;
+}
+
+/**
+ * snap_virtio_ctrl_suspend() - suspend virtio controller
+ * @ctrl:   virtio controller
+ *
+ * The function suspends virtio block controller. All active queues will be
+ * suspended. The controller must be in the STARTED state. Once controller is
+ * suspended it can be resumed with the snap_virtio_ctrl_resume()
+ *
+ * The function is async. snap_virtio_ctrl_is_suspended() should be used to
+ * check for the suspend completion.
+ *
+ * The function should be called in the snap_virtio_ctrl_progress() context.
+ * Otherwise locking is required.
+ *
+ * Return:
+ * 0 on success or -errno
+ */
+int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
+{
+	int i;
+
+	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING)
+		return 0;
+
+	if (ctrl->state != SNAP_VIRTIO_CTRL_STARTED)
+		return -EINVAL;
+
+	if (!ctrl->q_ops->suspend) {
+		ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDED;
+		return 0;
+	}
+
+	snap_info("Suspending controller\n");
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		if (ctrl->queues[i])
+			ctrl->q_ops->suspend(ctrl->queues[i]);
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+
+	ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDING;
+	return 0;
 }
 
 static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
@@ -299,9 +433,52 @@ static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
 	return 0;
 }
 
+static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
+{
+	int i;
+	int ret;
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		if (ctrl->queues[i] &&
+				!ctrl->q_ops->is_suspended(ctrl->queues[i])) {
+			snap_pgs_resume(&ctrl->pg_ctx);
+			return;
+		}
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+
+	ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDED;
+	snap_info("Controller SUSPENDED\n");
+
+	if (ctrl->pending_reset) {
+		ret = snap_virtio_ctrl_reset(ctrl);
+		if (ret)
+			snap_error("virtio controlelr pending reset failed\n");
+		ctrl->pending_reset = false;
+	}
+}
+
+/**
+ * snap_virtio_ctrl_progress() - progress virtio controller
+ * @ctrl:   virtio controller
+ *
+ * The function polls virtio controller configuration areas for changes and
+ * processes them. Ultimately the function is responsible for starting the
+ * controller with snap_virtio_ctrl_start(), suspending it with
+ * snap_virtio_ctrl_suspend() and stopping it with snap_virtio_ctrl_stop()
+ *
+ * The function does not progress io.
+ *
+ * snap_virtio_ctrl_pg_io_progress() or snap_virtio_ctrl_io_progress() should
+ * be called to progress virtio queueus.
+ */
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 {
 	int ret;
+
+	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING)
+		snap_virtio_ctrl_progress_suspend(ctrl);
 
 	ret = snap_virtio_ctrl_bar_update(ctrl, ctrl->bar_curr);
 	if (ret)

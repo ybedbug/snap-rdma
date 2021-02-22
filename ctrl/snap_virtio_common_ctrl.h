@@ -181,6 +181,8 @@ struct snap_virtio_ctrl {
 	struct snap_pg_ctx pg_ctx;
 	bool log_writes_to_host;
 	struct snap_channel *lm_channel;
+	/* true if reset was requested while some queues are not suspended */
+	bool pending_reset;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
