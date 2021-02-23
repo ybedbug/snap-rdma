@@ -165,15 +165,15 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 	if (!vbdev)
 		return -ENOMEM;
 
-	vbdev->vdev.num_queues = sdev->sctx->virtio_blk_caps.max_emulated_virtqs;
+	vbdev->num_queues = sdev->sctx->virtio_blk_caps.max_emulated_virtqs;
 
-	vbdev->virtqs = calloc(vbdev->vdev.num_queues, sizeof(*vbdev->virtqs));
+	vbdev->virtqs = calloc(vbdev->num_queues, sizeof(*vbdev->virtqs));
 	if (!vbdev->virtqs) {
 		ret = -ENOMEM;
 		goto out_free;
 	}
 
-	for (i = 0; i < vbdev->vdev.num_queues; i++)
+	for (i = 0; i < vbdev->num_queues; i++)
 		vbdev->virtqs[i].vbdev = vbdev;
 
 	ret = snap_init_device(sdev);
@@ -181,7 +181,6 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 		goto out_free_virtqs;
 
 	sdev->dd_data = vbdev;
-	vbdev->vdev.sdev = sdev;
 
 	return 0;
 
@@ -205,7 +204,7 @@ static int snap_consume_virtio_blk_queue_event(struct mlx5_snap_devx_obj *obj,
 		return -EINVAL;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
-	for (i = 0; i < vbdev->vdev.num_queues; i++) {
+	for (i = 0; i < vbdev->num_queues; i++) {
 		if (vbdev->virtqs[i].virtq.virtq == obj) {
 			vbq = &vbdev->virtqs[i];
 			break;
@@ -286,7 +285,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
 
-	if (attr->vattr.idx >= vbdev->vdev.num_queues) {
+	if (attr->vattr.idx >= vbdev->num_queues) {
 		errno = EINVAL;
 		goto out;
 	}

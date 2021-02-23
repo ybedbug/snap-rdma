@@ -79,7 +79,7 @@ struct snap_virtio_net_device_attr {
 };
 
 struct snap_virtio_net_device {
-	struct snap_virtio_device		vdev;
+	uint32_t				num_queues;
 	struct snap_virtio_net_queue		*virtqs;
 };
 

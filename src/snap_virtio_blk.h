@@ -71,7 +71,7 @@ struct snap_virtio_blk_device_attr {
 };
 
 struct snap_virtio_blk_device {
-	struct snap_virtio_device		vdev;
+	uint32_t				num_queues;
 	struct snap_virtio_blk_queue		*virtqs;
 };
 

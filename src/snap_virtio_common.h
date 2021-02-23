@@ -172,11 +172,6 @@ struct snap_virtio_device_attr {
 	uint16_t			queue_select;
 };
 
-struct snap_virtio_device {
-	struct snap_device			*sdev;
-	uint32_t				num_queues;
-};
-
 void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 	void *q_configuration);
 void snap_virtio_get_device_attr(struct snap_device *sdev,

@@ -160,15 +160,15 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 	if (!vndev)
 		return -ENOMEM;
 
-	vndev->vdev.num_queues = sdev->sctx->virtio_net_caps.max_emulated_virtqs;
+	vndev->num_queues = sdev->sctx->virtio_net_caps.max_emulated_virtqs;
 
-	vndev->virtqs = calloc(vndev->vdev.num_queues, sizeof(*vndev->virtqs));
+	vndev->virtqs = calloc(vndev->num_queues, sizeof(*vndev->virtqs));
 	if (!vndev->virtqs) {
 		ret = -ENOMEM;
 		goto out_free;
 	}
 
-	for (i = 0; i < vndev->vdev.num_queues; i++)
+	for (i = 0; i < vndev->num_queues; i++)
 		vndev->virtqs[i].vndev = vndev;
 
 	ret = snap_init_device(sdev);
@@ -191,7 +191,6 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 	}
 
 	sdev->dd_data = vndev;
-	vndev->vdev.sdev = sdev;
 
 	return 0;
 
@@ -267,7 +266,7 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 
 	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
 
-	if (attr->vattr.idx >= vndev->vdev.num_queues) {
+	if (attr->vattr.idx >= vndev->num_queues) {
 		errno = EINVAL;
 		goto out;
 	}
