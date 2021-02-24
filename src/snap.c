@@ -2773,7 +2773,7 @@ out_err:
 
 static struct mlx5_snap_devx_obj*
 snap_create_nvme_device_emulation(struct snap_device *sdev,
-                                  struct snap_device_attr *attr)
+				  struct snap_device_attr *attr)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(nvme_device_emulation)] = {0};
@@ -2798,8 +2798,8 @@ snap_create_nvme_device_emulation(struct snap_device *sdev,
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.nvme_need_tunnel ? 0 : 1);
 	if (attr->counter_set_id) {
-	    DEVX_SET(nvme_device_emulation, device_emulation_in, counter_set_id,
-	             attr->counter_set_id);
+		DEVX_SET(nvme_device_emulation, device_emulation_in,
+			 counter_set_id, attr->counter_set_id);
 	}
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
@@ -2820,7 +2820,7 @@ out_err:
 
 static struct mlx5_snap_devx_obj*
 snap_create_device_emulation(struct snap_device *sdev,
-                             struct snap_device_attr *attr)
+			     struct snap_device_attr *attr)
 {
 	if (!sdev->pci->plugged)
 		return NULL;
