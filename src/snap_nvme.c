@@ -76,10 +76,14 @@ int snap_nvme_query_device(struct snap_device *sdev,
 				 enabled);
 	dev_allowed = DEVX_GET64(nvme_device_emulation, device_emulation_out,
 				 modify_field_select);
-	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR)
-		attr->modifiable_fields = SNAP_NVME_DEV_MOD_BAR;
-	else
-		attr->modifiable_fields = 0;
+
+	attr->modifiable_fields = 0;
+	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR_CAP_VS_CSTS)
+		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_BAR_CAP_VS_CSTS;
+	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR_CC)
+		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_BAR_CC;
+	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ)
+		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ;
 
 	attr->crossed_vhca_mkey = DEVX_GET(nvme_device_emulation,
 					   device_emulation_out,
@@ -122,6 +126,7 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	uint8_t *device_emulation_in;
 	int ret, in_size;
+	uint64_t modify_mask;
 
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
 		return -EINVAL;
@@ -161,9 +166,16 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 	memcpy(DEVX_ADDR_OF(nvme_device_emulation, device_emulation_in,
 			    register_data), &attr->bar, sdev->pci->bar.size);
 
-	if (mask & SNAP_NVME_DEV_MOD_BAR)
+	modify_mask = 0;
+	if (mask & SNAP_NVME_DEV_MOD_BAR_CAP_VS_CSTS)
+		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_CAP_VS_CSTS;
+	if (mask & SNAP_NVME_DEV_MOD_BAR_CC)
+		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_CC;
+	if (mask & SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ)
+		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ;
+    if(modify_mask)
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,
-			   modify_field_select, MLX5_NVME_DEVICE_MODIFY_BAR);
+			   modify_field_select, modify_mask);
 
 	ret = mlx5dv_devx_obj_modify(sdev->mdev.device_emulation->obj, in,
 				     in_size, out, sizeof(out));

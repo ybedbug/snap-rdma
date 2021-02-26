@@ -2462,7 +2462,9 @@ enum {
 };
 
 enum {
-	MLX5_NVME_DEVICE_MODIFY_BAR = 1 << 0,
+	MLX5_NVME_DEVICE_MODIFY_BAR_CAP_VS_CSTS = 1 << 0,
+	MLX5_NVME_DEVICE_MODIFY_BAR_CC = 1 << 1,
+	MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ = 1 << 2,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {

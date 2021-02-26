@@ -113,7 +113,9 @@ struct snap_nvme_cq {
 };
 
 enum snap_nvme_device_modify {
-	SNAP_NVME_DEV_MOD_BAR	= 1 << 0,
+	SNAP_NVME_DEV_MOD_BAR_CAP_VS_CSTS	= 1 << 0,
+	SNAP_NVME_DEV_MOD_BAR_CC	= 1 << 1,
+	SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ	= 1 << 2,
 };
 
 struct snap_nvme_device_attr {
