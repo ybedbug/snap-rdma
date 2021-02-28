@@ -99,18 +99,37 @@ static void snap_virtio_ctrl_bars_teardown(struct snap_virtio_ctrl *ctrl)
 	snap_virtio_ctrl_bar_destroy(ctrl, ctrl->bar_curr);
 }
 
+static void snap_virtio_ctrl_sched_q_nolock(struct snap_virtio_ctrl *ctrl,
+					    struct snap_virtio_ctrl_queue *vq,
+					    struct snap_pg *pg)
+{
+	TAILQ_INSERT_TAIL(&pg->q_list, &vq->pg_q, entry);
+	vq->pg = pg;
+	if (ctrl->q_ops->start)
+		ctrl->q_ops->start(vq);
+}
+
 static void snap_virtio_ctrl_sched_q(struct snap_virtio_ctrl *ctrl,
 				     struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_pg *pg;
 
 	pg = snap_pg_get_next(&ctrl->pg_ctx);
+
 	pthread_spin_lock(&pg->lock);
-	TAILQ_INSERT_TAIL(&pg->q_list, &vq->pg_q, entry);
-	vq->pg = pg;
-	if (ctrl->q_ops->start)
-		ctrl->q_ops->start(vq);
+	snap_virtio_ctrl_sched_q_nolock(ctrl, vq, pg);
 	pthread_spin_unlock(&pg->lock);
+}
+
+static void snap_virtio_ctrl_desched_q_nolock(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_pg *pg = vq->pg;
+
+	if (!pg)
+		return;
+
+	TAILQ_REMOVE(&pg->q_list, &vq->pg_q, entry);
+	vq->pg = NULL;
 }
 
 static void snap_virtio_ctrl_desched_q(struct snap_virtio_ctrl_queue *vq)
@@ -121,8 +140,7 @@ static void snap_virtio_ctrl_desched_q(struct snap_virtio_ctrl_queue *vq)
 		return;
 
 	pthread_spin_lock(&pg->lock);
-	TAILQ_REMOVE(&pg->q_list, &vq->pg_q, entry);
-	vq->pg = NULL;
+	snap_virtio_ctrl_desched_q_nolock(vq);
 	pthread_spin_unlock(&pg->lock);
 }
 
@@ -395,6 +413,8 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
 		return -EINVAL;
 
 	if (!ctrl->q_ops->suspend) {
+		/* pretend that suspend was done. It is done for the compatibility
+		 * reasons. TODO: return error */
 		ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDED;
 		return 0;
 	}
@@ -409,6 +429,63 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
 	snap_pgs_resume(&ctrl->pg_ctx);
 
 	ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDING;
+	return 0;
+}
+
+/**
+ * snap_virtio_ctrl_resume() - resume virtio controller
+ * @ctrl:    virtio controller
+ *
+ * The function resumes controller that was suspended by the
+ * snap_virtio_ctrl_suspend() or started in the suspended state.
+ *
+ * All enabled queues will be recreated based on the current controller state.
+ *
+ * The function is synchrounous and should be called in the
+ * snap_virtio_ctrl_progress() context. Otherwise locking is required.
+ *
+ * Return:
+ * 0 on success or -errno
+ */
+int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
+{
+	int n_enabled = 0;
+	int i;
+	struct snap_pg *pg;
+
+	if (ctrl->state != SNAP_VIRTIO_CTRL_SUSPENDED)
+		return -EINVAL;
+
+	if (!ctrl->q_ops->suspend) {
+		/* pretend that resume was done. It is done for the compatibility
+		 * reasons. TODO: return error */
+		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+		return 0;
+	}
+
+	if (!ctrl->q_ops->resume) {
+		snap_error("virtio controller: resume is not implemented\n");
+		return -ENOTSUP;
+	}
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		if (!ctrl->queues[i])
+			continue;
+
+		/* preserve pg across resume */
+		pg = ctrl->queues[i]->pg;
+		if (!pg)
+			pg = snap_pg_get_next(&ctrl->pg_ctx);
+		snap_virtio_ctrl_desched_q_nolock(ctrl->queues[i]);
+		ctrl->queues[i]->pg = pg;
+		ctrl->q_ops->resume(ctrl->queues[i]);
+		snap_virtio_ctrl_sched_q_nolock(ctrl, ctrl->queues[i], pg);
+		n_enabled++;
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+	ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	snap_info("virtio controller: resumed with %d queues\n", n_enabled);
 	return 0;
 }
 

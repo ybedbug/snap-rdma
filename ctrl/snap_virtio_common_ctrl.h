@@ -141,6 +141,7 @@ struct snap_virtio_queue_ops {
 	void (*start)(struct snap_virtio_ctrl_queue *queue);
 	void (*suspend)(struct snap_virtio_ctrl_queue *queue);
 	bool (*is_suspended)(struct snap_virtio_ctrl_queue *queue);
+	int (*resume)(struct snap_virtio_ctrl_queue *queue);
 	int (*get_state)(struct snap_virtio_ctrl_queue *queue,
 			 struct snap_virtio_ctrl_queue_state *state);
 };
