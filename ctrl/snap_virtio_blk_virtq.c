@@ -1084,6 +1084,7 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat)
 {
 	struct blk_virtq_priv *vq_priv = q->priv;
+	struct snap_virtio_blk_queue_attr virtq_attr = {};
 	struct vring_avail vra;
 	struct vring_used vru;
 	uint64_t drv_addr = vq_priv->snap_attr.vattr.driver;
@@ -1149,17 +1150,16 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 	ibv_dereg_mr(vra_mr);
 	snap_dma_q_destroy(dma_q);
 
-	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq,
-					  &vq_priv->snap_attr);
+	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, &virtq_attr);
 	if (ret) {
 		snap_error("failed query queue %d debugstat\n", q->idx);
 		return ret;
 	}
 
 	q_debugstat->qid = q->idx;
-	q_debugstat->hw_available_index = vq_priv->snap_attr.hw_available_index;
+	q_debugstat->hw_available_index = virtq_attr.hw_available_index;
 	q_debugstat->sw_available_index = vra.idx;
-	q_debugstat->hw_used_index = vq_priv->snap_attr.hw_used_index;
+	q_debugstat->hw_used_index = virtq_attr.hw_used_index;
 	q_debugstat->sw_used_index = vru.idx;
 
 	return 0;
