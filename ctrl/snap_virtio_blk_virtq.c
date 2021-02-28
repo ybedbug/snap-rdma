@@ -1005,6 +1005,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 							    attr->seg_max + NUM_HDR_FTR_DESCS);
 	vq_priv->snap_attr.vattr.event_qpn_or_msix = attr->msix_vector;
 	vq_priv->snap_attr.vattr.pd = attr->pd;
+	vq_priv->snap_attr.hw_available_index = attr->hw_available_index;
+	vq_priv->snap_attr.hw_used_index = attr->hw_used_index;
 	vq_priv->snap_attr.qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
 	if (!vq_priv->snap_attr.qp) {
 		snap_error("no fw qp exist when trying to create virtq\n");

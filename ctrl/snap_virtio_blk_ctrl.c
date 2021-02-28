@@ -355,18 +355,13 @@ out:
 	return ret;
 }
 
-static struct snap_virtio_ctrl_queue*
-snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
+static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
+				   struct snap_virtio_ctrl *vctrl, int index)
 {
 	struct blk_virtq_create_attr attr = {0};
 	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(vctrl);
 	struct snap_context *sctx = vctrl->sdev->sctx;
-	struct snap_virtio_blk_ctrl_queue *vbq;
 	struct snap_virtio_blk_device_attr *dev_attr;
-
-	vbq = calloc(1, sizeof(*vbq));
-	if (!vbq)
-		return NULL;
 
 	dev_attr = to_blk_device_attr(vctrl->bar_curr);
 	vbq->attr = &dev_attr->q_attrs[index];
@@ -382,10 +377,33 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 	attr.msix_vector = vbq->attr->vattr.msix_vector;
 	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
 
+	attr.hw_available_index = vbq->attr->hw_available_index;
+	attr.hw_used_index = vbq->attr->hw_used_index;
+
 	vbq->q_impl = blk_virtq_create(vbq, blk_ctrl->bdev_ops, blk_ctrl->bdev,
 				       vctrl->sdev, &attr);
 	if (!vbq->q_impl) {
 		snap_error("controller failed to create blk virtq\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static struct snap_virtio_ctrl_queue *
+snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq;
+
+	vbq = calloc(1, sizeof(*vbq));
+	if (!vbq)
+		return NULL;
+
+	/* queue creation will be finished during resume */
+	if (vctrl->state == SNAP_VIRTIO_CTRL_SUSPENDED)
+		return &vbq->common;
+
+	if (blk_virtq_create_helper(vbq, vctrl, index)) {
 		free(vbq);
 		return NULL;
 	}
@@ -406,8 +424,18 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 static void snap_virtio_blk_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+	struct snap_virtio_blk_device_attr *dev_attr;
 
-	blk_virtq_destroy(vbq->q_impl);
+	/* in the case of resume failure vbq->q_impl may be NULL */
+	if (vbq->q_impl)
+		blk_virtq_destroy(vbq->q_impl);
+
+	/* make sure that next time the queue is created with
+	 * the default hw_avail and used values
+	 */
+	dev_attr = to_blk_device_attr(vq->ctrl->bar_curr);
+	dev_attr->q_attrs[vq->index].hw_available_index = 0;
+	dev_attr->q_attrs[vq->index].hw_used_index = 0;
 	free(vbq);
 }
 
@@ -427,6 +455,49 @@ static bool snap_virtio_blk_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queu
 
 	snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
 	return true;
+}
+
+static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+	struct snap_virtio_ctrl_queue_state state = {};
+	int ret, index;
+	struct snap_virtio_blk_device_attr *dev_attr;
+	struct snap_virtio_ctrl *ctrl;
+
+	index = vq->index;
+	ctrl = vq->ctrl;
+	dev_attr = to_blk_device_attr(ctrl->bar_curr);
+
+	/* if q_impl is NULL it means that we are resuming after
+	 * the state restore
+	 */
+	if (vbq->q_impl) {
+		if (!blk_virtq_is_suspended(vbq->q_impl))
+			return -EINVAL;
+
+		/* save hw_used and hw_avail to allow resume */
+		ret = blk_virtq_get_state(vbq->q_impl, &state);
+		if (ret) {
+			snap_error("queue %d: failed to get state, cannot resume.\n",
+					vq->index);
+			return -EINVAL;
+		}
+
+		blk_virtq_destroy(vbq->q_impl);
+		dev_attr->q_attrs[index].hw_available_index = state.hw_available_index;
+		dev_attr->q_attrs[index].hw_used_index = state.hw_used_index;
+	}
+
+	ret = blk_virtq_create_helper(vbq, ctrl, index);
+	if (ret)
+		return ret;
+
+	snap_info("queue %d: pg_id %d RESUMED with hw_avail %hu hw_used %hu\n",
+		  vq->index, vq->pg->id,
+		  dev_attr->q_attrs[index].hw_available_index,
+		  dev_attr->q_attrs[index].hw_used_index);
+	return 0;
 }
 
 static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
@@ -460,6 +531,7 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.start = snap_virtio_blk_ctrl_queue_start,
 	.suspend = snap_virtio_blk_ctrl_queue_suspend,
 	.is_suspended = snap_virtio_blk_ctrl_queue_is_suspended,
+	.resume = snap_virtio_blk_ctrl_queue_resume,
 	.get_state = snap_virtio_blk_ctrl_queue_get_state
 };
 
