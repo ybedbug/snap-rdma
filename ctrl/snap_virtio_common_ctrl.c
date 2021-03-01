@@ -931,3 +931,127 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
 	dump_state(ctrl, buf);
 	return total_len;
 }
+
+/**
+ * snap_virtio_ctrl_state_restore() - Restore virtio controllerr state
+ * @ctrl:     virtio controller
+ * @buf:      buffer to restore the controller state from
+ * @len:      buffer length
+ *
+ * The function restores virtio state from the provided buffer. The buffer must
+ * be large enough to hold the state. snap_virtio_ctrl_state_size() can be used
+ * to find the minimum required buffer size.
+ *
+ * The function should be called from the admin thread context. If called from 
+ * another context, the caller is repsonsible for locking admin polling thread.
+ *
+ * The internal controller state must be either SNAP_VIRTIO_CTRL_STOPPED or
+ * SNAP_VIRTIO_CTRL_SUSPENDED. Otherwise the function will fail.
+ *
+ * Return:
+ * total state length or -errno on error
+ */
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len)
+{
+	struct snap_virtio_ctrl_section *hdr;
+	struct snap_virtio_ctrl_common_state *common_state;
+	struct snap_virtio_ctrl_queue_state *queue_state;
+	void *device_state;
+	int total_len = 0;
+	int ret = 0;
+	int i;
+
+	dump_state(ctrl, buf);
+
+	/* there is no way to restore just common state */
+	if (!ctrl->bar_ops->set_state)
+		return -ENOTSUP;
+
+	/* controller must be either stopped or suspended */
+	if (!snap_virtio_ctrl_is_stopped(ctrl) &&
+	    !snap_virtio_ctrl_is_suspended(ctrl)) {
+		snap_error("controller state (%d) must be either STOPPED or SUSPENDED\n",
+			   ctrl->state);
+		return -EINVAL;
+	}
+
+	/* header */
+	hdr = buf;
+	if (hdr->len > len) {
+		snap_error("controller state is truncated\n");
+		return -EINVAL;
+	}
+
+	/* common */
+	hdr++;
+	common_state = (struct snap_virtio_ctrl_common_state *)(hdr + 1);
+	total_len += hdr->len;
+
+	/* queues */
+	hdr = (struct snap_virtio_ctrl_section *)(common_state + 1);
+	queue_state = (struct snap_virtio_ctrl_queue_state *)(hdr + 1);
+	total_len += hdr->len;
+
+	/* device config */
+	if (total_len < len) {
+		hdr = (struct snap_virtio_ctrl_section *)((char *)hdr + hdr->len);
+		device_state = hdr + 1;
+	} else
+		device_state = NULL;
+
+	if (common_state->ctrl_state != SNAP_VIRTIO_CTRL_STOPPED &&
+	    common_state->ctrl_state != SNAP_VIRTIO_CTRL_SUSPENDED) {
+		snap_error("original controller state (%d) must be either STOPPED or SUSPENDED\n",
+			   ctrl->state);
+		return -EINVAL;
+	}
+
+	snap_info("state: %d -> %d  status: %d -> %d\n",
+		  common_state->ctrl_state, ctrl->state,
+		  common_state->device_status, ctrl->bar_curr->status);
+
+	if (snap_virtio_ctrl_is_suspended(ctrl))
+		snap_virtio_ctrl_stop(ctrl);
+
+	ctrl->state = common_state->ctrl_state;
+
+	ctrl->bar_curr->device_feature = common_state->device_feature;
+	ctrl->bar_curr->driver_feature = common_state->driver_feature;
+	ctrl->bar_curr->msix_config = common_state->msix_config;
+	ctrl->bar_curr->max_queues = common_state->num_queues;
+	ctrl->bar_curr->status = common_state->device_status;
+	ctrl->bar_curr->config_generation = common_state->config_generation;
+
+	ctrl->bar_curr->queue_select = common_state->queue_select;
+	ctrl->bar_curr->device_feature_select = common_state->device_feature_select;
+	ctrl->bar_curr->driver_feature_select = common_state->driver_feature_select;
+
+	for (i = 0; i < ctrl->max_queues; i++) {
+		struct snap_virtio_queue_attr *vq;
+
+		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
+
+		vq->size = queue_state[i].queue_size;
+		vq->msix_vector = queue_state[i].queue_msix_vector;
+		vq->enable = queue_state[i].queue_enable;
+		vq->notify_off = queue_state[i].queue_notify_off;
+		vq->desc = queue_state[i].queue_desc;
+		vq->driver = queue_state[i].queue_driver;
+		vq->device = queue_state[i].queue_device;
+	}
+
+	ret = ctrl->bar_ops->set_state(ctrl, ctrl->bar_curr, queue_state,
+				       device_state, hdr->len);
+	if (ret)
+		return ret;
+
+	/* start controller in the suspended state. Otherwise the controller
+	 * will start doing dma to/from host memory even before it is
+	 * unfreezed and unquiesced.
+	 */
+	if (common_state->ctrl_state == SNAP_VIRTIO_CTRL_SUSPENDED)
+		ret = snap_virtio_ctrl_start(ctrl);
+
+	snap_virtio_ctrl_bar_copy(ctrl, ctrl->bar_curr, ctrl->bar_prev);
+	return ret;
+}

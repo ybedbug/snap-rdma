@@ -162,6 +162,10 @@ struct snap_virtio_ctrl_bar_ops {
 	int (*get_state)(struct snap_virtio_ctrl *ctrl,
 			 struct snap_virtio_device_attr *attr, void *buf,
 			 unsigned len);
+	int (*set_state)(struct snap_virtio_ctrl *ctrl,
+			 struct snap_virtio_device_attr *attr,
+			 struct snap_virtio_ctrl_queue_state *queue_state,
+			 void *buf, int len);
 	void (*dump_state)(struct snap_virtio_ctrl *ctrl, void *buf, int len);
 };
 
