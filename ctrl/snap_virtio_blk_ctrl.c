@@ -150,6 +150,47 @@ snap_virtio_blk_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 	return snap_virtio_blk_ctrl_bar_get_state_size(ctrl);
 }
 
+static int
+snap_virtio_blk_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
+				   struct snap_virtio_device_attr *vbar,
+				   struct snap_virtio_ctrl_queue_state *queue_state,
+				   void *buf, int len)
+{
+	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
+	struct virtio_blk_config *dev_cfg;
+	int i, ret;
+
+	if (!buf)
+		return -EINVAL;
+
+	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl))
+		return -EINVAL;
+
+	if(!queue_state)
+		return -EINVAL;
+
+	for (i = 0; i < ctrl->max_queues; i++) {
+		vbbar->q_attrs[i].hw_available_index = queue_state[i].hw_available_index;
+		vbbar->q_attrs[i].hw_used_index = queue_state[i].hw_used_index;
+	}
+
+	dev_cfg = buf;
+	vbbar->capacity = dev_cfg->capacity;
+	vbbar->size_max = dev_cfg->size_max;
+	vbbar->seg_max = dev_cfg->seg_max;
+	vbbar->blk_size = dev_cfg->blk_size;
+	vbbar->max_blk_queues = dev_cfg->num_queues;
+
+	ret = snap_virtio_blk_modify_device(ctrl->sdev,
+					    SNAP_VIRTIO_MOD_ALL |
+					    SNAP_VIRTIO_MOD_QUEUE_CFG,
+					    vbbar);
+	if (ret)
+		snap_error("Failed to restore virtio blk device config\n");
+
+	return ret;
+}
+
 static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.create = snap_virtio_blk_ctrl_bar_create,
 	.destroy = snap_virtio_blk_ctrl_bar_destroy,
@@ -160,6 +201,7 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.get_state_size = snap_virtio_blk_ctrl_bar_get_state_size,
 	.dump_state = snap_virtio_blk_ctrl_bar_dump_state,
 	.get_state = snap_virtio_blk_ctrl_bar_get_state,
+	.set_state = snap_virtio_blk_ctrl_bar_set_state
 };
 
 static bool
