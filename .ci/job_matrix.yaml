@@ -77,6 +77,7 @@ steps:
       make -j 3 install
 
   - name: Blackduck scan source
+    enable: false
     containerSelector: "{name: 'blackduck'}"
     shell: action
     module: ngci
