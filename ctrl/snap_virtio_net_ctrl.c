@@ -118,6 +118,11 @@ static void snap_virtio_net_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq
 {
 	struct snap_virtio_net_ctrl_queue *vnq = container_of(vq,
 					struct snap_virtio_net_ctrl_queue, common);
+	struct snap_virtio_net_queue_attr *vnqa;
+
+	vnqa = (struct snap_virtio_net_queue_attr *)vnq->attr;
+	vnqa->hw_available_index = 0;
+	vnqa->hw_used_index      = 0;
 
 	free(vnq);
 }
