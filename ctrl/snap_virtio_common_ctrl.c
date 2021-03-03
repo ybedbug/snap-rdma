@@ -1,5 +1,6 @@
 #include "snap_virtio_common_ctrl.h"
 #include "snap_queue.h"
+#include "snap_channel.h"
 
 /*
  * Driver may choose to reset device for numerous reasons:
@@ -1124,4 +1125,195 @@ int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, uns
 
 	snap_virtio_ctrl_bar_copy(ctrl, ctrl->bar_curr, ctrl->bar_prev);
 	return ret;
+}
+
+static int snap_virtio_ctrl_quiesce(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_NORMAL) {
+		ret = -1;
+		goto err;
+	}
+
+	if (snap_virtio_ctrl_is_stopped(ctrl))
+		goto done;
+
+	ret = snap_virtio_ctrl_suspend(ctrl);
+	if (ret)
+		goto err;
+
+	/* TODO: add timeout */
+	while (!snap_virtio_ctrl_is_suspended(ctrl)) {
+		snap_virtio_ctrl_progress_unlock(ctrl);
+		usleep(100);
+		snap_virtio_ctrl_progress_lock(ctrl);
+	}
+done:
+	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
+err:
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return ret;
+}
+
+static int snap_virtio_ctrl_unquiesce(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_QUIESCED) {
+		ret = -1;
+		goto err;
+	}
+
+	ret = snap_virtio_ctrl_resume(ctrl);
+	if (ret)
+		goto err;
+
+	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_NORMAL;
+err:
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return ret;
+}
+
+static int snap_virtio_ctrl_freeze(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_QUIESCED) {
+		ret = -1;
+		goto err;
+	}
+	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_FREEZED;
+err:
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return ret;
+}
+
+static int snap_virtio_ctrl_unfreeze(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_FREEZED) {
+		ret = -1;
+		goto err;
+	}
+	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
+err:
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return ret;
+}
+
+static int snap_virtio_ctrl_get_state_size(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	unsigned dev_cfg_len, queue_cfg_len, common_cfg_len, len;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_FREEZED) {
+		/* act as if we don't support state tracking */
+		snap_virtio_ctrl_progress_unlock(ctrl);
+		return 0;
+	}
+	len = snap_virtio_ctrl_state_size(ctrl, &common_cfg_len, &queue_cfg_len,
+					  &dev_cfg_len);
+
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return len;
+}
+
+static int snap_virtio_ctrl_copy_state(void *data, void *buf, int len,
+				       bool copy_from_buffer)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (!copy_from_buffer)
+		ret = snap_virtio_ctrl_state_save(ctrl, buf, len);
+	else
+		ret = snap_virtio_ctrl_state_restore(ctrl, buf, len);
+
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return ret < 0 ? -1 : 0;
+}
+
+static int snap_virtio_ctrl_start_dirty_pages_track(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	snap_virtio_ctrl_log_writes(ctrl, true);
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return 0;
+}
+
+static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	snap_virtio_ctrl_log_writes(ctrl, false);
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return 0;
+}
+
+static struct snap_migration_ops snap_virtio_ctrl_migration_ops = {
+	.quiesce = snap_virtio_ctrl_quiesce,
+	.unquiesce = snap_virtio_ctrl_unquiesce,
+	.freeze = snap_virtio_ctrl_freeze,
+	.unfreeze = snap_virtio_ctrl_unfreeze,
+	.get_state_size = snap_virtio_ctrl_get_state_size,
+	.copy_state = snap_virtio_ctrl_copy_state,
+	.start_dirty_pages_track = snap_virtio_ctrl_start_dirty_pages_track,
+	.stop_dirty_pages_track = snap_virtio_ctrl_stop_dirty_pages_track,
+};
+
+/**
+ * snap_virtio_ctrl_lm_enable() - enable virtio controlelr live migration
+ * @ctrl:   virtio controller
+ * @name:   live migration channel name
+ *
+ * The function opens live migration channel @name and attaches it to the
+ * controller.
+ *
+ * Return:
+ * 0 or -errno on error
+ */
+int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name)
+{
+	int ret = 0;
+
+	ctrl->lm_channel = snap_channel_open(name, &snap_virtio_ctrl_migration_ops, ctrl);
+	if (!ctrl->lm_channel)
+		ret = -errno;
+	return ret;
+}
+
+/**
+ * snap_virtio_ctrl_lm_disable() - disable virtio controller live migration
+ * @ctrl:   virtio controller
+ * @name:   live migration channel name
+ *
+ * The function disables live migration channel
+ */
+void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl)
+{
+	if (!ctrl->lm_channel)
+		return;
+	snap_channel_close(ctrl->lm_channel);
+	ctrl->lm_channel = NULL;
 }

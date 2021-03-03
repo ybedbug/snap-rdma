@@ -103,6 +103,12 @@ enum snap_virtio_ctrl_state {
 	SNAP_VIRTIO_CTRL_SUSPENDING
 };
 
+enum snap_virtio_ctrl_lm_state {
+	SNAP_VIRTIO_CTRL_LM_NORMAL,
+	SNAP_VIRTIO_CTRL_LM_QUIESCED,
+	SNAP_VIRTIO_CTRL_LM_FREEZED
+};
+
 struct snap_virtio_ctrl_bar_cbs {
 	int (*validate)(void *cb_ctx);
 	int (*start)(void *cb_ctx);
@@ -195,6 +201,7 @@ struct snap_virtio_ctrl {
 	/* true if completion (commands handled by queues) should be sent in order */
 	bool force_in_order;
 	struct snap_device_attr sdev_attr;
+	enum snap_virtio_ctrl_lm_state lm_state;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
@@ -306,4 +313,7 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
 int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len);
 
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
+
+int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);
+void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl);
 #endif
