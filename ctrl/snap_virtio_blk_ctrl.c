@@ -373,7 +373,6 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	int enabled_queues = 0;
 	int ret = 0;
 
-	pthread_mutex_lock(&ctrl->common.state_lock);
 	if (ctrl->common.state != SNAP_VIRTIO_CTRL_STARTED)
 		goto out;
 
@@ -392,8 +391,6 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	ctrl_debugstat->num_queues = enabled_queues;
 
 out:
-	pthread_mutex_unlock(&ctrl->common.state_lock);
-
 	return ret;
 }
 

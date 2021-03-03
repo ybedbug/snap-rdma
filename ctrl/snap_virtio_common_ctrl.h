@@ -175,7 +175,7 @@ struct snap_virtio_ctrl_bar_ops {
 struct snap_virtio_ctrl {
 	enum snap_virtio_ctrl_type type;
 	enum snap_virtio_ctrl_state state;
-	pthread_mutex_t state_lock;
+	pthread_mutex_t progress_lock;
 	struct snap_device *sdev;
 	size_t max_queues;
 	size_t enabled_queues;
@@ -206,6 +206,8 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl);
 
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
+void snap_virtio_ctrl_progress_lock(struct snap_virtio_ctrl *ctrl);
+void snap_virtio_ctrl_progress_unlock(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id);
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,

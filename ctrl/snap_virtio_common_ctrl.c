@@ -301,7 +301,6 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 	int i, j;
 	const struct snap_virtio_queue_attr *vq;
 
-	pthread_mutex_lock(&ctrl->state_lock);
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
 		goto out;
 
@@ -349,7 +348,6 @@ vq_cleanup:
 			snap_virtio_ctrl_queue_destroy(ctrl->queues[j]);
 
 out:
-	pthread_mutex_unlock(&ctrl->state_lock);
 	return ret;
 }
 
@@ -373,7 +371,6 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 {
 	int i, ret = 0;
 
-	pthread_mutex_lock(&ctrl->state_lock);
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STOPPED)
 		goto out;
 
@@ -393,7 +390,6 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 	ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
 	snap_info("virtio controller stopped. state: %d\n", ctrl->state);
 out:
-	pthread_mutex_unlock(&ctrl->state_lock);
 	return ret;
 }
 
@@ -573,6 +569,40 @@ static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
 }
 
 /**
+ * snap_virtio_ctrl_progress_lock() - lock virtio controller progress thread
+ * @ctrl:   virtio controller
+ *
+ * The function suspends execution of the snap_virtio_ctrl_progress() by
+ * taking a global progress lock.
+ *
+ * The function should be used when calling functions that change internal controller
+ * state from a thread context different from the one of the snap_virtio_ctrl_progress()
+ *
+ * Example of functions that require lock:
+ *  - snap_virtio_ctrl_suspend()
+ *  - snap_virtio_ctrl_resume()
+ *  - snap_virtio_ctrl_state_save()
+ *  - snap_virtio_ctrl_state_restore()
+ *  - snap_virtio_ctrl_state_size()
+ */
+void snap_virtio_ctrl_progress_lock(struct snap_virtio_ctrl *ctrl)
+{
+	pthread_mutex_lock(&ctrl->progress_lock);
+}
+
+/**
+ * snap_virtio_ctrl_progress_lock() - unlock virtio controller progress thread
+ * @ctrl:   virtio controller
+ *
+ * The function resumes execution of the snap_virtio_ctrl_progress() by
+ * releasing a global progress lock.
+ */
+void snap_virtio_ctrl_progress_unlock(struct snap_virtio_ctrl *ctrl)
+{
+	pthread_mutex_unlock(&ctrl->progress_lock);
+}
+
+/**
  * snap_virtio_ctrl_progress() - progress virtio controller
  * @ctrl:   virtio controller
  *
@@ -590,12 +620,14 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 {
 	int ret;
 
+	snap_virtio_ctrl_progress_lock(ctrl);
+
 	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING)
 		snap_virtio_ctrl_progress_suspend(ctrl);
 
 	ret = snap_virtio_ctrl_bar_update(ctrl, ctrl->bar_curr);
 	if (ret)
-		return;
+		goto out;
 
 	/* Handle device_status changes */
 	if (ctrl->bar_curr->status != ctrl->bar_prev->status ||
@@ -605,6 +637,9 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
 		snap_virtio_ctrl_change_num_vfs(ctrl);
+
+out:
+	snap_virtio_ctrl_progress_unlock(ctrl);
 }
 
 static inline struct snap_virtio_ctrl_queue *
@@ -687,7 +722,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	if (ret)
 		goto close_device;
 
-	ret = pthread_mutex_init(&ctrl->state_lock, NULL);
+	ret = pthread_mutex_init(&ctrl->progress_lock, NULL);
 	if (ret)
 		goto teardown_bars;
 
@@ -710,7 +745,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 free_queues:
 	free(ctrl->queues);
 mutex_destroy:
-	pthread_mutex_destroy(&ctrl->state_lock);
+	pthread_mutex_destroy(&ctrl->progress_lock);
 teardown_bars:
 	snap_virtio_ctrl_bars_teardown(ctrl);
 close_device:
@@ -728,7 +763,7 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 			snap_warn("Closing ctrl with queue %d still active", i);
 	snap_pgs_free(&ctrl->pg_ctx);
 	free(ctrl->queues);
-	pthread_mutex_destroy(&ctrl->state_lock);
+	pthread_mutex_destroy(&ctrl->progress_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);
 	snap_close_device(ctrl->sdev);
 }
