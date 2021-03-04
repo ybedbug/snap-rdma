@@ -1271,6 +1271,17 @@ static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
 	return 0;
 }
 
+static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	uint16_t bdf;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	bdf = ctrl->bar_curr->pci_bdf;
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return bdf;
+}
+
 static struct snap_migration_ops snap_virtio_ctrl_migration_ops = {
 	.quiesce = snap_virtio_ctrl_quiesce,
 	.unquiesce = snap_virtio_ctrl_unquiesce,
@@ -1280,6 +1291,7 @@ static struct snap_migration_ops snap_virtio_ctrl_migration_ops = {
 	.copy_state = snap_virtio_ctrl_copy_state,
 	.start_dirty_pages_track = snap_virtio_ctrl_start_dirty_pages_track,
 	.stop_dirty_pages_track = snap_virtio_ctrl_stop_dirty_pages_track,
+	.get_pci_bdf = snap_virtio_ctrl_get_pci_bdf
 };
 
 /**
