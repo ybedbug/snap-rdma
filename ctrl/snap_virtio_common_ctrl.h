@@ -120,6 +120,7 @@ struct snap_virtio_ctrl_attr {
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
 	struct ibv_pd *pd;
 	uint32_t npgs;
+	bool force_in_order;
 };
 
 struct snap_virtio_ctrl_queue {
@@ -184,6 +185,8 @@ struct snap_virtio_ctrl {
 	struct snap_channel *lm_channel;
 	/* true if reset was requested while some queues are not suspended */
 	bool pending_reset;
+	/* true if completion (commands handled by queues) should be sent in order */
+	bool force_in_order;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);

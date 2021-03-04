@@ -49,6 +49,7 @@ typedef struct blk_virtq_io_cmd_stat {
     uint64_t total;
     uint64_t success;
     uint64_t fail;
+    uint64_t unordered;
 } blk_virtq_io_cmd_stat_t;
 
 typedef struct blk_virtq_io_stat {
@@ -93,6 +94,7 @@ struct blk_virtq_create_attr {
 	bool virtio_version_1_0;
 	uint16_t hw_available_index;
 	uint16_t hw_used_index;
+	bool force_in_order;
 };
 
 struct blk_virtq_start_attr {

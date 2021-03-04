@@ -376,6 +376,7 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.max_tunnel_desc = sctx->virtio_blk_caps.max_tunnel_desc;
 	attr.msix_vector = vbq->attr->vattr.msix_vector;
 	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
+	attr.force_in_order = blk_ctrl->common.force_in_order;
 
 	attr.hw_available_index = vbq->attr->hw_available_index;
 	attr.hw_used_index = vbq->attr->hw_used_index;

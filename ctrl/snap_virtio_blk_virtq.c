@@ -57,19 +57,21 @@ struct virtio_blk_outftr {
 
 /**
  * enum virtq_cmd_sm_state - state of the sm handling a cmd
- * @VIRTQ_CMD_STATE_IDLE:            SM initialization state
- * @VIRTQ_CMD_STATE_FETCH_CMD_DESCS: SM received tunnel cmd and copied
- *                                   immediate data, now fetch cmd descs
- * @VIRTQ_CMD_STATE_READ_REQ:        Read request data from host memory
- * @VIRTQ_CMD_STATE_HANDLE_REQ:      Handle received request from host, perform
- *                                   READ/WRITE/FLUSH
- * @VIRTQ_CMD_STATE_T_OUT_IOV_DONE:  Finished writing to bdev, check write
- *                                   status
- * @VIRTQ_CMD_STATE_T_IN_IOV_DONE:   Write data pulled from bdev to host memory
- * @VIRTQ_CMD_STATE_WRITE_STATUS:    Write cmd status to host memory
- * @VIRTQ_CMD_STATE_SEND_COMP:       Send completion to FW
- * @VIRTQ_CMD_STATE_RELEASE:         Release command
- * @VIRTQ_CMD_STATE_FATAL_ERR:       Fatal error, SM stuck here (until reset)
+ * @VIRTQ_CMD_STATE_IDLE:               SM initialization state
+ * @VIRTQ_CMD_STATE_FETCH_CMD_DESCS:    SM received tunnel cmd and copied
+ *                                      immediate data, now fetch cmd descs
+ * @VIRTQ_CMD_STATE_READ_REQ:           Read request data from host memory
+ * @VIRTQ_CMD_STATE_HANDLE_REQ:         Handle received request from host, perform
+ *                                      READ/WRITE/FLUSH
+ * @VIRTQ_CMD_STATE_T_OUT_IOV_DONE:     Finished writing to bdev, check write
+ *                                      status
+ * @VIRTQ_CMD_STATE_T_IN_IOV_DONE:      Write data pulled from bdev to host memory
+ * @VIRTQ_CMD_STATE_WRITE_STATUS:       Write cmd status to host memory
+ * @VIRTQ_CMD_STATE_SEND_COMP:          Send completion to FW
+ * @VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP: Send completion to FW for commands completed
+ *                                      unordered
+ * @VIRTQ_CMD_STATE_RELEASE:            Release command
+ * @VIRTQ_CMD_STATE_FATAL_ERR:          Fatal error, SM stuck here (until reset)
  */
 enum virtq_cmd_sm_state {
 	VIRTQ_CMD_STATE_IDLE,
@@ -78,8 +80,9 @@ enum virtq_cmd_sm_state {
 	VIRTQ_CMD_STATE_HANDLE_REQ,
 	VIRTQ_CMD_STATE_T_OUT_IOV_DONE,
 	VIRTQ_CMD_STATE_T_IN_IOV_DONE,
-	VIRTQ_CMD_STATE_SEND_COMP,
 	VIRTQ_CMD_STATE_WRITE_STATUS,
+	VIRTQ_CMD_STATE_SEND_COMP,
+	VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP,
 	VIRTQ_CMD_STATE_RELEASE,
 	VIRTQ_CMD_STATE_FATAL_ERR,
 };
@@ -107,22 +110,23 @@ struct blk_virtq_cmd_aux
 };
 /**
  * struct blk_virtq_cmd - command context
- * @idx:		descr_head_idx modulo queue size
- * @descr_head_idx:	descriptor head index
- * @num_desc:		number of descriptors in the command
- * @vq_priv:		virtqueue command belongs to, private context
- * @state:		state of sm processing the command
- * @descs:		memory holding command descriptors
- * @buf:		buffer holding the request data and aux data
- * @aux:		aux data resided in dma/mr memory
- * @mr:			buf mr
- * @req_buf:		pointer to request buffer
- * @req_mr:		request buffer mr
- * @req_size:		allocated request buffer size
- * @dma_comp:		struct given to snap library
- * @total_seg_len:	total length of the request data to be written/read
- * @total_in_len:	total length of data written to request buffers
- * @use_dmem:		command uses dynamic mem for req_buf
+ * @idx:			descr_head_idx modulo queue size
+ * @descr_head_idx:	 	descriptor head index
+ * @num_desc:		 	number of descriptors in the command
+ * @vq_priv:		 	virtqueue command belongs to, private context
+ * @state:		 	state of sm processing the command
+ * @descs:		 	memory holding command descriptors
+ * @buf:		 	buffer holding the request data and aux data
+ * @aux:		 	aux data resided in dma/mr memory
+ * @mr:                  	buf mr
+ * @req_buf:		 	pointer to request buffer
+ * @req_mr:		 	request buffer mr
+ * @req_size:		 	allocated request buffer size
+ * @dma_comp:		 	struct given to snap library
+ * @total_seg_len:	 	total length of the request data to be written/read
+ * @total_in_len:	 	total length of data written to request buffers
+ * @use_dmem:		  	command uses dynamic mem for req_buf
+ * @cmd_available_index:	sequential number of the command according to arrival
  */
 struct blk_virtq_cmd {
 	int idx;
@@ -143,6 +147,7 @@ struct blk_virtq_cmd {
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool use_dmem;
 	blk_virtq_io_cmd_stat_t *io_cmd_stat;
+	uint16_t cmd_available_index;
 };
 
 /**
@@ -186,6 +191,9 @@ struct blk_virtq_priv {
 	int pg_id;
 	struct snap_virtio_blk_ctrl_queue *vbq;
 	uint16_t ctrl_available_index;
+	bool force_in_order;
+	/* current inorder value, for which completion should be sent */
+	uint16_t ctrl_used_index;
 };
 
 static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
@@ -250,6 +258,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->bdev_op_ctx.user_arg = cmd;
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->io_cmd_stat = NULL;
+	cmd->cmd_available_index = 0;
 
 	cmd->req_size = req_size;
 
@@ -764,16 +773,39 @@ static bool sm_write_status(struct blk_virtq_cmd *cmd,
  * sm_send_completion() - send command completion to FW
  * @cmd: Command being processed
  * @status: Status of callback
+ *
+ * Return:
+ * True if state machine is moved synchronously to the new state
+ * (error cases) or false if the state transition will be done asynchronously.
  */
-static void sm_send_completion(struct blk_virtq_cmd *cmd,
+static int sm_send_completion(struct blk_virtq_cmd *cmd,
 			       enum virtq_cmd_sm_op_status status)
 {
 	int ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		snap_error("failed to write the request status field\n");
+
+		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
+		 * handle case when cmd with VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
+		 */
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return;
+		return true;
+	}
+
+	/* check order of completed command, if the command unordered - wait for
+	 * other completions
+	 */
+	if (snap_unlikely(cmd->vq_priv->force_in_order)) {
+		if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
+			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d \n",
+				cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
+			cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
+			if (cmd->io_cmd_stat)
+				++cmd->io_cmd_stat->unordered;
+
+			return false;
+		}
 	}
 
 	cmd->aux->tunnel_comp.descr_head_idx = cmd->descr_head_idx;
@@ -791,7 +823,10 @@ static void sm_send_completion(struct blk_virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
 		cmd->state = VIRTQ_CMD_STATE_RELEASE;
+		++cmd->vq_priv->ctrl_used_index;
 	}
+
+	return true;
 }
 
 /**
@@ -834,8 +869,8 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 			repeat = sm_write_status(cmd, status);
 			break;
 		case VIRTQ_CMD_STATE_SEND_COMP:
-			sm_send_completion(cmd, status);
-			repeat = true;
+		case VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP:
+			repeat = sm_send_completion(cmd, status);
 			break;
 		case VIRTQ_CMD_STATE_RELEASE:
 			if (snap_unlikely(cmd->use_dmem))
@@ -885,7 +920,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	split_hdr = (struct split_tunnel_req_hdr *)data;
 
-	cmd_idx = split_hdr->descr_head_idx % priv->snap_attr.vattr.size;
+	cmd_idx = priv->ctrl_available_index % priv->snap_attr.vattr.size;
 	cmd = &priv->cmd_arr[cmd_idx];
 	cmd->num_desc = split_hdr->num_desc;
 	cmd->descr_head_idx = split_hdr->descr_head_idx;
@@ -896,10 +931,13 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 
+	if (snap_unlikely(cmd->vq_priv->force_in_order))
+		cmd->cmd_available_index = priv->ctrl_available_index;
+
 	/* If new commands are not dropped there is a risk of never
 	 * completing the flush */
 	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING)) {
-		virtq_log_data(cmd, "DROP_CMD: %d inline descs, rxlen %d\n",
+		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->num_desc, data_len);
 		return;
 	}
@@ -972,6 +1010,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	}
 	vq_priv->cmd_cntr = 0;
 	vq_priv->ctrl_available_index = attr->hw_available_index;
+	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 
 	rdma_qp_create_attr.tx_qsize = attr->queue_size;
 	rdma_qp_create_attr.tx_elem_size = sizeof(struct split_tunnel_comp);
@@ -1031,7 +1070,9 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		goto destroy_virtio_blk_queue;
 	}
 
-	snap_debug("created VIRTQ %d succesfully\n", attr->idx);
+	vq_priv->force_in_order = attr->force_in_order;
+	snap_debug("created VIRTQ %d succesfully in_order %d\n", attr->idx,
+		   attr->force_in_order);
 	return vq_ctx;
 
 destroy_virtio_blk_queue:
@@ -1199,6 +1240,27 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 }
 
 /**
+ * blk_virq_progress_unordered() - Check & complete unordered commands
+ * @vq_priv:	queue to progress
+ */
+static void blk_virq_progress_unordered(struct blk_virtq_priv *vq_priv)
+{
+	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
+	struct blk_virtq_cmd* cmd = &vq_priv->cmd_arr[cmd_idx];
+
+	while (cmd->state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
+	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {
+		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
+			       cmd->cmd_available_index, cmd->state);
+
+		blk_virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
+
+		cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
+		cmd = &vq_priv->cmd_arr[cmd_idx];
+	}
+}
+
+/**
  * blk_virtq_progress() - Progress RDMA QPs,  Polls on QPs CQs
  * @q:	queue to progress
  *
@@ -1214,6 +1276,10 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 		return 0;
 
 	snap_dma_q_progress(priv->dma_q);
+
+	if (snap_unlikely(priv->force_in_order))
+		blk_virq_progress_unordered(priv);
+
 	/*
 	 * need to wait until all inflight requests
 	 * are finished before moving to the suspend state

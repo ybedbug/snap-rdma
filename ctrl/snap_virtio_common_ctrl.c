@@ -669,6 +669,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	}
 
 	ctrl->type = attr->type;
+	ctrl->force_in_order = attr->force_in_order;
 	return 0;
 
 free_queues:
