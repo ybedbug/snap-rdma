@@ -33,7 +33,7 @@ struct blk_virtq_priv;
  * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
  */
 struct split_tunnel_req_hdr {
-	uint16_t avail_idx;
+	uint16_t descr_head_idx;
 	uint16_t num_desc;
 	uint32_t rsvd1;
 	uint32_t rsvd2;
@@ -43,7 +43,7 @@ struct split_tunnel_req_hdr {
  * struct split_tunnel_comp - header of completion sent to FW
  */
 struct split_tunnel_comp {
-	uint16_t avail_idx;
+	uint16_t descr_head_idx;
 	uint16_t rsvd;
 	uint32_t len;
 };
@@ -107,8 +107,8 @@ struct blk_virtq_cmd_aux
 };
 /**
  * struct blk_virtq_cmd - command context
- * @idx:		avail_idx modulo queue size
- * @avail_idx:		avail_idx
+ * @idx:		descr_head_idx modulo queue size
+ * @descr_head_idx:	descriptor head index
  * @num_desc:		number of descriptors in the command
  * @vq_priv:		virtqueue command belongs to, private context
  * @state:		state of sm processing the command
@@ -126,7 +126,7 @@ struct blk_virtq_cmd_aux
  */
 struct blk_virtq_cmd {
 	int idx;
-	uint16_t avail_idx;
+	uint16_t descr_head_idx;
 	size_t num_desc;
 	struct blk_virtq_priv *vq_priv;
 	enum virtq_cmd_sm_state state;
@@ -185,7 +185,7 @@ struct blk_virtq_priv {
 	int size_max;
 	int pg_id;
 	struct snap_virtio_blk_ctrl_queue *vbq;
-	uint16_t last_avail_idx;
+	uint16_t ctrl_available_index;
 };
 
 static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
@@ -293,7 +293,7 @@ void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
  * be allocated such that it can be written to by RDMA. Instead of registering
  * another memory region for completion allocate memory for completion mem at
  * end of the request buffer.
- * Note: for easy implementation there is a direct mapping between avail_idx
+ * Note: for easy implementation there is a direct mapping between descr_head_idx
  * and command.
  * Todo: Unify memory into one block for all commands
  *
@@ -370,7 +370,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 	int ret;
 
 	if (cmd->num_desc == 0)
-		in_ring_desc_addr = cmd->avail_idx %
+		in_ring_desc_addr = cmd->descr_head_idx %
 				    cmd->vq_priv->snap_attr.vattr.size;
 	else if (cmd->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
 		in_ring_desc_addr = cmd->descs[cmd->num_desc - 1].next;
@@ -776,10 +776,10 @@ static void sm_send_completion(struct blk_virtq_cmd *cmd,
 		return;
 	}
 
-	cmd->aux->tunnel_comp.avail_idx = cmd->avail_idx;
+	cmd->aux->tunnel_comp.descr_head_idx = cmd->descr_head_idx;
 	cmd->aux->tunnel_comp.len = cmd->total_in_len;
-	virtq_log_data(cmd, "SEND_COMP: avail_idx %d len %d send_size %lu\n",
-		       cmd->aux->tunnel_comp.avail_idx,
+	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+		       cmd->aux->tunnel_comp.descr_head_idx,
 		       cmd->aux->tunnel_comp.len,
 		       sizeof(struct split_tunnel_comp));
 	virtq_mark_dirty_mem(cmd, 0, 0, true);
@@ -871,7 +871,7 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
  * @imm_data:	immediate data
  *
  * Received command is assigned to a memory slot in the command array according
- * to avail_idx. Function starts the state machine processing for this command
+ * to descr_head_idx. Function starts the state machine processing for this command
  */
 static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 			    uint32_t data_len, uint32_t imm_data)
@@ -885,10 +885,10 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	split_hdr = (struct split_tunnel_req_hdr *)data;
 
-	cmd_idx = split_hdr->avail_idx % priv->snap_attr.vattr.size;
+	cmd_idx = split_hdr->descr_head_idx % priv->snap_attr.vattr.size;
 	cmd = &priv->cmd_arr[cmd_idx];
 	cmd->num_desc = split_hdr->num_desc;
-	cmd->avail_idx = split_hdr->avail_idx;
+	cmd->descr_head_idx = split_hdr->descr_head_idx;
 	cmd->total_seg_len = 0;
 	cmd->total_in_len = 0;
 	cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_OK;
@@ -910,7 +910,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	}
 
 	priv->cmd_cntr++;
-	priv->last_avail_idx++;
+	priv->ctrl_available_index++;
 	cmd->state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
 	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->num_desc,
 		       data_len);
@@ -971,7 +971,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		goto release_priv;
 	}
 	vq_priv->cmd_cntr = 0;
-	vq_priv->last_avail_idx = attr->hw_available_index;
+	vq_priv->ctrl_available_index = attr->hw_available_index;
 
 	rdma_qp_create_attr.tx_qsize = attr->queue_size;
 	rdma_qp_create_attr.tx_elem_size = sizeof(struct split_tunnel_comp);
@@ -1323,12 +1323,12 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 		return ret;
 	}
 
-	/* Everything between last_avail_idx and hw_available_index has
+	/* Everything between ctrl_available_index and hw_available_index has
 	 * not been touched by us. It means that the ordering still holds and
 	 * it is safe to ask hw to replay all these descriptors when queue is
 	 * created.
 	 */
-	state->hw_available_index = priv->last_avail_idx;
+	state->hw_available_index = priv->ctrl_available_index;
 	state->hw_used_index = attr.hw_used_index;
 	return 0;
 }
