@@ -106,6 +106,15 @@
  * controller to stop tracking and reporting dirty pages. For live migration,
  * capable controllers should be able to start tracking dirty pages during
  * "Pre-copy" phase and stop tracking during "Stop-and-Copy" phase.
+ *
+ * @get_pci_bdf: This operation will be used to retrieve the PCI Bus/Device/Function
+ *  presented to the hostfor the snap controller. In case of success,
+ *  non 0 value will be returned. This value willrepresent the PCI BDF
+ *  according to the commonly known structure of eight-bit PCI Bus,five-bit
+ *  Device and three-bit Function. In case of an error or in case the host
+ *  still didn'tenumerate the PCI device, 0 value will be returned.This
+ *  knowledge might be useful for creating a discovery mechanism between
+ *  migrationSW and SNAP channels.
  */
 struct snap_migration_ops {
 	int (*quiesce)(void *data);
@@ -117,6 +126,7 @@ struct snap_migration_ops {
 			  bool copy_from_buffer);
 	int (*start_dirty_pages_track)(void *data);
 	int (*stop_dirty_pages_track)(void *data);
+	uint16_t (*get_pci_bdf)(void *data);
 };
 
 /**
