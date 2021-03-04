@@ -108,6 +108,8 @@ struct snap_virtio_ctrl_bar_cbs {
 	int (*start)(void *cb_ctx);
 	int (*stop)(void *cb_ctx);
 	int (*num_vfs_changed)(void *cb_ctx, uint16_t new_numvfs);
+	int (*pre_flr)(void *cb_ctx);
+	int (*post_flr)(void *cb_ctx);
 };
 
 struct snap_virtio_ctrl_attr {

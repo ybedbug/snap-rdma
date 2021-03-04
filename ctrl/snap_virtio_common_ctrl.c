@@ -244,13 +244,18 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		void *dd_data = ctrl->sdev->dd_data;
 
 		snap_info("virtio controller FLR detected\n");
+		if (ctrl->bar_cbs.pre_flr)
+			ctrl->bar_cbs.pre_flr(ctrl->cb_ctx);
 		snap_close_device(ctrl->sdev);
 
 		ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
-		if (ctrl->sdev)
+		if (ctrl->sdev) {
 			ctrl->sdev->dd_data = dd_data;
-		else
+			if (ctrl->bar_cbs.post_flr)
+				ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
+		} else {
 			ret = -ENODEV;
+		}
 	} else {
 		ret = snap_virtio_ctrl_validate(ctrl);
 		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
