@@ -56,6 +56,8 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 								virtio_q_configuration[i]));
 	}
 
+	snap_update_pci_bdf(sdev->pci, attr->vattr.pci_bdf);
+
 	attr->capacity = DEVX_GET64(virtio_blk_device_emulation,
 				    device_emulation_out,
 				    virtio_blk_config.capacity);

@@ -33,6 +33,7 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	uint8_t *device_emulation_out;
 	uint64_t dev_allowed;
 	int ret, out_size;
+	uint16_t pci_bdf;
 
 	if (sdev->pci->type != SNAP_NVME_PF && sdev->pci->type != SNAP_NVME_VF)
 		return -EINVAL;
@@ -88,6 +89,9 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	attr->crossed_vhca_mkey = DEVX_GET(nvme_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
+
+	pci_bdf = DEVX_GET(nvme_device_emulation, device_emulation_out, pci_bdf);
+	snap_update_pci_bdf(sdev->pci, pci_bdf);
 
 out_free:
 	free(out);

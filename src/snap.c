@@ -330,6 +330,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 	int i, j;
 	int ret, output_size, num_emulated_pfs;
 
+	pfs_ctx->dirty = false;
 	pfs_ctx->pfs = calloc(pfs_ctx->max_pfs, sizeof(struct snap_pci));
 	if (!pfs_ctx->pfs)
 		return -ENOMEM;
@@ -2853,6 +2854,9 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 {
 	struct snap_pfs_ctx *pfs_ctx;
 	int i;
+	uint8_t *out;
+	int ret = 0, output_size;
+	bool clear_dirty = true;
 
 	if (type == SNAP_NVME)
 		pfs_ctx = &sctx->nvme_pfs;
@@ -2866,6 +2870,45 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 	for (i = 0; i < pfs_ctx->max_pfs; i++)
 		pfs[i] = &pfs_ctx->pfs[i];
 
+	/* ignore any failure happened to update pci_bdf */
+	pthread_mutex_lock(&sctx->hotplug_lock);
+	if (pfs_ctx->dirty) {
+		output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
+			DEVX_ST_SZ_BYTES(emulated_function_info) * (pfs_ctx->max_pfs);
+		out = calloc(1, output_size);
+		if (!out) {
+			snap_warn("alloc memory for output structure failed\n");
+			goto out;
+		}
+
+		ret = snap_query_functions_info(sctx, pfs_ctx->type,
+				SNAP_UNINITIALIZED_VHCA_ID, out, output_size);
+		if (ret) {
+			snap_warn("query functions info failed, ret:%d\n", ret);
+			free(out);
+			goto out;
+		}
+
+		for (i = 0; i < pfs_ctx->max_pfs; i++) {
+			if (pfs[i]->hotplug && !pfs[i]->pci_bdf.raw) {
+				ret = snap_pf_get_pci_info(pfs[i], out);
+				if (ret) {
+					snap_warn("pf get pci info failed, ret:%d\n", ret);
+					free(out);
+					goto out;
+				}
+			}
+
+			if (!pfs[i]->pci_bdf.raw)
+				clear_dirty = false;
+		}
+
+		if (clear_dirty)
+			pfs_ctx->dirty = false;
+	}
+
+out:
+	pthread_mutex_unlock(&sctx->hotplug_lock);
 	return i;
 }
 
@@ -2943,7 +2986,7 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 	struct snap_pfs_ctx *pfs_ctx;
 	struct snap_hotplug_device *hotplug;
 	struct snap_pci *pf = NULL;
-	int ret, output_size, i, retries, max_retries;
+	int ret, output_size, i;
 
 	if (attr->type == SNAP_NVME) {
 		pfs_ctx = &sctx->nvme_pfs;
@@ -2995,36 +3038,22 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto unbind_vhca_id;
 	}
 
-	retries = 0;
+	ret = snap_query_functions_info(sctx, attr->type,
+					SNAP_UNINITIALIZED_VHCA_ID,
+					out, output_size);
+	if (ret)
+		goto free_cmd;
 
-	if (attr->pci_enumerate_max_retries)
-		max_retries = attr->pci_enumerate_max_retries;
-	else
-		max_retries = SNAP_PCI_ENUMERATE_MAX_RETRIES;
+	ret = snap_pf_get_pci_info(pf, out);
+	if (ret)
+		goto free_cmd;
 
-	do {
-		/* Lazy polling until new PF is enumerated by host */
-		if (retries++ > max_retries) {
-			snap_warn("Finishing hotplug before PCI enumeration "
-				  "is completed. PCI Enumeration might "
-				  "be blocked\n");
-			snap_warn("Please create a controller on PF id %d "
-				  "so enumeration can be completed", pf->id);
-			break;
-		}
-
-		usleep(SNAP_PCI_ENUMERATE_TIME_WAIT);
-		ret = snap_query_functions_info(sctx, attr->type,
-						SNAP_UNINITIALIZED_VHCA_ID,
-						out, output_size);
-		if (ret)
-			goto free_cmd;
-
-		ret = snap_pf_get_pci_info(pf, out);
-		if (ret)
-			goto free_cmd;
-	} while (!pf->pci_bdf.raw);
-	snap_debug("PCI enumeration done, retries: %d\n", retries);
+	if (!pf->pci_bdf.raw) {
+		pthread_mutex_lock(&sctx->hotplug_lock);
+		pfs_ctx->dirty = true;
+		pthread_mutex_unlock(&sctx->hotplug_lock);
+	}
+	snap_debug("PCI enumeration done\n");
 
 	free(out);
 
@@ -3423,4 +3452,16 @@ int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
 	free(mkey);
 
 	return ret;
+}
+
+void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf)
+{
+       if (spci->hotplug && spci->pci_bdf.raw != pci_bdf) {
+               spci->pci_bdf.raw = pci_bdf;
+               snprintf(spci->pci_number, sizeof(spci->pci_number), "%02x:%02x.%d",
+                       spci->pci_bdf.bdf.bus, spci->pci_bdf.bdf.device,
+                       spci->pci_bdf.bdf.function);
+               snap_warn("sctx:%p pci function(%d) pci_bdf changed to:%s\n",
+                           spci->sctx, spci->id, spci->pci_number);
+       }
 }

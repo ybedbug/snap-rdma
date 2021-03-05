@@ -288,7 +288,6 @@ struct snap_hotplug_attr {
 	bool				use_default_regs;
 	union snap_device_registers	regs;
 	uint16_t			max_vfs;
-	uint16_t			pci_enumerate_max_retries;
 };
 
 struct snap_hotplug_device {
@@ -307,9 +306,10 @@ struct snap_hotplug_context {
 };
 
 struct snap_pfs_ctx {
-	enum snap_emulation_type		type;
-	int					max_pfs;
-	struct snap_pci				*pfs;
+	enum snap_emulation_type	type;
+	int             max_pfs;
+	struct snap_pci *pfs;
+	bool            dirty;
 };
 
 struct snap_nvme_caps {
@@ -396,4 +396,5 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 					       struct snap_device *target_sdev);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 
+void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
 #endif

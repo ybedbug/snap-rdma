@@ -55,6 +55,8 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 								virtio_q_configuration[i]));
 	}
 
+	snap_update_pci_bdf(sdev->pci, attr->vattr.pci_bdf);
+
 	attr->vattr.enabled = DEVX_GET(virtio_net_device_emulation,
 				       device_emulation_out, enabled);
 	attr->modifiable_fields = 0;
