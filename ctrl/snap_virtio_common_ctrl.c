@@ -242,18 +242,33 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 	} else if (SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl)) {
 		struct snap_context *sctx = ctrl->sdev->sctx;
 		void *dd_data = ctrl->sdev->dd_data;
+		int i;
 
 		snap_info("virtio controller FLR detected\n");
 		if (ctrl->bar_cbs.pre_flr)
 			ctrl->bar_cbs.pre_flr(ctrl->cb_ctx);
 		snap_close_device(ctrl->sdev);
 
-		ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
-		if (ctrl->sdev) {
-			ctrl->sdev->dd_data = dd_data;
-			if (ctrl->bar_cbs.post_flr)
-				ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
-		} else {
+		/*
+		 * Per PCIe r4.0, sec 6.6.2, a device must complete a FLR
+		 * within 100ms. Creating a device emulation object succeed
+		 * only after FLR completes, so polling on this command.
+		 * Be more graceful and try to recover for 1 second.
+		 */
+		for (i = 0; i < 100; i++) {
+			usleep(10000);
+			ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
+			if (ctrl->sdev) {
+				if (i > 9)
+					snap_warn("FLR took more than 100ms");
+				ctrl->sdev->dd_data = dd_data;
+				if (ctrl->bar_cbs.post_flr)
+					ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
+				break;
+			}
+		}
+		if (!ctrl->sdev) {
+			snap_error("virtio controller FLR failed\n");
 			ret = -ENODEV;
 		}
 	} else {
