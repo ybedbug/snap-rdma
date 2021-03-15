@@ -1588,8 +1588,8 @@ struct mlx5_ifc_query_emulated_functions_info_out_bits {
 
 	u8	 syndrome[0x20];
 
-	u8	 reserved_at_40[0x38];
-	u8	 num_emulated_functions[0x8];
+	u8	 reserved_at_40[0x30];
+	u8	 num_emulated_functions[0x10];
 
 	struct mlx5_ifc_emulated_function_info_bits emulated_function_info[0];
 };
