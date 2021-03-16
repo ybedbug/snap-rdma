@@ -29,7 +29,7 @@ runs_on_dockers:
   - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed52', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed52', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: 'latest'}
-  - {url: '$registry_host/toolbox/ngci-centos:7.9.2009', name: 'blackduck', category: 'tool', arch: 'x86_64'}
+  - {url: '$registry_host/toolbox/ngci-centos:7.9.2009.2', name: 'blackduck', category: 'tool', arch: 'x86_64'}
 
 steps:
 
