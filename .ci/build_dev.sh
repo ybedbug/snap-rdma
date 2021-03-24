@@ -43,7 +43,8 @@ fi
 if test -n "$ghprbPullId" ; then
     _rev="pr${ghprbPullId}"
 else
-    _rev=${BUILD_NUMBER:-1}
+    BUILD_NUMBER="dev${BUILD_NUMBER:-1}"
+    _rev="${BUILD_NUMBER}"
 fi
 
 if [[ -f /etc/debian_version ]]; then

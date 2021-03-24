@@ -88,7 +88,8 @@ if test -n "$ghprbPullId" ; then
     REV="pr${ghprbPullId}"
     repo_name="${repo_name}-pr"
 else
-    REV=${BUILD_NUMBER:-1}
+    REV="dev${BUILD_NUMBER:-1}"
+    repo_name="${repo_name}-dev"
 fi
 
 if [[ -f /etc/debian_version ]]; then

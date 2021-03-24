@@ -17,7 +17,7 @@
     parameters:
         - string:
             name: "sha1"
-            default: "master"
+            default: "main"
             description: "Commit to be checked, set by PR"
         - bool:
             name: "build_dockers"
@@ -25,7 +25,7 @@
             description: "Rebuild docker containers"
         - string:
             name: "conf_file"
-            default: ".ci/job_matrix.yaml"
+            default: ".ci/job_matrix_dev.yaml"
             description: "Regex to select job config file"
         - bool:
             name: "do_release"

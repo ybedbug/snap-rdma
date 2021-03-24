@@ -1,13 +1,5 @@
-- scm:
-    name: mlnx-libsnap
-    scm:
-      - git:
-          url: git@github.com:Mellanox/snap-rdma.git
-          branches:
-              - origin/master
-
 - job-template:
-    name: "{jjb_proj}"
+    name: "{jjb_proj}-{git_branch}"
     project-type: pipeline
     properties:
         - github:
@@ -29,7 +21,7 @@
             description: "Rebuild docker containers"
         - string:
             name: "conf_file"
-            default: ".ci/job_matrix.yaml"
+            default: "{conf_file|.ci/job_matrix.yaml}"
             description: "Regex to select job config file"
         - bool:
             name: "do_release"
@@ -77,23 +69,32 @@
                   key: source_branch
                   value: $.pull_request.head.ref
             regex-filter-text: $action $merged $target_branch
-            regex-filter-expression: ^closed true master$
+            regex-filter-expression: ^closed true {git_branch}$
             print-post-content: false
             print-contrib-var: true
             cause: Triggered by merge of <a href="$pr_url">PR$pr_num</a> into $target_branch
             token: mlnx-libsnap-release
             silent-response: true
     pipeline-scm:
-        scm:
-            - mlnx-libsnap
-        script-path: "$script"
+      scm:
+        - git:
+            url: git@github.com:Mellanox/snap-rdma.git
+            branches:
+              - 'origin/{git_branch}'
+
+      script-path: "$script"
 
 - project:
     name: proj_name
     jjb_email: 'andiih@nvidia.com'
-    jjb_proj: 'mlnx-libsnap-release'
+    jjb_proj: 'mlnx-libsnap'
+    git_branch:
+      - main:
+          conf_file: '.ci/job_matrix_dev.yaml'
+      - mlnx_libsnap_1_1_0:
+          conf_file: '.ci/job_matrix.yaml'
     jjb_git: 'git@github.com:Mellanox/snap-rdma.git'
     jjb_owner: 'andriih@nvidia.com'
     jjb_jenkinsfile: '.ci/Jenkinsfile.shlib'
     jobs:
-        - "{jjb_proj}"
+      - '{jjb_proj}-{git_branch}'

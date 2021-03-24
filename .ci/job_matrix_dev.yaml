@@ -35,7 +35,7 @@ steps:
 
   - name: Build distro package
     run: |
-      .ci/build.sh
+      .ci/build_dev.sh
 
   - name: Upload distro package
     credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d'
@@ -44,7 +44,7 @@ steps:
       - "{name: 'ubuntu2004ofed52', variant:1}"
       - "{name: 'centos79ofed52', variant:1}"
     run: |
-      .ci/upload.sh
+      .ci/upload_dev.sh
 
   - name: Code style check
     containerSelector: "{name: 'toolbox'}"
@@ -90,9 +90,3 @@ steps:
       scanMode: "source"
     env:
       SPRING_APPLICATION_JSON: '{"blackduck.url":"https://blackduck.mellanox.com/","blackduck.api.token":"ODMwOWYwMzEtODA2ZC00MzBjLWI1ZDEtNmFiMjBkYzQzMzkwOjNmNjExN2M1LWE2ZmEtNDZlYS1hZjRiLTZlNDgwNjAwOTVjNw=="}'
-
-pipeline_stop:
-  run: |
-    if [[ ! -n "$ghprbPullId" && "$pipeline_status" == "SUCCESS" ]]; then
-      .ci/git_tag.sh
-    fi
