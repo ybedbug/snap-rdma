@@ -97,11 +97,8 @@ static int snap_json_rpc_client_sock_send(struct snap_json_rpc_client *client)
 		ret = 0;
 	}
 
-	if (client->send_len == 0) {
-		free(client->send_buf);
-		client->send_buf = NULL;
-		client->send_offset = 0;
-	}
+	if (client->send_len == 0)
+		snap_json_rpc_client_reset_send_buf(client);
 
 out:
 	return ret;
@@ -149,6 +146,22 @@ static int snap_json_rpc_client_poll(struct snap_json_rpc_client *client)
 	}
 
 	return ret ? ret : ready;
+}
+
+/**
+ * snap_json_rpc_client_reset_send_buf - Reset the send buffer which inited
+ *                                       for this rpc client
+ *
+ * @client:       snap json rpc client
+ */
+void snap_json_rpc_client_reset_send_buf(struct snap_json_rpc_client *client)
+{
+	if (client->send_buf) {
+		free(client->send_buf);
+		client->send_buf = NULL;
+		client->send_len = 0;
+		client->send_offset = 0;
+	}
 }
 
 /**

@@ -82,6 +82,7 @@ void snap_json_rpc_client_close(struct snap_json_rpc_client *client);
 int snap_json_rpc_client_send_req(struct snap_json_rpc_client *client,
 				  void *buf, size_t length);
 int snap_json_rpc_wait_for_response(struct snap_json_rpc_client *client);
+void snap_json_rpc_client_reset_send_buf(struct snap_json_rpc_client *client);
 void snap_json_rpc_put_response(struct snap_json_rpc_client_response *rsp);
 struct snap_json_rpc_client_response*
 snap_json_rpc_get_response(struct snap_json_rpc_client *client);
