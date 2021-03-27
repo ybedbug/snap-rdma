@@ -306,10 +306,11 @@ struct snap_hotplug_context {
 };
 
 struct snap_pfs_ctx {
-	enum snap_emulation_type	type;
-	int             max_pfs;
-	struct snap_pci *pfs;
-	bool            dirty;
+	enum snap_emulation_type		type;
+	int					max_pfs;
+	uint64_t				pf_mac;
+	struct snap_pci				*pfs;
+	bool					dirty;
 };
 
 struct snap_nvme_caps {

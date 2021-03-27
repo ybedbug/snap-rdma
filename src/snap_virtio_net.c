@@ -182,9 +182,14 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 		ret = snap_virtio_net_query_device(sdev, &nattr);
 		if (ret)
 			goto out_free_virtqs;
-		mac = (uint8_t *)&nattr.mac;
-		eth_random_addr(&mac[2]);
-		nattr.mac = be64toh(nattr.mac);
+		if (sdev->pci->type == SNAP_VIRTIO_NET_PF &&
+		    sdev->sctx->virtio_net_pfs.pf_mac) {
+			nattr.mac = sdev->sctx->virtio_net_pfs.pf_mac++;
+		} else {
+			mac = (uint8_t *)&nattr.mac;
+			eth_random_addr(&mac[2]);
+			nattr.mac = be64toh(nattr.mac);
+		}
 		ret = snap_virtio_net_modify_device(sdev,
 						    SNAP_VIRTIO_MOD_DEV_CFG,
 						    &nattr);
