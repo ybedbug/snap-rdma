@@ -107,6 +107,14 @@ struct snap_virtio_queue_attr {
 	uint16_t			queue_period;
 	uint16_t			queue_max_count;
 
+	/* lm */
+	bool                dirty_map_dump_enable;
+	bool                dirty_map_mode;
+	uint32_t            dirty_map_mkey;
+	uint32_t            dirty_map_size;
+	uint64_t            dirty_map_addr;
+	uint8_t             vhost_log_page;
+
 	/* Query: */
 	uint32_t			dma_mkey;
 };

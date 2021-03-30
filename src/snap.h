@@ -131,9 +131,31 @@ struct snap_device_attr {
 	void				*mig_data;
 };
 
+struct mlx5_klm {
+	uint32_t byte_count;
+	uint32_t mkey;
+	uint64_t address;
+};
+
+struct mlx5_devx_mkey_attr {
+	uint64_t addr;
+	uint64_t size;
+	uint32_t log_entity_size;
+	uint32_t relaxed_ordering_write:1;
+	uint32_t relaxed_ordering_read:1;
+	struct mlx5_klm *klm_array;
+	int klm_num;
+};
+
 struct snap_cross_mkey {
 	struct mlx5dv_devx_obj *devx_obj;
 	uint32_t mkey;
+};
+
+struct snap_indirect_mkey {
+	struct mlx5dv_devx_obj *devx_obj;
+	uint32_t mkey;
+	struct mlx5_klm *klm_array;
 };
 
 struct snap_pci_bar {
@@ -373,6 +395,12 @@ struct snap_context {
 	TAILQ_HEAD(, snap_hotplug_device)	hotplug_device_list;
 };
 
+#define SNAP_ALIGN_FLOOR(val, align) \
+	(typeof(val))((val) & (~((typeof(val))((align) - 1))))
+
+#define SNAP_ALIGN_CEIL(val, align) \
+	SNAP_ALIGN_FLOOR(((val) + ((typeof(val)) (align) - 1)), align)
+
 void snap_close_device(struct snap_device *sdev);
 struct snap_device *snap_open_device(struct snap_context *sctx,
 		struct snap_device_attr *attr);
@@ -397,5 +425,14 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 					       struct snap_device *target_sdev);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 
+struct snap_indirect_mkey *
+snap_create_indirect_mkey(struct ibv_pd *pd,
+			  struct mlx5_devx_mkey_attr *attr);
+int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
+
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
+static inline int snap_get_vhca_id(struct snap_device *sdev)
+{
+	return sdev->pci->mpci.vhca_id;
+}
 #endif

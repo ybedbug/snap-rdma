@@ -3371,11 +3371,6 @@ static int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 	return 0;
 }
 
-static inline int snap_get_vhca_id(struct snap_device *sdev)
-{
-	return sdev->pci->mpci.vhca_id;
-}
-
 /**
  * snap_create_cross_mkey() - Creates a new mkey
  * @pd - pd this mkey belongs to
@@ -3451,6 +3446,100 @@ int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
 
 	if (mkey->devx_obj)
 		ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
+	free(mkey);
+
+	return ret;
+}
+
+struct snap_indirect_mkey *
+snap_create_indirect_mkey(struct ibv_pd *pd,
+			  struct mlx5_devx_mkey_attr *attr)
+{
+	struct mlx5_klm *klm_array = attr->klm_array;
+	int klm_num = attr->klm_num;
+	int in_size_dw = DEVX_ST_SZ_DW(create_mkey_in) +
+		     (klm_num ? SNAP_ALIGN_CEIL(klm_num, 4) : 0) * DEVX_ST_SZ_DW(klm);
+	uint32_t in[in_size_dw];
+	uint32_t out[DEVX_ST_SZ_DW(create_mkey_out)] = {0};
+	void *mkc;
+	uint32_t translation_size;
+	struct snap_indirect_mkey *cmkey;
+	struct ibv_context *ctx = pd->context;
+	uint32_t pd_id;
+
+	cmkey = calloc(1, sizeof(*cmkey));
+	if (!cmkey) {
+		snap_error("failed to alloc cross_mkey \n");
+		return NULL;
+	}
+	memset(in, 0, in_size_dw * 4);
+	DEVX_SET(create_mkey_in, in, opcode, MLX5_CMD_OP_CREATE_MKEY);
+	mkc = DEVX_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
+	if (klm_num > 0) {
+		int i;
+		uint8_t *klm = (uint8_t *)DEVX_ADDR_OF(create_mkey_in, in,
+						       klm_pas_mtt);
+		translation_size = SNAP_ALIGN_CEIL(klm_num, 4);
+
+		for (i = 0; i < klm_num; i++) {
+			DEVX_SET(klm, klm, byte_count, klm_array[i].byte_count);
+			DEVX_SET(klm, klm, mkey, klm_array[i].mkey);
+			DEVX_SET64(klm, klm, address, klm_array[i].address);
+			klm += DEVX_ST_SZ_BYTES(klm);
+		}
+		for (; i < (int)translation_size; i++) {
+			DEVX_SET(klm, 	klm, byte_count, 0x0);
+			DEVX_SET(klm, 	klm, mkey, 0x0);
+			DEVX_SET64(klm, klm, address, 0x0);
+			klm += DEVX_ST_SZ_BYTES(klm);
+		}
+		DEVX_SET(mkc, mkc, access_mode_1_0, attr->log_entity_size ?
+			 MLX5_MKC_ACCESS_MODE_KLMFBS :
+			 MLX5_MKC_ACCESS_MODE_KLMS);
+		DEVX_SET(mkc, mkc, log_page_size, attr->log_entity_size);
+	}
+
+	snap_get_pd_id(pd, &pd_id);
+	DEVX_SET(create_mkey_in, in, translations_octword_actual_size,
+		 klm_num);
+	DEVX_SET(mkc, mkc, lw, 0x1);
+	DEVX_SET(mkc, mkc, lr, 0x1);
+	DEVX_SET(mkc, mkc, rw, 0x1);
+	DEVX_SET(mkc, mkc, rr, 0x1);
+	DEVX_SET(mkc, mkc, qpn, 0xffffff);
+	DEVX_SET(mkc, mkc, pd, pd_id);
+	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey, translation_size);
+	DEVX_SET(mkc, mkc, relaxed_ordering_write,
+		attr->relaxed_ordering_write);
+	DEVX_SET(mkc, mkc, relaxed_ordering_read,
+		attr->relaxed_ordering_read);
+	DEVX_SET64(mkc, mkc, start_addr, attr->addr);
+	DEVX_SET64(mkc, mkc, len, attr->size);
+	/* TODO: change mkey_7_0 to increasing counter */
+	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
+	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
+						 sizeof(out));
+	if(!cmkey->devx_obj)
+		goto out_err;
+
+	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;
+	cmkey->klm_array = klm_array;
+	return cmkey;
+
+out_err:
+	free(cmkey);
+	return NULL;
+}
+
+int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
+{
+	int ret = 0;
+
+	if (mkey->devx_obj)
+		ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
+	if (mkey->klm_array)
+		free(mkey->klm_array);
+
 	free(mkey);
 
 	return ret;

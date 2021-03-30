@@ -40,6 +40,8 @@ struct snap_virtio_net_device;
 
 enum snap_virtio_net_queue_modify {
 	SNAP_VIRTIO_NET_QUEUE_MOD_STATE	= 1 << 0,
+	SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM	= 1 << 3,
+	SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE	= 1 << 4,
 	SNAP_VIRTIO_NET_QUEUE_PERIOD	= 1 << 5,
 };
 
@@ -78,8 +80,24 @@ struct snap_virtio_net_device_attr {
 	uint32_t				crossed_vhca_mkey;
 };
 
+struct snap_virtnet_migration_log {
+	uint16_t                    flag;
+	uint16_t                    mode;
+
+	uint32_t                    guest_page_size;
+	uint64_t                    log_base;
+	uint32_t                    log_size;
+	uint32_t                    num_sge;
+
+	uint32_t 		    dirty_map_mkey;
+	struct snap_indirect_mkey   *indirect_mkey;
+	struct snap_cross_mkey      *crossing_mkey;
+	struct ibv_mr               *mr;
+};
+
 struct snap_virtio_net_device {
 	uint32_t				num_queues;
+	struct snap_virtnet_migration_log	lattr;
 	struct snap_virtio_net_queue		*virtqs;
 };
 

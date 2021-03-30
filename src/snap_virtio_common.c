@@ -705,6 +705,19 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 				 vattr->queue_max_count);
 
 		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM;
+			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_mkey, vattr->dirty_map_mkey);
+			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_size, vattr->dirty_map_size);
+			DEVX_SET(virtio_net_q,  virtq_in, vhost_log_page, vattr->vhost_log_page);
+			DEVX_SET64(virtio_net_q,virtq_in, dirty_map_addr, vattr->dirty_map_addr);
+		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE;
+			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_dump_enable, vattr->dirty_map_dump_enable);
+		}
 		DEVX_SET64(virtio_net_q, virtq_in, modify_field_select,
 			   fields_to_modify);
 	} else {
@@ -814,6 +827,18 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 		if (dev_allowed & SNAP_VIRTIO_NET_QUEUE_PERIOD)
 			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_PERIOD;
+		/* lm */
+		if (dev_allowed & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM)
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM;
+
+		if (dev_allowed & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE)
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE;
+
+		vattr->dirty_map_dump_enable = DEVX_GET(virtio_net_q, virtq_out, dirty_map_dump_enable);
+		vattr->dirty_map_mkey        = DEVX_GET(virtio_net_q, virtq_out, dirty_map_mkey);
+		vattr->dirty_map_size        = DEVX_GET(virtio_net_q, virtq_out, dirty_map_size);
+		vattr->dirty_map_addr        = DEVX_GET64(virtio_net_q, virtq_out, dirty_map_addr);
+		vattr->vhost_log_page        = DEVX_GET(virtio_net_q, virtq_out, vhost_log_page);
 	}
 
 	return 0;
