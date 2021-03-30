@@ -95,6 +95,16 @@ enum snap_virtio_common_device_status {
  *    (resume) is a sync operation.
  *
  *  @SUSPENDING: indicates that suspend operation is in progress
+ *
+ *  Normal flow:
+ *  STOPPED -> STARTED - [SUSPENDING] -> SUSPENDED -> STOPPED
+ *
+ *  Allowed transitions:
+ *  STOPPED -> STARTED, SUSPENDED
+ *  STARTED - [SUSPENDING] -> SUSPENDED
+ *          -> STOPPED  NOTE: this is not a safe transition. If there is outstanding
+ *                            io, the controller may crash.
+ *  SUSPENDED -> STOPPED, STARTED
  */
 enum snap_virtio_ctrl_state {
 	SNAP_VIRTIO_CTRL_STOPPED,
@@ -103,6 +113,12 @@ enum snap_virtio_ctrl_state {
 	SNAP_VIRTIO_CTRL_SUSPENDING
 };
 
+/**
+ * enum snap_virtio_ctrl_lm_state - Virtio controller live migration state
+ *
+ * The enum tracks controller live migration state. See &struct snap_migration_ops
+ * in snap_channel.h for the detailed description.
+ */
 enum snap_virtio_ctrl_lm_state {
 	SNAP_VIRTIO_CTRL_LM_NORMAL,
 	SNAP_VIRTIO_CTRL_LM_QUIESCED,
