@@ -196,6 +196,30 @@ def main():
                    required=False)
     p.set_defaults(func=emulation_device_attach)
 
+    def controller_virtio_blk_lm_enable(args):
+        params = {
+            'name': args.name,
+            'lm_channel_name': args.lm_channel_name,
+        }
+
+        args.client.call('controller_virtio_blk_lm_enable', params)
+    p = subparsers.add_parser('controller_virtio_blk_lm_enable',
+                              help='Enable VirtIO BLK SNAP controller live migration')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.add_argument('lm_channel_name', help='Live migration channel name', type=str)
+    p.set_defaults(func=controller_virtio_blk_lm_enable)
+
+    def controller_virtio_blk_lm_disable(args):
+        params = {
+            'name': args.name,
+        }
+
+        args.client.call('controller_virtio_blk_lm_disable', params)
+    p = subparsers.add_parser('controller_virtio_blk_lm_disable',
+                              help='Disable VirtIO BLK SNAP controller live migration')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_virtio_blk_lm_disable)
+
     def controller_virtio_blk_suspend(args):
         params = {
             'name': args.name,
