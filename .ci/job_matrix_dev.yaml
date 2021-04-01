@@ -76,13 +76,13 @@ steps:
       make -j 3 install
 
   - name: Blackduck scan source
+    enable: false
     containerSelector: "{name: 'blackduck'}"
     shell: action
     module: ngci
     run: NGCIBlackDuckScan
     args:
-      projectName: "NGCIBlackDuckScan"
-      projectVersion: "snap-rdma"
+      projectName: "snap-rdma"
       projectVersion: "1.0"
       projectSrcPath: "src"
       attachArtifact: true
