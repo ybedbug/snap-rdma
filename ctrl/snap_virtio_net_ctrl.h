@@ -44,13 +44,28 @@ struct snap_virtio_net_ctrl_queue {
 	const struct snap_virtio_net_queue_attr *attr;
 };
 
+struct snap_virtio_net_ctrl_lm_cbs {
+    unsigned (*get_internal_state_size)(void *cb_ctx);
+    int (*get_internal_state)(void *cb_ctx, void *buf, unsigned len);
+    unsigned (*dump_internal_state)(void *cb_ctx, void *buff, unsigned len);
+    int (*set_internal_state)(void *cb_ctx, void *buf, unsigned len);
+};
+
 struct snap_virtio_net_ctrl_attr {
 	struct snap_virtio_ctrl_attr common;
+	struct snap_virtio_net_ctrl_lm_cbs  *lm_cbs;
 };
 
 struct snap_virtio_net_ctrl {
 	struct snap_virtio_ctrl common;
+	struct snap_virtio_net_ctrl_lm_cbs lm_cbs;
 };
+
+static inline struct snap_virtio_net_ctrl*
+to_net_ctrl(struct snap_virtio_ctrl *vctrl)
+{
+       return container_of(vctrl, struct snap_virtio_net_ctrl, common);
+}
 
 struct snap_virtio_net_ctrl*
 snap_virtio_net_ctrl_open(struct snap_context *sctx,

@@ -428,10 +428,13 @@ int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 struct snap_indirect_mkey *
 snap_create_indirect_mkey(struct ibv_pd *pd,
 			  struct mlx5_devx_mkey_attr *attr);
-int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
+int
+snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
 
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
-static inline int snap_get_vhca_id(struct snap_device *sdev)
+
+static inline int
+snap_get_vhca_id(struct snap_device *sdev)
 {
 	return sdev->pci->mpci.vhca_id;
 }

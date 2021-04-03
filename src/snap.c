@@ -3458,7 +3458,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	struct mlx5_klm *klm_array = attr->klm_array;
 	int klm_num = attr->klm_num;
 	int in_size_dw = DEVX_ST_SZ_DW(create_mkey_in) +
-		     (klm_num ? SNAP_ALIGN_CEIL(klm_num, 4) : 0) * DEVX_ST_SZ_DW(klm);
+			(klm_num ? SNAP_ALIGN_CEIL(klm_num, 4) : 0) * DEVX_ST_SZ_DW(klm);
 	uint32_t in[in_size_dw];
 	uint32_t out[DEVX_ST_SZ_DW(create_mkey_out)] = {0};
 	void *mkc;
@@ -3537,6 +3537,7 @@ int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
 
 	if (mkey->devx_obj)
 		ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
+
 	if (mkey->klm_array)
 		free(mkey->klm_array);
 

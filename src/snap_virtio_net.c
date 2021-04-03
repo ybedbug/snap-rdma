@@ -374,6 +374,9 @@ int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 	ret = snap_devx_obj_destroy(vnq->virtq.virtq);
 	snap_virtio_teardown_virtq_umem(&vnq->virtq);
 
+	vnq->virtq.virtq = NULL;
+	vnq->virtq.ctrs_obj = NULL;
+
 	return ret;
 }
 

@@ -1713,9 +1713,9 @@ enum {
 };
 
 struct mlx5_ifc_klm_bits {
-	u8         byte_count[0x20];
-	u8         mkey[0x20];
-	u8         address[0x40];
+	u8	 byte_count[0x20];
+	u8	 mkey[0x20];
+	u8	 address[0x40];
 };
 
 struct mlx5_ifc_mkc_bits {

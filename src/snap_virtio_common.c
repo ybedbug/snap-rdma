@@ -106,9 +106,19 @@ static void snap_virtio_net_modify_queues(void *in, struct snap_virtio_device_at
 	int i;
 	void *q;
 
+	snap_info("modify queues, %d queues\n", attr->max_queues);
 	for (i = 0; i < attr->max_queues; i++) {
+		snap_debug("size: %u msix %u enable %u notify %u desc 0x%lx avail 0x%lx used 0x%lx\n",
+			   nattr->q_attrs[i].vattr.size,
+			   nattr->q_attrs[i].vattr.msix_vector,
+			   nattr->q_attrs[i].vattr.enable,
+			   nattr->q_attrs[i].vattr.notify_off,
+			   nattr->q_attrs[i].vattr.desc,
+			   nattr->q_attrs[i].vattr.driver,
+			   nattr->q_attrs[i].vattr.device);
 		q = DEVX_ADDR_OF(virtio_net_device_emulation, in, virtio_q_configuration[i]);
 
+		snap_debug("offset %ld\n", q - in);
 		DEVX_SET(virtio_q_layout, q, queue_size,
 			 nattr->q_attrs[i].vattr.size);
 		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
@@ -835,10 +845,10 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE;
 
 		vattr->dirty_map_dump_enable = DEVX_GET(virtio_net_q, virtq_out, dirty_map_dump_enable);
-		vattr->dirty_map_mkey        = DEVX_GET(virtio_net_q, virtq_out, dirty_map_mkey);
-		vattr->dirty_map_size        = DEVX_GET(virtio_net_q, virtq_out, dirty_map_size);
-		vattr->dirty_map_addr        = DEVX_GET64(virtio_net_q, virtq_out, dirty_map_addr);
-		vattr->vhost_log_page        = DEVX_GET(virtio_net_q, virtq_out, vhost_log_page);
+		vattr->dirty_map_mkey = DEVX_GET(virtio_net_q, virtq_out, dirty_map_mkey);
+		vattr->dirty_map_size = DEVX_GET(virtio_net_q, virtq_out, dirty_map_size);
+		vattr->dirty_map_addr = DEVX_GET64(virtio_net_q, virtq_out, dirty_map_addr);
+		vattr->vhost_log_page = DEVX_GET(virtio_net_q, virtq_out, vhost_log_page);
 	}
 
 	return 0;
