@@ -38,6 +38,7 @@
 #include <infiniband/mlx5dv.h>
 #include <pthread.h>
 #include <linux/types.h>
+#include <linux/virtio_ring.h>
 
 #include "snap.h"
 
@@ -200,4 +201,9 @@ int snap_virtio_init_virtq_umem(struct snap_context *sctx,
 				struct snap_virtio_queue *virtq,
 				int depth);
 void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq);
+
+int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr,
+					    uint64_t dev_addr, uint32_t dma_mkey,
+					    struct vring_avail *vra,
+					    struct vring_used *vru);
 #endif

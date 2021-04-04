@@ -1116,13 +1116,6 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 	free(vq_priv);
 }
 
-static void dma_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
-		      uint32_t imm_data)
-{
-	snap_error("Got unexpected completion on DMA queue %p data_len %u\n",
-		   q, data_len);
-}
-
 int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat)
 {
@@ -1132,66 +1125,16 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 	struct vring_used vru;
 	uint64_t drv_addr = vq_priv->snap_attr.vattr.driver;
 	uint64_t dev_addr = vq_priv->snap_attr.vattr.device;
-	struct ibv_mr *vra_mr;
-	struct ibv_mr *vru_mr;
-	struct snap_dma_q_create_attr dma_q_attr = {};
-	struct snap_dma_q *dma_q;
 	int ret;
 
-	/* Create queue only for 2 DMA operations */
-	dma_q_attr.tx_qsize = 2;
-	dma_q_attr.rx_qsize = 2;
-	dma_q_attr.tx_elem_size = 16;
-	dma_q_attr.rx_elem_size = 64;
-	dma_q_attr.rx_cb = dma_rx_cb;
-
-	dma_q = snap_dma_q_create(vq_priv->pd, &dma_q_attr);
-	if (!dma_q) {
-		snap_error("failed to create dma_q for queue %d\n", q->idx);
-		return -1;
-	}
-
-	vra_mr = ibv_reg_mr(vq_priv->pd, &vra, sizeof(vra),
-			    IBV_ACCESS_LOCAL_WRITE);
-	if (!vra_mr) {
-		snap_error("failed to register vring_avail mr for queue %d\n",
-			   q->idx);
-		ret = -1;
-		goto err;
-	}
-
-	vru_mr = ibv_reg_mr(vq_priv->pd, &vru, sizeof(vru),
-			    IBV_ACCESS_LOCAL_WRITE);
-	if (!vru_mr) {
-		snap_error("failed to register vring_used mr for queue %d\n",
-			   q->idx);
-		ret = -1;
-		goto dereg_vra_mr;
-	}
-
-	ret = snap_dma_q_read(dma_q, &vra, sizeof(struct vring_avail),
-			      vra_mr->lkey, drv_addr,
-			      vq_priv->snap_attr.vattr.dma_mkey, NULL);
+	ret = snap_virtio_get_vring_indexes_from_host(vq_priv->pd, drv_addr, dev_addr,
+				                      vq_priv->snap_attr.vattr.dma_mkey,
+					              &vra, &vru
+						     );
 	if (ret) {
-		snap_error("failed DMA read vring_used for queue %d\n", q->idx);
-		goto dereg_vru_mr;
+		snap_error("failed to get vring indexes from host memory for queue %d\n", q->idx);
+		return ret;
 	}
-
-	ret = snap_dma_q_read(dma_q, &vru, sizeof(struct vring_used),
-			      vru_mr->lkey, dev_addr,
-			      vq_priv->snap_attr.vattr.dma_mkey, NULL);
-	if (ret) {
-		snap_error("failed DMA read vring_used for queue %d\n", q->idx);
-		goto dereg_vru_mr;
-	}
-
-	ret = snap_dma_q_flush(dma_q);
-	if (ret != 2)
-		snap_error("failed flush queue %d, ret %d\n", q->idx, ret);
-
-	ibv_dereg_mr(vru_mr);
-	ibv_dereg_mr(vra_mr);
-	snap_dma_q_destroy(dma_q);
 
 	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, &virtq_attr);
 	if (ret) {
@@ -1206,14 +1149,6 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 	q_debugstat->sw_used_index = vru.idx;
 
 	return 0;
-
-dereg_vru_mr:
-	ibv_dereg_mr(vru_mr);
-dereg_vra_mr:
-	ibv_dereg_mr(vra_mr);
-err:
-	snap_dma_q_destroy(dma_q);
-	return ret;
 }
 
 static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
