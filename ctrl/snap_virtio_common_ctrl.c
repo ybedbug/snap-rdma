@@ -1,6 +1,7 @@
 #include "snap_virtio_common_ctrl.h"
 #include "snap_queue.h"
 #include "snap_channel.h"
+#include "snap_virtio_common.h"
 
 /*
  * Driver may choose to reset device for numerous reasons:
@@ -45,7 +46,7 @@ static void snap_virtio_ctrl_init_section(struct snap_virtio_ctrl_section *hdr,
 					  unsigned len, const char *name)
 {
 	hdr->len = len;
-	snprintf(hdr->name, sizeof(hdr->name), name);
+	snprintf((char *)hdr->name, sizeof(hdr->name), "%s", name);
 }
 
 static struct snap_virtio_ctrl_section*
@@ -907,25 +908,29 @@ void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable)
 int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_cfg_len,
 				unsigned *queue_cfg_len, unsigned *dev_cfg_len)
 {
+	unsigned tmp_common_cfg_len, tmp_queue_cfg_len, tmp_dev_cfg_len;
+	unsigned *common_cfg_len_p = common_cfg_len ? common_cfg_len : &tmp_common_cfg_len;
+	unsigned *queue_cfg_len_p  = queue_cfg_len  ? queue_cfg_len  : &tmp_queue_cfg_len;
+	unsigned *dev_cfg_len_p    = dev_cfg_len    ? dev_cfg_len    : &tmp_dev_cfg_len;
+
 	if (ctrl->bar_ops->get_state_size)
-		*dev_cfg_len = ctrl->bar_ops->get_state_size(ctrl);
+		*dev_cfg_len_p = ctrl->bar_ops->get_state_size(ctrl);
 	else
-		*dev_cfg_len = 0;
+		*dev_cfg_len_p = 0;
 
-	if (*dev_cfg_len)
-		*dev_cfg_len += sizeof(struct snap_virtio_ctrl_section);
+	*dev_cfg_len_p += sizeof(struct snap_virtio_ctrl_section);
 
-	*queue_cfg_len = ctrl->max_queues * sizeof(struct snap_virtio_ctrl_queue_state) +
+	*queue_cfg_len_p = ctrl->max_queues * sizeof(struct snap_virtio_ctrl_queue_state) +
 			 sizeof(struct snap_virtio_ctrl_section);
 
-	*common_cfg_len = sizeof(struct snap_virtio_ctrl_section) +
+	*common_cfg_len_p = sizeof(struct snap_virtio_ctrl_section) +
 			  sizeof(struct snap_virtio_ctrl_common_state);
 
 	snap_debug("common_cfg %d dev_cfg %d queue_cfg %d max_queue %d\n",
-		   *common_cfg_len, *dev_cfg_len, *queue_cfg_len, (int)ctrl->max_queues);
+		   *common_cfg_len_p, *dev_cfg_len_p, *queue_cfg_len_p, (int)ctrl->max_queues);
 
-	return sizeof(struct snap_virtio_ctrl_section) + *dev_cfg_len +
-	       *queue_cfg_len + *common_cfg_len;
+	return sizeof(struct snap_virtio_ctrl_section) + *dev_cfg_len_p +
+	       *queue_cfg_len_p + *common_cfg_len_p;
 }
 
 static __attribute__ ((unused)) void dump_state(struct snap_virtio_ctrl *ctrl,
@@ -1438,4 +1443,143 @@ void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl)
 		return;
 	snap_channel_close(ctrl->lm_channel);
 	ctrl->lm_channel = NULL;
+}
+
+static int snap_virtio_ctrl_queue_recover_indexes(struct snap_virtio_ctrl *ctrl,
+						  struct snap_virtio_ctrl_queue_state *q_state)
+{
+	struct snap_cross_mkey *q_mkey;
+	struct vring_avail vra;
+	struct vring_used vru;
+	int ret;
+
+	/* Get available & used indexes of virtio ctrl queue (vring) from host memory */
+
+	q_mkey = snap_create_cross_mkey(ctrl->lb_pd, ctrl->sdev);
+	if (!q_mkey) {
+		snap_error("Failed to create snap MKey Entry for queue\n");
+		return -EINVAL;
+	}
+
+	ret = snap_virtio_get_vring_indexes_from_host(ctrl->lb_pd,
+						      q_state->queue_driver,
+						      q_state->queue_device,
+						      q_mkey->mkey, &vra, &vru);
+	if (!ret) {
+		q_state->hw_available_index = vra.idx;
+		q_state->hw_used_index = vru.idx;
+	}
+
+	snap_destroy_cross_mkey(q_mkey);
+	return ret;
+}
+
+/**
+ * snap_virtio_ctrl_recover() - Recover virtio controller
+ * @ctrl:     virtio controller
+ * @attr:     virtio device atttribute
+ *
+ * This function will recover the virtio controller:
+ *
+ * The state of the controller will be saved.
+ *
+ * Note: at this point, the controller was not started yet,
+ * controller state must be SNAP_VIRTIO_CTRL_SUSPENDED.
+ * The state of contoller's queues will be saved as well.
+ * The avail & used indexes of the queues (if the queue is enabled)
+ * will be retrieved from the host's memory.
+ *
+ * The controller will be restored (using the saved state)
+ * and after that, the controller will be resumed.
+ *
+ * Return:
+ * 0 on success or -errno on error
+ */
+int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
+                             struct snap_virtio_device_attr *attr)
+{
+	const struct snap_virtio_queue_attr *vq;
+
+	void *buf;
+	struct snap_virtio_ctrl_state_hdrs state_hdrs;
+	struct snap_virtio_ctrl_common_state *common_state;
+	struct snap_virtio_ctrl_queue_state *queue_state;
+	void *device_state;
+	int i, ret, total_len;
+	int outstanding = 0;
+
+	snap_debug("recover the virtio ctrl \n");
+
+	if (!snap_virtio_ctrl_is_suspended(ctrl)) {
+		snap_error("original controller state (%d) must be SUSPENDED\n",
+			   ctrl->state);
+		return -EINVAL;
+	}
+
+	if (!ctrl->bar_ops->queue_attr_valid(attr)) {
+		snap_error("virtio device q attributes are not valid\n");
+		return -EINVAL;
+	}
+
+	/* at the moment always allow saving state but limit restore */
+	total_len = snap_virtio_ctrl_state_size(ctrl, NULL, NULL, NULL);
+	buf = calloc(1, total_len);
+	if (!buf) {
+		return -ENOMEM;
+	}
+
+	/* reserve the 'place' for the sections and the sections data */
+	ret = snap_virtio_ctrl_save_init_hdrs(ctrl, buf, total_len, &state_hdrs);
+	if (ret < 0)
+		goto free_buf;
+
+	common_state = section_hdr_to_data(state_hdrs.common_state_hdr);
+	/* save common and device configs */
+	snap_virtio_ctrl_save_common_state(common_state, ctrl->state, attr);
+
+	/* save queue state for every queue */
+	queue_state = section_hdr_to_data(state_hdrs.queues_state_hdr);
+
+	for (i = 0; i < ctrl->max_queues; ++i) {
+		vq = to_virtio_queue_attr(ctrl, attr, i);
+		snap_virtio_ctrl_save_queue_state(&queue_state[i], vq);
+
+		/* if enabled, read hw_avail and used from host memory*/
+		if (vq->enable) {
+			ret = snap_virtio_ctrl_queue_recover_indexes(ctrl, &queue_state[i]);
+			snap_info("q: %d avail: %d used: %d\n", i,
+			           queue_state[i].hw_available_index,
+				   queue_state[i].hw_used_index);
+
+			if (ret != 0)
+				goto free_buf;
+
+			/* will cause re-send all requests between available & used again */
+			if (queue_state[i].hw_available_index != queue_state[i].hw_used_index) {
+				++outstanding;
+				queue_state[i].hw_available_index = queue_state[i].hw_used_index;
+			}
+		}
+	}
+
+	if (outstanding)
+		snap_warn("Outstanding requests are detected on queue(s)."
+			  " If the previous controller was not run in ordered mode"
+			  " the recovery may not work correctly.\n");
+
+	device_state = section_hdr_to_data(state_hdrs.dev_state_hdr);
+	if (device_state) {
+		ret = snap_virtio_ctrl_save_dev_state(ctrl, attr, device_state,
+						      state_hdrs.dev_state_hdr->len);
+		if (ret < 0)
+			goto free_buf;
+	}
+
+	ret = snap_virtio_ctrl_state_restore(ctrl, buf, total_len);
+	if (!ret)
+		ret = snap_virtio_ctrl_resume(ctrl);
+
+free_buf:
+	free(buf);
+	return ret;
 }

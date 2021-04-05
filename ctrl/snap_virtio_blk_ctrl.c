@@ -191,6 +191,13 @@ snap_virtio_blk_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 	return ret;
 }
 
+static bool
+snap_virtio_blk_ctrl_bar_queue_attr_valid(struct snap_virtio_device_attr *vbar)
+{
+	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
+	return vbbar->q_attrs ? true : false;
+}
+
 static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.create = snap_virtio_blk_ctrl_bar_create,
 	.destroy = snap_virtio_blk_ctrl_bar_destroy,
@@ -201,7 +208,8 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.get_state_size = snap_virtio_blk_ctrl_bar_get_state_size,
 	.dump_state = snap_virtio_blk_ctrl_bar_dump_state,
 	.get_state = snap_virtio_blk_ctrl_bar_get_state,
-	.set_state = snap_virtio_blk_ctrl_bar_set_state
+	.set_state = snap_virtio_blk_ctrl_bar_set_state,
+	.queue_attr_valid = snap_virtio_blk_ctrl_bar_queue_attr_valid
 };
 
 static bool
@@ -564,6 +572,37 @@ static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *v
 	return blk_virtq_get_state(vbq->q_impl, state);
 }
 
+
+static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl)
+{
+	int ret;
+	struct snap_virtio_blk_device_attr blk_attr = {};
+
+	snap_info("create controller in recover mode - ctrl=%p"
+		  " max_queues=%ld enabled_queues=%ld \n",
+		   ctrl, ctrl->common.max_queues, ctrl->common.enabled_queues);
+
+	blk_attr.queues = ctrl->common.max_queues;
+	blk_attr.q_attrs = calloc(blk_attr.queues, sizeof(*blk_attr.q_attrs));
+	if (!blk_attr.q_attrs) {
+		snap_error("Failed to allocate memory for Qs attribute\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	ret = snap_virtio_blk_query_device(ctrl->common.sdev, &blk_attr);
+	if (ret) {
+		snap_error("Failed to query bar during recovery of controller\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	ret = snap_virtio_ctrl_recover(&ctrl->common, &blk_attr.vattr);
+err:
+	free(blk_attr.q_attrs);
+	return ret;
+}
+
 static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.create = snap_virtio_blk_ctrl_queue_create,
 	.destroy = snap_virtio_blk_ctrl_queue_destroy,
@@ -639,11 +678,17 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	if (ret)
 		goto close_ctrl;
 
-	if (attr->common.suspended) {
-		/* creating controller in the suspended state means that
+	if (attr->common.suspended || attr->common.recover) {
+		/* Creating controller in the suspended state or recovery mode.
+		 * When created in the suspended state means that
 		 * there will be a state restore that will override current
-		 * bar config. Also it means that host is not going to touch
-		 * anything. So let state restore do actual configuration
+		 * bar config.
+		 * Also it means that the host is not going to touch
+		 * anything. So let state restore do the actual configuration.
+		 *
+		 * When created in recover mode means the state of controller
+		 * should be recovered - see snap_virtio_blk_ctrl_recover function
+		 * for more details.
 		 */
 		ctrl->common.state = SNAP_VIRTIO_CTRL_SUSPENDED;
 		flags = 0;
@@ -654,6 +699,12 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	ret = snap_virtio_blk_ctrl_bar_setup(ctrl, &attr->regs, flags);
 	if (ret)
 		goto teardown_dev;
+
+	if (attr->common.recover) {
+		ret = snap_virtio_blk_ctrl_recover(ctrl);
+		if (ret)
+			goto teardown_dev;
+	}
 
 	return ctrl;
 

@@ -146,6 +146,7 @@ struct snap_virtio_ctrl_attr {
 	uint32_t npgs;
 	bool force_in_order;
 	bool suspended;
+	bool recover;
 };
 
 struct snap_virtio_ctrl_queue {
@@ -192,6 +193,8 @@ struct snap_virtio_ctrl_bar_ops {
 			 struct snap_virtio_ctrl_queue_state *queue_state,
 			 void *buf, int len);
 	void (*dump_state)(struct snap_virtio_ctrl *ctrl, void *buf, int len);
+	bool (*queue_attr_valid)(struct snap_virtio_device_attr *attr);
+
 };
 
 struct snap_virtio_ctrl {
@@ -332,4 +335,7 @@ void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 
 int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);
 void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl);
+
+int  snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
+                              struct snap_virtio_device_attr *attr);
 #endif
