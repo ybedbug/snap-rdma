@@ -378,6 +378,17 @@ def main():
     p.add_argument('name', help='Controller Name', type=str)
     p.set_defaults(func=controller_virtio_blk_bdev_detach)
 
+    def controller_virtio_blk_bdev_list(args):
+        params = {
+            'name': args.name,
+        }
+        result = args.client.call('controller_virtio_blk_bdev_list', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('controller_virtio_blk_bdev_list',
+                              help='List bdev attached to VirtIO BLK controller')
+    p.add_argument('name', help='Controller Name', type=str)
+    p.set_defaults(func=controller_virtio_blk_bdev_list)
+
     def controller_virtio_blk_get_debugstat(args):
         params = {
         }
