@@ -170,8 +170,15 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 		goto out_free;
 	}
 
-	for (i = 0; i < vndev->num_queues; i++)
+	for (i = 0; i < vndev->num_queues; i++) {
 		vndev->virtqs[i].vndev = vndev;
+		vndev->virtqs[i].virtq.ctrs_obj =
+					snap_virtio_create_queue_counters(sdev);
+		if (!vndev->virtqs[i].virtq.ctrs_obj) {
+			ret = -ENODEV;
+			goto out_free_qctrs;
+		}
+	}
 
 	ret = snap_init_device(sdev);
 	if (ret)
@@ -201,6 +208,10 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 
 	return 0;
 
+out_free_qctrs:
+	for (i = 0; i < vndev->num_queues; i++)
+		if (vndev->virtqs[i].virtq.ctrs_obj)
+			snap_devx_obj_destroy(vndev->virtqs[i].virtq.ctrs_obj);
 out_free_virtqs:
 	free(vndev->virtqs);
 out_free:
@@ -229,11 +240,40 @@ int snap_virtio_net_teardown_device(struct snap_device *sdev)
 
 	sdev->dd_data = NULL;
 
+	ret = snap_devx_obj_destroy(vndev->virtqs->virtq.ctrs_obj);
+	if (ret)
+		snap_error("Failed to destroy net virtq counter obj \n");
+
 	ret = snap_teardown_device(sdev);
 
 	free(vndev->virtqs);
 	free(vndev);
 
+	return ret;
+}
+
+/**
+ * snap_virtio_net_query_counters() - Query a Virtio net queue cnt
+ * @vnq:        snap Virtio net queue
+ * @q_cnt:      cnt for the queue (output)
+ *
+ * Query a Virtio net snap queue cnt object.
+ *
+ * Return: 0 on success, and cnt is filled with the query result.
+ */
+int snap_virtio_net_query_counters(struct snap_virtio_net_queue *vnq,
+				struct snap_virtio_queue_counters_attr *q_cnt)
+{
+	struct mlx5_snap_devx_obj  *cnt_obj;
+	int ret = 0;
+
+	if (!vnq || !vnq->virtq.ctrs_obj)
+		return 0;
+
+	cnt_obj = vnq->virtq.ctrs_obj;
+
+	memset(q_cnt, 0, sizeof(*q_cnt));
+	ret = snap_virtio_query_queue_counters(cnt_obj, q_cnt);
 	return ret;
 }
 
@@ -287,6 +327,8 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 		errno = ret;
 		goto out;
 	}
+
+	attr->vattr.ctrs_obj_id = vnq->virtq.ctrs_obj->obj_id;
 
 	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
 	if (!snap_cross_mkey) {

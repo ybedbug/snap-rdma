@@ -97,6 +97,8 @@ int snap_virtio_net_query_queue(struct snap_virtio_net_queue *vnq,
 		struct snap_virtio_net_queue_attr *attr);
 int snap_virtio_net_modify_queue(struct snap_virtio_net_queue *vnq,
 		uint64_t mask, struct snap_virtio_net_queue_attr *attr);
+int snap_virtio_net_query_counters(struct snap_virtio_net_queue *vnq,
+				struct snap_virtio_queue_counters_attr *q_cnt);
 
 static inline struct snap_virtio_net_queue_attr*
 to_net_queue_attr(struct snap_virtio_queue_attr *vattr)
