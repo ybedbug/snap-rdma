@@ -111,6 +111,15 @@ struct snap_virtio_queue_attr {
 	uint32_t			dma_mkey;
 };
 
+struct snap_virtio_queue_counters_attr {
+	uint64_t			received_desc;
+	uint64_t			completed_desc;
+	uint32_t			error_cqes;
+	uint32_t			bad_desc_errors;
+	uint32_t			exceed_max_chain;
+	uint32_t			invalid_buffer;
+};
+
 struct snap_virtio_queue_debugstat {
 	uint32_t				qid;
 	uint32_t				hw_available_index;
@@ -206,4 +215,6 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 					    uint64_t dev_addr, uint32_t dma_mkey,
 					    struct vring_avail *vra,
 					    struct vring_used *vru);
+int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
+				struct snap_virtio_queue_counters_attr *attr);
 #endif

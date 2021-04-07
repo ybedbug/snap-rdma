@@ -421,6 +421,41 @@ out:
 	return NULL;
 }
 
+int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
+			 struct snap_virtio_queue_counters_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+			DEVX_ST_SZ_BYTES(virtio_q_counters)] = {0};
+	uint8_t *virtq_cnt_out;
+	int ret;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, counters_obj->obj_id);
+
+	ret = snap_devx_obj_query(counters_obj, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		return ret;
+
+	virtq_cnt_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	attr->received_desc = DEVX_GET64(virtio_q_counters, virtq_cnt_out,
+					 received_desc);
+	attr->completed_desc = DEVX_GET64(virtio_q_counters, virtq_cnt_out,
+					  completed_desc);
+	attr->error_cqes = DEVX_GET(virtio_q_counters, virtq_cnt_out,
+				    error_cqes);
+	attr->bad_desc_errors = DEVX_GET(virtio_q_counters, virtq_cnt_out,
+					 bad_desc_errors);
+	attr->exceed_max_chain = DEVX_GET(virtio_q_counters, virtq_cnt_out,
+					  exceed_max_chain);
+	attr->invalid_buffer = DEVX_GET(virtio_q_counters, virtq_cnt_out,
+					invalid_buffer);
+	return ret;
+}
+
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *vattr, struct snap_virtio_umem *umem)
