@@ -301,12 +301,13 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 				 reset, attr->reset);
 		}
 		if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
-			fields_to_modify |=
-				MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
-			DEVX_SET64(virtio_net_device_emulation,
-				   device_emulation_in,
-				   virtio_device.device_feature,
-				   attr->device_feature);
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
+			DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
+				   virtio_device.device_feature, attr->device_feature);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.num_queues, attr->max_queues);
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 virtio_device.max_queue_size, attr->max_queue_size);
 		}
 		if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
