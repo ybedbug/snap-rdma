@@ -2,6 +2,7 @@
 #define _SNAP_BLK_OPS_H
 
 #include <sys/uio.h>
+#include <stdbool.h>
 
 /**
  * enum snap_bdev_op_status - Return status values for snap_bdev_io_done_cb_t
@@ -48,6 +49,10 @@ struct snap_bdev_io_done_ctx {
  * @get_block_size:	pointer to function which gets bdev block size
  * @get_bdev_name:	pointer to function which returns null terminated bdev
  * 			name
+ * @is_zcopy:		pointer to function which returns true if bdev supports
+ * 			ZCOPY
+ * @is_zcopy_aligned:	pointer to function which returns true if address is
+ * 			ZCOPY and bdev aligned
  *
  * operations provided by the block device given to the virtio controller
  * ToDo: add mechanism to tell which block operations are supported
@@ -78,6 +83,8 @@ struct snap_bdev_ops {
 	uint64_t (*get_num_blocks)(void *ctx);
 	uint32_t (*get_block_size)(void *ctx);
 	const char *(*get_bdev_name)(void *ctx);
+	bool (*is_zcopy)(void *ctx);
+	bool (*is_zcopy_aligned)(void *ctx, void *addr);
 };
 
 #endif
