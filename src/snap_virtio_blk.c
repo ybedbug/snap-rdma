@@ -175,18 +175,26 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 		goto out_free;
 	}
 
-	for (i = 0; i < vbdev->num_queues; i++)
+	for (i = 0; i < vbdev->num_queues; i++) {
 		vbdev->virtqs[i].vbdev = vbdev;
+		vbdev->virtqs[i].virtq.ctrs_obj = snap_virtio_create_queue_counters(sdev);
+		if (!vbdev->virtqs[i].virtq.ctrs_obj) {
+			ret = -ENODEV;
+			goto out_destroy_counters;
+		}
+	}
 
 	ret = snap_init_device(sdev);
 	if (ret)
-		goto out_free_virtqs;
+		goto out_destroy_counters;
 
 	sdev->dd_data = vbdev;
 
 	return 0;
 
-out_free_virtqs:
+out_destroy_counters:
+	for (--i; i >= 0; i--)
+		snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
 	free(vbdev->virtqs);
 out_free:
 	free(vbdev);
@@ -234,7 +242,7 @@ static int snap_consume_virtio_blk_queue_event(struct mlx5_snap_devx_obj *obj,
 int snap_virtio_blk_teardown_device(struct snap_device *sdev)
 {
 	struct snap_virtio_blk_device *vbdev;
-	int ret = 0;
+	int i, ret = 0;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
 	if (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
@@ -244,6 +252,9 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
 	sdev->dd_data = NULL;
 
 	ret = snap_teardown_device(sdev);
+
+	for (i = 0; i < vbdev->num_queues; i++)
+		snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
 
 	free(vbdev->virtqs);
 	free(vbdev);
@@ -302,16 +313,13 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 		goto out;
 	}
 
-	vbq->virtq.ctrs_obj = snap_virtio_create_queue_counters(sdev);
 	if (vbq->virtq.ctrs_obj)
 		attr->vattr.ctrs_obj_id = vbq->virtq.ctrs_obj->obj_id;
-	else
-		goto out_umem;
 
 	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
 	if (!snap_cross_mkey) {
 		snap_error("Failed to create snap MKey Entry for blk queue\n");
-		goto destroy_counter;
+		goto out_umem;
 	}
 	attr->vattr.dma_mkey = snap_cross_mkey->mkey;
 	vbq->virtq.snap_cross_mkey = snap_cross_mkey;
@@ -342,8 +350,6 @@ destroy_queue:
 	snap_devx_obj_destroy(vbq->virtq.virtq);
 destroy_mkey:
 	snap_destroy_cross_mkey(vbq->virtq.snap_cross_mkey);
-destroy_counter:
-	snap_devx_obj_destroy(vbq->virtq.ctrs_obj);
 out_umem:
 	snap_virtio_teardown_virtq_umem(&vbq->virtq);
 out:
@@ -360,22 +366,18 @@ out:
  */
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 {
-	int mkey_ret, q_ret, ctrs_ret;
+	int mkey_ret, q_ret;
 
 	vbq->virtq.virtq->consume_event = NULL;
 
 	mkey_ret = snap_destroy_cross_mkey(vbq->virtq.snap_cross_mkey);
 	q_ret = snap_devx_obj_destroy(vbq->virtq.virtq);
-	ctrs_ret = snap_devx_obj_destroy(vbq->virtq.ctrs_obj);
 	snap_virtio_teardown_virtq_umem(&vbq->virtq);
 
 	if (mkey_ret)
 		return mkey_ret;
 
-	if (q_ret)
-		return q_ret;
-
-	return ctrs_ret;
+	return q_ret;
 }
 
 static int
