@@ -374,6 +374,31 @@ snap_virtio_blk_ctrl_queue_get_debugstat(struct snap_virtio_ctrl_queue *vq,
 	return blk_virtq_get_debugstat(vbq->q_impl, q_debugstat);
 }
 
+static int
+snap_virtio_blk_ctrl_global_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
+			struct snap_virtio_ctrl_debugstat *ctrl_debugstat)
+{
+	int i, ret;
+	struct snap_virtio_blk_device *vbdev;
+	struct snap_virtio_blk_queue *virtq;
+	struct snap_virtio_queue_counters_attr vqc_attr = {};
+
+	vbdev = ctrl->common.sdev->dd_data;
+	for (i = 0; i < vbdev->num_queues; i++) {
+		virtq = &vbdev->virtqs[i];
+
+		ret = snap_virtio_query_queue_counters(virtq->virtq.ctrs_obj, &vqc_attr);
+		if (ret)
+			return ret;
+
+		ctrl_debugstat->bad_descriptor_error += vqc_attr.bad_desc_errors;
+		ctrl_debugstat->invalid_buffer += vqc_attr.invalid_buffer;
+		ctrl_debugstat->desc_list_exceed_limit += vqc_attr.exceed_max_chain;
+	}
+
+	return 0;
+}
+
 int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 			struct snap_virtio_ctrl_debugstat *ctrl_debugstat)
 {
@@ -382,6 +407,10 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	int ret = 0;
 
 	if (ctrl->common.state != SNAP_VIRTIO_CTRL_STARTED)
+		goto out;
+
+	ret = snap_virtio_blk_ctrl_global_get_debugstat(ctrl, ctrl_debugstat);
+	if (ret)
 		goto out;
 
 	for (i = 0; i < ctrl->common.max_queues; i++) {

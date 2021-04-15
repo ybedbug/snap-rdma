@@ -1121,6 +1121,7 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 {
 	struct blk_virtq_priv *vq_priv = q->priv;
 	struct snap_virtio_blk_queue_attr virtq_attr = {};
+	struct snap_virtio_queue_counters_attr vqc_attr = {};
 	struct vring_avail vra;
 	struct vring_used vru;
 	uint64_t drv_addr = vq_priv->snap_attr.vattr.driver;
@@ -1142,11 +1143,19 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 		return ret;
 	}
 
+	ret = snap_virtio_query_queue_counters(vq_priv->snap_vbq->virtq.ctrs_obj, &vqc_attr);
+	if (ret) {
+		snap_error("failed query virtio_q_counters %d debugstat\n", q->idx);
+		return ret;
+	}
+
 	q_debugstat->qid = q->idx;
 	q_debugstat->hw_available_index = virtq_attr.hw_available_index;
 	q_debugstat->sw_available_index = vra.idx;
 	q_debugstat->hw_used_index = virtq_attr.hw_used_index;
 	q_debugstat->sw_used_index = vru.idx;
+	q_debugstat->hw_received_descs = vqc_attr.received_desc;
+	q_debugstat->hw_completed_descs = vqc_attr.completed_desc;
 
 	return 0;
 }
