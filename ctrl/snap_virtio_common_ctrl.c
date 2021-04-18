@@ -31,6 +31,22 @@
 		    (vctrl->bar_curr->status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
 
 /**
+ * snap_virtio_ctrl_critical_bar_change_detected
+ * @ctrl:	virtio controller
+ * change of snap_virtio_device_attr that is critical
+ * - device status change
+ * - enabled bit, relating to flr flow
+ * - reset bit, relating to reset flow
+ * Return: True when critical change detected, otherwise False
+ */
+bool
+snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl) {
+	return ((ctrl->bar_curr->status != ctrl->bar_prev->status) ||
+		 SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl) ||
+		 SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl));
+}
+
+/**
  * struct snap_virtio_ctrl_state_hdrs - helper struct.
  * Should be used for reservation place for sections before
  * saving the state of the controller.
@@ -728,9 +744,7 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 		goto out;
 
 	/* Handle device_status changes */
-	if (ctrl->bar_curr->status != ctrl->bar_prev->status ||
-	    SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl) ||
-	    SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl))
+	if (snap_virtio_ctrl_critical_bar_change_detected(ctrl))
 		snap_virtio_ctrl_change_status(ctrl);
 
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)

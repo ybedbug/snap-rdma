@@ -231,6 +231,7 @@ bool snap_virtio_ctrl_is_suspended(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl);
 
+bool snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress_lock(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress_unlock(struct snap_virtio_ctrl *ctrl);
