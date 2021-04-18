@@ -85,7 +85,8 @@ struct snap_nvme_sq_attr {
 	struct snap_nvme_cq		*cq;
 	enum snap_nvme_sq_state		state;
 	uint8_t				log_entry_size;
-	uint32_t            counter_set_id;
+	uint32_t			counter_set_id;
+	bool				fe_only;
 };
 
 struct snap_nvme_sq {
@@ -197,6 +198,7 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 	struct snap_nvme_sq_attr *attr);
 int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_nvme_sq_attr *attr);
+bool snap_nvme_sq_is_fe_only(struct snap_nvme_sq *sq);
 
 struct snap_nvme_sq_counters*
 snap_nvme_create_sq_counters(struct snap_device *sdev);

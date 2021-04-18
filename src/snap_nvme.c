@@ -18,6 +18,19 @@ static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
 					      struct snap_nvme_sq *sq);
 int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 		       struct snap_nvme_sq_attr *attr);
+
+bool snap_nvme_sq_is_fe_only(struct snap_nvme_sq *sq)
+{
+	struct snap_nvme_sq_attr sq_attr = {};
+
+	if (snap_nvme_query_sq(sq, &sq_attr)) {
+		snap_warn("Failed to query provided SQ\n");
+		return false;
+	}
+
+	return (bool)sq_attr.fe_only;
+}
+
 /**
  * snap_nvme_query_device() - Query an NVMe snap device
  * @sdev:       snap device
@@ -537,6 +550,11 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	if (mask & ~sq->mod_allowed_mask)
 		return -EINVAL;
 
+	if (snap_nvme_sq_is_fe_only(sq)) {
+		snap_error("Cannot modify fe_only SQ\n");
+		return -ENOTSUP;
+	}
+
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
@@ -636,6 +654,7 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	out_sq = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 	attr->queue_depth = DEVX_GET(nvme_sq, out_sq, nvme_num_of_entries);
 	attr->state = DEVX_GET(nvme_sq, out_sq, network_state);
+	attr->fe_only = DEVX_GET(nvme_sq, out_sq, fe_only);
 	dev_allowed = DEVX_GET64(nvme_sq, out_sq, modify_field_select);
 	if (dev_allowed) {
 		if (dev_allowed & MLX5_NVME_SQ_MODIFY_QPN)
@@ -747,12 +766,20 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	if (attr->counter_set_id) {
 	    DEVX_SET(nvme_sq, sq_in, counter_set_id, attr->counter_set_id);
 	}
+	if (attr->fe_only && sdev->mdev.vtunnel) {
+		snap_debug("fe_only flag is ignored for Bluefield-1\n");
+		attr->fe_only = false;
+	}
+	DEVX_SET(nvme_sq, sq_in, fe_only, attr->fe_only);
 	if (attr->qp) {
 		if (sdev->mdev.vtunnel) {
 			if (snap_nvme_init_sq_legacy_mode(sdev, sq, attr))
 				goto out;
 		}
-		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+		if (!attr->fe_only)
+			DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+		else
+			snap_warn("set qpn is not valid when fe_only=1\n");
 	}
 	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
 	DEVX_SET(nvme_sq, sq_in, nvme_log_entry_size,
