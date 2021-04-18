@@ -2247,7 +2247,7 @@ out:
  *
  * Return: Returns vhca id for a given context on success and -1 otherwise.
  */
-int snap_get_dev_vhca_id(struct ibv_context *context)
+uint16_t snap_get_dev_vhca_id(struct ibv_context *context)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
@@ -3369,6 +3369,11 @@ static int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 		return ret;
 	*pd_id = pd_info.pdn;
 	return 0;
+}
+
+uint16_t snap_get_vhca_id(struct snap_device *sdev)
+{
+	return sdev->pci->mpci.vhca_id;
 }
 
 /**

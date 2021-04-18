@@ -11,6 +11,13 @@
 #define NVME_SQ_LOG_ENTRY_SIZE 6
 #define NVME_DB_BASE 0x1000
 
+struct snap_nvme_sq_be {
+	struct mlx5dv_devx_obj *obj;
+	uint32_t obj_id;
+	struct snap_nvme_sq *sq;
+	struct ibv_qp *qp;
+};
+
 static int snap_nvme_init_sq_legacy_mode(struct snap_device *sdev,
 					 struct snap_nvme_sq *sq,
 					 const struct snap_nvme_sq_attr *attr);
@@ -715,6 +722,101 @@ static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
 }
 
 /**
+ * snap_nvme_create_sq_be() - Create a new NVMe snap SQ backend object
+ * @sdev:       snap device
+ * @attr:       attributes for the SQ backend creation
+ *
+ * Create an NVMe snap SQ backend object with the given attributes.
+ *
+ * Return: Returns snap_nvme_sq_be in case of success, NULL otherwise and
+ * errno will be set to indicate the failure reason.
+ */
+struct snap_nvme_sq_be *
+snap_nvme_create_sq_be(struct snap_device *sdev,
+		       struct snap_nvme_sq_be_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_sq_be)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	uint8_t *nvme_sq_be_in;
+	struct snap_nvme_sq_be *sq_be;
+	struct ibv_context *context = sdev->sctx->context;
+
+	if (!attr->sq) {
+		snap_error("snap SQ must be provided\n");
+		errno = EINVAL;
+		goto err;
+	}
+
+	if (!attr->qp) {
+		snap_error("ibv QP must be provided\n");
+		errno = EINVAL;
+		goto err;
+	}
+
+	if (!snap_nvme_sq_is_fe_only(attr->sq)) {
+		snap_error("Cannot create SQ backend for non-fe_only SQ\n");
+		errno = ENOTSUP;
+		goto err;
+	}
+
+
+	if (snap_get_dev_vhca_id(attr->qp->context) !=
+	    snap_get_dev_vhca_id(sdev->sctx->context)) {
+		snap_error("Attach QP from RDMA context (vhca_id 0x%x) "
+			   "different than of emu_manager (vhca_id 0x%x) "
+			   "is not supported\n",
+                           snap_get_dev_vhca_id(attr->qp->context),
+                           snap_get_dev_vhca_id(sdev->sctx->context));
+		errno = EINVAL;
+		goto err;
+	}
+
+	sq_be = calloc(1, sizeof(*sq_be));
+	if (!sq_be) {
+		snap_error("Failed to allocate sq_be object\n");
+		errno = ENOMEM;
+		goto err;
+	}
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_NVME_SQ_BE);
+	nvme_sq_be_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(nvme_sq_be, nvme_sq_be_in, nvme_sq_id, attr->sq->sq->obj_id);
+	DEVX_SET(nvme_sq_be, nvme_sq_be_in, qpn, attr->qp->qp_num);
+	sq_be->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
+					    sizeof(out));
+	if (!sq_be->obj) {
+		snap_error("Failed to create nvme_sq_be object\n");
+		goto free_sq_be;
+	}
+
+	sq_be->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	sq_be->sq = attr->sq;
+	sq_be->sq->sq_be = sq_be;
+	sq_be->qp = attr->qp;
+	snap_debug("backend SQ obj_id 0x%x created for SQ 0x%d and QP 0x%x\n",
+                   sq_be->obj_id, sq_be->sq->sq->obj_id, attr->qp->qp_num);
+
+	return sq_be;
+
+free_sq_be:
+	free(sq_be);
+err:
+	return NULL;
+}
+
+void snap_nvme_destroy_sq_be(struct snap_nvme_sq_be *sq_be)
+{
+	if (sq_be->obj)
+		(void)mlx5dv_devx_obj_destroy(sq_be->obj);
+	sq_be->sq->sq_be = NULL;
+	free(sq_be);
+}
+
+/**
  * snap_nvme_create_sq() - Create a new NVMe snap SQ object
  * @sdev:       snap device
  * @attr:       attributes for the SQ creation
@@ -831,6 +933,11 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 {
 	struct snap_device *sdev = sq->sq->sdev;
 	int ret = 0;
+
+	if (sq->sq_be) {
+		snap_error("Cannot destroy SQ with attached sq_be object\n");
+		return -EBUSY;
+	}
 
 	if (sq->hw_qp) {
 		struct snap_nvme_sq_attr sq_attr = {};

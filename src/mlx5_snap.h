@@ -186,7 +186,8 @@ int snap_devx_obj_query(struct mlx5_snap_devx_obj *snap_obj, void *in,
 			size_t inlen, void *out, size_t outlen);
 void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
 		void *pci_params_out);
-int snap_get_dev_vhca_id(struct ibv_context *context);
+uint16_t snap_get_vhca_id(struct snap_device *sdev);
+uint16_t snap_get_dev_vhca_id(struct ibv_context *context);
 void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context);
 struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
 		struct ibv_context *context);

@@ -2447,6 +2447,7 @@ enum {
 	MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION = 0x0016,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_Q = 0x0017,
 	MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS = 0x001c,
+	MLX5_OBJ_TYPE_NVME_SQ_BE = 0x0038,
 };
 
 enum {
@@ -3857,6 +3858,18 @@ struct mlx5_ifc_nvme_cq_bits {
 	u8	   cq_max_count[0x10];
 
 	u8	   reserved_at_160[0x6a0];
+};
+
+struct mlx5_ifc_nvme_sq_be_bits {
+	u8	modify_field_select[0x40];
+
+	u8	reserved_at_40[0x40];
+
+	u8	nvme_sq_id[0x20];
+
+	u8	qpn[0x20];
+
+	u8	reserved_at_18[0x240];
 };
 
 struct mlx5_ifc_nvme_sq_bits {

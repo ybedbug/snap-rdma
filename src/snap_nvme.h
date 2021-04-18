@@ -89,12 +89,20 @@ struct snap_nvme_sq_attr {
 	bool				fe_only;
 };
 
+struct snap_nvme_sq_be;
+
 struct snap_nvme_sq {
 	struct ibv_context			*rdma_dev;
 	uint32_t				id;
 	struct mlx5_snap_devx_obj		*sq;
 	struct mlx5_snap_hw_qp			*hw_qp;
 	uint64_t				mod_allowed_mask;
+	struct snap_nvme_sq_be			*sq_be;
+};
+
+struct snap_nvme_sq_be_attr {
+	struct snap_nvme_sq *sq;
+	struct ibv_qp *qp;
 };
 
 struct snap_nvme_cq_attr {
@@ -198,6 +206,10 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 	struct snap_nvme_sq_attr *attr);
 int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_nvme_sq_attr *attr);
+struct snap_nvme_sq_be *
+snap_nvme_create_sq_be(struct snap_device *sdev,
+		       struct snap_nvme_sq_be_attr *attr);
+void snap_nvme_destroy_sq_be(struct snap_nvme_sq_be *sq_be);
 bool snap_nvme_sq_is_fe_only(struct snap_nvme_sq *sq);
 
 struct snap_nvme_sq_counters*
