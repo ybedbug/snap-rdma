@@ -3870,7 +3870,7 @@ struct mlx5_ifc_nvme_sq_bits {
 	u8	   offload_type[0x4];
 	u8	   qpn[0x18];
 
-	u8	   qpn_vhca_id[0x10];
+	u8	   reserved_at_100[0x10];
 	u8	   reserved_at_b0[0x3];
 	u8	   log_nvme_page_size[0x5];
 	u8	   msix_vector[0x8];

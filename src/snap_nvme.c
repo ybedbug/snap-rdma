@@ -540,7 +540,6 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 
 	sq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	if (mask & SNAP_NVME_SQ_MOD_QPN) {
-		int vhca_id = 0;
 		uint32_t qp_num = 0;
 
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
@@ -568,13 +567,6 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 					ret = -EINVAL;
 					goto out_put_dev;
 				}
-				vhca_id = sdev->pci->mpci.vhca_id;
-			} else {
-				vhca_id = snap_get_dev_vhca_id(attr->qp->context);
-			}
-			if (vhca_id < 0) {
-				ret = -EINVAL;
-				goto out_free_qp;
 			}
 			qp_num = attr->qp->qp_num;
 		} else if (sq->hw_qp) {
@@ -583,7 +575,6 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 		}
 
 		DEVX_SET(nvme_sq, sq_in, qpn, qp_num);
-		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, vhca_id);
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
@@ -728,8 +719,6 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	    DEVX_SET(nvme_sq, sq_in, counter_set_id, attr->counter_set_id);
 	}
 	if (attr->qp) {
-		int vhca_id;
-
 		sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
 		if (!sq->rdma_dev) {
 			errno = EINVAL;
@@ -743,17 +732,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 				errno = EINVAL;
 				goto out_put_dev;
 			}
-
-			/* For Bluefield-1 use the emulated function id */
-			vhca_id = sdev->pci->mpci.vhca_id;
-		} else {
-			vhca_id = snap_get_dev_vhca_id(attr->qp->context);
 		}
-		if (vhca_id < 0) {
-			errno = EINVAL;
-			goto out_destroy_hw_qp;
-		}
-		DEVX_SET(nvme_sq, sq_in, qpn_vhca_id, vhca_id);
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
 	}
 	DEVX_SET64(nvme_sq, sq_in, nvme_base_addr, attr->base_addr);
