@@ -3373,10 +3373,34 @@ static int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 
 /**
  * snap_create_cross_mkey() - Creates a new mkey
- * @pd - pd this mkey belongs to
- * @target_sdev - The target emulation device
+ * @pd:           a protection domain that will be used to access remote memory
+ * @target_sdev:  an emulation device
  *
- * @Return: created cross gvmi mkey
+ * The function creates a special 'cross' memory key that must be used to
+ * access host memory via RDMA operations.
+ *
+ * For QPs that use 'cross' mkey there is no need to be attached to the snap
+ * emulation object.
+ *
+ * Sample usage pattern:
+ *   sctx = snap_open();
+ *   sdev = snap_open_device(sctx, attrs);
+ *
+ *   // Create protection domain
+ *   ib_ctx = ibv_open_device();
+ *   pd = ibv_alloc_pd(ib_ctx);
+ *
+ *   // create mkey
+ *   mkey = snap_create_cross_mkey(pd, sdev);
+ *
+ *   // create qp using dma layer or directly with ibv_create_qp()
+ *   dma_q = snap_dma_q_create(pd, attr);
+ *
+ *   // use mkey->mkey to access host memory
+ *   rc = snap_dma_q_write(dma_q, ldata, len, lkey, host_paddr, mkey->mkey, comp);
+ *
+ * Return:
+ * A memory key or NULL on error
  */
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 					       struct snap_device *target_sdev)
@@ -3440,6 +3464,15 @@ out_err:
 	return NULL;
 }
 
+/**
+ * snap_destroy_cross_mkey() - Destroy 'cross' mkey
+ * @mkey: mkey to destroy
+ *
+ * The function destroys 'cross' mkey
+ *
+ * Return:
+ * 0 or -errno on error
+ */
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
 {
 	int ret = 0;
