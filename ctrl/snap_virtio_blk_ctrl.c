@@ -375,6 +375,45 @@ snap_virtio_blk_ctrl_queue_get_debugstat(struct snap_virtio_ctrl_queue *vq,
 }
 
 static int
+snap_virtio_blk_ctrl_count_error(struct snap_virtio_blk_ctrl *ctrl)
+{
+	int i, ret;
+	struct snap_virtio_ctrl_queue *vq;
+	struct snap_virtio_blk_ctrl_queue *vbq;
+	struct snap_virtio_blk_queue_attr *attr;
+	struct snap_virtio_queue_attr *vattr;
+
+	for (i = 0; i < ctrl->common.max_queues; i++) {
+		vq = ctrl->common.queues[i];
+		if (!vq)
+			continue;
+
+		vbq = to_blk_ctrl_q(vq);
+		if (vbq->in_error)
+			continue;
+
+		attr = (struct snap_virtio_blk_queue_attr *)(void *)vbq->attr;
+		ret = blk_virtq_query_error_state(vbq->q_impl, attr);
+		if (ret) {
+			snap_error("Failed to query queue error state\n");
+			return ret;
+		}
+
+		vattr = &attr->vattr;
+		if (vattr->state == SNAP_VIRTQ_STATE_ERR) {
+			if (vattr->error_type == SNAP_VIRTQ_ERROR_TYPE_NETWORK_ERROR)
+				ctrl->network_error++;
+			else if (vattr->error_type == SNAP_VIRTQ_ERROR_TYPE_INTERNAL_ERROR)
+				ctrl->internal_error++;
+
+			vbq->in_error = true;
+		}
+	}
+
+	return 0;
+}
+
+static int
 snap_virtio_blk_ctrl_global_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 			struct snap_virtio_ctrl_debugstat *ctrl_debugstat)
 {
@@ -388,13 +427,24 @@ snap_virtio_blk_ctrl_global_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 		virtq = &vbdev->virtqs[i];
 
 		ret = snap_virtio_query_queue_counters(virtq->virtq.ctrs_obj, &vqc_attr);
-		if (ret)
+		if (ret) {
+			snap_error("Failed to query virtio_q_counter obj\n");
 			return ret;
+		}
 
 		ctrl_debugstat->bad_descriptor_error += vqc_attr.bad_desc_errors;
 		ctrl_debugstat->invalid_buffer += vqc_attr.invalid_buffer;
 		ctrl_debugstat->desc_list_exceed_limit += vqc_attr.exceed_max_chain;
 	}
+
+	ret = snap_virtio_blk_ctrl_count_error(ctrl);
+	if (ret) {
+		snap_error("Failed to count queue error stats\n");
+		return ret;
+	}
+
+	ctrl_debugstat->network_error = ctrl->network_error;
+	ctrl_debugstat->internal_error = ctrl->internal_error;
 
 	return 0;
 }
@@ -475,6 +525,8 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 	vbq = calloc(1, sizeof(*vbq));
 	if (!vbq)
 		return NULL;
+
+	vbq->in_error = false;
 
 	/* queue creation will be finished during resume */
 	if (vctrl->state == SNAP_VIRTIO_CTRL_SUSPENDED)
@@ -600,7 +652,6 @@ static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *v
 
 	return blk_virtq_get_state(vbq->q_impl, state);
 }
-
 
 static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl)
 {

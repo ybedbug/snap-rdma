@@ -789,6 +789,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 		vattr->size = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_size);
 		vattr->idx = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_index);
+		vattr->error_type = DEVX_GET(virtio_blk_q, virtq_out, virtqc.error_type);
 
 		state = DEVX_GET(virtio_blk_q, virtq_out, state);
 		if (state == MLX5_VIRTIO_Q_STATE_INIT)

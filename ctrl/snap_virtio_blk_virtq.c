@@ -4,7 +4,6 @@
 #include "snap_channel.h"
 #include "snap_virtio_blk_virtq.h"
 #include "snap_dma.h"
-#include "snap_virtio_blk.h"
 #include "snap_virtio_blk_ctrl.h"
 
 #define NUM_HDR_FTR_DESCS 2
@@ -1156,6 +1155,31 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 	q_debugstat->sw_used_index = vru.idx;
 	q_debugstat->hw_received_descs = vqc_attr.received_desc;
 	q_debugstat->hw_completed_descs = vqc_attr.completed_desc;
+
+	return 0;
+}
+
+int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
+				struct snap_virtio_blk_queue_attr *attr)
+{
+	int ret;
+	struct blk_virtq_priv *vq_priv = q->priv;
+
+	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, attr);
+	if (ret) {
+		snap_error("failed query queue %d (update)\n", q->idx);
+		return ret;
+	}
+
+	if (attr->vattr.state == SNAP_VIRTQ_STATE_ERR &&
+		attr->vattr.error_type == SNAP_VIRTQ_ERROR_TYPE_NO_ERROR)
+		snap_warn("queue %d state is in error but error type is 0\n", q->idx);
+
+	if (attr->vattr.state != SNAP_VIRTQ_STATE_ERR &&
+		attr->vattr.error_type != SNAP_VIRTQ_ERROR_TYPE_NO_ERROR) {
+		snap_warn("queue %d state is not in error but with error type %d\n",
+					q->idx, attr->vattr.error_type);
+	}
 
 	return 0;
 }

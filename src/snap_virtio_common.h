@@ -67,6 +67,15 @@ enum snap_virtq_state {
 	SNAP_VIRTQ_STATE_ERR		= 1 << 3,
 };
 
+enum snap_virtq_error_type {
+	SNAP_VIRTQ_ERROR_TYPE_NO_ERROR                      = 0x0,
+	SNAP_VIRTQ_ERROR_TYPE_NETWORK_ERROR                 = 0x1,
+	SNAP_VIRTQ_ERROR_TYPE_BAD_DESCRIPTOR                = 0x2,
+	SNAP_VIRTQ_ERROR_TYPE_INVALID_BUFFER                = 0x3,
+	SNAP_VIRTQ_ERROR_TYPE_DESCRIPTOR_LIST_EXCEED_LIMIT  = 0x4,
+	SNAP_VIRTQ_ERROR_TYPE_INTERNAL_ERROR                = 0x5,
+};
+
 enum snap_virtio_features {
 	SNAP_VIRTIO_NET_F_CSUM		= 1ULL << 0,
 	SNAP_VIRTIO_NET_F_GUEST_CSUM	= 1ULL << 1,
@@ -102,6 +111,7 @@ struct snap_virtio_queue_attr {
 	uint32_t			ctrs_obj_id;
 
 	enum snap_virtq_state		state; /* query and modify */
+	uint8_t				error_type;
 
 	enum snap_virtq_period_mode	queue_period_mode;
 	uint16_t			queue_period;

@@ -45,6 +45,7 @@ struct snap_virtio_blk_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
 	const struct snap_virtio_blk_queue_attr	*attr;
 	struct blk_virtq_ctx *q_impl;
+	bool in_error;
 };
 
 struct snap_virtio_blk_ctrl_attr {
@@ -56,6 +57,8 @@ struct snap_virtio_blk_ctrl {
 	struct snap_virtio_ctrl common;
 	struct snap_bdev_ops *bdev_ops;
 	void *bdev;
+	uint32_t network_error;
+	uint32_t internal_error;
 };
 
 struct snap_virtio_blk_ctrl *
