@@ -11,6 +11,11 @@
 #define NVME_SQ_LOG_ENTRY_SIZE 6
 #define NVME_DB_BASE 0x1000
 
+static int snap_nvme_init_sq_legacy_mode(struct snap_device *sdev,
+					 struct snap_nvme_sq *sq,
+					 const struct snap_nvme_sq_attr *attr);
+static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
+					      struct snap_nvme_sq *sq);
 int snap_nvme_query_sq(struct snap_nvme_sq *sq,
 		       struct snap_nvme_sq_attr *attr);
 /**
@@ -519,7 +524,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	struct snap_device *sdev = sq->sq->sdev;
 	uint8_t *sq_in;
 	uint64_t fields_to_modify = 0;
-	bool destroy_qp = false;
+	bool teardown_legacy = false;
 	int ret;
 
 	if (!sq->mod_allowed_mask) {
@@ -540,41 +545,30 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 
 	sq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	if (mask & SNAP_NVME_SQ_MOD_QPN) {
-		uint32_t qp_num = 0;
-
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_QPN;
 
 		if (attr->qp) {
-			/* we need to destroy current hw qp and dereference
-			 * rdma_dev, because new rdma_dev may be different from
-			 * the previous one.
-			 */
-			if (sq->hw_qp) {
-				snap_destroy_hw_qp(sq->hw_qp);
-				sq->hw_qp = NULL;
-				snap_put_rdma_dev(sdev, sq->rdma_dev);
-				sq->rdma_dev = NULL;
-			}
-
-			sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
-			if (!sq->rdma_dev)
-				return -ENODEV;
-
-			/* For Bluefield-1 QP's VHCA_ID is the NVMe VHCA_ID */
 			if (sdev->mdev.vtunnel) {
-				sq->hw_qp = snap_create_hw_qp(sdev, attr->qp);
-				if (!sq->hw_qp) {
-					ret = -EINVAL;
-					goto out_put_dev;
+				/*
+				 * we need to reset rdma settings, because
+				 * new rdma_dev may be different from
+				 * the previous one.
+				 */
+				snap_nvme_teardown_sq_legacy_mode(sdev, sq);
+				if (snap_nvme_init_sq_legacy_mode(sdev, sq,
+								  attr)) {
+					ret= -ENODEV;
+					goto err;
 				}
 			}
-			qp_num = attr->qp->qp_num;
-		} else if (sq->hw_qp) {
-			/* modify QP to 0 */
-			destroy_qp = true;
+			DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
+		} else {
+			if (sdev->mdev.vtunnel) {
+				/* teardown only after object is modified */
+				teardown_legacy = true;
+			}
+			DEVX_SET(nvme_sq, sq_in, qpn, 0);
 		}
-
-		DEVX_SET(nvme_sq, sq_in, qpn, qp_num);
 	}
 	if (mask & SNAP_NVME_SQ_MOD_STATE) {
 		fields_to_modify |=  MLX5_NVME_SQ_MODIFY_STATE;
@@ -599,26 +593,15 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 	if (ret)
 		goto out_free_qp;
 
-	if (destroy_qp && sq->hw_qp) {
-		snap_destroy_hw_qp(sq->hw_qp);
-		sq->hw_qp = NULL;
-		snap_put_rdma_dev(sdev, sq->rdma_dev);
-		sq->rdma_dev = NULL;
-	}
+	if (teardown_legacy)
+		snap_nvme_teardown_sq_legacy_mode(sdev, sq);
 
 	return 0;
 
 out_free_qp:
-	if ((mask & SNAP_NVME_SQ_MOD_QPN) && sq->hw_qp) {
-		snap_destroy_hw_qp(sq->hw_qp);
-		sq->hw_qp = NULL;
-	}
-out_put_dev:
-	if ((mask & SNAP_NVME_SQ_MOD_QPN) && sq->rdma_dev) {
-		snap_put_rdma_dev(sdev, sq->rdma_dev);
-		sq->rdma_dev = NULL;
-	}
-
+	if ((mask & SNAP_NVME_SQ_MOD_QPN) && sdev->mdev.vtunnel)
+		snap_nvme_teardown_sq_legacy_mode(sdev, sq);
+err:
 	return ret;
 }
 
@@ -664,6 +647,52 @@ int snap_nvme_query_sq(struct snap_nvme_sq *sq, struct snap_nvme_sq_attr *attr)
 	}
 
 	return 0;
+}
+
+static int snap_nvme_init_sq_legacy_mode(struct snap_device *sdev,
+					 struct snap_nvme_sq *sq,
+					 const struct snap_nvme_sq_attr *attr)
+{
+	if (!sdev->mdev.vtunnel) {
+		snap_warn("Tried to start legacy mode on modern HW. ignoring\n");
+		return 0;
+	}
+
+	if (!attr->qp)
+		return 0;
+
+	sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
+	if (!sq->rdma_dev) {
+		errno = EINVAL;
+		goto err;
+	}
+
+	sq->hw_qp = snap_create_hw_qp(sdev, attr->qp);
+	if (!sq->hw_qp) {
+		errno = EINVAL;
+		goto put_dev;
+	}
+
+	return 0;
+
+put_dev:
+	snap_put_rdma_dev(sdev, sq->rdma_dev);
+err:
+	return EINVAL;
+}
+
+static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
+					      struct snap_nvme_sq *sq)
+{
+	if (sq->hw_qp) {
+		snap_destroy_hw_qp(sq->hw_qp);
+		sq->hw_qp = NULL;
+	}
+
+	if (sq->rdma_dev) {
+		snap_put_rdma_dev(sdev, sq->rdma_dev);
+		sq->rdma_dev = NULL;
+	}
 }
 
 /**
@@ -719,19 +748,9 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	    DEVX_SET(nvme_sq, sq_in, counter_set_id, attr->counter_set_id);
 	}
 	if (attr->qp) {
-		sq->rdma_dev = snap_find_get_rdma_dev(sdev, attr->qp->context);
-		if (!sq->rdma_dev) {
-			errno = EINVAL;
-			goto out;
-		}
-
-		/* For Bluefield-1 QP's VHCA_ID is the NVMe VHCA_ID */
 		if (sdev->mdev.vtunnel) {
-			sq->hw_qp = snap_create_hw_qp(sdev, attr->qp);
-			if (!sq->hw_qp) {
-				errno = EINVAL;
-				goto out_put_dev;
-			}
+			if (snap_nvme_init_sq_legacy_mode(sdev, sq, attr))
+				goto out;
 		}
 		DEVX_SET(nvme_sq, sq_in, qpn, attr->qp->qp_num);
 	}
@@ -749,7 +768,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 				      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
 	if (!sq->sq) {
 		errno = ENODEV;
-		goto out_destroy_hw_qp;
+		goto teardown_sq_legacy_mode;
 	}
 
 	if (sdev->mdev.vtunnel) {
@@ -766,16 +785,9 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 
 	return sq;
 
-out_destroy_hw_qp:
-	if (attr->qp && sq->hw_qp) {
-		snap_destroy_hw_qp(sq->hw_qp);
-		sq->hw_qp = NULL;
-	}
-out_put_dev:
-	if (attr->qp) {
-		snap_put_rdma_dev(sdev, sq->rdma_dev);
-		sq->rdma_dev = NULL;
-	}
+teardown_sq_legacy_mode:
+	if (attr->qp && sdev->mdev.vtunnel)
+		snap_nvme_teardown_sq_legacy_mode(sdev, sq);
 out:
 	return NULL;
 }
@@ -806,19 +818,13 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 
 	ret = snap_devx_obj_destroy(sq->sq);
 
-	/* If hw qp was not destroyed it means that modify failed because of
+	/*
+	 * If hw qp was not destroyed it means that modify failed because of
 	 * the FLR. We have to desrtoy it expicitly in order to avoid leaking
 	 * RDMA_FT_RX rdma flow table.
 	 */
-	if (sq->hw_qp) {
-		snap_destroy_hw_qp(sq->hw_qp);
-		sq->hw_qp = NULL;
-	}
-
-	if (sq->rdma_dev) {
-		snap_put_rdma_dev(sdev, sq->rdma_dev);
-		sq->rdma_dev = NULL;
-	}
+	if (sdev->mdev.vtunnel)
+		snap_nvme_teardown_sq_legacy_mode(sdev, sq);
 
 	return ret;
 }
