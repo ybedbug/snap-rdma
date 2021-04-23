@@ -358,6 +358,23 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		void *dd_data = ctrl->sdev->dd_data;
 		int i;
 
+		if (!snap_virtio_ctrl_is_stopped(ctrl)) {
+			if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED) {
+				snap_info("stopping virtio controller before FLR\n");
+				snap_virtio_ctrl_suspend(ctrl);
+			}
+
+			/*
+			 * suspending virtio queues may take some time. In such
+			 * case stop the controller once it is suspended.
+			 */
+			if (snap_virtio_ctrl_is_suspended(ctrl))
+				ret = snap_virtio_ctrl_stop(ctrl);
+
+			if (!ret && !snap_virtio_ctrl_is_stopped(ctrl))
+				return 0;
+		}
+
 		snap_info("virtio controller FLR detected\n");
 		if (ctrl->bar_cbs.pre_flr)
 			ctrl->bar_cbs.pre_flr(ctrl->cb_ctx);
