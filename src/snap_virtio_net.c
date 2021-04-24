@@ -233,7 +233,7 @@ out_free:
 int snap_virtio_net_teardown_device(struct snap_device *sdev)
 {
 	struct snap_virtio_net_device *vndev;
-	int ret = 0;
+	int ret = 0, i;
 
 	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
 	if (sdev->pci->type != SNAP_VIRTIO_NET_PF &&
@@ -242,11 +242,13 @@ int snap_virtio_net_teardown_device(struct snap_device *sdev)
 
 	sdev->dd_data = NULL;
 
-	ret = snap_devx_obj_destroy(vndev->virtqs->virtq.ctrs_obj);
-	if (ret)
-		snap_error("Failed to destroy net virtq counter obj \n");
-
 	ret = snap_teardown_device(sdev);
+
+	for (i = 0; i < vndev->num_queues && vndev->virtqs[i].virtq.ctrs_obj; i++) {
+		ret = snap_devx_obj_destroy(vndev->virtqs[i].virtq.ctrs_obj);
+		if (ret)
+			snap_error("Failed to destroy net virtq counter obj \n");
+	}
 
 	free(vndev->virtqs);
 	free(vndev);
