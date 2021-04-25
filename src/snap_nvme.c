@@ -1,6 +1,6 @@
 #include "snap_nvme.h"
 #include "snap_queue.h"
-
+#include "snap_internal.h"
 #include "mlx5_ifc.h"
 
 /* doorbell stride as specified in the NVMe CAP register, stride in
@@ -15,6 +15,7 @@ struct snap_nvme_sq_be {
 	struct mlx5dv_devx_obj *obj;
 	uint32_t obj_id;
 	struct snap_nvme_sq *sq;
+	struct snap_alias_object *sq_alias;
 	struct ibv_qp *qp;
 };
 
@@ -740,7 +741,8 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	uint8_t *nvme_sq_be_in;
 	struct snap_nvme_sq_be *sq_be;
-	struct ibv_context *context = sdev->sctx->context;
+	struct snap_alias_object *sq_alias = NULL;
+	uint32_t sq_obj_id;
 
 	if (!attr->sq) {
 		snap_error("snap SQ must be provided\n");
@@ -761,22 +763,47 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	}
 
 
+	sq_obj_id = attr->sq->sq->obj_id;
 	if (snap_get_dev_vhca_id(attr->qp->context) !=
 	    snap_get_dev_vhca_id(sdev->sctx->context)) {
-		snap_error("Attach QP from RDMA context (vhca_id 0x%x) "
-			   "different than of emu_manager (vhca_id 0x%x) "
-			   "is not supported\n",
+		/*
+		 * When QP resides on different VHCA than the SQ,
+		 * we need to link between them somehow. This is
+		 * done by
+		 *  - Allowing cross-vhca access to the SQ.
+		 *  - Creating alias SQ on QP's context.
+		 *  - Use alias SQ obj_id for SQ backend instead of
+		 *    the original SQ.
+		 */
+		snap_debug("Attach QP from RDMA context (vhca_id 0x%x) "
+			   "different than of emu_manager (vhca_id 0x%x)\n",
                            snap_get_dev_vhca_id(attr->qp->context),
                            snap_get_dev_vhca_id(sdev->sctx->context));
-		errno = EINVAL;
-		goto err;
+
+		if (snap_allow_other_vhca_access(sdev->sctx->context,
+						 MLX5_OBJ_TYPE_NVME_SQ,
+						 attr->sq->sq->obj_id, NULL)) {
+			snap_error("Failed to allow cross vhca access\n");
+			goto err;
+		}
+
+		sq_alias = snap_create_alias_object(attr->qp->context,
+						    MLX5_OBJ_TYPE_NVME_SQ,
+						    sdev->sctx->context,
+						    attr->sq->sq->obj_id, NULL);
+		if (!sq_alias) {
+			snap_error("Failed to create SQ alias\n");
+			goto err;
+		}
+
+		sq_obj_id = sq_alias->obj_id;
 	}
 
 	sq_be = calloc(1, sizeof(*sq_be));
 	if (!sq_be) {
 		snap_error("Failed to allocate sq_be object\n");
 		errno = ENOMEM;
-		goto err;
+		goto delete_alias;
 	}
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -784,9 +811,9 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 		 MLX5_OBJ_TYPE_NVME_SQ_BE);
 	nvme_sq_be_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	DEVX_SET(nvme_sq_be, nvme_sq_be_in, nvme_sq_id, attr->sq->sq->obj_id);
+	DEVX_SET(nvme_sq_be, nvme_sq_be_in, nvme_sq_id, sq_obj_id);
 	DEVX_SET(nvme_sq_be, nvme_sq_be_in, qpn, attr->qp->qp_num);
-	sq_be->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
+	sq_be->obj = mlx5dv_devx_obj_create(attr->qp->context, in, sizeof(in), out,
 					    sizeof(out));
 	if (!sq_be->obj) {
 		snap_error("Failed to create nvme_sq_be object\n");
@@ -794,6 +821,7 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	}
 
 	sq_be->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	sq_be->sq_alias = sq_alias;
 	sq_be->sq = attr->sq;
 	sq_be->sq->sq_be = sq_be;
 	sq_be->qp = attr->qp;
@@ -804,6 +832,9 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 
 free_sq_be:
 	free(sq_be);
+delete_alias:
+	if (sq_alias)
+		snap_destroy_alias_object(sq_alias);
 err:
 	return NULL;
 }
@@ -812,6 +843,8 @@ void snap_nvme_destroy_sq_be(struct snap_nvme_sq_be *sq_be)
 {
 	if (sq_be->obj)
 		(void)mlx5dv_devx_obj_destroy(sq_be->obj);
+	if (sq_be->sq_alias)
+		snap_destroy_alias_object(sq_be->sq_alias);
 	sq_be->sq->sq_be = NULL;
 	free(sq_be);
 }
