@@ -3610,3 +3610,90 @@ int snap_allow_other_vhca_access(struct ibv_context *context,
 	snap_debug("Other VHCA access is allowed for object 0x%x\n", obj_id);
 	return 0;
 }
+
+static bool
+snap_cross_vhca_object_is_supported(struct ibv_context *context,
+				    enum cross_vhca_object_support_bit cross_type)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	uint32_t supported_obj_types_mask;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
+				      out, sizeof(out));
+	if (ret)
+		return false;
+
+	supported_obj_types_mask = DEVX_GET(query_hca_cap_out, out,
+	       capability.cmd_hca_cap2.cross_vhca_object_to_object_supported);
+	if (!(supported_obj_types_mask & cross_type))
+		return false;
+
+	return true;
+}
+
+struct snap_alias_object *
+snap_create_alias_object(struct ibv_context *src_context,
+			 enum mlx5_obj_type obj_type,
+			 struct ibv_context *dst_context,
+			 uint32_t dst_obj_id,
+			 uint8_t access_key[SNAP_ACCESS_KEY_LENGTH])
+{
+	struct snap_alias_object *alias;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(alias_context)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {};
+	uint8_t *alias_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+	if (!snap_cross_vhca_object_is_supported(src_context,
+			 CROSS_VHCA_OBJ_SUPPORT_LNVME_SQ_BE_TO_RNVME_SQ)) {
+		errno = ENOTSUP;
+		goto err;
+	}
+
+	alias = calloc(1, sizeof(*alias));
+	if (!alias) {
+		errno = ENOMEM;
+		goto err;
+	}
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, obj_type);
+	DEVX_SET(general_obj_in_cmd_hdr, in, alias_object, 1);
+	DEVX_SET(alias_context, alias_in, vhca_id_to_be_accessed,
+		 snap_get_dev_vhca_id(dst_context));
+	DEVX_SET(alias_context, alias_in, object_id_to_be_accessed,
+		 dst_obj_id);
+	if (access_key)
+		memcpy(DEVX_ADDR_OF(alias_context, in, access_key), access_key,
+		       DEVX_FLD_SZ_BYTES(alias_context, access_key));
+	alias->obj = mlx5dv_devx_obj_create(src_context, in, sizeof(in),
+					    out, sizeof(out));
+	if (!alias->obj)
+		goto free_alias;
+
+	alias->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	alias->src_context = src_context;
+	alias->dst_context = dst_context;
+	alias->dst_obj_id = dst_obj_id;
+	if (access_key)
+		memcpy(alias->access_key, access_key, SNAP_ACCESS_KEY_LENGTH);
+
+	return alias;
+
+free_alias:
+	free(alias);
+err:
+	return NULL;
+}
+
+void snap_destroy_alias_object(struct snap_alias_object *alias)
+{
+	mlx5dv_devx_obj_destroy(alias->obj);
+	free(alias);
+}

@@ -1295,11 +1295,20 @@ struct mlx5_ifc_cmd_hca_cap2_bits {
 
 	u8	reserved_at_18[0x20];
 
-	u8	reserved_at_1c[0x20];
+	u8	cross_vhca_object_to_object_supported[0x20];
 
 	u8	allowed_object_for_other_vhca_access[0x40];
 
 	u8	reserved_at_28[0x6a0];
+};
+
+enum cross_vhca_object_support_bit {
+	CROSS_VHCA_OBJ_SUPPORT_LCQ_TO_RUMEM = 1 << 0,
+	CROSS_VHCA_OBJ_SUPPORT_LSQ_TO_RUMEM = 1 << 1,
+	CROSS_VHCA_OBJ_SUPPORT_LRQ_TO_RUMEM = 1 << 2,
+	CROSS_VHCA_OBJ_SUPPORT_LQP_TO_RUMEM = 1 << 3,
+	CROSS_VHCA_OBJ_SUPPORT_LCQ_TO_RAPU = 1 << 4,
+	CROSS_VHCA_OBJ_SUPPORT_LNVME_SQ_BE_TO_RNVME_SQ = 1 << 5,
 };
 
 struct mlx5_ifc_header_modify_cap_properties_bits {
@@ -2549,6 +2558,19 @@ struct mlx5_ifc_general_obj_out_cmd_hdr_bits {
 	u8	 obj_id[0x20];
 
 	u8	 reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_alias_context_bits {
+	u8	 vhca_id_to_be_accessed[0x10];
+	u8	 reserved_at_10[0x10];
+
+	u8	 object_id_to_be_accessed[0x20];
+
+	u8	 reserved_at_40[0x40];
+
+	u8	 access_key[0x100];
+
+	u8	 reserved_at_180[0x80];
 };
 
 struct mlx5_ifc_flow_meter_parameters_bits {
