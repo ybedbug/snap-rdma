@@ -3,6 +3,7 @@
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
 #include "snap_queue.h"
+#include "snap_internal.h"
 
 #include "mlx5_ifc.h"
 
@@ -3547,4 +3548,65 @@ void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf)
                snap_warn("sctx:%p pci function(%d) pci_bdf changed to:%s\n",
                            spci->sctx, spci->id, spci->pci_number);
        }
+}
+
+static bool
+snap_allow_other_vhca_access_is_supported(struct ibv_context *context,
+					  enum mlx5_obj_type obj_type)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	uint64_t allowed_obj_types_mask;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
+				      out, sizeof(out));
+	if (ret)
+		return false;
+
+	allowed_obj_types_mask = DEVX_GET64(query_hca_cap_out, out,
+	       capability.cmd_hca_cap2.allowed_object_for_other_vhca_access);
+	if (!((1 << obj_type) & allowed_obj_types_mask))
+		return false;
+
+	return true;
+}
+
+int snap_allow_other_vhca_access(struct ibv_context *context,
+				 enum mlx5_obj_type obj_type,
+				 uint32_t obj_id,
+				 uint8_t access_key[SNAP_ACCESS_KEY_LENGTH])
+{
+	int ret;
+	uint8_t in[DEVX_ST_SZ_BYTES(allow_other_vhca_access_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(allow_other_vhca_access_out)] = {};
+
+	if (!snap_allow_other_vhca_access_is_supported(context, obj_type))
+		return -ENOTSUP;
+
+	DEVX_SET(allow_other_vhca_access_in, in, opcode,
+		 MLX5_CMD_OP_ALLOW_OTHER_VHCA_ACCESS);
+	DEVX_SET(allow_other_vhca_access_in, in,
+		 object_type_to_be_accessed, obj_type);
+	DEVX_SET(allow_other_vhca_access_in, in,
+		 object_id_to_be_accessed, obj_id);
+	if (access_key) {
+		memcpy(DEVX_ADDR_OF(allow_other_vhca_access_in,
+				    in, access_key),
+		       access_key,
+		       DEVX_FLD_SZ_BYTES(allow_other_vhca_access_in,
+					 access_key));
+	}
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
+				      out, sizeof(out));
+	if (ret) {
+		snap_error("Failed to allow other vhca access\n");
+		return ret;
+	}
+
+	snap_debug("Other VHCA access is allowed for object 0x%x\n", obj_id);
+	return 0;
 }
