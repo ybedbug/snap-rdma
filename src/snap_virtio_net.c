@@ -367,15 +367,19 @@ out:
  */
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 {
-	int ret;
+	int mkey_ret, ret;
 
 	vnq->virtq.virtq->consume_event = NULL;
 
+	mkey_ret = snap_destroy_cross_mkey(vnq->virtq.snap_cross_mkey);
 	ret = snap_devx_obj_destroy(vnq->virtq.virtq);
 	snap_virtio_teardown_virtq_umem(&vnq->virtq);
 
 	vnq->virtq.virtq = NULL;
 	vnq->virtq.ctrs_obj = NULL;
+
+	if (mkey_ret)
+		return mkey_ret;
 
 	return ret;
 }
