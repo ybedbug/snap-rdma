@@ -199,7 +199,8 @@ struct snap_pci {
 	struct snap_pci			*parent;//parent PF for VFs
 
 	struct mlx5_snap_pci		mpci;
-	struct snap_hotplug_device	*hotplug;
+
+	bool hotplugged;
 };
 
 struct snap_device {

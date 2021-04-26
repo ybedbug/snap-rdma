@@ -82,6 +82,8 @@ enum {
 	MLX5_CMD_OP_DESTROY_GENERAL_OBJECT = 0xa03,
 	MLX5_CMD_OP_SYNC_STEERING = 0xb00,
 	MLX5_CMD_OP_QUERY_EMULATED_FUNCTIONS_INFO = 0xb03,
+	MLX5_CMD_OP_HOTPLUG_DEVICE = 0xb20,
+	MLX5_CMD_OP_HOTUNPLUG_DEVICE = 0xb21,
 };
 
 enum mlx5_event {
@@ -1579,7 +1581,8 @@ struct mlx5_ifc_emulated_function_info_bits {
 	u8	 pci_bdf[0x10];
 	u8	 vhca_id[0x10];
 
-	u8	 reserved_at_20[0x20];
+	u8	 hotplug_function[0x1];
+	u8	 reserved_at_21[0x1f];
 };
 
 struct mlx5_ifc_query_emulated_functions_info_out_bits {
@@ -3979,6 +3982,48 @@ struct mlx5_ifc_nvme_ctrl_counters_bits {
     u8     reserved_at_1B0[0x10];
 
     u8     reserved_at_1c0[0x660];
+};
+
+struct mlx5_ifc_hotplug_device_input_bits {
+    u8     opcode[0x10];
+    u8     uid[0x10];
+
+    u8     reserved_at_20[0x20];
+
+    u8     reserved_at_40[0x40];
+
+    struct mlx5_ifc_device_bits	hotplug_device_object;
+};
+
+struct mlx5_ifc_hotplug_device_output_bits {
+    u8     status[0x8];
+    u8     reserved_at_8[0x18];
+
+    u8     syndrome[0x20];
+
+    u8     reserved_at_40[0x40];
+
+    struct mlx5_ifc_device_bits	hotplug_device_object;
+};
+
+struct mlx5_ifc_hotunplug_device_input_bits {
+    u8     opcode[0x10];
+    u8     uid[0x10];
+
+    u8     reserved_at_20[0x20];
+
+    u8     reserved_at_40[0x40];
+
+    struct mlx5_ifc_device_bits	hotplug_device_object;
+};
+
+struct mlx5_ifc_hotunplug_device_output_bits {
+    u8     status[0x8];
+    u8     reserved_at_8[0x18];
+
+    u8     syndrome[0x20];
+
+    u8     reserved_at_40[0x40];
 };
 
 enum {

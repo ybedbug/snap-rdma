@@ -187,7 +187,7 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 		goto out_free_virtqs;
 
 	/* Assign random mac to non-hotplug virtio net devices */
-	if (!sdev->pci->hotplug) {
+	if (!sdev->pci->hotplugged) {
 		ret = snap_virtio_net_query_device(sdev, &nattr);
 		if (ret)
 			goto out_free_virtqs;

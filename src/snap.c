@@ -319,6 +319,9 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 	pf->mpci.vhca_id = DEVX_GET(query_emulated_functions_info_out,
 				    emulated_info_out,
 				    emulated_function_info[idx].vhca_id);
+	pf->hotplugged = DEVX_GET(query_emulated_functions_info_out,
+					emulated_info_out,
+					emulated_function_info[idx].hotplug_function) ? true : false;
 	pf->num_vfs = 0;
 	return 0;
 }
@@ -2432,12 +2435,6 @@ out_err:
 	return NULL;
 }
 
-static void snap_destroy_device_object(struct mlx5_snap_devx_obj *device)
-{
-	mlx5dv_devx_obj_destroy(device->obj);
-	free(device);
-}
-
 static void snap_set_nvme_hotplug_device(struct snap_hotplug_attr *attr,
 		uint8_t *device_in)
 {
@@ -2546,76 +2543,6 @@ static void snap_set_virtio_blk_hotplug_device(struct snap_hotplug_attr *attr,
 	DEVX_SET(device, device_in,
 		 emulation_initial_regs.virtio_blk.virtio_blk_config.write_zeroes_may_unmap,
 		 attr->regs.virtio_blk.write_zeroes_may_unmap);
-}
-
-static struct mlx5_snap_devx_obj*
-snap_create_device_object(struct snap_context *sctx,
-		struct snap_hotplug_attr *attr)
-{
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(device)] = {0};
-	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
-	struct ibv_context *context = sctx->context;
-	uint8_t *device_in;
-	struct mlx5_snap_devx_obj *device;
-
-	if (!(sctx->hotplug.supported_types & attr->type)) {
-		errno = ENOTSUP;
-		goto out_err;
-	}
-
-	device = calloc(1, sizeof(*device));
-	if (!device) {
-		errno = ENOMEM;
-		goto out_err;
-	}
-
-	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_DEVICE);
-
-	device_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	switch (attr->type) {
-	case SNAP_NVME:
-		snap_set_nvme_hotplug_device(attr, device_in);
-		break;
-	case SNAP_VIRTIO_NET:
-		snap_set_virtio_net_hotplug_device(attr, device_in);
-		break;
-	case SNAP_VIRTIO_BLK:
-		snap_set_virtio_blk_hotplug_device(attr, device_in);
-		break;
-	default:
-		goto out_free;
-	}
-
-	DEVX_SET(device, device_in, total_vf, attr->max_vfs);
-	DEVX_SET(device, device_in, initial_registers_valid, !attr->use_default_regs);
-	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
-	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
-	DEVX_SET(device, device_in, pci_params.revision_id, attr->pci_attr.revision_id);
-	DEVX_SET(device, device_in, pci_params.class_code, attr->pci_attr.class_code);
-	DEVX_SET(device, device_in, pci_params.subsystem_id, attr->pci_attr.subsystem_id);
-	DEVX_SET(device, device_in, pci_params.subsystem_vendor_id,
-		 attr->pci_attr.subsystem_vendor_id);
-	DEVX_SET(device, device_in, pci_params.num_msix, attr->pci_attr.num_msix);
-
-	device->obj = mlx5dv_devx_obj_create(context, in, sizeof(in), out,
-					     sizeof(out));
-	if (!device->obj)
-		goto out_free;
-
-	device->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
-	/* sdev will be assigned after creating the emulation object */
-	device->sdev = NULL;
-
-	return device;
-
-out_free:
-	free(device);
-out_err:
-	return NULL;
 }
 
 void snap_get_pci_attr(struct snap_pci_attr *pci_attr,
@@ -2897,7 +2824,7 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		}
 
 		for (i = 0; i < pfs_ctx->max_pfs; i++) {
-			if (pfs[i]->hotplug && !pfs[i]->pci_bdf.raw) {
+			if (pfs[i]->hotplugged && !pfs[i]->pci_bdf.raw) {
 				ret = snap_pf_get_pci_info(pfs[i], out);
 				if (ret) {
 					snap_warn("pf get pci info failed, ret:%d\n", ret);
@@ -2919,37 +2846,76 @@ out:
 	return i;
 }
 
-static void snap_hotplug_pf_unbind_vhca_id(struct snap_pci *pf)
+static int snap_hotplug_device(struct snap_context *sctx,
+		struct snap_hotplug_attr *attr, struct snap_pci *pf)
 {
-	pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+	int ret = 0;
+	uint8_t in[DEVX_ST_SZ_BYTES(hotplug_device_input)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(hotplug_device_output)] = {0};
+	struct ibv_context *context = sctx->context;
+	uint8_t *device_in;
+
+	if (!(sctx->hotplug.supported_types & attr->type)) {
+		ret = -ENOTSUP;
+		goto out_err;
+	}
+
+	DEVX_SET(hotplug_device_input, in, opcode,
+		MLX5_CMD_OP_HOTPLUG_DEVICE);
+
+	device_in = in + (DEVX_ST_SZ_BYTES(hotplug_device_input)
+						- DEVX_ST_SZ_BYTES(device));
+	switch (attr->type) {
+	case SNAP_NVME:
+		snap_set_nvme_hotplug_device(attr, device_in);
+		break;
+	case SNAP_VIRTIO_NET:
+		snap_set_virtio_net_hotplug_device(attr, device_in);
+		break;
+	case SNAP_VIRTIO_BLK:
+		snap_set_virtio_blk_hotplug_device(attr, device_in);
+		break;
+	default:
+		ret = -EINVAL;
+		goto out_err;
+	}
+
+	DEVX_SET(device, device_in, total_vf, attr->max_vfs);
+	DEVX_SET(device, device_in, initial_registers_valid, !attr->use_default_regs);
+	DEVX_SET(device, device_in, pci_params.device_id, attr->pci_attr.device_id);
+	DEVX_SET(device, device_in, pci_params.vendor_id, attr->pci_attr.vendor_id);
+	DEVX_SET(device, device_in, pci_params.revision_id, attr->pci_attr.revision_id);
+	DEVX_SET(device, device_in, pci_params.class_code, attr->pci_attr.class_code);
+	DEVX_SET(device, device_in, pci_params.subsystem_id, attr->pci_attr.subsystem_id);
+	DEVX_SET(device, device_in, pci_params.subsystem_vendor_id,
+		attr->pci_attr.subsystem_vendor_id);
+	DEVX_SET(device, device_in, pci_params.num_msix, attr->pci_attr.num_msix);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		goto out_err;
+
+	pf->mpci.vhca_id = DEVX_GET(hotplug_device_output, out, hotplug_device_object.vhca_id);
+
+out_err:
+	return ret;
 }
 
-static int snap_hotplug_pf_bind_vhca_id(struct snap_pci *pf)
+static void snap_hotunplug_device(struct snap_pci *pf)
 {
-	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
-	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-		    DEVX_ST_SZ_BYTES(device)] = {0};
-	uint8_t *out_hotplug;
-	int ret;
+	uint8_t in[DEVX_ST_SZ_BYTES(hotunplug_device_input)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(hotunplug_device_output)] = {0};
+	struct ibv_context *context = pf->sctx->context;
+	uint8_t *device_in;
 
-	if (!pf->plugged || !pf->hotplug || pf->hotplug->obj)
-		return -ENODEV;
+	DEVX_SET(hotunplug_device_input, in, opcode,
+		MLX5_CMD_OP_HOTUNPLUG_DEVICE);
 
-	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_DEVICE);
-	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, pf->hotplug->obj->obj_id);
+	device_in = in + (DEVX_ST_SZ_BYTES(hotunplug_device_input)
+						- DEVX_ST_SZ_BYTES(device));
+	DEVX_SET(device, device_in, vhca_id, pf->mpci.vhca_id);
 
-	ret = snap_devx_obj_query(pf->hotplug->obj, in, sizeof(in), out,
-				  sizeof(out));
-	if (ret)
-		return ret;
-
-	out_hotplug = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
-	pf->mpci.vhca_id = DEVX_GET(device, out_hotplug, vhca_id);
-
-	return 0;
+	mlx5dv_devx_general_cmd(context, in, sizeof(in), out, sizeof(out));
 }
 
 /**
@@ -2963,15 +2929,14 @@ void snap_hotunplug_pf(struct snap_pci *pf)
 	if (!pf->plugged)
 		return;
 
-	if (!pf->hotplug)
+	if (!pf->hotplugged)
 		return;
 
 	snap_free_virtual_functions(pf);
 
-	snap_hotplug_pf_unbind_vhca_id(pf);
-	snap_destroy_device_object(pf->hotplug->obj);
-	free(pf->hotplug);
-	pf->hotplug = NULL;
+	snap_hotunplug_device(pf);
+	pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+	pf->hotplugged = false;
 	pf->plugged = false;
 }
 
@@ -2991,7 +2956,6 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 {
 	uint8_t *out;
 	struct snap_pfs_ctx *pfs_ctx;
-	struct snap_hotplug_device *hotplug;
 	struct snap_pci *pf = NULL;
 	int ret, output_size, i;
 
@@ -3018,31 +2982,21 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto out_err;
 	}
 
-	hotplug = calloc(1, sizeof(*hotplug));
-	if (!hotplug) {
-		errno = ENOMEM;
+	ret = snap_hotplug_device(sctx, attr, pf);
+	if (ret) {
+		errno = EINVAL;
 		goto out_err;
 	}
 
-	hotplug->obj = snap_create_device_object(sctx, attr);
-	if (!hotplug->obj) {
-		errno = ENOMEM;
-		goto out_free;
-	}
-
 	pf->plugged = true;
-	pf->hotplug = hotplug;
-
-	ret = snap_hotplug_pf_bind_vhca_id(pf);
-	if (!ret)
-		goto destroy_hotplug;
+	pf->hotplugged = true;
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
 		      DEVX_ST_SZ_BYTES(emulated_function_info) * (pfs_ctx->max_pfs);
 	out = calloc(1, output_size);
 	if (!out) {
 		errno = ENOMEM;
-		goto unbind_vhca_id;
+		goto out_hotunplug;
 	}
 
 	ret = snap_query_functions_info(sctx, attr->type,
@@ -3068,14 +3022,10 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 
 free_cmd:
 	free(out);
-unbind_vhca_id:
-	snap_hotplug_pf_unbind_vhca_id(pf);
-destroy_hotplug:
-	pf->hotplug = NULL;
+out_hotunplug:
+	pf->hotplugged = false;
 	pf->plugged = false;
-	snap_destroy_device_object(hotplug->obj);
-out_free:
-	free(hotplug);
+	snap_hotunplug_device(pf);
 out_err:
 	return NULL;
 }
@@ -3200,9 +3150,6 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 			goto out_free_tunnel;
 		}
 	}
-
-	if (sdev->pci->hotplug)
-		sdev->pci->hotplug->obj->sdev = sdev;
 
 	pthread_mutex_lock(&sctx->lock);
 	TAILQ_INSERT_HEAD(&sctx->device_list, sdev, entry);
@@ -3592,7 +3539,7 @@ int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
 
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf)
 {
-       if (spci->hotplug && spci->pci_bdf.raw != pci_bdf) {
+       if (spci->hotplugged && spci->pci_bdf.raw != pci_bdf) {
                spci->pci_bdf.raw = pci_bdf;
                snprintf(spci->pci_number, sizeof(spci->pci_number), "%02x:%02x.%d",
                        spci->pci_bdf.bdf.bus, spci->pci_bdf.bdf.device,
