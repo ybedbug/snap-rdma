@@ -106,7 +106,6 @@ enum virtq_cmd_sm_op_status {
 struct blk_virtq_cmd_aux
 {
 	struct virtio_blk_outhdr header;
-	struct split_tunnel_comp tunnel_comp;
 };
 /**
  * struct blk_virtq_cmd - command context
@@ -779,12 +778,13 @@ static inline bool sm_write_status(struct blk_virtq_cmd *cmd,
  * True if state machine is moved synchronously to the new state
  * (error cases) or false if the state transition will be done asynchronously.
  */
-static int sm_send_completion(struct blk_virtq_cmd *cmd,
-			       enum virtq_cmd_sm_op_status status)
+static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
+				     enum virtq_cmd_sm_op_status status)
 {
 	int ret;
+	struct split_tunnel_comp tunnel_comp;
 
-	if (status != VIRTQ_CMD_SM_OP_OK) {
+	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
 		snap_error("failed to write the request status field\n");
 
 		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
@@ -809,17 +809,17 @@ static int sm_send_completion(struct blk_virtq_cmd *cmd,
 		}
 	}
 
-	cmd->aux->tunnel_comp.descr_head_idx = cmd->descr_head_idx;
-	cmd->aux->tunnel_comp.len = cmd->total_in_len;
+	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
+	tunnel_comp.len = cmd->total_in_len;
 	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
-		       cmd->aux->tunnel_comp.descr_head_idx,
-		       cmd->aux->tunnel_comp.len,
+		       tunnel_comp.descr_head_idx, tunnel_comp.len,
 		       sizeof(struct split_tunnel_comp));
 	virtq_mark_dirty_mem(cmd, 0, 0, true);
 	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
-					 &cmd->aux->tunnel_comp,
+					 &tunnel_comp,
 					 sizeof(struct split_tunnel_comp));
-	if (ret) {
+	if (snap_unlikely(ret)) {
+		/* TODO: pending queue */
 		ERR_ON_CMD(cmd, "failed to second completion\n");
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
