@@ -135,14 +135,14 @@ struct blk_virtq_cmd {
 	enum virtq_cmd_sm_state state;
 	struct vring_desc *descs;
 	uint8_t *buf;
-	size_t req_size;
+	uint32_t req_size;
 	struct blk_virtq_cmd_aux *aux;
 	struct ibv_mr *mr;
 	uint8_t *req_buf;
 	struct ibv_mr *req_mr;
 	struct snap_dma_completion dma_comp;
-	size_t total_seg_len;
-	size_t total_in_len;
+	uint32_t total_seg_len;
+	uint32_t total_in_len;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool use_dmem;
 	blk_virtq_io_cmd_stat_t *io_cmd_stat;
