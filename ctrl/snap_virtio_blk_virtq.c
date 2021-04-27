@@ -107,7 +107,6 @@ struct blk_virtq_cmd_aux
 {
 	struct virtio_blk_outhdr header;
 	struct split_tunnel_comp tunnel_comp;
-	struct virtio_blk_outftr blk_req_ftr;
 };
 /**
  * struct blk_virtq_cmd - command context
@@ -149,6 +148,7 @@ struct blk_virtq_cmd {
 	bool use_dmem;
 	blk_virtq_io_cmd_stat_t *io_cmd_stat;
 	uint16_t cmd_available_index;
+	struct virtio_blk_outftr blk_req_ftr;
 };
 
 /**
@@ -478,7 +478,7 @@ free_buf:
 	free(cmd->req_buf);
 err:
 	cmd->req_buf = cmd->buf;
-	cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	return -1;
 }
@@ -586,7 +586,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to get request data, returning"
 			   " failure\n");
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
@@ -631,7 +631,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			       dev_name);
 		if (ret < 0) {
 			snap_error("failed to read block id\n");
-			cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
+			cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
 			return true;
 		}
 		cmd->dma_comp.count = 1;
@@ -652,7 +652,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		ERR_ON_CMD(cmd, "invalid command - requested command type "
 				"0x%x is not implemented\n", cmd->aux->header.type);
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
 		return true;
 	}
 
@@ -665,7 +665,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	if (ret) {
 		ERR_ON_CMD(cmd, "failed while executing command %d \n",
 		        cmd->aux->header.type);
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	} else {
@@ -690,7 +690,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr"
 			   " to host\n");
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
@@ -710,7 +710,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 				       &(cmd->dma_comp));
 		if (ret) {
-			cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+			cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			return true;
 		}
@@ -730,7 +730,7 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
 {
 	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	if (status != VIRTQ_CMD_SM_OP_OK)
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 }
 
 /**
@@ -741,33 +741,33 @@ static void sm_handle_out_iov_done(struct blk_virtq_cmd *cmd,
  * Return: True if state machine is moved synchronously to the new state
  * (error cases) or false if the state transition will be done asynchronously.
  */
-static bool sm_write_status(struct blk_virtq_cmd *cmd,
-			    enum virtq_cmd_sm_op_status status)
+static inline bool sm_write_status(struct blk_virtq_cmd *cmd,
+				   enum virtq_cmd_sm_op_status status)
 {
 	int ret;
 
-	if (status != VIRTQ_CMD_SM_OP_OK)
-		cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 
-	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
-	cmd->dma_comp.count = 1;
 	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
 		       cmd->descs[cmd->num_desc - 1].addr,
 		       sizeof(struct virtio_blk_outftr));
 	virtq_mark_dirty_mem(cmd, cmd->descs[cmd->num_desc - 1].addr,
 			     sizeof(struct virtio_blk_outftr), false);
-	ret = snap_dma_q_write(cmd->vq_priv->dma_q, &cmd->aux->blk_req_ftr,
-			       sizeof(struct virtio_blk_outftr),
-			       cmd->mr->lkey,
-			       cmd->descs[cmd->num_desc - 1].addr,
-			       cmd->vq_priv->snap_attr.vattr.dma_mkey,
-			       &cmd->dma_comp);
-	if (ret) {
+	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, &cmd->blk_req_ftr,
+				     sizeof(struct virtio_blk_outftr),
+				     cmd->descs[cmd->num_desc - 1].addr,
+				     cmd->vq_priv->snap_attr.vattr.dma_mkey);
+	if (snap_unlikely(ret)) {
+		/* TODO: at some point we will have to do pending queue */
+		ERR_ON_CMD(cmd, "failed to send status, err=%d", ret);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
+
 	cmd->total_in_len += sizeof(struct virtio_blk_outftr);
-	return false;
+	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
+	return true;
 }
 
 /**
@@ -927,7 +927,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->descr_head_idx = split_hdr->descr_head_idx;
 	cmd->total_seg_len = 0;
 	cmd->total_in_len = 0;
-	cmd->aux->blk_req_ftr.status = VIRTIO_BLK_S_OK;
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
 	cmd->use_dmem = false;
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
