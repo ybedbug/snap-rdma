@@ -3,6 +3,7 @@ ARG _UID=6213
 ARG _GID=11429
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
+ARG MOFED_VER=5.3-1.0.0.1
 ENV LANG=en_US.utf-8
 USER root
 
@@ -44,10 +45,10 @@ RUN yum install -y \
 RUN set -eux; \
   if [ $(uname -m) == "aarch64" ]; then \
    cd /etc/yum.repos.d && \
-   wget https://linux.mellanox.com/public/repo/mlnx_ofed/latest/rhel7.6alternate/mellanox_mlnx_ofed.repo; \
+   wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/rhel7.6alternate/mellanox_mlnx_ofed.repo; \
   elif [ $(uname -m) == "x86_64" ]; then \
     cd /etc/yum.repos.d && \
-    wget https://linux.mellanox.com/public/repo/mlnx_ofed/latest/rhel7.6/mellanox_mlnx_ofed.repo; \
+    wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/rhel7.6/mellanox_mlnx_ofed.repo; \
   fi
 RUN yum install -y mlnx-ofed-basic-user-only.noarch
 RUN pip3 -qq install gitlint
