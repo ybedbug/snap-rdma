@@ -71,8 +71,8 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 		}
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
-			fprintf(stdout, "SNAP device created: type=%d pf_id=%d fd=%d\n",
-				type, attr.pf_id, snap_device_get_fd(sdev));
+			fprintf(stdout, "SNAP device created: type=%d pf_id=%d fd=%d vhca_id=%d\n",
+				type, attr.pf_id, snap_device_get_fd(sdev), sdev->pci->mpci.vhca_id);
 			fflush(stdout);
 			snap_close_device(sdev);
 			if (hotplug)
