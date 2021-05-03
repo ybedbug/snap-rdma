@@ -184,6 +184,7 @@ struct snap_channel_ops {
 };
 
 void snap_channel_register(const struct snap_channel_ops *ops);
+void snap_channel_unregister(const struct snap_channel_ops *ops);
 
 /*
  * Convinience macro that creates a constructor function that will

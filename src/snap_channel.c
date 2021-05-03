@@ -48,15 +48,17 @@ struct snap_channel *snap_channel_open(const char *name, struct snap_migration_o
 
 	dlhandle = dlopen(so_name, RTLD_NOW);
 	if (!dlhandle) {
-		snap_channel_error("Failed to open %s\n", so_name);
+		snap_channel_error("Failed to open %s : %s\n", so_name, dlerror());
 		free(so_name);
 		return NULL;
 	}
 	free(so_name);
 
 	channel_ops = lookup(name);
-	if (!channel_ops)
+	if (!channel_ops) {
+		snap_channel_error("Channel %s is not registered\n", name);
 		return NULL;
+	}
 
 found:
 	schannel = channel_ops->open(ops, data);
@@ -100,3 +102,6 @@ void snap_channel_register(const struct snap_channel_ops *ops)
 			   ops->name);
 }
 
+void snap_channel_unregister(const struct snap_channel_ops *ops)
+{
+}
