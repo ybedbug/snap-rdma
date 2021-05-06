@@ -115,6 +115,8 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat);
 int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 				struct snap_virtio_blk_queue_attr *attr);
+void *blk_virtq_get_cmd_addr(void *ctx, void *ptr, size_t len);
+struct snap_cross_mkey *blk_virtq_get_cross_mkey(void *ctx, struct ibv_pd *pd);
 int blk_virtq_suspend(struct blk_virtq_ctx *q);
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);
 int blk_virtq_get_state(struct blk_virtq_ctx *q,

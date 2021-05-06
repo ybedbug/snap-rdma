@@ -41,6 +41,23 @@
 #include "snap_blk_ops.h"
 #include "snap_virtio_blk_virtq.h"
 
+#define VIRTIO_BLK_MAX_CTRL_NUM		128
+#define VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX	32
+#define VIRTIO_BLK_MAX_VIRTQ_SIZE	256
+
+#define VIRTIO_BLK_CTRL_PAGE_SHIFT	16
+#define VIRTIO_BLK_CTRL_PAGE_SIZE	(1 << VIRTIO_BLK_CTRL_PAGE_SHIFT)
+#define VIRTIO_BLK_CTRL_MDTS_MAX	6
+#define VIRTIO_BLK_MAX_REQ_DATA		(VIRTIO_BLK_CTRL_PAGE_SIZE * (1 << VIRTIO_BLK_CTRL_MDTS_MAX))
+
+typedef struct snap_virtio_blk_ctrl_zcopy_ctx {
+    void *fake_addr_table;
+    size_t fake_addr_table_size;
+    uintptr_t *request_table;
+    struct snap_context *sctx;
+    LIST_ENTRY(snap_virtio_blk_ctrl_zcopy_ctx) entry;
+} snap_virtio_blk_ctrl_zcopy_ctx_t;
+
 struct snap_virtio_blk_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
 	const struct snap_virtio_blk_queue_attr	*attr;
@@ -59,6 +76,9 @@ struct snap_virtio_blk_ctrl {
 	void *bdev;
 	uint32_t network_error;
 	uint32_t internal_error;
+	int idx;
+	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx;
+	struct snap_cross_mkey *cross_mkey;
 };
 
 struct snap_virtio_blk_ctrl *
@@ -72,6 +92,8 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 				   uint16_t regs_mask);
 int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 			struct snap_virtio_ctrl_debugstat *ctrl_debugstat);
+int snap_virtio_blk_ctrl_addr_trans(struct ibv_pd *pd, void *ptr, size_t len,
+				    uint32_t *cross_mkey, void **addr);
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl);
 void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,

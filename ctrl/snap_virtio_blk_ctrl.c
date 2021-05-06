@@ -1,6 +1,7 @@
 #include "snap_virtio_blk_ctrl.h"
 #include <linux/virtio_blk.h>
 #include <linux/virtio_config.h>
+#include <sys/mman.h>
 
 
 #define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
@@ -9,6 +10,164 @@
 					 (1ULL << VIRTIO_BLK_F_SEG_MAX) |\
 					 (1ULL << VIRTIO_BLK_F_BLK_SIZE))
 
+
+static bool taken_cntlids[VIRTIO_BLK_MAX_CTRL_NUM];
+LIST_HEAD(, snap_virtio_blk_ctrl_zcopy_ctx) snap_virtio_blk_ctrl_zcopy_ctx_list =
+			LIST_HEAD_INITIALIZER(snap_virtio_blk_ctrl_zcopy_ctx);
+
+static void snap_virtio_blk_zcopy_ctxs_clear()
+{
+	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx;
+
+	while ((zcopy_ctx = LIST_FIRST(&snap_virtio_blk_ctrl_zcopy_ctx_list)) != NULL) {
+		LIST_REMOVE(zcopy_ctx, entry);
+		free(zcopy_ctx->request_table);
+		munmap(zcopy_ctx->fake_addr_table, zcopy_ctx->fake_addr_table_size);
+		free(zcopy_ctx);
+	}
+}
+
+static snap_virtio_blk_ctrl_zcopy_ctx_t *
+snap_virtio_blk_zcopy_ctx_init(struct snap_context *sctx)
+{
+	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx;
+	size_t req_num;
+	size_t size;
+
+	zcopy_ctx = calloc(1, sizeof(*zcopy_ctx));
+	if (!zcopy_ctx)
+		return NULL;
+
+	zcopy_ctx->sctx = sctx;
+
+	req_num = VIRTIO_BLK_MAX_CTRL_NUM * VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX *
+	          VIRTIO_BLK_MAX_VIRTQ_SIZE;
+	size = req_num * VIRTIO_BLK_MAX_REQ_DATA;
+
+	zcopy_ctx->fake_addr_table = mmap(NULL, size,
+					  PROT_NONE,
+					  MAP_PRIVATE | MAP_ANONYMOUS,
+					  -1, 0);
+	if (zcopy_ctx->fake_addr_table == MAP_FAILED) {
+		snap_error("mmap call failed: %m\n");
+		goto free_zcopy_ctx;
+	}
+	zcopy_ctx->fake_addr_table_size = size;
+
+	zcopy_ctx->request_table = calloc(req_num, sizeof(uintptr_t));
+	if (!zcopy_ctx->request_table) {
+		snap_error("failed to alloc request_table\n");
+		goto unmap_fake_addr_table;
+	}
+
+	snap_info("Created fake_addr_table %p size %lu\n",
+		  zcopy_ctx->fake_addr_table, size);
+
+	LIST_INSERT_HEAD(&snap_virtio_blk_ctrl_zcopy_ctx_list, zcopy_ctx, entry);
+
+	return zcopy_ctx;
+
+unmap_fake_addr_table:
+	munmap(zcopy_ctx->fake_addr_table, size);
+free_zcopy_ctx:
+	free(zcopy_ctx);
+	return NULL;
+}
+
+static snap_virtio_blk_ctrl_zcopy_ctx_t *
+snap_virtio_blk_get_zcopy_ctx(struct snap_context *sctx)
+{
+	snap_virtio_blk_ctrl_zcopy_ctx_t *tmp;
+	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx = NULL;
+
+	LIST_FOREACH(tmp, &snap_virtio_blk_ctrl_zcopy_ctx_list, entry) {
+		if (tmp->sctx == sctx) {
+			zcopy_ctx = tmp;
+			break;
+		}
+	}
+
+	if (!zcopy_ctx)
+		zcopy_ctx = snap_virtio_blk_zcopy_ctx_init(sctx);
+
+	return zcopy_ctx;
+}
+
+int snap_virtio_blk_ctrl_addr_trans(struct ibv_pd *pd, void *ptr, size_t len,
+				    uint32_t *cross_mkey, void **addr)
+{
+	snap_virtio_blk_ctrl_zcopy_ctx_t *tmp;
+	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx = NULL;
+	struct blk_virtq_cmd *cmd;
+	size_t req_idx;
+	struct snap_cross_mkey *snap_cross_mkey;
+	void *tmp_addr;
+
+	if (snap_unlikely(!len))
+		return 0;
+
+	LIST_FOREACH(tmp, &snap_virtio_blk_ctrl_zcopy_ctx_list, entry) {
+		if (ptr >= tmp->fake_addr_table &&
+		    ptr + len <= tmp->fake_addr_table + tmp->fake_addr_table_size) {
+			zcopy_ctx = tmp;
+			break;
+		}
+	}
+
+	if (!zcopy_ctx) {
+		snap_debug("Address %p not in range\n", ptr);
+		return -1;
+	}
+
+	req_idx = (uintptr_t)(ptr - zcopy_ctx->fake_addr_table) / VIRTIO_BLK_MAX_REQ_DATA;
+	cmd = (void *)zcopy_ctx->request_table[req_idx];
+
+	snap_cross_mkey = blk_virtq_get_cross_mkey(cmd, pd);
+	if (snap_unlikely(!snap_cross_mkey))
+		return -1;
+	*cross_mkey = snap_cross_mkey->mkey;
+
+	tmp_addr = blk_virtq_get_cmd_addr(cmd, ptr, len);
+	if (snap_unlikely(!tmp_addr))
+		return -1;
+	*addr = tmp_addr;
+
+	return 0;
+}
+
+static bool snap_virtio_blk_is_ctrlid_empty()
+{
+	int i;
+
+	for (i = 0; i < VIRTIO_BLK_MAX_CTRL_NUM; i++)
+		if (taken_cntlids[i])
+			return false;
+
+	return true;
+}
+
+static int snap_virtio_blk_acquire_cntlid()
+{
+	int i;
+
+	for (i = 0; i < VIRTIO_BLK_MAX_CTRL_NUM; i++) {
+		if (!taken_cntlids[i]) {
+			taken_cntlids[i] = true;
+			snap_debug("cntlid %d was acquired\n", i);
+			return i;
+		}
+	}
+
+	/* Not found */
+	snap_error("Failed to find unused cntlid value\n");
+	return -EINVAL;
+}
+
+static inline void snap_virtio_blk_release_cntlid(int cntlid)
+{
+	taken_cntlids[cntlid] = false;
+	snap_debug("cntlid %d was released\n", cntlid);
+}
 
 static inline struct snap_virtio_blk_ctrl_queue*
 to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
@@ -507,6 +666,9 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.hw_available_index = vbq->attr->hw_available_index;
 	attr.hw_used_index = vbq->attr->hw_used_index;
 
+	vbq->common.ctrl = vctrl;
+	vbq->common.index = index;
+
 	vbq->q_impl = blk_virtq_create(vbq, blk_ctrl->bdev_ops, blk_ctrl->bdev,
 				       vctrl->sdev, &attr);
 	if (!vbq->q_impl) {
@@ -786,6 +948,16 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			goto teardown_dev;
 	}
 
+	if (bdev_ops->is_zcopy(bdev)) {
+		ctrl->zcopy_ctx = snap_virtio_blk_get_zcopy_ctx(sctx);
+		if (!ctrl->zcopy_ctx) {
+			snap_error("Failed to get zcopy_ctx\n");
+			errno = -ENOMEM;
+			goto teardown_dev;
+		}
+		ctrl->idx = snap_virtio_blk_acquire_cntlid();
+	}
+
 	return ctrl;
 
 teardown_dev:
@@ -806,6 +978,17 @@ err:
  */
 void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 {
+	if (ctrl->zcopy_ctx) {
+		if (ctrl->cross_mkey) {
+			snap_destroy_cross_mkey(ctrl->cross_mkey);
+			ctrl->cross_mkey = NULL;
+		}
+		snap_virtio_blk_release_cntlid(ctrl->idx);
+
+		if (snap_virtio_blk_is_ctrlid_empty())
+			snap_virtio_blk_zcopy_ctxs_clear();
+	}
+
 	/* We must first notify host the device is no longer operational */
 	snap_virtio_blk_ctrl_bar_add_status(ctrl,
 				SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET);
