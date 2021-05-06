@@ -122,6 +122,7 @@ def main():
                                        "both configured")
         params = {
             'emulation_manager': args.emu_manager,
+            'device_type': args.type,
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
@@ -131,6 +132,8 @@ def main():
     p = subparsers.add_parser('emulation_device_detach',
                               help='Detach (Unplug) SNAP device from host')
     p.add_argument('emu_manager', help='Emulation manager', type=str)
+    p.add_argument('type', help='Device type', type=str,
+                   choices=['nvme', 'virtio_blk'])
     p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
                    'Must be set if \'--pci_index\' is not set',
                    type=str, required=False)

@@ -5,8 +5,6 @@ emulation_device_detach - Detach (unplug) emulated device from host
 # DESCRIPTION
 
 Detach plugged emulated device from host.
-Unlike attach, there is no importance for which protocol is used by
-the device.
 
 To specify the PCI function to open controller upon, either "pci_bdf"
 ("84:00.2") or "pci_index" (0) must be provided, but not both.
@@ -22,6 +20,7 @@ emulation_functions_list method.
 
   "params": {
     "emulation_manager": "mlx5_0",
+    "device_type": "nvme",
     "pci_bdf": "83:00.2"
   }
 }
