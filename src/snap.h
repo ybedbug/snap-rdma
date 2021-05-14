@@ -120,6 +120,7 @@ struct snap_event {
 };
 
 struct snap_device_attr {
+	struct ibv_context *context;
 	enum snap_pci_type type;
 	int         pf_id;
 	int         vf_id;

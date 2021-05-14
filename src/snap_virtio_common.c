@@ -855,7 +855,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	return 0;
 }
 
-static int snap_umem_init(struct snap_context *sctx,
+static int snap_umem_init(struct ibv_context *context,
 		struct snap_virtio_umem *umem)
 {
 	int ret;
@@ -868,7 +868,7 @@ static int snap_umem_init(struct snap_context *sctx,
 	if (ret)
 		return ret;
 
-	umem->devx_umem = mlx5dv_devx_umem_reg(sctx->context, umem->buf,
+	umem->devx_umem = mlx5dv_devx_umem_reg(context, umem->buf,
 					       umem->size,
 					       IBV_ACCESS_LOCAL_WRITE);
 	if (!umem->devx_umem) {
@@ -895,7 +895,7 @@ static void snap_umem_free(struct snap_virtio_umem *umem)
 	memset(umem, 0, sizeof(*umem));
 }
 
-int snap_virtio_init_virtq_umem(struct snap_context *sctx,
+int snap_virtio_init_virtq_umem(struct ibv_context *context,
 		struct snap_virtio_caps *virtio,
 		struct snap_virtio_queue *virtq,
 		int depth)
@@ -904,19 +904,19 @@ int snap_virtio_init_virtq_umem(struct snap_context *sctx,
 
 	virtq->umem[0].size = (virtio->umem_1_buffer_param_a * depth) +
 			virtio->umem_1_buffer_param_b;
-	ret = snap_umem_init(sctx, &virtq->umem[0]);
+	ret = snap_umem_init(context, &virtq->umem[0]);
 	if (ret)
 		goto out_free_buf_0;
 
 	virtq->umem[1].size = (virtio->umem_2_buffer_param_a * depth) +
 			virtio->umem_2_buffer_param_b;
-	ret = snap_umem_init(sctx, &virtq->umem[1]);
+	ret = snap_umem_init(context, &virtq->umem[1]);
 	if (ret)
 		goto out_free_buf_1;
 
 	virtq->umem[2].size = (virtio->umem_3_buffer_param_a * depth) +
 			virtio->umem_3_buffer_param_b;
-	ret = snap_umem_init(sctx, &virtq->umem[2]);
+	ret = snap_umem_init(context, &virtq->umem[2]);
 	if (ret)
 		goto out_free_buf_2;
 

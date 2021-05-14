@@ -837,6 +837,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	};
 	if (attr->event)
 		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
+	ctrl->sdev_attr.context = attr->context;
 	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
 		ret = -ENODEV;

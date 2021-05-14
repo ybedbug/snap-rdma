@@ -305,7 +305,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 	vbq = &vbdev->virtqs[attr->vattr.idx];
 
-	ret = snap_virtio_init_virtq_umem(sdev->sctx,
+	ret = snap_virtio_init_virtq_umem(sdev->sctx->context,
 					  &sdev->sctx->virtio_blk_caps,
 					  &vbq->virtq, attr->vattr.size);
 	if (ret) {

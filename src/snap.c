@@ -879,9 +879,13 @@ snap_devx_obj_create(struct snap_device *sdev, void *in, size_t inlen,
 		     struct mlx5_snap_devx_obj *vtunnel,
 		     size_t dtor_inlen, size_t dtor_outlen)
 {
-	struct ibv_context *context = sdev->sctx->context;
 	struct mlx5_snap_devx_obj *snap_obj;
+	struct ibv_context *context;
 	int ret;
+
+	/* Use SF context if it's valid, otherwise use emulation manager */
+	context = sdev->mdev.context ? sdev->mdev.context :
+		sdev->sctx->context;
 
 	snap_obj = calloc(1, sizeof(*snap_obj));
 	if (!snap_obj)
@@ -2683,6 +2687,7 @@ static void snap_destroy_device_emulation(struct snap_device *sdev)
 	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation->obj);
 	free(sdev->mdev.device_emulation);
 	sdev->mdev.device_emulation = NULL;
+	sdev->mdev.context = NULL;
 }
 
 static struct mlx5_snap_devx_obj*
@@ -3156,6 +3161,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	 * the cross-gvmi mkey enabled.
 	 */
 	sdev->mdev.rdma_dev_users = 0;
+	sdev->mdev.context = attr->context;
 
 	sdev->sctx = sctx;
 	if (attr->type & (SNAP_VIRTIO_NET_VF | SNAP_VIRTIO_BLK_VF | SNAP_NVME_VF)) {

@@ -135,6 +135,7 @@ struct snap_virtio_ctrl_bar_cbs {
 };
 
 struct snap_virtio_ctrl_attr {
+	struct ibv_context *context;
 	enum snap_virtio_ctrl_type type;
 	enum snap_pci_type pci_type;
 	int pf_id;

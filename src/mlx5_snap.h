@@ -151,6 +151,7 @@ struct mlx5_snap_hw_qp {
 };
 
 struct mlx5_snap_device {
+	struct ibv_context			*context;
 	struct mlx5_snap_devx_obj		*device_emulation;
 	struct mlx5dv_devx_event_channel	*channel;
 

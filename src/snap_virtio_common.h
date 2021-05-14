@@ -223,7 +223,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	struct snap_virtio_queue_attr *vattr);
 
-int snap_virtio_init_virtq_umem(struct snap_context *sctx,
+int snap_virtio_init_virtq_umem(struct ibv_context *context,
 				struct snap_virtio_caps *virtio,
 				struct snap_virtio_queue *virtq,
 				int depth);
