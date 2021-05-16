@@ -4,6 +4,7 @@
 #include "snap.h"
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
+#include "snap_internal.h"
 
 /* memory barriers */
 
@@ -359,21 +360,42 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	struct ibv_qp_init_attr init_attr = {};
 	struct ibv_recv_wr rx_wr, *bad_wr;
 	struct ibv_sge rx_sge;
+	struct snap_compression_caps comp_caps = {0};
 	int i, rc;
 
 	if (getenv(SNAP_DMA_Q_MODE)) {
-		attr->mode = atoi(getenv(SNAP_DMA_Q_MODE));
-		snap_info("dma_q mode is forced to be %d\n", attr->mode);
+		snap_warn("env SNAP_DMA_Q_MODE is soon to be deprecated. "
+			  "Please use SNAP_DMA_Q_OPMODE instead\n");
+		attr->mode = atoi(getenv(SNAP_DMA_Q_MODE)) + 1;
 	}
 
-	if (attr->mode == SNAP_DMA_Q_MODE_VERBS) {
+	switch (attr->mode) {
+	case SNAP_DMA_Q_MODE_AUTOSELECT:
+		rc = snap_query_compression_caps(pd->context, &comp_caps);
+		if (rc)
+			return rc;
+
+		if (comp_caps.dma_mmo_supported) {
+			attr->mode = SNAP_DMA_Q_MODE_GGA;
+			q->ops = &gga_ops;
+		} else {
+			attr->mode = SNAP_DMA_Q_MODE_DV;
+			q->ops = &dv_ops;
+		}
+		break;
+	case SNAP_DMA_Q_MODE_VERBS:
 		q->ops = &verb_ops;
-	} else if (attr->mode == SNAP_DMA_Q_MODE_DV) {
+		break;
+	case SNAP_DMA_Q_MODE_DV:
 		q->ops = &dv_ops;
-	} else if (attr->mode == SNAP_DMA_Q_MODE_GGA) {
+		break;
+	case SNAP_DMA_Q_MODE_GGA:
 		q->ops = &gga_ops;
-	} else
+		break;
+	default:
+		snap_error("Invalid SNAP_DMA_Q_MODE %d\n", attr->mode);
 		return -EINVAL;
+	}
 	snap_debug("Opening dma_q of type %d\n", attr->mode);
 
 	/* make sure that the completion is requested at least once */

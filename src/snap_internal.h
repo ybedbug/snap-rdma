@@ -49,6 +49,20 @@ struct snap_alias_object {
 	uint8_t access_key[SNAP_ACCESS_KEY_LENGTH];
 };
 
+/*
+ * struct snap_compression_caps - compression and HW accelaration capabilities
+ * @dma_mmo_supported: GGA engine support
+ * @compress_supported: compression support
+ * @decompress_supported: decompression support
+ * @compress_min_block_size: compression minimal block size
+ */
+struct snap_compression_caps {
+	bool dma_mmo_supported;
+	bool compress_supported;
+	bool decompress_supported;
+	uint8_t compress_min_block_size:4;
+};
+
 int snap_allow_other_vhca_access(struct ibv_context *context,
 				 enum mlx5_obj_type obj_type,
 				 uint32_t obj_id,
@@ -61,4 +75,7 @@ snap_create_alias_object(struct ibv_context *src_context,
 			 uint32_t dst_obj_id,
 			 uint8_t access_key[SNAP_ACCESS_KEY_LENGTH]);
 void snap_destroy_alias_object(struct snap_alias_object *obj);
+
+int snap_query_compression_caps(struct ibv_context *context,
+				struct snap_compression_caps *caps);
 #endif

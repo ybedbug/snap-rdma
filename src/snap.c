@@ -428,6 +428,45 @@ out_err:
 	return ret;
 }
 
+/**
+ * snap_query_compression_caps() - Query for compression and HW
+ *				   accelaration capabilities.
+ * @context: IB context to query capabilities from.
+ * @caps: compression capabilities (output)
+ *
+ * The function queries compression and HW accelarators capabilities
+ * of the given IB context, and fills caps as output param.
+ * For more info regarding caps different fields, see struct
+ * snap_compression_caps documentation.
+ *
+ * Return: 0 for success, -errno on error
+ */
+int snap_query_compression_caps(struct ibv_context *context,
+				struct snap_compression_caps *caps)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	caps->dma_mmo_supported = DEVX_GET(query_hca_cap_out, out,
+					   capability.cmd_hca_cap.dma_mmo);
+	caps->compress_supported = DEVX_GET(query_hca_cap_out, out,
+					    capability.cmd_hca_cap.compress);
+	caps->decompress_supported = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress);
+	caps->compress_min_block_size = DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.compress_min_block_size);
+	return 0;
+}
+
 static int snap_set_device_emulation_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
@@ -492,19 +531,6 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->nvme_caps.crossing_vhca_mkey = false;
 		sctx->virtio_blk_caps.crossing_vhca_mkey = false;
 	}
-
-	sctx->compression_caps.dma_mmo_supported =
-			DEVX_GET(query_hca_cap_out, out,
-				capability.cmd_hca_cap.dma_mmo);
-	sctx->compression_caps.compress_supported =
-			DEVX_GET(query_hca_cap_out, out,
-				capability.cmd_hca_cap.compress);
-	sctx->compression_caps.decompress_supported =
-			DEVX_GET(query_hca_cap_out, out,
-				capability.cmd_hca_cap.decompress);
-	sctx->compression_caps.compress_min_block_size =
-			DEVX_GET(query_hca_cap_out, out,
-				capability.cmd_hca_cap.compress_min_block_size);
 
 	return 0;
 }

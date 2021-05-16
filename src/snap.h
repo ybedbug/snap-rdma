@@ -368,17 +368,9 @@ struct snap_virtio_caps {
 	uint32_t	umem_3_buffer_param_b;
 };
 
-struct snap_compression_caps {
-	bool dma_mmo_supported;
-	bool compress_supported;
-	bool decompress_supported;
-	uint8_t compress_min_block_size:4;
-};
-
 struct snap_context {
 	struct ibv_context			*context;
 	int					emulation_caps; //mask for supported snap_emulation_types
-	struct snap_compression_caps		compression_caps;
 	struct mlx5_snap_context		mctx;
 
 	struct snap_pfs_ctx			nvme_pfs;

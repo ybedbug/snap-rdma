@@ -163,9 +163,10 @@ struct snap_dma_q {
 
 #define SNAP_DMA_Q_MODE   "SNAP_DMA_Q_MODE"
 enum {
-	SNAP_DMA_Q_MODE_VERBS = 0,
-	SNAP_DMA_Q_MODE_DV,
-	SNAP_DMA_Q_MODE_GGA
+	SNAP_DMA_Q_MODE_AUTOSELECT = 0,
+	SNAP_DMA_Q_MODE_VERBS = 1,
+	SNAP_DMA_Q_MODE_DV = 2,
+	SNAP_DMA_Q_MODE_GGA = 3
 };
 
 /**
@@ -180,12 +181,13 @@ enum {
  *                For example 64 bytes for NVMe
  * @uctx:         user supplied context
  * @mode:         choose dma implementation:
+ *                 SNAP_DMA_Q_MODE_AUTOSELECT - select best option automatically
  *                 SNAP_DMA_Q_MODE_VERBS - verbs, standard API, safest, slowest
  *                 SNAP_DMA_Q_MODE_DV    - dv, direct hw access, faster than verbs
  *                 SNAP_DMA_Q_MODE_GGA   - dv, plus uses hw dma engine directly to
  *                                         do rdma read or write. Fastest, best bandwidth.
  *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_MODE
- *                environment variable: 0 - verbs, 1 - dv, 2 - gga.
+ *                environment variable: 0 - autoselect, 1 - verbs, 2 - dv, 3 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
  * @comp_channel: receive and DMA completion channel. See
  *                man ibv_create_comp_channel
