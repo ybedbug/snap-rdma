@@ -641,6 +641,11 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 	virtio->umem_3_buffer_param_b = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.umem_3_buffer_param_b);
 
+	virtio->min_num_vf_dynamic_msix = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.min_num_vf_dynamic_msix);
+	virtio->max_num_vf_dynamic_msix = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.max_num_vf_dynamic_msix);
+
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
 	    MLX5_VIRTIO_QUEUE_CAP_TYPE_SPLIT)
@@ -2745,8 +2750,10 @@ static void snap_destroy_device_emulation(struct snap_device *sdev)
 }
 
 static struct mlx5_snap_devx_obj*
-snap_create_virtio_net_device_emulation(struct snap_device *sdev)
+snap_create_virtio_net_device_emulation(struct snap_device *sdev,
+					struct snap_device_attr *attr)
 {
+	struct snap_virtio_caps *net_caps = &sdev->sctx->virtio_net_caps;
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
@@ -2770,6 +2777,13 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev)
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
+
+	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&
+	    (net_caps->max_num_vf_dynamic_msix != 0)) {
+		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+			 dynamic_vf_msix_control, 1);
+		snap_debug("Set dynamic_vf_msix_control for PF\n");
+	}
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -2933,7 +2947,7 @@ snap_create_device_emulation(struct snap_device *sdev,
 		return snap_create_nvme_device_emulation(sdev, attr);
 	case SNAP_VIRTIO_NET_PF:
 	case SNAP_VIRTIO_NET_VF:
-		return snap_create_virtio_net_device_emulation(sdev);
+		return snap_create_virtio_net_device_emulation(sdev, attr);
 	case SNAP_VIRTIO_BLK_PF:
 	case SNAP_VIRTIO_BLK_VF:
 		return snap_create_virtio_blk_device_emulation(sdev);

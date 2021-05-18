@@ -182,6 +182,8 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_DEV_CFG = 1 << 4,
 	SNAP_VIRTIO_MOD_ALL = 1 << 6,
 	SNAP_VIRTIO_MOD_QUEUE_CFG = 1 << 7,
+	SNAP_VIRTIO_MOD_NUM_MSIX = 1 << 8,
+	SNAP_VIRTIO_MOD_DYN_MSIX_RESET = 1 << 9,
 };
 
 struct snap_virtio_device_attr {
@@ -194,6 +196,9 @@ struct snap_virtio_device_attr {
 	uint8_t				status;
 	bool				enabled;
 	bool				reset;
+	bool				dynamic_vf_msix_reset;
+	uint16_t			num_msix;
+	uint16_t			num_free_dynamic_vfs_msix;
 	uint16_t			num_of_vfs;
 	uint8_t				config_generation;
 	uint8_t				device_feature_select;

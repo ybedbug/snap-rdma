@@ -1504,6 +1504,9 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8	 umem_3_buffer_param_a[0x20];
 	u8	 umem_3_buffer_param_b[0x20];
 
+	u8	 max_num_vf_dynamic_msix[0x10];
+	u8	 min_num_vf_dynamic_msix[0x10];
+
 	u8	 reserved_at_60[0x600];
 };
 
@@ -1522,6 +1525,8 @@ enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG = 1 << 4,
 	MLX5_VIRTIO_DEVICE_MODIFY_ALL = 1 << 6,
 	MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG = 1 << 7,
+	MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX = 1 << 8,
+	MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET = 1 << 9,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -2911,7 +2916,10 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
 	u8	   reset[0x1];
-	u8	   reserved_at_62[0x1d];
+	u8	   dynamic_vf_msix_control[0x1];
+	u8	   dynamic_vf_msix_reset[0x1];
+	u8	   reserved_at_65[0xb];
+	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
 

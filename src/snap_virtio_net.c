@@ -43,6 +43,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 				       pci_params));
 
 	attr->vattr.num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
+	attr->vattr.num_msix = sdev->pci->pci_attr.num_msix;
 	snap_virtio_get_device_attr(sdev, &attr->vattr,
 				    DEVX_ADDR_OF(virtio_net_device_emulation,
 						 device_emulation_out,
@@ -79,7 +80,13 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ALL;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_QUEUE_CFG;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_NUM_MSIX;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DYN_MSIX_RESET;
 	}
+	attr->vattr.num_free_dynamic_vfs_msix = DEVX_GET(virtio_net_device_emulation,
+						   device_emulation_out, num_free_dynamic_vfs_msix);
 	attr->mtu = DEVX_GET(virtio_net_device_emulation,
 			     device_emulation_out, virtio_net_config.mtu);
 	attr->status = DEVX_GET(virtio_net_device_emulation,

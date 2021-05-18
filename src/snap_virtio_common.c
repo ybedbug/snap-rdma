@@ -441,6 +441,22 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 				 reset, attr->reset);
 		}
+		if (mask & (SNAP_VIRTIO_MOD_DYN_MSIX_RESET | SNAP_VIRTIO_MOD_ALL)) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET;
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 dynamic_vf_msix_reset, attr->dynamic_vf_msix_reset);
+			snap_debug("Setting SNAP_VIRTIO_MOD_DYN_MSIX_RESET on PF\n");
+		}
+		if (mask & (SNAP_VIRTIO_MOD_NUM_MSIX | SNAP_VIRTIO_MOD_ALL)) {
+			void *pci_params;
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX;
+			pci_params = DEVX_ADDR_OF(virtio_net_device_emulation, device_emulation_in,
+						  pci_params);
+			DEVX_SET(device_pci_parameters, pci_params, num_msix, attr->num_msix);
+			snap_debug("Setting SNAP_VIRTIO_MOD_NUM_MSIX, msix number: %d\n",
+				   attr->num_msix);
+		}
+
 		if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
 			DEVX_SET64(virtio_net_device_emulation, device_emulation_in,

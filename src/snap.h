@@ -103,6 +103,7 @@ enum snap_emulation_type {
 
 enum snap_device_attr_flags {
 	SNAP_DEVICE_FLAGS_EVENT_CHANNEL = 1 << 0,
+	SNAP_DEVICE_FLAGS_VF_DYN_MSIX	= 1 << 1,
 };
 
 struct snap_context;
@@ -391,6 +392,8 @@ struct snap_virtio_caps {
 	uint32_t	umem_2_buffer_param_b;
 	uint32_t	umem_3_buffer_param_a;
 	uint32_t	umem_3_buffer_param_b;
+	uint16_t	min_num_vf_dynamic_msix;
+	uint16_t	max_num_vf_dynamic_msix;
 };
 
 struct snap_context {
