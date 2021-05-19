@@ -44,8 +44,7 @@ struct split_tunnel_req_hdr {
  * struct split_tunnel_comp - header of completion sent to FW
  */
 struct split_tunnel_comp {
-	uint16_t descr_head_idx;
-	uint16_t rsvd;
+	uint32_t descr_head_idx;
 	uint32_t len;
 };
 
