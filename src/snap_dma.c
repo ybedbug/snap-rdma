@@ -1718,9 +1718,11 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 		n++;
 		/* optimize for NVMe where SQE is 64 bytes and will always
 		 * be scattered */
-		if (snap_likely(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64))) {
+		if (snap_likely(cqe->op_own & MLX5_INLINE_SCATTER_64)) {
 			__builtin_prefetch(cqe - 1);
 			q->rx_cb(q, cqe - 1, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
+		} else if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+			q->rx_cb(q, cqe, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
 		} else {
 			ri = be16toh(cqe->wqe_counter) & rq_mask;
 			__builtin_prefetch(q->sw_qp.rx_buf + ri * q->rx_elem_size);
