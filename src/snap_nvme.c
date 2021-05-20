@@ -1095,8 +1095,6 @@ snap_nvme_create_ctrl_counters(struct snap_context *sctx)
                DEVX_ST_SZ_BYTES(nvme_ctrl_counters)] = {0};
     uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
     struct snap_nvme_ctrl_counters *ctrlc;
-    struct snap_device sdev = {0};
-    sdev.sctx = sctx;
 
     ctrlc = calloc(1, sizeof(*ctrlc));
     if (!ctrlc) {
@@ -1108,18 +1106,12 @@ snap_nvme_create_ctrl_counters(struct snap_context *sctx)
             MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
     DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
             MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
-
-    ctrlc->obj = snap_devx_obj_create(&sdev, in, sizeof(in), out, sizeof(out),
-                      NULL,
-                      DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
-                      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
-
-    if (!ctrlc->obj) {
-        errno = ENODEV;
+    ctrlc->obj = mlx5dv_devx_obj_create(sctx->context, in, sizeof(in),
+					out, sizeof(out));
+    if (!ctrlc->obj)
         goto out_destroy_ctrlc;
-    }
-    ctrlc->obj->sdev = NULL;
 
+    ctrlc->id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
     return ctrlc;
 
 out_destroy_ctrlc:
@@ -1139,9 +1131,10 @@ int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
          MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
     DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
             MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, ctrlc->obj->obj_id);
+    DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, ctrlc->id);
 
-    ret = snap_devx_obj_query(ctrlc->obj, in, sizeof(in), out, sizeof(out));
+    ret = mlx5dv_devx_obj_query(ctrlc->obj, in, sizeof(in),
+				out, sizeof(out));
     if (ret)
         return ret;
 
@@ -1181,7 +1174,7 @@ int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 
 int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 {
-    int ret = snap_devx_obj_destroy(ctrlc->obj);
+    int ret = mlx5dv_devx_obj_destroy(ctrlc->obj);
     free(ctrlc);
     return ret;
 }

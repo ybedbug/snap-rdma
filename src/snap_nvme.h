@@ -44,6 +44,7 @@
 
 struct snap_nvme_device;
 struct snap_nvme_cq;
+struct mlx5dv_devx_obj;
 
 struct snap_nvme_namespace_attr {
 	int			src_nsid;
@@ -183,7 +184,8 @@ struct snap_nvme_ctrl_counters
     uint16_t unsafe_shutdowns;
     uint16_t error_information_log_entries;
 
-    struct mlx5_snap_devx_obj *obj;
+    struct mlx5dv_devx_obj *obj;
+    uint32_t id;
 };
 
 int snap_nvme_init_device(struct snap_device *sdev);
