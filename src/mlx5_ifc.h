@@ -892,7 +892,11 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8	 reserved_at_20[0x10];
 	u8	 vhca_id[0x10];
 
-	u8	 reserved_at_40[0x40];
+	u8	 reserved_at_40[0x20];
+
+	u8	 reserved_at_60[0x10];
+	u8	 relaxed_ordering_write_pci_enabled[0x1];
+	u8	 reserved_at_71[0xf];
 
 	u8	 log_max_srq_sz[0x8];
 	u8	 log_max_qp_sz[0x8];
@@ -907,14 +911,16 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 	u8	 reserved_at_c0[0x8];
 	u8	 log_max_cq_sz[0x8];
-	u8	 reserved_at_d0[0x9];
+	u8	 relaxed_ordering_write_umr[0x1];
+	u8	 relaxed_ordering_read_umr[0x1];
+	u8	 reserved_at_d0[0x7];
 	u8	 virtio_net_device_emulation_manager[0x1];
 	u8	 virtio_blk_device_emulation_manager[0x1];
 	u8	 log_max_cq[0x5];
 
 	u8	 log_max_eq_sz[0x8];
 	u8	 relaxed_ordering_write[0x1];
-	u8	 reserved_at_e9[0x1];
+	u8	 relaxed_ordering_read[0x1];
 	u8	 log_max_mkey[0x6];
 	u8	 tunneled_atomic[0x1];
 	u8	 as_notify[0x1];

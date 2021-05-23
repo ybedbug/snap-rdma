@@ -184,6 +184,14 @@ union snap_pci_bdf {
 	} bdf;
 };
 
+struct snap_relaxed_ordering_caps {
+	bool relaxed_ordering_write_pci_enabled;
+	bool relaxed_ordering_write;
+	bool relaxed_ordering_read;
+	bool relaxed_ordering_write_umr;
+	bool relaxed_ordering_read_umr;
+};
+
 struct snap_pci {
 	struct snap_context		*sctx;
 	enum snap_pci_type		type;
@@ -426,4 +434,7 @@ int
 snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
 
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
+
+int snap_query_relaxed_ordering_caps(struct ibv_context *context,
+				     struct snap_relaxed_ordering_caps *caps);
 #endif
