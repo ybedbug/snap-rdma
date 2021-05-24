@@ -1715,6 +1715,8 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 			return n;
 		}
 
+		snap_memory_cpu_load_fence();
+
 		n++;
 		/* optimize for NVMe where SQE is 64 bytes and will always
 		 * be scattered */
