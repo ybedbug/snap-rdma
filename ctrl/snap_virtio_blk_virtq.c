@@ -581,6 +581,9 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 
 static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 {
+	int mr_access = 0;
+	struct snap_relaxed_ordering_caps ro_caps = {};
+
 	cmd->req_buf = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
 	if (!cmd->req_buf) {
 		snap_error("failed to dynamically allocate %lu bytes for \
@@ -588,10 +591,18 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 		goto err;
 	}
 
+	mr_access = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE |
+		    IBV_ACCESS_LOCAL_WRITE;
+	if (!snap_query_relaxed_ordering_caps(cmd->vq_priv->pd->context,
+					      &ro_caps)) {
+		if (ro_caps.relaxed_ordering_write &&
+		    ro_caps.relaxed_ordering_read)
+			mr_access |= IBV_ACCESS_RELAXED_ORDERING;
+	} else
+		snap_warn("Failed to query relaxed ordering caps\n");
+
 	cmd->req_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->req_buf, len,
-				             IBV_ACCESS_REMOTE_READ |
-				             IBV_ACCESS_REMOTE_WRITE |
-				             IBV_ACCESS_LOCAL_WRITE);
+				 mr_access);
 	if (!cmd->req_mr) {
 		snap_error("failed to register mr for commmand %d\n", cmd->idx);
 		goto free_buf;
