@@ -1470,6 +1470,12 @@ int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name)
 {
 	int ret = 0;
 
+	if (ctrl->lm_channel) {
+		snap_error("%p: controller already has a migration channel %s\n",
+			   ctrl, ctrl->lm_channel->channel_ops->name);
+		return -EEXIST;
+	}
+
 	ctrl->lm_channel = snap_channel_open(name, &snap_virtio_ctrl_migration_ops, ctrl);
 	if (!ctrl->lm_channel)
 		ret = -errno;
