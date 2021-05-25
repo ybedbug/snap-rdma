@@ -46,6 +46,20 @@ snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl) {
 		 SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl));
 }
 
+static const char *lm_state2str(enum snap_virtio_ctrl_lm_state state)
+{
+	switch (state) {
+		case SNAP_VIRTIO_CTRL_LM_NORMAL:
+			return "LM_NORMAL";
+		case SNAP_VIRTIO_CTRL_LM_QUIESCED:
+			return "LM_QUISCED";
+		case SNAP_VIRTIO_CTRL_LM_FREEZED:
+			return "LM_FREEZED";
+	}
+
+	return "LM_UNKNOWN";
+}
+
 /**
  * struct snap_virtio_ctrl_state_hdrs - helper struct.
  * Should be used for reservation place for sections before
@@ -1305,6 +1319,8 @@ done:
 	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: queisce: new state %s ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1327,6 +1343,8 @@ static int snap_virtio_ctrl_unquiesce(void *data)
 	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_NORMAL;
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: unqueisce: new state %s ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1344,6 +1362,8 @@ static int snap_virtio_ctrl_freeze(void *data)
 	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_FREEZED;
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: freeze: new state %s ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1361,6 +1381,8 @@ static int snap_virtio_ctrl_unfreeze(void *data)
 	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: unfreeze: new state %s ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1369,17 +1391,20 @@ static int snap_virtio_ctrl_get_state_size(void *data)
 	struct snap_virtio_ctrl *ctrl = data;
 	unsigned dev_cfg_len, queue_cfg_len, common_cfg_len, len;
 
+	snap_info("%p: get_state_size ", ctrl);
 	snap_virtio_ctrl_progress_lock(ctrl);
 
 	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_FREEZED) {
 		/* act as if we don't support state tracking */
 		snap_virtio_ctrl_progress_unlock(ctrl);
+		snap_info("not freezed, no state tracking - zero state size\n");
 		return 0;
 	}
 	len = snap_virtio_ctrl_state_size(ctrl, &common_cfg_len, &queue_cfg_len,
 					  &dev_cfg_len);
 
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%d\n", len);
 	return len;
 }
 
@@ -1397,6 +1422,9 @@ static int snap_virtio_ctrl_copy_state(void *data, void *buf, int len,
 		ret = snap_virtio_ctrl_state_restore(ctrl, buf, len);
 
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: lm_state %s: copy state: dir %s buf %p len %d ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state),
+		  copy_from_buffer ? "from_buffer" : "to_buffer", buf, len, ret);
 	return ret < 0 ? -1 : 0;
 }
 
@@ -1407,6 +1435,7 @@ static int snap_virtio_ctrl_start_dirty_pages_track(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	snap_virtio_ctrl_log_writes(ctrl, true);
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: start dirty pages track\n", ctrl);
 	return 0;
 }
 
@@ -1417,6 +1446,7 @@ static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	snap_virtio_ctrl_log_writes(ctrl, false);
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: stop dirty pages track\n", ctrl);
 	return 0;
 }
 
@@ -1428,6 +1458,7 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	bdf = ctrl->bar_curr->pci_bdf;
 	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: get_pci_bdf: 0x0%hx\n", ctrl, bdf);
 	return bdf;
 }
 
