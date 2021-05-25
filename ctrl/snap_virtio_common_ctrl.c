@@ -1431,6 +1431,17 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	return bdf;
 }
 
+static enum snap_virtio_ctrl_lm_state snap_virtio_ctrl_get_lm_state(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	enum snap_virtio_ctrl_lm_state lm_state;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	lm_state = ctrl->lm_state;
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return lm_state;
+}
+
 static struct snap_migration_ops snap_virtio_ctrl_migration_ops = {
 	.quiesce = snap_virtio_ctrl_quiesce,
 	.unquiesce = snap_virtio_ctrl_unquiesce,
@@ -1440,7 +1451,8 @@ static struct snap_migration_ops snap_virtio_ctrl_migration_ops = {
 	.copy_state = snap_virtio_ctrl_copy_state,
 	.start_dirty_pages_track = snap_virtio_ctrl_start_dirty_pages_track,
 	.stop_dirty_pages_track = snap_virtio_ctrl_stop_dirty_pages_track,
-	.get_pci_bdf = snap_virtio_ctrl_get_pci_bdf
+	.get_pci_bdf = snap_virtio_ctrl_get_pci_bdf,
+	.get_lm_state = snap_virtio_ctrl_get_lm_state
 };
 
 /**

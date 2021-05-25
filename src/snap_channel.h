@@ -54,6 +54,19 @@
 		fflush(stdout); \
 	 } while (0)
 
+
+/**
+ * enum snap_virtio_ctrl_lm_state - Virtio controller live migration state
+ *
+ * The enum tracks controller live migration state. See &struct snap_migration_ops
+ * for the detailed description.
+ */
+enum snap_virtio_ctrl_lm_state {
+	SNAP_VIRTIO_CTRL_LM_NORMAL,
+	SNAP_VIRTIO_CTRL_LM_QUIESCED,
+	SNAP_VIRTIO_CTRL_LM_FREEZED
+};
+
 /**
  * struct snap_migration_ops - completion handle and callback
  * for live migration support
@@ -115,6 +128,10 @@
  *  still didn'tenumerate the PCI device, 0 value will be returned.This
  *  knowledge might be useful for creating a discovery mechanism between
  *  migrationSW and SNAP channels.
+ *
+ * @get_lm_state: This operation will be used to retrieve current live migration
+ * state of the snap controller. A migration channel can use it to recover its
+ * state after abnormal disconnect or for the debug purposes.
  */
 struct snap_migration_ops {
 	int (*quiesce)(void *data);
@@ -127,6 +144,7 @@ struct snap_migration_ops {
 	int (*start_dirty_pages_track)(void *data);
 	int (*stop_dirty_pages_track)(void *data);
 	uint16_t (*get_pci_bdf)(void *data);
+	enum snap_virtio_ctrl_lm_state (*get_lm_state)(void *data);
 };
 
 /**
