@@ -464,6 +464,7 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	/* Calculate doorbell offset as described in the NVMe spec 3.1.17 */
 	DEVX_SET(nvme_cq, cq_in, nvme_doorbell_offset,
 		 ndev->db_base + (2 * attr->id + 1) * (4 << NVME_DB_STRIDE));
+	DEVX_SET(nvme_cq, cq_in, interrupt_disabled, attr->interrupt_disable);
 	DEVX_SET(nvme_cq, cq_in, msix_vector, attr->msix);
 	DEVX_SET(nvme_cq, cq_in, nvme_num_of_entries, attr->queue_depth);
 	DEVX_SET64(nvme_cq, cq_in, nvme_base_addr, attr->base_addr);

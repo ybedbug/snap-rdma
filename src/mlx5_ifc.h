@@ -3910,7 +3910,8 @@ struct mlx5_ifc_nvme_cq_bits {
 
 	u8	   reserved_at_60[0x20];
 
-	u8	   reserved_at_80[0x4];
+	u8	   interrupt_disabled[0x1];
+	u8	   reserved_at_80[0x3];
 	u8	   offload_type[0x4];
 	u8	   reserved_at_88[0x18];
 

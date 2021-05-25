@@ -114,6 +114,7 @@ struct snap_nvme_cq_attr {
 	uint16_t			cq_period;
 	uint16_t			cq_max_count;
 	uint8_t				log_entry_size;
+	bool				interrupt_disable;
 };
 
 struct snap_nvme_cq {
