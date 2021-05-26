@@ -642,6 +642,9 @@ static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 	if (cmd->num_desc == NUM_HDR_FTR_DESCS)
 		return false;
 
+	if (!priv->blk_dev.ops->is_zcopy_aligned)
+		return false;
+
 	/* cannot use zcopy if the first data addr is not zcopy aligned */
 	return priv->blk_dev.ops->is_zcopy_aligned(priv->blk_dev.ctx,
 						   (void *)cmd->descs[1].addr);
@@ -1204,7 +1207,9 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
 	vq_priv->swq_state = BLK_SW_VIRTQ_RUNNING;
 	vq_priv->vbq = vbq;
-	vq_priv->zcopy = vq_priv->blk_dev.ops->is_zcopy(vq_priv->blk_dev.ctx);
+	if (vq_priv->blk_dev.ops->is_zcopy)
+		vq_priv->zcopy =
+			vq_priv->blk_dev.ops->is_zcopy(vq_priv->blk_dev.ctx);
 
 	vq_priv->cmd_arr = alloc_blk_virtq_cmd_arr(attr->size_max,
 						   attr->seg_max, vq_priv);

@@ -948,7 +948,7 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			goto teardown_dev;
 	}
 
-	if (bdev_ops->is_zcopy(bdev)) {
+	if (bdev_ops->is_zcopy && bdev_ops->is_zcopy(bdev)) {
 		ctrl->zcopy_ctx = snap_virtio_blk_get_zcopy_ctx(sctx);
 		if (!ctrl->zcopy_ctx) {
 			snap_error("Failed to get zcopy_ctx\n");
