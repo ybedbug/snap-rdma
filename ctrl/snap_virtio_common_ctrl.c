@@ -682,7 +682,8 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 		n_enabled++;
 	}
 	snap_pgs_resume(&ctrl->pg_ctx);
-	ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
+	if (n_enabled > 0)
+		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
 	snap_info("virtio controller: resumed with %d queues\n", n_enabled);
 	return 0;
 }
