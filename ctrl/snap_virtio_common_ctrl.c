@@ -357,8 +357,15 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 
+	/* NOTE: it is not allowed to reset or change bar while controller is
+	 * freezed. It is the responsibility of the migration channel implementation
+	 * to ensure it. Log error, the migration is probably going to fail.
+	 */
 	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
 		snap_info("virtio controller reset detected\n");
+
+		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
+			snap_error("reset while in %s\n", lm_state2str(ctrl->lm_state));
 		/*
 		 * suspending virtio queues may take some time. In such case
 		 * do reset once the controller is suspended.
@@ -392,6 +399,12 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		}
 
 		snap_info("virtio controller FLR detected\n");
+
+		if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_NORMAL) {
+			snap_info("clearing live migration state");
+			ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_NORMAL;
+		}
+
 		if (ctrl->bar_cbs.pre_flr)
 			ctrl->bar_cbs.pre_flr(ctrl->cb_ctx);
 		snap_close_device(ctrl->sdev);
@@ -419,6 +432,9 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 			ret = -ENODEV;
 		}
 	} else {
+		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
+			snap_error("bar change while in %s\n", lm_state2str(ctrl->lm_state));
+
 		ret = snap_virtio_ctrl_validate(ctrl);
 		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
 			ret = snap_virtio_ctrl_start(ctrl);
