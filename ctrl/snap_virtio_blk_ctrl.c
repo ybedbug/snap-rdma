@@ -391,7 +391,8 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	}
 
 	/* Everything is configurable as long as driver is still down */
-	if (snap_virtio_ctrl_is_stopped(&ctrl->common))
+	if (snap_virtio_ctrl_is_stopped(&ctrl->common) ||
+	    snap_virtio_ctrl_is_suspended(&ctrl->common))
 		return true;
 
 	/* virtio_common_pci_config registers */
