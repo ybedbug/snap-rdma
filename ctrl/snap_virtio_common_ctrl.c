@@ -648,7 +648,10 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 	int i;
 	struct snap_pg *pg;
 
-	if (ctrl->state != SNAP_VIRTIO_CTRL_SUSPENDED)
+	if (snap_virtio_ctrl_is_stopped(ctrl))
+		return 0;
+
+	if (!snap_virtio_ctrl_is_suspended(ctrl))
 		return -EINVAL;
 
 	if (!ctrl->q_ops->suspend) {
