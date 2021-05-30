@@ -161,8 +161,9 @@ struct snap_dma_q *SnapDmaTest::create_queue()
 	struct snap_dma_q *q;
 
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
-	if (q)
+	if (q) {
 		EXPECT_TRUE(q->fw_qp.qp->qp_num == snap_dma_q_get_fw_qp(q)->qp_num);
+	}
 	return q;
 }
 
@@ -517,7 +518,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	ASSERT_TRUE(mkey);
 
 	xgvmi_rkey = mkey->mkey;
-	ASSERT_NE(0, xgvmi_rkey);
+	ASSERT_NE(0U, xgvmi_rkey);
 
 	void *va;
 	uintptr_t pa;
