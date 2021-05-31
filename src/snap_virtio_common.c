@@ -651,6 +651,22 @@ static int snap_virtio_queue_state_to_mlx_state(enum snap_virtq_state state)
 	}
 }
 
+static enum snap_virtq_state snap_virtio_mlx_state_to_queue_state(int mlx_state)
+{
+	switch (mlx_state) {
+	case MLX5_VIRTIO_Q_STATE_INIT:
+		return SNAP_VIRTQ_STATE_INIT;
+	case MLX5_VIRTIO_Q_STATE_RDY:
+		return SNAP_VIRTQ_STATE_RDY;
+	case MLX5_VIRTIO_Q_STATE_SUSPEND:
+		return SNAP_VIRTQ_STATE_SUSPEND;
+	case MLX5_VIRTIO_Q_STATE_ERR:
+		return SNAP_VIRTQ_STATE_ERR;
+	default:
+		return -EINVAL;
+	}
+}
+
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 			     struct snap_virtio_queue_attr *vattr)
 {
@@ -792,16 +808,8 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->error_type = DEVX_GET(virtio_blk_q, virtq_out, virtqc.error_type);
 
 		state = DEVX_GET(virtio_blk_q, virtq_out, state);
-		if (state == MLX5_VIRTIO_Q_STATE_INIT)
-			vattr->state = SNAP_VIRTQ_STATE_INIT;
-		else if (state == MLX5_VIRTIO_Q_STATE_RDY)
-			vattr->state = SNAP_VIRTQ_STATE_RDY;
-		else if (state == MLX5_VIRTIO_Q_STATE_SUSPEND)
-			vattr->state = SNAP_VIRTQ_STATE_SUSPEND;
-		else if (state == MLX5_VIRTIO_Q_STATE_ERR)
-			vattr->state = SNAP_VIRTQ_STATE_ERR;
-		else
-			return -EINVAL;
+		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+			return vattr->state;
 
 		attr->hw_available_index = DEVX_GET(virtio_blk_q, virtq_out, hw_available_index);
 		attr->hw_used_index = DEVX_GET(virtio_blk_q, virtq_out, hw_used_index);
@@ -818,17 +826,9 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->size = DEVX_GET(virtio_net_q, virtq_out, virtqc.queue_size);
 		vattr->idx = DEVX_GET(virtio_net_q, virtq_out, virtqc.queue_index);
 
-		state = DEVX_GET(virtio_blk_q, virtq_out, state);
-		if (state == MLX5_VIRTIO_Q_STATE_INIT)
-			vattr->state = SNAP_VIRTQ_STATE_INIT;
-		else if (state == MLX5_VIRTIO_Q_STATE_RDY)
-			vattr->state = SNAP_VIRTQ_STATE_RDY;
-		else if (state == MLX5_VIRTIO_Q_STATE_SUSPEND)
-			vattr->state = SNAP_VIRTQ_STATE_SUSPEND;
-		else if (state == MLX5_VIRTIO_Q_STATE_ERR)
-			vattr->state = SNAP_VIRTQ_STATE_ERR;
-		else
-			return -EINVAL;
+		state = DEVX_GET(virtio_net_q, virtq_out, state);
+		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+			return vattr->state;
 
 		attr->hw_available_index = DEVX_GET(virtio_net_q, virtq_out, hw_available_index);
 		attr->hw_used_index = DEVX_GET(virtio_net_q, virtq_out, hw_used_index);
