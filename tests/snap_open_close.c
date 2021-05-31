@@ -21,16 +21,18 @@ int main(int argc, char **argv)
 			break;
 		case 't':
 			if (!strcmp(optarg, "all"))
-				type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
+				type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET | SNAP_VIRTIO_FS;
 			else if (!strcmp(optarg, "nvme"))
 				type = SNAP_NVME;
 			else if (!strcmp(optarg, "virtio-blk"))
 				type = SNAP_VIRTIO_BLK;
 			else if (!strcmp(optarg, "virtio-net"))
 				type = SNAP_VIRTIO_NET;
+			else if (!strcmp(optarg, "virtio-fs"))
+				type = SNAP_VIRTIO_FS;
 			break;
 		default:
-			printf("Usage: snap_open_close -t <type: all, nvme, virtio-blk, virtio-net>\n");
+			printf("Usage: snap_open_close -t <type: all, nvme, virtio-blk, virtio-net, virtio-fs>\n");
 			exit(1);
 		}
 	}
@@ -48,6 +50,8 @@ int main(int argc, char **argv)
 	}
 
 	snap_ctx_close(sctx);
+	fprintf(stdout, "closed snap ctx for %d types\n", type);
+
 out:
 	return ret;
 }

@@ -4,6 +4,7 @@
 
 #include "snap.h"
 #include "snap_test.h"
+#include "snap_virtio_common.h"
 
 static int snap_open_close_pf_helper(struct snap_context *sctx,
 	enum snap_emulation_type type, bool ev)
@@ -21,6 +22,10 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 	} else if (type == SNAP_VIRTIO_BLK) {
 		pfs = &sctx->virtio_blk_pfs;
 		ptype = SNAP_VIRTIO_BLK_PF;
+	} else if (type == SNAP_VIRTIO_FS) {
+		pfs = &sctx->virtio_fs_pfs;
+		ptype = SNAP_VIRTIO_FS_PF;
+
 	} else {
 		return -EINVAL;
 	}
@@ -52,6 +57,18 @@ static int snap_open_close_pf_helper(struct snap_context *sctx,
 				hp_attr.regs.virtio_blk.capacity = 0x8000;
 				hp_attr.regs.virtio_blk.size_max = 1024;
 				hp_attr.regs.virtio_blk.seg_max = 512;
+			} else if (type == SNAP_VIRTIO_FS) {
+				hp_attr.pci_attr.class_code = 0x018000;
+				hp_attr.pci_attr.device_id = 0x105A;
+				hp_attr.pci_attr.vendor_id = 0x1AF4;
+				hp_attr.pci_attr.subsystem_id = 0x1100;
+				hp_attr.pci_attr.subsystem_vendor_id = 0x1AF4;
+
+				hp_attr.regs.virtio_fs.device_features = SNAP_VIRTIO_F_VERSION_1;
+				hp_attr.regs.virtio_fs.queue_size = 64;
+				const char fs_name[] = "snap-fs";
+				strncpy((char *)hp_attr.regs.virtio_fs.tag, fs_name, sizeof(hp_attr.regs.virtio_fs.tag));
+				hp_attr.regs.virtio_fs.num_request_queues = 1;
 			} else if (type == SNAP_NVME) {
 				hp_attr.pci_attr.device_id = 0x6001;
 			}
@@ -109,17 +126,19 @@ int main(int argc, char **argv)
 				dev_type = SNAP_VIRTIO_BLK;
 			else if (!strcmp(optarg, "virtio_net"))
 				dev_type = SNAP_VIRTIO_NET;
+			else if (!strcmp(optarg, "virtio_fs"))
+				dev_type = SNAP_VIRTIO_FS;
 			else
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_open_close_device -t <type: all, nvme, virtio_blk, virtio_net> [-e (event_channel)]\n");
+			printf("Usage: snap_open_close_device -t <type: all, nvme, virtio_blk, virtio_net, virtio_fs> [-e (event_channel)]\n");
 			exit(1);
 		}
 	}
 
 	if (!dev_type)
-		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
+		dev_type = SNAP_NVME | SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET | SNAP_VIRTIO_FS;
 
 
 	sctx = snap_ctx_open(dev_type, NULL);
@@ -129,6 +148,10 @@ int main(int argc, char **argv)
 		fflush(stderr);
 		ret = -errno;
 		goto out;
+	} else {
+		fprintf(stdout, "opened snap ctx for %d types on %s\n", dev_type,
+			sctx->context->device->name);
+		fflush(stdout);
 	}
 
 	if (dev_type & SNAP_NVME)
@@ -137,8 +160,11 @@ int main(int argc, char **argv)
 		snap_open_close_pf_helper(sctx, SNAP_VIRTIO_BLK, ev);
 	if (dev_type & SNAP_VIRTIO_NET)
 		snap_open_close_pf_helper(sctx, SNAP_VIRTIO_NET, ev);
+	if (dev_type & SNAP_VIRTIO_FS)
+		snap_open_close_pf_helper(sctx, SNAP_VIRTIO_FS, ev);
 
 	snap_ctx_close(sctx);
+	fprintf(stdout, "closed snap ctx for %d types\n", dev_type);
 out:
 	return ret;
 }
