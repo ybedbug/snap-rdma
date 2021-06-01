@@ -1,6 +1,7 @@
 #include "snap.h"
 #include "snap_nvme.h"
 #include "snap_virtio_blk.h"
+#include "snap_virtio_fs.h"
 #include "snap_virtio_net.h"
 #include "snap_queue.h"
 #include "snap_internal.h"
@@ -2689,6 +2690,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	struct snap_nvme_device_attr nvme_attr = {};
 	struct snap_virtio_net_device_attr net_attr = {};
 	struct snap_virtio_blk_device_attr blk_attr = {};
+	struct snap_virtio_fs_device_attr fs_attr = {};
 	int ret;
 
 	if (!sdev->pci->plugged)
@@ -2717,6 +2719,14 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 		if (!ret) {
 			sdev->mod_allowed_mask = blk_attr.modifiable_fields;
 			sdev->crossed_vhca_mkey = blk_attr.crossed_vhca_mkey;
+		}
+		break;
+	case SNAP_VIRTIO_FS_PF:
+	case SNAP_VIRTIO_FS_VF:
+		ret = snap_virtio_fs_query_device(sdev, &fs_attr);
+		if (!ret) {
+			sdev->mod_allowed_mask = fs_attr.modifiable_fields;
+			sdev->crossed_vhca_mkey = fs_attr.crossed_vhca_mkey;
 		}
 		break;
 	default:
