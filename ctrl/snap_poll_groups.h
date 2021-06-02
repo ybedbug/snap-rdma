@@ -18,7 +18,6 @@ struct snap_pg_ctx {
     /* Polling groups */
 	struct snap_pg *pgs;
 	int npgs;
-	int next_pg;    /* pg which next vq will be added to */
 };
 
 void snap_pgs_free(struct snap_pg_ctx *ctx);
@@ -26,5 +25,6 @@ int snap_pgs_alloc(struct snap_pg_ctx *ctx, int nthreads);
 void snap_pgs_suspend(struct snap_pg_ctx *ctx);
 void snap_pgs_resume(struct snap_pg_ctx *ctx);
 struct snap_pg *snap_pg_get_next(struct snap_pg_ctx *ctx);
+void snap_pg_usage_decrease(size_t pg_index);
 
 #endif

@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include "snap_poll_groups.h"
 
+static size_t *virtio_pg_usage = NULL;
+static size_t virtio_pg_ref_count = 0;
+
 void snap_pgs_free(struct snap_pg_ctx *ctx)
 {
 	int i;
@@ -12,6 +15,12 @@ void snap_pgs_free(struct snap_pg_ctx *ctx)
 		pthread_spin_destroy(&ctx->pgs[i].lock);
 
 	free(ctx->pgs);
+
+	virtio_pg_ref_count--;
+	if (!virtio_pg_ref_count) {
+		free(virtio_pg_usage);
+		virtio_pg_usage = NULL;
+	}
 }
 
 int snap_pgs_alloc(struct snap_pg_ctx *ctx, int npgs)
@@ -19,13 +28,21 @@ int snap_pgs_alloc(struct snap_pg_ctx *ctx, int npgs)
 	int i;
 
 	ctx->npgs = 0;
-	ctx->next_pg = 0;
 	ctx->pgs = calloc(npgs, sizeof(struct snap_pg));
 	if (!ctx->pgs)
 		return -1;
 
+	if (!virtio_pg_usage) {
+		virtio_pg_usage = calloc(npgs, sizeof(*virtio_pg_usage));
+		if (!virtio_pg_usage) {
+			free(ctx->pgs);
+			return -1;
+		}
+		virtio_pg_ref_count = 0;
+	}
+	virtio_pg_ref_count++;
+
 	ctx->npgs = npgs;
-	ctx->next_pg = 0;
 	for (i = 0; i < npgs; i++) {
 		pthread_spin_init(&ctx->pgs[i].lock, PTHREAD_PROCESS_PRIVATE);
 		TAILQ_INIT(&ctx->pgs[i].q_list);
@@ -52,9 +69,19 @@ void snap_pgs_resume(struct snap_pg_ctx *ctx)
 struct snap_pg *snap_pg_get_next(struct snap_pg_ctx *ctx)
 {
 	struct snap_pg *pg;
+	size_t pg_index = 0, i;
 
-	pg = &ctx->pgs[ctx->next_pg];
-	pg->id = ctx->next_pg;
-	ctx->next_pg = (ctx->next_pg + 1) % ctx->npgs;
+	for (i = 1; i < ctx->npgs; i++)
+		if (virtio_pg_usage[i] < virtio_pg_usage[pg_index])
+			pg_index = i;
+	pg = &ctx->pgs[pg_index];
+	virtio_pg_usage[pg_index]++;
+	pg->id = pg_index;
+
 	return pg;
+}
+
+void snap_pg_usage_decrease(size_t pg_index)
+{
+	virtio_pg_usage[pg_index]--;
 }

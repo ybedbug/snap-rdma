@@ -236,6 +236,7 @@ static void snap_virtio_ctrl_sched_q(struct snap_virtio_ctrl *ctrl,
 
 	pthread_spin_lock(&pg->lock);
 	snap_virtio_ctrl_sched_q_nolock(ctrl, vq, pg);
+	snap_debug("Virtio queue polling group id = %d \n",vq->pg->id);
 	pthread_spin_unlock(&pg->lock);
 }
 
@@ -247,6 +248,7 @@ static void snap_virtio_ctrl_desched_q_nolock(struct snap_virtio_ctrl_queue *vq)
 		return;
 
 	TAILQ_REMOVE(&pg->q_list, &vq->pg_q, entry);
+	snap_pg_usage_decrease(vq->pg->id);
 	vq->pg = NULL;
 }
 
