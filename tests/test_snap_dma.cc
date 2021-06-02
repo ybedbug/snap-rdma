@@ -167,6 +167,31 @@ struct snap_dma_q *SnapDmaTest::create_queue()
 	return q;
 }
 
+TEST_F(SnapDmaTest, ibv_create_ah_test) {
+	int ret, attr_mask;
+	struct ibv_qp_attr attr = {};
+	struct ibv_qp_init_attr init_attr = {};
+	struct ibv_ah *ah;
+	struct snap_dma_q *q;
+	union ibv_gid gid;
+
+	q = create_queue();
+	ASSERT_TRUE(q);
+
+	if (!ibv_query_gid(q->fw_qp.qp->context, 1, 0, &gid)) {
+		attr_mask = IBV_QP_AV;
+		ret = ibv_query_qp(q->fw_qp.qp, &attr, attr_mask, &init_attr);
+		ASSERT_TRUE(!ret);
+
+		ah = ibv_create_ah(q->fw_qp.qp->pd, &attr.ah_attr);
+		ASSERT_TRUE(ah);
+
+		ibv_destroy_ah(ah);
+	}
+
+	snap_dma_q_destroy(q);
+}
+
 TEST_F(SnapDmaTest, create_destroy) {
 	struct snap_dma_q *q;
 
