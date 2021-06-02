@@ -82,6 +82,7 @@ struct mlx5_snap_context {
 	bool				nvme_need_tunnel;
 	bool				virtio_net_need_tunnel;
 	bool				virtio_blk_need_tunnel;
+	bool				virtio_fs_need_tunnel;
 };
 
 struct mlx5_snap_pci {

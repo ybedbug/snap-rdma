@@ -89,13 +89,16 @@ enum snap_pci_type {
 	SNAP_VIRTIO_NET_VF	= 1 << 3,
 	SNAP_VIRTIO_BLK_PF	= 1 << 4,
 	SNAP_VIRTIO_BLK_VF	= 1 << 5,
+	SNAP_VIRTIO_FS_PF	= 1 << 6,
+	SNAP_VIRTIO_FS_VF	= 1 << 7,
 };
 
 enum snap_emulation_type {
 	SNAP_NVME	= 1 << 0,
 	SNAP_VIRTIO_NET	= 1 << 1,
 	SNAP_VIRTIO_BLK	= 1 << 2,
-	SNAP_VF		= 1 << 3,
+	SNAP_VIRTIO_FS	= 1 << 3,
+	SNAP_VF		= 1 << 4,
 };
 
 enum snap_device_attr_flags {
@@ -112,6 +115,8 @@ enum snap_event_type {
 	SNAP_EVENT_VIRTIO_NET_QUEUE_CHANGE,
 	SNAP_EVENT_VIRTIO_BLK_DEVICE_CHANGE,
 	SNAP_EVENT_VIRTIO_BLK_QUEUE_CHANGE,
+	SNAP_EVENT_VIRTIO_FS_DEVICE_CHANGE,
+	SNAP_EVENT_VIRTIO_FS_QUEUE_CHANGE,
 };
 
 struct snap_event {
@@ -308,10 +313,22 @@ struct snap_virtio_blk_registers {
 	uint8_t		write_zeroes_may_unmap;
 };
 
+#define SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN 36
+
+struct snap_virtio_fs_registers {
+	uint64_t	device_features;
+	// This is a 'depth' parameter from RPC call
+	uint16_t	queue_size;
+
+	uint8_t		tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN];
+	uint16_t 	num_request_queues;
+};
+
 union snap_device_registers {
 	struct snap_nvme_registers nvme;
 	struct snap_virtio_net_registers virtio_net;
 	struct snap_virtio_blk_registers virtio_blk;
+	struct snap_virtio_fs_registers  virtio_fs;
 };
 
 struct snap_hotplug_attr {
@@ -387,6 +404,8 @@ struct snap_context {
 	struct snap_virtio_caps			virtio_net_caps;
 	struct snap_pfs_ctx			virtio_blk_pfs;
 	struct snap_virtio_caps			virtio_blk_caps;
+	struct snap_pfs_ctx			virtio_fs_pfs;
+	struct snap_virtio_caps			virtio_fs_caps;
 
 	bool					hotplug_supported;
 	struct snap_hotplug_context		hotplug;
