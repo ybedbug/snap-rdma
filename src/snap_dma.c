@@ -73,6 +73,8 @@ struct snap_roce_caps {
 	uint8_t roce_version;
 	bool fl_when_roce_disabled;
 	bool fl_when_roce_enabled;
+	uint16_t r_roce_max_src_udp_port;
+	uint16_t r_roce_min_src_udp_port;
 };
 
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
@@ -127,6 +129,10 @@ static int fill_roce_caps(struct ibv_context *context,
 					   capability.roce_cap.roce_version);
 	roce_caps->fl_when_roce_enabled = DEVX_GET(query_hca_cap_out,
 			out, capability.roce_cap.fl_rc_qp_when_roce_enabled);
+	roce_caps->r_roce_max_src_udp_port = DEVX_GET(query_hca_cap_out,
+			out, capability.roce_cap.r_roce_max_src_udp_port);
+	roce_caps->r_roce_min_src_udp_port = DEVX_GET(query_hca_cap_out,
+			out, capability.roce_cap.r_roce_min_src_udp_port);
 out:
 	snap_debug("RoCE Caps: enabled %d ver %d fl allowed %d\n",
 		   roce_caps->roce_enabled, roce_caps->roce_version,
@@ -509,13 +515,13 @@ static int snap_modify_lb_qp_to_init(struct ibv_qp *qp,
 
 	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
-		snap_error("failed to modify qp to init with errno = %m\n");
+		snap_error("failed to modify qp to init with errno = %d\n", ret);
 	return ret;
 }
 
 static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask,
-				    bool force_loopback)
+				    bool force_loopback, uint16_t udp_sport)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
@@ -569,6 +575,7 @@ static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 			memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
 					    mac, 6);
 
+			DEVX_SET(qpc, qpc, primary_address_path.udp_sport, udp_sport);
 			DEVX_SET(qpc, qpc, primary_address_path.src_addr_index,
 				 qp_attr->ah_attr.grh.sgid_index);
 			if (qp_attr->ah_attr.sl & 0x7)
@@ -594,7 +601,7 @@ static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 
 	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
-		snap_error("failed to modify qp to rtr with errno = %m\n");
+		snap_error("failed to modify qp to rtr with errno = %d\n", ret);
 	return ret;
 }
 
@@ -624,17 +631,46 @@ static int snap_modify_lb_qp_to_rts(struct ibv_qp *qp,
 
 	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
-		snap_error("failed to modify qp to rts with errno = %m\n");
+		snap_error("failed to modify qp to rts with errno = %d\n", ret);
 	return ret;
+}
+
+#define SNAP_IB_GRH_FLOWLABEL_MASK            (0x000FFFFF)
+
+static uint16_t snap_get_udp_sport(uint16_t roce_min_src_udp_port,
+                       uint32_t lqpn, uint32_t rqpn)
+{
+	/* flow_label is a field in ipv6 header, how ipv6 flow label
+	 * and udp source port are related, please refer to:
+	 * https://www.spinics.net/lists/linux-rdma/msg87626.html. */
+	uint32_t fl, fl_low, fl_high;
+	uint64_t v = (uint64_t)lqpn * rqpn;
+
+	/* hash function to calc fl from lqpn and rqpn.
+	 * a copy of rdma_calc_flow_label() from kernel */
+	v ^= v >> 20;
+	v ^= v >> 40;
+	fl = (uint32_t)(v & SNAP_IB_GRH_FLOWLABEL_MASK);
+
+	/* hash function to calc udp_sport from fl.
+	 * a copy of rdma_flow_label_to_udp_sport() from kernel */
+	fl_low = fl & 0x03FFF;
+	fl_high = fl & 0xFC000;
+	fl_low ^= fl_high >> 14;
+
+	return (uint16_t)(fl_low | roce_min_src_udp_port);
 }
 
 static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 				 bool ib_en, uint16_t lid,
 				 bool roce_en, bool force_loopback,
-				 union ibv_gid *sw_gid, union ibv_gid *fw_gid)
+				 struct ibv_gid_entry *sw_gid_entry,
+				 struct ibv_gid_entry *fw_gid_entry,
+				 struct snap_roce_caps *roce_caps)
 {
 	struct ibv_qp_attr attr;
 	int rc, flags_mask;
+	uint16_t udp_sport;
 
 	memset(&attr, 0, sizeof(attr));
 	attr.qp_state = IBV_QPS_INIT;
@@ -682,22 +718,38 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		     IBV_QP_MAX_DEST_RD_ATOMIC |
 		     IBV_QP_MIN_RNR_TIMER;
 
+	if (sw_gid_entry && sw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
+		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
+		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
+				q->sw_qp.qp->qp_num, q->fw_qp.qp->qp_num);
+	} else {
+		udp_sport = 0;
+	}
+
 	if (roce_en && !force_loopback)
-		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid->raw,
-		       sizeof(fw_gid->raw));
+		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid_entry->gid.raw,
+		       sizeof(fw_gid_entry->gid.raw));
 	rc = snap_modify_lb_qp_to_rtr(q->sw_qp.qp, &attr, flags_mask,
-				      force_loopback);
+				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
 		return rc;
 	}
 
+	if (fw_gid_entry && fw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
+		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
+		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
+				q->fw_qp.qp->qp_num, q->sw_qp.qp->qp_num);
+	} else {
+		udp_sport = 0;
+	}
+
 	if (roce_en && !force_loopback)
-		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid->raw,
-		       sizeof(sw_gid->raw));
+		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid_entry->gid.raw,
+		       sizeof(sw_gid_entry->gid.raw));
 	attr.dest_qp_num = q->sw_qp.qp->qp_num;
 	rc = snap_modify_lb_qp_to_rtr(q->fw_qp.qp, &attr, flags_mask,
-				      force_loopback);
+				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTR errno=%d\n", rc);
 		return rc;
@@ -736,7 +788,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 
 static int snap_connect_loop_qp(struct snap_dma_q *q)
 {
-	union ibv_gid sw_gid, fw_gid;
+	struct ibv_gid_entry sw_gid_entry, fw_gid_entry;
 	int rc;
 	bool roce_en = false, ib_en = false;
 	uint16_t lid = 0;
@@ -751,7 +803,8 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 
 	/* If IB is supported, can immediately advance to QP activation */
 	if (ib_en)
-	    return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL, NULL);
+	    return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL, NULL,
+					&roce_caps);
 
 	rc = fill_roce_caps(q->sw_qp.qp->context, &roce_caps);
 	if (rc)
@@ -767,11 +820,11 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		 * If force loopback is unsupported try to acquire GIDs and
 		 * open a non-fl QP
 		 */
-		rc = ibv_query_gid(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-				   SNAP_DMA_QP_GID_INDEX, &sw_gid);
+		rc = ibv_query_gid_ex(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+				   SNAP_DMA_QP_GID_INDEX, &sw_gid_entry, 0);
 		if (!rc)
-			rc = ibv_query_gid(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
-					   SNAP_DMA_QP_GID_INDEX, &fw_gid);
+			rc = ibv_query_gid_ex(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+					   SNAP_DMA_QP_GID_INDEX, &fw_gid_entry, 0);
 		if (rc) {
 			snap_error("Failed to get gid[%d] for loop QP\n",
 				   SNAP_DMA_QP_GID_INDEX);
@@ -784,7 +837,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	}
 
 	return snap_activate_loop_qp(q, mtu, ib_en, lid, roce_en,
-				     force_loopback, &sw_gid, &fw_gid);
+				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
 /**

@@ -1218,8 +1218,10 @@ static int snap_clone_qp(struct snap_device *sdev,
 	 * which has rmac
 	 */
 	ah = ibv_create_ah(qp->pd, &attr.ah_attr);
-	if (!ah)
+	if (!ah) {
+		snap_error("ibv_create_ah() return failed with errno:%d\n", errno);
 		return -1;
+	}
 
 	av_obj.ah.in = ah;
 	av_obj.ah.out = &dv_ah;

@@ -1540,6 +1540,12 @@ struct mlx5_ifc_hotplug_cap_bits {
 	u8	 reserved_at_40[0x7c0];
 };
 
+enum {
+	MLX5_ROCE_VERSION_1_0 = 1 << 0,
+	MLX5_ROCE_VERSION_1_5 = 1 << 1,
+	MLX5_ROCE_VERSION_2_0 = 1 << 2,
+};
+
 struct mlx5_ifc_roce_cap_bits {
 	u8	   roce_apm[0x1];
 	u8	   rts2rts_primary_eth_prio[0x1];
