@@ -158,9 +158,7 @@ int snap_virtio_net_modify_device(struct snap_device *sdev, uint64_t mask,
  */
 int snap_virtio_net_init_device(struct snap_device *sdev)
 {
-	struct snap_virtio_net_device_attr nattr = {};
 	struct snap_virtio_net_device *vndev;
-	uint8_t *mac;
 	int ret, i;
 
 	if (sdev->pci->type != SNAP_VIRTIO_NET_PF &&
@@ -192,26 +190,6 @@ int snap_virtio_net_init_device(struct snap_device *sdev)
 	ret = snap_init_device(sdev);
 	if (ret)
 		goto out_free_virtqs;
-
-	/* Assign random mac to non-hotplug virtio net devices */
-	if (!sdev->pci->hotplugged) {
-		ret = snap_virtio_net_query_device(sdev, &nattr);
-		if (ret)
-			goto out_free_virtqs;
-		if (sdev->pci->type == SNAP_VIRTIO_NET_PF &&
-		    sdev->sctx->virtio_net_pfs.pf_mac) {
-			nattr.mac = sdev->sctx->virtio_net_pfs.pf_mac++;
-		} else {
-			mac = (uint8_t *)&nattr.mac;
-			eth_random_addr(&mac[2]);
-			nattr.mac = be64toh(nattr.mac);
-		}
-		ret = snap_virtio_net_modify_device(sdev,
-						    SNAP_VIRTIO_MOD_DEV_CFG,
-						    &nattr);
-		if (ret)
-			goto out_free_virtqs;
-	}
 
 	sdev->dd_data = vndev;
 
