@@ -1684,6 +1684,9 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	if (!ret)
 		ret = snap_virtio_ctrl_resume(ctrl);
 
+	if (!ret && ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDED)
+		ret = snap_virtio_ctrl_stop(ctrl);
+
 free_buf:
 	free(buf);
 	return ret;
