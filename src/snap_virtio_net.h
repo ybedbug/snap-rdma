@@ -56,7 +56,7 @@ struct snap_virtio_net_queue_attr {
 	/* query result: */
 	uint64_t			modifiable_fields;//mask of snap_virtio_net_queue_modify
 	uint16_t			hw_available_index;
-	uint8_t				hw_used_index;
+	uint16_t			hw_used_index;
 	struct snap_virtio_queue_attr   vattr;
 };
 
