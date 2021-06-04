@@ -705,6 +705,7 @@ static int snap_nvme_init_sq_legacy_mode(struct snap_device *sdev,
 
 put_dev:
 	snap_put_rdma_dev(sdev, sq->rdma_dev);
+	sq->rdma_dev = NULL;
 err:
 	return EINVAL;
 }
