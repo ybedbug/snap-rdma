@@ -443,10 +443,21 @@ def main():
         if args.pci_bdf is not None and args.pf_id != -1:
             raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
                                        "both configured")
+
+        if args.nqn is None and args.subsys_id == -1:
+            raise JsonRpcSnapException("Either nqn  or subsys_id must "
+                                       "be configured")
+        if args.nqn is not None and args.subsys_id != -1:
+            raise JsonRpcSnapException("nqn and subsys_id cannot be "
+                                       "both configured")
+
         params = {
-            'nqn': args.nqn,
             'emulation_manager': args.emu_manager,
         }
+        if args.nqn:
+            params['nqn'] = args.nqn
+        if args.subsys_id:
+            params['subsys_id'] = args.subsys_id
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
         if args.pf_id != -1:
@@ -470,7 +481,11 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_nvme_create',
                               help='Create new NVMe SNAP controller')
-    p.add_argument('nqn', help='NVMe subsystem nqn', type=str)
+    p.add_argument('--nqn', help='NVMe subsystem nqn. Must be set if'
+                   ' \'--subsys_id\' is not set', type=str, required=False)
+    p.add_argument('--subsys_id', help='NVMe subsystem id. '
+                   'Must be set if \'--nqn\' is not set',
+                    default=-1, type=int, required=False)
     p.add_argument('emu_manager', help='Emulation manager', type=str)
     p.add_argument('-d', '--pci_bdf', help='PCI device to start emulation on. '
                    'Must be set if \'--pf_id\' is not set',
@@ -647,14 +662,15 @@ def main():
 
     def subsystem_nvme_create(args):
         params = {
-            'nqn': args.nqn,
             'serial_number': args.serial_number,
             'model_number': args.model_number,
         }
+        if args.nqn:
+            params['nqn'] = args.nqn
         args.client.call('subsystem_nvme_create', params)
     p = subparsers.add_parser('subsystem_nvme_create',
                               help='Create new NVMe subsystem')
-    p.add_argument('nqn', help='Subsystem NQN', type=str)
+    p.add_argument('--nqn', help='Subsystem NQN', type=str, required=False)
     p.add_argument('serial_number', help='Subsystem serial number', type=str)
     p.add_argument('model_number', help='Subsystem model number', type=str)
     p.set_defaults(func=subsystem_nvme_create)
