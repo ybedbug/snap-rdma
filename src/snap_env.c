@@ -69,7 +69,7 @@ int snap_env_add(const char *env_name, int default_val)
 int snap_env_getenv(const char *env_name)
 {
         const struct mlnx_snap_env *env = snap_env_find(env_name);
-        if (env && env->defined)
+        if (env)
                 return env->default_val;
         
         return -EINVAL;
