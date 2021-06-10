@@ -724,6 +724,15 @@ def main():
     p.add_argument('-c', '--name', help='Controller Name', 
                    type=str, required=False)
     p.set_defaults(func=controller_virtio_blk_get_iostat)
+
+    def mlnx_snap_params_list(args):
+        params = {}
+
+        result = args.client.call('mlnx_snap_params_list')
+        print(json.dumps(result, indent=2))
+    __help = 'List of parameters used in mlnx_snap ( /etc/default/mlnx_snap )'
+    p = subparsers.add_parser('mlnx_snap_params_list', help=__help)
+    p.set_defaults(func=mlnx_snap_params_list)
     
     def storage_admin(args):
         params = {
