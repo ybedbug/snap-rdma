@@ -36,6 +36,8 @@
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
 
+#define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
+
 struct snap_dma_q;
 struct snap_dma_completion;
 
@@ -161,7 +163,6 @@ struct snap_dma_q {
 	void                  *uctx;
 };
 
-#define SNAP_DMA_Q_MODE   "SNAP_DMA_Q_MODE"
 enum {
 	SNAP_DMA_Q_MODE_AUTOSELECT = 0,
 	SNAP_DMA_Q_MODE_VERBS = 1,
@@ -186,7 +187,7 @@ enum {
  *                 SNAP_DMA_Q_MODE_DV    - dv, direct hw access, faster than verbs
  *                 SNAP_DMA_Q_MODE_GGA   - dv, plus uses hw dma engine directly to
  *                                         do rdma read or write. Fastest, best bandwidth.
- *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_MODE
+ *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_OPMODE
  *                environment variable: 0 - autoselect, 1 - verbs, 2 - dv, 3 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
  * @comp_channel: receive and DMA completion channel. See

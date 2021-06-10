@@ -3,6 +3,7 @@
 
 #include "snap.h"
 #include "snap_dma.h"
+#include "snap_env.h"
 #include "mlx5_ifc.h"
 #include "snap_internal.h"
 
@@ -38,6 +39,8 @@
 #define SNAP_DMA_Q_TX_CQE_SIZE  64
 #define SNAP_MLX5_RECV_WQE_BB   16
 #define SNAP_DMA_Q_TX_MOD_COUNT 16
+
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
 
 /* GGA specific */
 
@@ -363,12 +366,6 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	struct snap_compression_caps comp_caps = {0};
 	int i, rc;
 
-	if (getenv(SNAP_DMA_Q_MODE)) {
-		snap_warn("env SNAP_DMA_Q_MODE is soon to be deprecated. "
-			  "Please use SNAP_DMA_Q_OPMODE instead\n");
-		attr->mode = atoi(getenv(SNAP_DMA_Q_MODE)) + 1;
-	}
-
 	switch (attr->mode) {
 	case SNAP_DMA_Q_MODE_AUTOSELECT:
 		rc = snap_query_compression_caps(pd->context, &comp_caps);
@@ -393,7 +390,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->ops = &gga_ops;
 		break;
 	default:
-		snap_error("Invalid SNAP_DMA_Q_MODE %d\n", attr->mode);
+		snap_error("Invalid SNAP_DMA_Q_OPMODE %d\n", attr->mode);
 		return -EINVAL;
 	}
 	snap_debug("Opening dma_q of type %d\n", attr->mode);
