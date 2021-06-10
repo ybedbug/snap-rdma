@@ -4,6 +4,7 @@
 #include "snap_channel.h"
 #include "snap_virtio_blk_virtq.h"
 #include "snap_dma.h"
+#include "snap_env.h"
 #include "snap_virtio_blk_ctrl.h"
 
 #define NUM_HDR_FTR_DESCS 2
@@ -23,8 +24,6 @@
 #else
 #define virtq_log_data(cmd, fmt, ...)
 #endif
-
-#define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
 struct blk_virtq_priv;
 
@@ -1240,8 +1239,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 					   num_descs * sizeof(struct vring_desc);
 	rdma_qp_create_attr.uctx = vq_priv;
 	rdma_qp_create_attr.rx_cb = blk_virtq_rx_cb;
-	if (getenv(SNAP_DMA_Q_OPMODE))
-		rdma_qp_create_attr.mode = atoi(getenv(SNAP_DMA_Q_OPMODE));
+	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
 	vq_priv->dma_q = snap_dma_q_create(attr->pd, &rdma_qp_create_attr);
 	if (!vq_priv->dma_q) {
 		snap_error("failed creating rdma qp loop\n");
