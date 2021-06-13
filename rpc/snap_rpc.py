@@ -667,7 +667,8 @@ def main():
         }
         if args.nqn:
             params['nqn'] = args.nqn
-        args.client.call('subsystem_nvme_create', params)
+        result = args.client.call('subsystem_nvme_create', params)
+        print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('subsystem_nvme_create',
                               help='Create new NVMe subsystem')
     p.add_argument('--nqn', help='Subsystem NQN', type=str, required=False)
