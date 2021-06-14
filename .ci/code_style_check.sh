@@ -38,13 +38,14 @@ code_style_check() {
             --summary-file --show-types $f | \
             tee -a $out_log || true
 
-        err_num=$(grep total: $out_log | awk -F ' ' '{print $3}')
-        total_err=$(( total_err + err_num ))
+	err_num=$(grep ERROR $out_log | wc -l)
+	warn_num=$(grep WARNING $out_log | wc -l)
+	echo "$f Error Summary: $err_num errors, $warn_num warnings"
+        total_err=$(( total_err + err_num + warn_num))
 
     done
 
-    #exit $total_err
-    exit 0
+    exit $total_err
 }
 
 code_style_check
