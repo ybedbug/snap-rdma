@@ -1,5 +1,6 @@
 #include "snap_virtio_net.h"
 #include "snap_virtio_blk.h"
+#include "snap_virtio_fs.h"
 #include "snap_virtio_common.h"
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
@@ -57,6 +58,8 @@ int snap_virtio_query_device(struct snap_device *sdev,
 		DEVX_ST_SZ_BYTES(virtio_blk_device_emulation)] = {0};
 	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
+	uint8_t in_fs[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		DEVX_ST_SZ_BYTES(virtio_fs_device_emulation)] = {0};
 	uint8_t *in, *device_emulation_in;
 	int inlen;
 
@@ -67,6 +70,10 @@ int snap_virtio_query_device(struct snap_device *sdev,
 	else if (type == SNAP_VIRTIO_NET &&
 		 (sdev->pci->type != SNAP_VIRTIO_NET_PF &&
 		  sdev->pci->type != SNAP_VIRTIO_NET_VF))
+		return -EINVAL;
+	else if (type == SNAP_VIRTIO_FS &&
+	    (sdev->pci->type != SNAP_VIRTIO_FS_PF &&
+	     sdev->pci->type != SNAP_VIRTIO_FS_VF))
 		return -EINVAL;
 	else if (type == SNAP_NVME)
 		return -EINVAL;
@@ -80,7 +87,7 @@ int snap_virtio_query_device(struct snap_device *sdev,
 			 MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION);
 		DEVX_SET(virtio_blk_device_emulation, device_emulation_in, vhca_id,
 			 sdev->pci->mpci.vhca_id);
-	} else {
+	} else if (type == SNAP_VIRTIO_NET) {
 		in = in_net;
 		inlen = sizeof(in_net);
 		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
@@ -88,6 +95,15 @@ int snap_virtio_query_device(struct snap_device *sdev,
 		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
 		DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
+			 sdev->pci->mpci.vhca_id);
+	} else {
+		in = in_fs;
+		inlen = sizeof(in_fs);
+		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+			 MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in, vhca_id,
 			 sdev->pci->mpci.vhca_id);
 	}
 
@@ -175,6 +191,117 @@ static void snap_virtio_blk_modify_queues(void *in, struct snap_virtio_device_at
 	}
 }
 
+static void snap_virtio_fs_modify_queues(void *in, struct snap_virtio_device_attr *attr)
+{
+	struct snap_virtio_fs_device_attr *fs_attr = to_fs_device_attr(attr);
+	int i;
+	void *q;
+
+	snap_debug("modify queues, %d queues\n", attr->max_queues);
+	for (i = 0; i < attr->max_queues; i++) {
+		snap_debug("size: %u msix %u enable %u notify %u desc 0x%lx avail 0x%lx used 0x%lx\n",
+			   fs_attr->q_attrs[i].vattr.size,
+			   fs_attr->q_attrs[i].vattr.msix_vector,
+			   fs_attr->q_attrs[i].vattr.enable,
+			   fs_attr->q_attrs[i].vattr.notify_off,
+			   fs_attr->q_attrs[i].vattr.desc,
+			   fs_attr->q_attrs[i].vattr.driver,
+			   fs_attr->q_attrs[i].vattr.device);
+
+		q = DEVX_ADDR_OF(virtio_fs_device_emulation, in, virtio_q_configuration[i]);
+		snap_debug("offset %ld\n", q - in);
+
+		DEVX_SET(virtio_q_layout, q, queue_size,
+			 fs_attr->q_attrs[i].vattr.size);
+		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
+			 fs_attr->q_attrs[i].vattr.msix_vector);
+		DEVX_SET(virtio_q_layout, q, queue_enable,
+			 fs_attr->q_attrs[i].vattr.enable);
+		DEVX_SET(virtio_q_layout, q, queue_notify_off,
+			 fs_attr->q_attrs[i].vattr.notify_off);
+
+		DEVX_SET64(virtio_q_layout, q, queue_desc,
+			   fs_attr->q_attrs[i].vattr.desc);
+		DEVX_SET64(virtio_q_layout, q, queue_driver,
+			   fs_attr->q_attrs[i].vattr.driver);
+		DEVX_SET64(virtio_q_layout, q, queue_device,
+			   fs_attr->q_attrs[i].vattr.device);
+	}
+}
+
+static void snap_virtio_fs_impl_modify_device(uint8_t *in, uint8_t *device_emulation_in,
+					      uint64_t *fields_to_modify,
+					      uint64_t mask,
+					      struct snap_virtio_device_attr *attr)
+{
+	struct snap_virtio_fs_device_attr *fs_dev_attr = to_fs_device_attr(attr);
+	uint8_t *fs_tag;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+			MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION);
+
+	if (mask & (SNAP_VIRTIO_MOD_DEV_STATUS | SNAP_VIRTIO_MOD_ALL)) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_STATUS;
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.device_status, attr->status);
+	}
+	if (mask & (SNAP_VIRTIO_MOD_RESET | SNAP_VIRTIO_MOD_ALL)) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_RESET;
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				reset, attr->reset);
+	}
+	if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
+		DEVX_SET64(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.device_feature, attr->device_feature);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.num_queues, attr->max_queues);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.max_queue_size, attr->max_queue_size);
+	}
+	if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
+		fs_tag = DEVX_ADDR_OF(virtio_fs_device_emulation, device_emulation_in,
+					virtio_fs_config.tag);
+		memcpy(fs_tag, fs_dev_attr->tag, SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN);
+
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_fs_config.num_request_queues,
+				fs_dev_attr->num_request_queues);
+	}
+
+	if (mask & SNAP_VIRTIO_MOD_ALL) {
+		/* note: mod all overwrites all flags except queue_cfg */
+		*fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
+		DEVX_SET64(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.driver_feature, attr->driver_feature);
+
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.msix_config,
+				attr->msix_config);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.config_generation,
+				attr->config_generation);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.driver_feature_select,
+				attr->driver_feature_select);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.device_feature_select,
+				attr->device_feature_select);
+		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
+				virtio_device.queue_select,
+				attr->queue_select);
+	}
+
+	if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG) {
+		snap_virtio_fs_modify_queues(device_emulation_in, attr);
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG;
+	}
+
+	DEVX_SET64(virtio_fs_device_emulation, device_emulation_in,
+		   modify_field_select, *fields_to_modify);
+}
+
 int snap_virtio_modify_device(struct snap_device *sdev,
 		enum snap_emulation_type type,
 		uint64_t mask, struct snap_virtio_device_attr *attr)
@@ -193,6 +320,10 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 	else if (type == SNAP_VIRTIO_NET &&
 		 (sdev->pci->type != SNAP_VIRTIO_NET_PF &&
 		  sdev->pci->type != SNAP_VIRTIO_NET_VF))
+		return -EINVAL;
+	else if (type == SNAP_VIRTIO_FS &&
+	         (sdev->pci->type != SNAP_VIRTIO_FS_PF &&
+	          sdev->pci->type != SNAP_VIRTIO_FS_VF))
 		return -EINVAL;
 	else if (type == SNAP_NVME)
 		return -EINVAL;
@@ -283,7 +414,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 		DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
-	} else {
+	} else if (type == SNAP_VIRTIO_NET) {
 		struct snap_virtio_net_device_attr *nattr = to_net_device_attr(attr);
 
 		inlen += DEVX_ST_SZ_BYTES(virtio_net_device_emulation);
@@ -372,6 +503,15 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 		DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
 			   modify_field_select, fields_to_modify);
+	} else {
+		inlen += DEVX_ST_SZ_BYTES(virtio_fs_device_emulation);
+		in = calloc(1, inlen);
+		if (!in)
+			return -ENOMEM;
+
+		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+		snap_virtio_fs_impl_modify_device(in, device_emulation_in,
+					          &fields_to_modify, mask, attr);
 	}
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -475,6 +615,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		       DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
 	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		       DEVX_ST_SZ_BYTES(virtio_net_q)] = {0};
+	uint8_t in_fs[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		       DEVX_ST_SZ_BYTES(virtio_fs_q)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	uint8_t *in;
 	uint8_t *virtq_in;
@@ -556,6 +698,29 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
 		DEVX_SET(virtio_net_q, virtq_in, hw_available_index, attr->hw_available_index);
 		DEVX_SET(virtio_net_q, virtq_in, hw_used_index, attr->hw_used_index);
+	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
+		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
+		struct snap_virtio_fs_queue_attr *attr;
+		int vhca_id;
+
+		attr = to_fs_queue_attr(vattr);
+		in = in_fs;
+		inlen = sizeof(in_fs);
+		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+		virtq_ctx = DEVX_ADDR_OF(virtio_fs_q, virtq_in, virtqc);
+
+		obj_type = MLX5_OBJ_TYPE_VIRTIO_FS_Q;
+		if (attr->qp) {
+			vhca_id = snap_get_dev_vhca_id(attr->qp->context);
+			if (vhca_id < 0) {
+				errno = EINVAL;
+				goto out;
+			}
+			DEVX_SET(virtio_fs_q, virtq_in, qpn, attr->qp->qp_num);
+			DEVX_SET(virtio_fs_q, virtq_in, qpn_vhca_id, vhca_id);
+		}
+		DEVX_SET(virtio_fs_q, virtq_in, hw_available_index, attr->hw_available_index);
+		DEVX_SET(virtio_fs_q, virtq_in, hw_used_index, attr->hw_used_index);
 	} else {
 		errno = EINVAL;
 		goto out;
@@ -674,6 +839,8 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 			DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
 	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 			DEVX_ST_SZ_BYTES(virtio_net_q)] = {0};
+	uint8_t in_fs[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+			DEVX_ST_SZ_BYTES(virtio_fs_q)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
 	struct snap_device *sdev = virtq->virtq->sdev;
 	uint8_t *in;
@@ -746,6 +913,24 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 		}
 		DEVX_SET64(virtio_net_q, virtq_in, modify_field_select,
 			   fields_to_modify);
+	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
+		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
+		in = in_fs;
+		inlen = sizeof(in_fs);
+
+		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+			 MLX5_OBJ_TYPE_VIRTIO_FS_Q);
+		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+		if (mask & SNAP_VIRTIO_FS_QUEUE_MOD_STATE) {
+			state = snap_virtio_queue_state_to_mlx_state(vattr->state);
+			if (state < 0)
+				return state;
+			fields_to_modify = MLX5_VIRTIO_FS_Q_MODIFY_STATE;
+			DEVX_SET(virtio_fs_q, virtq_in, state, state);
+		}
+		DEVX_SET64(virtio_fs_q, virtq_in, modify_field_select,
+			   fields_to_modify);
 	} else {
 		return -ENODEV;
 	}
@@ -765,6 +950,8 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 			DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
 	uint8_t out_net[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 			DEVX_ST_SZ_BYTES(virtio_net_q)] = {0};
+	uint8_t out_fs[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+			DEVX_ST_SZ_BYTES(virtio_fs_q)] = {0};
 	uint8_t *out;
 	uint8_t *virtq_out;
 	uint8_t state;
@@ -788,6 +975,12 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 			 MLX5_OBJ_TYPE_VIRTIO_NET_Q);
 		out = out_net;
 		outlen = sizeof(out_net);
+	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
+		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
+		DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+			 MLX5_OBJ_TYPE_VIRTIO_FS_Q);
+		out = out_fs;
+		outlen = sizeof(out_fs);
 	} else {
 		return -EINVAL;
 	}
@@ -818,7 +1011,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 			attr->modifiable_fields = SNAP_VIRTIO_BLK_QUEUE_MOD_STATE;
 		else
 			attr->modifiable_fields = 0;
-	} else {
+	} else if (out == out_net) {
 		struct snap_virtio_net_queue_attr *attr;
 
 		attr = to_net_queue_attr(vattr);
@@ -850,6 +1043,26 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->dirty_map_size = DEVX_GET(virtio_net_q, virtq_out, dirty_map_size);
 		vattr->dirty_map_addr = DEVX_GET64(virtio_net_q, virtq_out, dirty_map_addr);
 		vattr->vhost_log_page = DEVX_GET(virtio_net_q, virtq_out, vhost_log_page);
+	} else {
+		struct snap_virtio_fs_queue_attr *attr;
+
+		attr = to_fs_queue_attr(vattr);
+
+		vattr->size = DEVX_GET(virtio_fs_q, virtq_out, virtqc.queue_size);
+		vattr->idx = DEVX_GET(virtio_fs_q, virtq_out, virtqc.queue_index);
+		vattr->error_type = DEVX_GET(virtio_fs_q, virtq_out, virtqc.error_type);
+
+		state = DEVX_GET(virtio_fs_q, virtq_out, state);
+		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+			return vattr->state;
+
+		attr->hw_available_index = DEVX_GET(virtio_fs_q, virtq_out, hw_available_index);
+		attr->hw_used_index = DEVX_GET(virtio_fs_q, virtq_out, hw_used_index);
+		dev_allowed = DEVX_GET64(virtio_fs_q, virtq_out, modify_field_select);
+		if (dev_allowed & MLX5_VIRTIO_FS_Q_MODIFY_STATE)
+			attr->modifiable_fields = SNAP_VIRTIO_FS_QUEUE_MOD_STATE;
+		else
+			attr->modifiable_fields = 0;
 	}
 
 	return 0;
