@@ -26,21 +26,21 @@ struct virtio_blk_outftr {
 
 /**
  * enum virtq_cmd_sm_state - state of the sm handling a cmd
- * @VIRTQ_CMD_STATE_IDLE:               SM initialization state
+ * @VIRTQ_CMD_STATE_IDLE:	       SM initialization state
  * @VIRTQ_CMD_STATE_FETCH_CMD_DESCS:    SM received tunnel cmd and copied
- *                                      immediate data, now fetch cmd descs
- * @VIRTQ_CMD_STATE_READ_REQ:           Read request data from host memory
- * @VIRTQ_CMD_STATE_HANDLE_REQ:         Handle received request from host, perform
- *                                      READ/WRITE/FLUSH
+ *				      immediate data, now fetch cmd descs
+ * @VIRTQ_CMD_STATE_READ_REQ:	   Read request data from host memory
+ * @VIRTQ_CMD_STATE_HANDLE_REQ:	 Handle received request from host, perform
+ *				      READ/WRITE/FLUSH
  * @VIRTQ_CMD_STATE_T_OUT_IOV_DONE:     Finished writing to bdev, check write
- *                                      status
+ *				      status
  * @VIRTQ_CMD_STATE_T_IN_IOV_DONE:      Write data pulled from bdev to host memory
  * @VIRTQ_CMD_STATE_WRITE_STATUS:       Write cmd status to host memory
- * @VIRTQ_CMD_STATE_SEND_COMP:          Send completion to FW
+ * @VIRTQ_CMD_STATE_SEND_COMP:	  Send completion to FW
  * @VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP: Send completion to FW for commands completed
- *                                      unordered
- * @VIRTQ_CMD_STATE_RELEASE:            Release command
- * @VIRTQ_CMD_STATE_FATAL_ERR:          Fatal error, SM stuck here (until reset)
+ *				      unordered
+ * @VIRTQ_CMD_STATE_RELEASE:	    Release command
+ * @VIRTQ_CMD_STATE_FATAL_ERR:	  Fatal error, SM stuck here (until reset)
  */
 enum virtq_cmd_sm_state {
 	VIRTQ_CMD_STATE_IDLE,
@@ -72,7 +72,7 @@ struct blk_virtq_cmd_aux {
  * @state:		 	state of sm processing the command
  * @buf:		 	buffer holding the request data and aux data
  * @aux:		 	aux data resided in dma/mr memory
- * @mr:                  	buf mr
+ * @mr:		  	buf mr
  * @req_buf:		 	pointer to request buffer
  * @req_mr:		 	request buffer mr
  * @req_size:		 	allocated request buffer size
@@ -337,7 +337,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		goto free_cmd_buf;
 	}
 
-	cmd->aux = (struct blk_virtq_cmd_aux *)((uint8_t*)cmd->buf + req_size);
+	cmd->aux = (struct blk_virtq_cmd_aux *)((uint8_t *)cmd->buf + req_size);
 	cmd->aux_mr = cmd->req_mr;
 
 	return 0;
@@ -407,7 +407,7 @@ alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 free_mem:
 	free(cmd_arr);
 	snap_error("failed allocating commands for queue %d\n",
-	        vq_priv->vq_ctx.common_ctx.idx);
+		vq_priv->vq_ctx.common_ctx.idx);
 out:
 	return NULL;
 }
@@ -482,8 +482,7 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 		snap_error("Failed iov completion!\n");
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 		cmd->io_cmd_stat->fail++;
-	}
-	else
+	} else
 		cmd->io_cmd_stat->success++;
 
 	blk_virtq_cmd_progress(cmd, op_status);
@@ -499,7 +498,8 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
  * Return: number of descs after merge
  */
 static size_t virtq_sequential_data_descs_merge(struct vring_desc *descs,
-		size_t num_desc, uint32_t *num_merges) {
+		size_t num_desc, uint32_t *num_merges)
+{
 	uint32_t merged_desc_num = num_desc;
 	uint32_t merged_index = 1;
 	uint32_t index_to_copy_to = 2;
@@ -537,7 +537,8 @@ static size_t virtq_sequential_data_descs_merge(struct vring_desc *descs,
  * Return: number of descs after processing
  */
 static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
-		uint32_t *num_merges, int merge_descs) {
+		uint32_t *num_merges, int merge_descs)
+{
 	uint32_t footer_len = sizeof(struct virtio_blk_outftr);
 	uint32_t header_len = sizeof(struct virtio_blk_outhdr);
 
@@ -703,7 +704,7 @@ static bool virtq_read_header(struct blk_virtq_cmd *cmd)
 	ret = snap_dma_q_read(priv->dma_q, &cmd->aux->header,
 		cmd->aux->descs[0].len, cmd->aux_mr->lkey,
 		cmd->aux->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
-	        &cmd->dma_comp);
+		&cmd->dma_comp);
 
 	if (ret) {
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
@@ -864,11 +865,11 @@ static inline void virtq_fill_fake_iov(struct blk_virtq_cmd *cmd)
     cmd->fake_iov[0].iov_len = cmd->iov[0].iov_len;
 
     for (i = 1; i < cmd->iov_cnt; i++) {
-        void *prev_iov_base = cmd->fake_iov[i - 1].iov_base;
-        size_t prev_iov_len = cmd->fake_iov[i - 1].iov_len;
+	void *prev_iov_base = cmd->fake_iov[i - 1].iov_base;
+	size_t prev_iov_len = cmd->fake_iov[i - 1].iov_len;
 
-        cmd->fake_iov[i].iov_base = prev_iov_base + prev_iov_len;
-        cmd->fake_iov[i].iov_len = cmd->iov[i].iov_len;
+	cmd->fake_iov[i].iov_base = prev_iov_base + prev_iov_len;
+	cmd->fake_iov[i].iov_len = cmd->iov[i].iov_len;
     }
 }
 
@@ -988,16 +989,16 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	}
 
 	if (cmd->io_cmd_stat) {
-	    cmd->io_cmd_stat->total++;
-	    if (ret)
-	        cmd->io_cmd_stat->fail++;
-	    if (cmd->vq_priv->merge_descs)
+		cmd->io_cmd_stat->total++;
+		if (ret)
+			cmd->io_cmd_stat->fail++;
+		if (cmd->vq_priv->merge_descs)
 			cmd->io_cmd_stat->merged_desc += cmd->num_merges;
 	}
 
 	if (ret) {
 		ERR_ON_CMD(cmd, "failed while executing command %d \n",
-		        cmd->aux->header.type);
+			cmd->aux->header.type);
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -1471,9 +1472,8 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 	int ret;
 
 	ret = snap_virtio_get_vring_indexes_from_host(vq_priv->pd, drv_addr, dev_addr,
-				                      vq_priv->snap_attr.vattr.dma_mkey,
-					              &vra, &vru
-						     );
+						      vq_priv->snap_attr.vattr.dma_mkey,
+						      &vra, &vru);
 	if (ret) {
 		snap_error("failed to get vring indexes from host memory for queue %d\n",
 			   q->common_ctx.idx);
@@ -1558,7 +1558,7 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 static void blk_virq_progress_unordered(struct blk_virtq_priv *vq_priv)
 {
 	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-	struct blk_virtq_cmd* cmd = &vq_priv->cmd_arr[cmd_idx];
+	struct blk_virtq_cmd *cmd = &vq_priv->cmd_arr[cmd_idx];
 
 	while (cmd->state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
 	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {

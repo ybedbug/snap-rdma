@@ -149,8 +149,7 @@ struct snap_nvme_device {
 	struct snap_nvme_sq			*sqs;
 };
 
-struct snap_nvme_sq_counters
-{
+struct snap_nvme_sq_counters {
     uint32_t data_read;
     uint32_t data_write;
     uint16_t cmd_read;
@@ -167,8 +166,7 @@ struct snap_nvme_sq_counters
     struct mlx5_snap_devx_obj *obj;
 };
 
-struct snap_nvme_ctrl_counters
-{
+struct snap_nvme_ctrl_counters {
     uint32_t data_read;
     uint32_t data_write;
     uint16_t cmd_read;

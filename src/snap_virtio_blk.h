@@ -52,7 +52,7 @@ struct snap_virtio_blk_queue_attr {
 
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
-	struct blk_virtq_q_ops* q_ops;
+	struct blk_virtq_q_ops		*q_ops;
 	struct snap_virtio_blk_device	*vbdev;
 };
 

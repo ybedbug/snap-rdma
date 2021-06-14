@@ -238,7 +238,7 @@ struct snap_device {
 	struct snap_channel		*channel;
 };
 
-struct __attribute__((packed)) snap_nvme_registers {
+struct snap_nvme_registers {
 	union {
 		uint64_t raw;
 		struct {
@@ -278,7 +278,7 @@ struct __attribute__((packed)) snap_nvme_registers {
 	uint32_t bpinfo;
 	uint32_t bprsel;
 	uint32_t bpmbl;
-};
+} __packed;
 
 struct snap_virtio_net_registers {
 	uint64_t	device_features;

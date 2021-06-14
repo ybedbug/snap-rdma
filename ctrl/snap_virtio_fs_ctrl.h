@@ -12,13 +12,13 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	copyright notice, this list of conditions and the following
+ *	disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	copyright notice, this list of conditions and the following
+ *	disclaimer in the documentation and/or other materials
+ *	provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -70,7 +70,7 @@ int snap_virtio_fs_ctrl_bar_setup(struct snap_virtio_fs_ctrl *ctrl,
 				  struct snap_virtio_fs_registers *regs,
 				  uint16_t regs_mask);
 int snap_virtio_fs_ctrl_get_debugstat(struct snap_virtio_fs_ctrl *ctrl,
-			struct snap_virtio_ctrl_debugstat *ctrl_debugstat);				   
+			struct snap_virtio_ctrl_debugstat *ctrl_debugstat);
 void snap_virtio_fs_ctrl_progress(struct snap_virtio_fs_ctrl *ctrl);
 void snap_virtio_fs_ctrl_io_progress(struct snap_virtio_fs_ctrl *ctrl);
 void snap_virtio_fs_ctrl_io_progress_thread(struct snap_virtio_fs_ctrl *ctrl,

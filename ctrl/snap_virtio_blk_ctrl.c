@@ -16,7 +16,7 @@ static bool taken_cntlids[VIRTIO_BLK_MAX_CTRL_NUM];
 LIST_HEAD(, snap_virtio_blk_ctrl_zcopy_ctx) snap_virtio_blk_ctrl_zcopy_ctx_list =
 			LIST_HEAD_INITIALIZER(snap_virtio_blk_ctrl_zcopy_ctx);
 
-static void snap_virtio_blk_zcopy_ctxs_clear()
+static void snap_virtio_blk_zcopy_ctxs_clear(void)
 {
 	snap_virtio_blk_ctrl_zcopy_ctx_t *zcopy_ctx;
 
@@ -42,7 +42,7 @@ snap_virtio_blk_zcopy_ctx_init(struct snap_context *sctx)
 	zcopy_ctx->sctx = sctx;
 
 	req_num = VIRTIO_BLK_MAX_CTRL_NUM * VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX *
-	          VIRTIO_BLK_MAX_VIRTQ_SIZE;
+		  VIRTIO_BLK_MAX_VIRTQ_SIZE;
 	size = req_num * VIRTIO_BLK_MAX_REQ_DATA;
 
 	zcopy_ctx->fake_addr_table = mmap(NULL, size,
@@ -136,7 +136,7 @@ int snap_virtio_blk_ctrl_addr_trans(struct ibv_pd *pd, void *ptr, size_t len,
 	return 0;
 }
 
-static bool snap_virtio_blk_is_ctrlid_empty()
+static bool snap_virtio_blk_is_ctrlid_empty(void)
 {
 	int i;
 
@@ -147,7 +147,7 @@ static bool snap_virtio_blk_is_ctrlid_empty()
 	return true;
 }
 
-static int snap_virtio_blk_acquire_cntlid()
+static int snap_virtio_blk_acquire_cntlid(void)
 {
 	int i;
 
@@ -326,7 +326,7 @@ snap_virtio_blk_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl))
 		return -EINVAL;
 
-	if(!queue_state)
+	if (!queue_state)
 		return -EINVAL;
 
 	for (i = 0; i < ctrl->max_queues; i++) {
@@ -876,7 +876,7 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
  * Allocates a new virtio-blk controller based on the requested attributes.
  *
  * Return: Returns a new snap_virtio_blk_ctrl in case of success, NULL otherwise and
- *         errno will be set to indicate the failure reason.
+ *	 errno will be set to indicate the failure reason.
  */
 struct snap_virtio_blk_ctrl*
 snap_virtio_blk_ctrl_open(struct snap_context *sctx,
@@ -1010,7 +1010,7 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 
 /**
  * snap_virtio_blk_ctrl_progress() - Handles control path changes in
- *                                   virtio-blk controller
+ *				   virtio-blk controller
  * @ctrl:       controller instance to handle
  *
  * Looks for control path status in virtio-blk controller and respond

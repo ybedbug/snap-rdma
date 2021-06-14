@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include "snap_poll_groups.h"
 
-static size_t *virtio_pg_usage = NULL;
-static size_t virtio_pg_ref_count = 0;
+static size_t *virtio_pg_usage;
+static size_t virtio_pg_ref_count;
 
 void snap_pgs_free(struct snap_pg_ctx *ctx)
 {

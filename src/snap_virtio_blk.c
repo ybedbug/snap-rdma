@@ -290,8 +290,9 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
  * Return: Returns snap_virtio_blk_queue in case of success, NULL otherwise and
  * errno will be set to indicate the failure reason.
  */
-static struct snap_virtio_blk_queue* snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
-		struct snap_virtio_blk_queue_attr *attr)
+static struct snap_virtio_blk_queue *
+snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
+				struct snap_virtio_blk_queue_attr *attr)
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;

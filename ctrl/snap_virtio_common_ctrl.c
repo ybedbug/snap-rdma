@@ -40,7 +40,8 @@
  * Return: True when critical change detected, otherwise False
  */
 bool
-snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl) {
+snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl)
+{
 	return ((ctrl->bar_curr->status != ctrl->bar_prev->status) ||
 		 SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl) ||
 		 SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl));
@@ -49,12 +50,12 @@ snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl) {
 static const char *lm_state2str(enum snap_virtio_ctrl_lm_state state)
 {
 	switch (state) {
-		case SNAP_VIRTIO_CTRL_LM_NORMAL:
-			return "LM_NORMAL";
-		case SNAP_VIRTIO_CTRL_LM_QUIESCED:
-			return "LM_QUISCED";
-		case SNAP_VIRTIO_CTRL_LM_FREEZED:
-			return "LM_FREEZED";
+	case SNAP_VIRTIO_CTRL_LM_NORMAL:
+		return "LM_NORMAL";
+	case SNAP_VIRTIO_CTRL_LM_QUIESCED:
+		return "LM_QUISCED";
+	case SNAP_VIRTIO_CTRL_LM_FREEZED:
+		return "LM_FREEZED";
 	}
 
 	return "LM_UNKNOWN";
@@ -250,7 +251,7 @@ static void snap_virtio_ctrl_sched_q(struct snap_virtio_ctrl *ctrl,
 
 	pthread_spin_lock(&pg->lock);
 	snap_virtio_ctrl_sched_q_nolock(ctrl, vq, pg);
-	snap_debug("Virtio queue polling group id = %d \n",vq->pg->id);
+	snap_debug("Virtio queue polling group id = %d\n", vq->pg->id);
 	pthread_spin_unlock(&pg->lock);
 }
 
@@ -970,7 +971,7 @@ void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable)
 
 /**
  * snap_virtio_ctrl_state_size() - Get virtio controller state size
- * @ctrl:              virtio controller
+ * @ctrl:	      virtio controller
  * @common_cfg_len:    on return holds size of the pci_common config section
  * @queue_cfg_len:     on return holds size of the queue configuration section
  * @dev_cfg_len:       on return holds size of the device configuration section
@@ -1075,7 +1076,7 @@ done:
 
 static void
 snap_virtio_ctrl_save_common_state(struct snap_virtio_ctrl_common_state *common_state,
-			           enum snap_virtio_ctrl_state ctrl_state,
+				   enum snap_virtio_ctrl_state ctrl_state,
 				   const struct snap_virtio_device_attr *attr)
 {
 	/* save common and device configs */
@@ -1095,7 +1096,7 @@ snap_virtio_ctrl_save_common_state(struct snap_virtio_ctrl_common_state *common_
 
 static void
 snap_virtio_ctrl_save_queue_state(struct snap_virtio_ctrl_queue_state *queue_state,
-			          const struct snap_virtio_queue_attr *vq)
+				  const struct snap_virtio_queue_attr *vq)
 {
 	queue_state->queue_size = vq->size;
 	queue_state->queue_msix_vector = vq->msix_vector;
@@ -1204,7 +1205,7 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
  * be large enough to hold the state. snap_virtio_ctrl_state_size() can be used
  * to find the minimum required buffer size.
  *
- * The function should be called from the admin thread context. If called from 
+ * The function should be called from the admin thread context. If called from
  * another context, the caller is repsonsible for locking admin polling thread.
  *
  * The internal controller state must be either SNAP_VIRTIO_CTRL_STOPPED or
@@ -1213,7 +1214,8 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
  * Return:
  * total state length or -errno on error
  */
-int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len)
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf,
+				   unsigned len)
 {
 	struct snap_virtio_ctrl_section *hdr;
 	struct snap_virtio_ctrl_common_state *common_state;
@@ -1607,7 +1609,7 @@ static int snap_virtio_ctrl_queue_recover_indexes(struct snap_virtio_ctrl *ctrl,
  * 0 on success or -errno on error
  */
 int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
-                             struct snap_virtio_device_attr *attr)
+			     struct snap_virtio_device_attr *attr)
 {
 	const struct snap_virtio_queue_attr *vq;
 
@@ -1659,9 +1661,8 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 		if (vq->enable) {
 			ret = snap_virtio_ctrl_queue_recover_indexes(ctrl, &queue_state[i]);
 			snap_info("q: %d avail: %d used: %d\n", i,
-			           queue_state[i].hw_available_index,
-				   queue_state[i].hw_used_index);
-
+				  queue_state[i].hw_available_index,
+				  queue_state[i].hw_used_index);
 			if (ret != 0)
 				goto free_buf;
 

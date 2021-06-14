@@ -12,13 +12,13 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	copyright notice, this list of conditions and the following
+ *	disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	copyright notice, this list of conditions and the following
+ *	disclaimer in the documentation and/or other materials
+ *	provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -103,8 +103,8 @@ enum snap_virtio_common_device_status {
  *  Allowed transitions:
  *  STOPPED -> STARTED, SUSPENDED
  *  STARTED - [SUSPENDING] -> SUSPENDED
- *          -> STOPPED  NOTE: this is not a safe transition. If there is outstanding
- *                            io, the controller may crash.
+ *	  -> STOPPED  NOTE: this is not a safe transition. If there is outstanding
+ *			    io, the controller may crash.
  *  SUSPENDED -> STOPPED, STARTED
  */
 enum snap_virtio_ctrl_state {
@@ -290,7 +290,7 @@ struct snap_virtio_ctrl_section {
  * NOTE: that device and driver features bits are expanded
  *
  * @ctlr_state:  this is an internal controller state. We keep it in order to
- *               validate state restore operation.
+ *	       validate state restore operation.
  */
 struct snap_virtio_ctrl_common_state {
 	uint32_t device_feature_select;
@@ -316,9 +316,9 @@ struct snap_virtio_ctrl_common_state {
  * size of the array is &struct snap_virtio_ctrl_common_state.num_queues
  *
  * @hw_available_index:  queue available index as reported by the controller.
- *                       It is always less or equal to the driver available index
- *                       because some commands may not have been processed by
- *                       the controller.
+ *		       It is always less or equal to the driver available index
+ *		       because some commands may not have been processed by
+ *		       the controller.
  * @hw_used_index:       queue used index as reported by the controller.
  */
 struct snap_virtio_ctrl_queue_state {
@@ -345,7 +345,7 @@ int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);
 void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl);
 
 int  snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
-                              struct snap_virtio_device_attr *attr);
+			      struct snap_virtio_device_attr *attr);
 
 const struct snap_virtio_ctrl_queue_stats *
 snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx);

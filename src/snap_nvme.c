@@ -203,7 +203,7 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_CC;
 	if (mask & SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ)
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ;
-    if(modify_mask)
+    if (modify_mask)
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,
 			   modify_field_select, modify_mask);
 
@@ -584,7 +584,7 @@ int snap_nvme_modify_sq(struct snap_nvme_sq *sq, uint64_t mask,
 				snap_nvme_teardown_sq_legacy_mode(sdev, sq);
 				if (snap_nvme_init_sq_legacy_mode(sdev, sq,
 								  attr)) {
-					ret= -ENODEV;
+					ret = -ENODEV;
 					goto err;
 				}
 			}
@@ -779,8 +779,8 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 		 */
 		snap_debug("Attach QP from RDMA context (vhca_id 0x%x) "
 			   "different than of emu_manager (vhca_id 0x%x)\n",
-                           snap_get_dev_vhca_id(attr->qp->context),
-                           snap_get_dev_vhca_id(sdev->sctx->context));
+			   snap_get_dev_vhca_id(attr->qp->context),
+			   snap_get_dev_vhca_id(sdev->sctx->context));
 
 		if (snap_allow_other_vhca_access(sdev->sctx->context,
 						 MLX5_OBJ_TYPE_NVME_SQ,
@@ -827,8 +827,8 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	sq_be->sq = attr->sq;
 	sq_be->sq->sq_be = sq_be;
 	sq_be->qp = attr->qp;
-	snap_debug("backend SQ obj_id 0x%x created for SQ 0x%d and QP 0x%x\n",
-                   sq_be->obj_id, sq_be->sq->sq->obj_id, attr->qp->qp_num);
+	snap_debug("backend SQ obj_id 0x%x created for SQ 0x%x and QP 0x%x\n",
+		   sq_be->obj_id, sq_be->sq->sq->obj_id, attr->qp->qp_num);
 
 	return sq_be;
 
@@ -1001,181 +1001,181 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 struct snap_nvme_sq_counters*
 snap_nvme_create_sq_counters(struct snap_device *sdev)
 {
-    uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-               DEVX_ST_SZ_BYTES(nvme_sq_counters)] = {0};
-    uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
-    struct snap_nvme_sq_counters *sqc;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+	DEVX_ST_SZ_BYTES(nvme_sq_counters)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct snap_nvme_sq_counters *sqc;
 
-    sqc = calloc(1, sizeof(*sqc));
-    if (!sqc) {
-        errno = ENOMEM;
-        goto out;
-    }
+	sqc = calloc(1, sizeof(*sqc));
+	if (!sqc) {
+		errno = ENOMEM;
+		goto out;
+	}
 
-    DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-            MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-            MLX5_OBJ_TYPE_NVME_SQ_COUNTERS);
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_NVME_SQ_COUNTERS);
 
-    sqc->obj = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
-                      sdev->mdev.vtunnel,
-                      DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
-                      DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
+	sqc->obj = snap_devx_obj_create(sdev, in, sizeof(in), out, sizeof(out),
+					sdev->mdev.vtunnel,
+					DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr),
+					DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr));
 
-    if (!sqc->obj) {
-        errno = ENODEV;
-        goto out_destroy_sqc;
-    }
+	if (!sqc->obj) {
+		errno = ENODEV;
+		goto out_destroy_sqc;
+	}
 
-    return sqc;
+	return sqc;
 
 out_destroy_sqc:
-    free(sqc);
+	free(sqc);
 out:
-    return NULL;
+	return NULL;
 }
 
 int snap_nvme_query_sq_counters(struct snap_nvme_sq_counters *sqc)
 {
-    uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
-    uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-                DEVX_ST_SZ_BYTES(nvme_sq_counters)] = {0};
-    uint8_t *out_sqc, ret;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_sq_counters)] = {0};
+	uint8_t *out_sqc, ret;
 
-    DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-         MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-            MLX5_OBJ_TYPE_NVME_SQ_COUNTERS);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, sqc->obj->obj_id);
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+	MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_NVME_SQ_COUNTERS);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, sqc->obj->obj_id);
 
-    ret = snap_devx_obj_query(sqc->obj, in, sizeof(in), out, sizeof(out));
-    if (ret)
-        return ret;
+	ret = snap_devx_obj_query(sqc->obj, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		return ret;
 
-     out_sqc = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	out_sqc = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 
-     sqc->data_read = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     data_read);
-     sqc->data_write = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     data_write);
-     sqc->cmd_read = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     cmd_read);
-     sqc->cmd_write = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     cmd_write);
-     sqc->error_cqes = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     error_cqes);
-     sqc->integrity_errors = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     integrity_errors);
-     sqc->fabric_errors = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     fabric_errors);
-     sqc->busy_time = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     busy_time);
-     sqc->power_cycle = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     power_cycle);
-     sqc->power_on_hours = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     power_on_hours);
-     sqc->unsafe_shutdowns = DEVX_GET(nvme_sq_counters, out_sqc,
-                                     unsafe_shutdowns);
-     sqc->error_information_log_entries = DEVX_GET(nvme_sq_counters,
-                                     out_sqc, error_information_log_entries);
+	sqc->data_read = DEVX_GET(nvme_sq_counters, out_sqc,
+				  data_read);
+	sqc->data_write = DEVX_GET(nvme_sq_counters, out_sqc,
+				  data_write);
+	sqc->cmd_read = DEVX_GET(nvme_sq_counters, out_sqc,
+				 cmd_read);
+	sqc->cmd_write = DEVX_GET(nvme_sq_counters, out_sqc,
+				  cmd_write);
+	sqc->error_cqes = DEVX_GET(nvme_sq_counters, out_sqc,
+				   error_cqes);
+	sqc->integrity_errors = DEVX_GET(nvme_sq_counters, out_sqc,
+					 integrity_errors);
+	sqc->fabric_errors = DEVX_GET(nvme_sq_counters, out_sqc,
+				      fabric_errors);
+	sqc->busy_time = DEVX_GET(nvme_sq_counters, out_sqc,
+				  busy_time);
+	sqc->power_cycle = DEVX_GET(nvme_sq_counters, out_sqc,
+				    power_cycle);
+	sqc->power_on_hours = DEVX_GET(nvme_sq_counters, out_sqc,
+					power_on_hours);
+	sqc->unsafe_shutdowns = DEVX_GET(nvme_sq_counters, out_sqc,
+					 unsafe_shutdowns);
+	sqc->error_information_log_entries = DEVX_GET(nvme_sq_counters,
+				out_sqc, error_information_log_entries);
 
-     return 0;
+	return 0;
 }
 
 int snap_nvme_destroy_sq_counters(struct snap_nvme_sq_counters *sqc)
 {
-    int ret = snap_devx_obj_destroy(sqc->obj);
-    free(sqc);
-    return ret;
+	int ret = snap_devx_obj_destroy(sqc->obj);
+	free(sqc);
+	return ret;
 }
 
 struct snap_nvme_ctrl_counters*
 snap_nvme_create_ctrl_counters(struct snap_context *sctx)
 {
-    uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-               DEVX_ST_SZ_BYTES(nvme_ctrl_counters)] = {0};
-    uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
-    struct snap_nvme_ctrl_counters *ctrlc;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(nvme_ctrl_counters)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct snap_nvme_ctrl_counters *ctrlc;
 
-    ctrlc = calloc(1, sizeof(*ctrlc));
-    if (!ctrlc) {
-        errno = ENOMEM;
-        goto out;
-    }
+	ctrlc = calloc(1, sizeof(*ctrlc));
+	if (!ctrlc) {
+		errno = ENOMEM;
+		goto out;
+	}
 
-    DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-            MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-            MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
-    ctrlc->obj = mlx5dv_devx_obj_create(sctx->context, in, sizeof(in),
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
+	ctrlc->obj = mlx5dv_devx_obj_create(sctx->context, in, sizeof(in),
 					out, sizeof(out));
-    if (!ctrlc->obj)
-        goto out_destroy_ctrlc;
+	if (!ctrlc->obj)
+		goto out_destroy_ctrlc;
 
-    ctrlc->id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
-    return ctrlc;
+	ctrlc->id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	return ctrlc;
 
 out_destroy_ctrlc:
-    free(ctrlc);
+	free(ctrlc);
 out:
-    return NULL;
+	return NULL;
 }
 
 int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 {
-    uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
-    uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-                DEVX_ST_SZ_BYTES(nvme_ctrl_counters)] = {0};
-    uint8_t *out_ctrlc, ret;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		DEVX_ST_SZ_BYTES(nvme_ctrl_counters)] = {0};
+	uint8_t *out_ctrlc, ret;
 
-    DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
-         MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-            MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
-    DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, ctrlc->id);
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_NVME_CTRL_COUNTERS);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, ctrlc->id);
 
-    ret = mlx5dv_devx_obj_query(ctrlc->obj, in, sizeof(in),
+	ret = mlx5dv_devx_obj_query(ctrlc->obj, in, sizeof(in),
 				out, sizeof(out));
-    if (ret)
-        return ret;
+	if (ret)
+		return ret;
 
-     out_ctrlc = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	out_ctrlc = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 
-     ctrlc->data_read = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     data_read);
-     ctrlc->data_write = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     data_write);
-     ctrlc->cmd_read = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     cmd_read);
-     ctrlc->cmd_write = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     cmd_write);
-     ctrlc->error_cqes = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     error_cqes);
-     ctrlc->flrs = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     flrs);
-     ctrlc->bad_doorbells = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     bad_doorbells);
-     ctrlc->integrity_errors = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     integrity_errors);
-     ctrlc->fabric_errors = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     fabric_errors);
-     ctrlc->busy_time = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     busy_time);
-     ctrlc->power_cycle = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     power_cycle);
-     ctrlc->power_on_hours = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     power_on_hours);
-     ctrlc->unsafe_shutdowns = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
-                                     unsafe_shutdowns);
-     ctrlc->error_information_log_entries = DEVX_GET(nvme_ctrl_counters,
-                                     out_ctrlc, error_information_log_entries);
+	ctrlc->data_read = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				    data_read);
+	ctrlc->data_write = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				     data_write);
+	ctrlc->cmd_read = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				   cmd_read);
+	ctrlc->cmd_write = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				    cmd_write);
+	ctrlc->error_cqes = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				     error_cqes);
+	ctrlc->flrs = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				flrs);
+	ctrlc->bad_doorbells = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+					bad_doorbells);
+	ctrlc->integrity_errors = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+					   integrity_errors);
+	ctrlc->fabric_errors = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+					fabric_errors);
+	ctrlc->busy_time = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				    busy_time);
+	ctrlc->power_cycle = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+				      power_cycle);
+	ctrlc->power_on_hours = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+					 power_on_hours);
+	ctrlc->unsafe_shutdowns = DEVX_GET(nvme_ctrl_counters, out_ctrlc,
+					   unsafe_shutdowns);
+	ctrlc->error_information_log_entries = DEVX_GET(nvme_ctrl_counters,
+					out_ctrlc, error_information_log_entries);
 
-     return 0;
+	return 0;
 }
 
 int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 {
-    int ret = mlx5dv_devx_obj_destroy(ctrlc->obj);
-    free(ctrlc);
-    return ret;
+	int ret = mlx5dv_devx_obj_destroy(ctrlc->obj);
+	free(ctrlc);
+	return ret;
 }

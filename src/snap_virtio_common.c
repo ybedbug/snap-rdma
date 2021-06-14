@@ -322,8 +322,8 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		  sdev->pci->type != SNAP_VIRTIO_NET_VF))
 		return -EINVAL;
 	else if (type == SNAP_VIRTIO_FS &&
-	         (sdev->pci->type != SNAP_VIRTIO_FS_PF &&
-	          sdev->pci->type != SNAP_VIRTIO_FS_VF))
+		 (sdev->pci->type != SNAP_VIRTIO_FS_PF &&
+		  sdev->pci->type != SNAP_VIRTIO_FS_VF))
 		return -EINVAL;
 	else if (type == SNAP_NVME)
 		return -EINVAL;
@@ -527,7 +527,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 		device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 		snap_virtio_fs_impl_modify_device(in, device_emulation_in,
-					          &fields_to_modify, mask, attr);
+						  &fields_to_modify, mask, attr);
 	}
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -917,10 +917,10 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM) {
 			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM;
-			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_mkey, vattr->dirty_map_mkey);
-			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_size, vattr->dirty_map_size);
-			DEVX_SET(virtio_net_q,  virtq_in, vhost_log_page, vattr->vhost_log_page);
-			DEVX_SET64(virtio_net_q,virtq_in, dirty_map_addr, vattr->dirty_map_addr);
+			DEVX_SET(virtio_net_q, virtq_in, dirty_map_mkey, vattr->dirty_map_mkey);
+			DEVX_SET(virtio_net_q, virtq_in, dirty_map_size, vattr->dirty_map_size);
+			DEVX_SET(virtio_net_q, virtq_in, vhost_log_page, vattr->vhost_log_page);
+			DEVX_SET64(virtio_net_q, virtq_in, dirty_map_addr, vattr->dirty_map_addr);
 		}
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE) {
@@ -1017,7 +1017,8 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->error_type = DEVX_GET(virtio_blk_q, virtq_out, virtqc.error_type);
 
 		state = DEVX_GET(virtio_blk_q, virtq_out, state);
-		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+		vattr->state = snap_virtio_mlx_state_to_queue_state(state);
+		if (vattr->state < 0)
 			return vattr->state;
 
 		attr->hw_available_index = DEVX_GET(virtio_blk_q, virtq_out, hw_available_index);
@@ -1036,7 +1037,8 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->idx = DEVX_GET(virtio_net_q, virtq_out, virtqc.queue_index);
 
 		state = DEVX_GET(virtio_net_q, virtq_out, state);
-		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+		vattr->state = snap_virtio_mlx_state_to_queue_state(state);
+		if (vattr->state < 0)
 			return vattr->state;
 
 		attr->hw_available_index = DEVX_GET(virtio_net_q, virtq_out, hw_available_index);
@@ -1069,7 +1071,8 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->error_type = DEVX_GET(virtio_fs_q, virtq_out, virtqc.error_type);
 
 		state = DEVX_GET(virtio_fs_q, virtq_out, state);
-		if ((vattr->state = snap_virtio_mlx_state_to_queue_state(state)) < 0)
+		vattr->state = snap_virtio_mlx_state_to_queue_state(state);
+		if (vattr->state < 0)
 			return vattr->state;
 
 		attr->hw_available_index = DEVX_GET(virtio_fs_q, virtq_out, hw_available_index);
@@ -1191,7 +1194,7 @@ static void get_vring_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
  */
 int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr,
 					    uint64_t dev_addr, uint32_t dma_mkey,
-			                    struct vring_avail *vra,
+					    struct vring_avail *vra,
 					    struct vring_used *vru)
 {
 	struct ibv_mr *vra_mr;
@@ -1213,8 +1216,7 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 	dma_q = snap_dma_q_create(pd, &dma_q_attr);
 	if (!dma_q) {
 		snap_error("failed to create dma_q for for drv: 0x%lx dev: 0x%lx\n",
-			   drv_addr, dev_addr
-		          );
+			   drv_addr, dev_addr);
 		return -EINVAL;
 	}
 
@@ -1246,7 +1248,7 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 			      vru_mr->lkey, dev_addr, dma_mkey, NULL);
 	if (ret) {
 		snap_error("failed DMA read vring_used for drv: 0x%lx dev: 0x%lx\n",
-		           drv_addr, dev_addr);
+			   drv_addr, dev_addr);
 		goto dereg_vru_mr;
 	}
 

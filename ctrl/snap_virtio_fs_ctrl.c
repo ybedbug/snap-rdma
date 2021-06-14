@@ -11,12 +11,12 @@
 #include <linux/virtio_fs.h>
 #else
 struct virtio_fs_config {
-        /* Filesystem name (UTF-8, not NUL-terminated, padded with NULs) */
-        uint8_t tag[36];
+	/* Filesystem name (UTF-8, not NUL-terminated, padded with NULs) */
+	uint8_t tag[36];
 
-        /* Number of request queues */
-        uint32_t num_request_queues;
-} __attribute__((packed));
+	/* Number of request queues */
+	uint32_t num_request_queues;
+} __packed;
 #endif
 
 #define SNAP_VIRTIO_FS_MODIFIABLE_FTRS (1ULL << VIRTIO_F_VERSION_1)
@@ -138,14 +138,13 @@ snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int
 		return;
 	}
 
-	dev_cfg = buf;	
+	dev_cfg = buf;
 	last_ch = dev_cfg->tag[sizeof(dev_cfg->tag) - 1];
 	if (last_ch != 0)
-		dev_cfg->tag[sizeof(dev_cfg->tag) - 1] = 0;		
-	
+		dev_cfg->tag[sizeof(dev_cfg->tag) - 1] = 0;
+
 	snap_info(">>> tag: '%s num_request_queues: %u\n",
 		       dev_cfg->tag, dev_cfg->num_request_queues);
-		       
 	dev_cfg->tag[sizeof(dev_cfg->tag) - 1] = last_ch;
 }
 
@@ -187,17 +186,17 @@ snap_virtio_fs_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 
 	if (!queue_state)
 		return -EINVAL;
-				
+
 	for (i = 0; i < ctrl->max_queues; i++) {
 		vfsbar->q_attrs[i].hw_available_index = queue_state[i].hw_available_index;
 		vfsbar->q_attrs[i].hw_used_index = queue_state[i].hw_used_index;
 	}
 
 	dev_cfg = buf;
-	
+
 	if (sizeof(dev_cfg->tag) != sizeof(vfsbar->tag))
 		return -EINVAL;
-	
+
 	memcpy(vfsbar->tag, dev_cfg->tag, sizeof(dev_cfg->tag));
 	vfsbar->num_request_queues = dev_cfg->num_request_queues;
 
@@ -336,7 +335,7 @@ int snap_virtio_fs_ctrl_bar_setup(struct snap_virtio_fs_ctrl *ctrl,
 		bar.vattr.max_queue_size = regs->queue_size ? :
 					   bar.vattr.max_queue_size;
 
-		bar.vattr.max_queues = regs->num_request_queues ? regs->num_request_queues + 1:
+		bar.vattr.max_queues = regs->num_request_queues ? regs->num_request_queues + 1 :
 				       bar.vattr.max_queues;
 
 		if (regs->num_request_queues) {
@@ -706,7 +705,7 @@ static struct snap_virtio_queue_ops snap_virtio_fs_queue_ops = {
  * Allocates a new virtio-fs controller based on the requested attributes.
  *
  * Return: Returns a new snap_virtio_fs_ctrl in case of success, NULL otherwise and
- *         errno will be set to indicate the failure reason.
+ *	 errno will be set to indicate the failure reason.
  */
 struct snap_virtio_fs_ctrl*
 snap_virtio_fs_ctrl_open(struct snap_context *sctx,
@@ -818,7 +817,7 @@ void snap_virtio_fs_ctrl_close(struct snap_virtio_fs_ctrl *ctrl)
 
 /**
  * snap_virtio_fs_ctrl_progress() - Handles control path changes in
- *                                   virtio-fs controller
+ *				   virtio-fs controller
  * @ctrl:       controller instance to handle
  *
  * Looks for control path status in virtio-fs controller and respond

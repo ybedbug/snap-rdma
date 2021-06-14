@@ -42,20 +42,20 @@ struct virtio_fs_outftr {
 
 /**
  * enum fs_virtq_cmd_sm_state - state of the sm handling a cmd
- * @FS_VIRTQ_CMD_STATE_IDLE:            	SM initialization state
+ * @FS_VIRTQ_CMD_STATE_IDLE:	    	SM initialization state
  * @FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS: 	SM received tunnel cmd and copied
- *                                      	immediate data, now fetch cmd descs
- * @FS_VIRTQ_CMD_STATE_READ_REQ:        	Read request data from host memory
+ *				      	immediate data, now fetch cmd descs
+ * @FS_VIRTQ_CMD_STATE_READ_REQ:		Read request data from host memory
  * @FS_VIRTQ_CMD_STATE_HANDLE_REQ:      	Handle received request from host, perform
- *                                      	fuse operation (open/read/write/etc.)
+ *				      	fuse operation (open/read/write/etc.)
  * @FS_VIRTQ_CMD_STATE_OUT_IOV_DONE:  		Finished writing to fs device, check write
- *                                      	status
+ *				      	status
  * @FS_VIRTQ_CMD_STATE_IN_IOV_DONE:   		Write data pulled from fs device to host memory
  * @FS_VIRTQ_CMD_STATE_WRITE_STATUS:    	Write cmd status to host memory
  * @FS_VIRTQ_CMD_STATE_SEND_COMP:       	Send completion to FW
  * @FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP:	Send completion to FW for commands completed
- *                                      	unordered
- * @FS_VIRTQ_CMD_STATE_RELEASE:         	Release command
+ *				      	unordered
+ * @FS_VIRTQ_CMD_STATE_RELEASE:	 	Release command
  * @FS_VIRTQ_CMD_STATE_FATAL_ERR:       	Fatal error, SM stuck here (until reset)
  */
 enum fs_virtq_cmd_sm_state {
@@ -72,8 +72,7 @@ enum fs_virtq_cmd_sm_state {
 	FS_VIRTQ_CMD_STATE_FATAL_ERR,
 };
 
-struct fs_virtq_cmd_aux
-{
+struct fs_virtq_cmd_aux {
 	struct fuse_in_header header;
 	// TODO check why header len of q0 is 64
 	uint8_t resrv[24];
@@ -90,7 +89,7 @@ struct fs_virtq_cmd_aux
  * @buf:		 	buffer holding the request data and aux data
  * @req_size:		 	allocated request buffer size
  * @aux:		 	aux data resided in dma/mr memory
- * @mr:                  	buf mr
+ * @mr:		  	buf mr
  * @req_buf:		 	pointer to request buffer
  * @req_mr:		 	request buffer mr
  * @dma_comp:		 	struct given to snap library
@@ -246,9 +245,9 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 		goto free_iov;
 	}
 
-	cmd->descs = (struct vring_desc*) ((uint8_t*) cmd->buf + req_size);
-	cmd->aux = (struct fs_virtq_cmd_aux*) ((uint8_t*) cmd->descs + descs_size);
-	cmd->fs_req_ftr = (struct virtio_fs_outftr *) ((uint8_t*) cmd->aux + sizeof(struct fs_virtq_cmd_aux));
+	cmd->descs = (struct vring_desc *) ((uint8_t *) cmd->buf + req_size);
+	cmd->aux = (struct fs_virtq_cmd_aux *) ((uint8_t *) cmd->descs + descs_size);
+	cmd->fs_req_ftr = (struct virtio_fs_outftr *) ((uint8_t *) cmd->aux + sizeof(struct fs_virtq_cmd_aux));
 
 	cmd->mr = ibv_reg_mr(vq_priv->pd, cmd->buf, buf_size,
 					IBV_ACCESS_REMOTE_READ |
@@ -463,7 +462,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 
 	if (snap_unlikely(offset > cmd->req_size)) {
 		ERR_ON_CMD(cmd, "Increase cmd's buffer - offset: %d req_size: %d !\n",
-		           offset, cmd->req_size);
+			   offset, cmd->req_size);
 		return EINVAL;
 	}
 
@@ -475,7 +474,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
  * @cmd: Command being processed
  * @status: Callback status
  *
- * Function collects all of the commands descriptors. Descriptors can be 
+ * Function collects all of the commands descriptors. Descriptors can be
  * either in the tunnel command itself, or in host memory.
  *
  * Return: True if state machine is moved to a new state synchronously (error
@@ -489,7 +488,7 @@ static bool sm_fetch_cmd_descs(struct fs_virtq_cmd *cmd,
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
-		           "command without response\n");
+			   "command without response\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
@@ -587,8 +586,8 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 
 	cmd->dma_comp.count = 1;
 	for (i = 1; i < cmd->num_desc; i++) {
-		snap_debug("\t desc[%d] --> pa 0x%llx len %d fl 0x%x F_WR %d \n", i, 
-			   cmd->descs[i].addr, cmd->descs[i].len, cmd->descs[i].flags, 
+		snap_debug("\t desc[%d] --> pa 0x%llx len %d fl 0x%x F_WR %d \n", i,
+			   cmd->descs[i].addr, cmd->descs[i].len, cmd->descs[i].flags,
 			   (cmd->descs[i].flags & VRING_DESC_F_WRITE) ? 1 : 0);
 
 		cmd->total_seg_len += cmd->descs[i].len;
@@ -654,7 +653,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
  * (error cases) or false if the state transition will be done asynchronously.
  */
 static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
-			        enum virtq_cmd_sm_op_status status)
+				enum virtq_cmd_sm_op_status status)
 {
 	struct fs_virtq_dev *fs_dev = &cmd->vq_priv->fs_dev;
 	int ret;
@@ -965,7 +964,7 @@ static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
  * to descr_head_idx. Function starts the state machine processing for this command
  */
 static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
-		           uint32_t data_len, uint32_t imm_data)
+			   uint32_t data_len, uint32_t imm_data)
 {
 	struct fs_virtq_priv *priv = (struct fs_virtq_priv *)q->uctx;
 	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
@@ -986,7 +985,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->use_dmem = false;
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
-	cmd->pos_f_write = 0;	
+	cmd->pos_f_write = 0;
 
 	if (snap_unlikely(cmd->vq_priv->force_in_order))
 		cmd->cmd_available_index = priv->ctrl_available_index;
@@ -1155,7 +1154,7 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	}
 	qattr.vattr.state = SNAP_VIRTQ_STATE_RDY;
 	if (snap_virtio_fs_modify_queue(vq_priv->snap_vfsq,
-				        SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
+					SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
 					&qattr)) {
 		snap_error("failed to change virtq to READY state\n");
 		goto destroy_virtio_fs_queue;
@@ -1220,8 +1219,8 @@ int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 	int ret;
 
 	ret = snap_virtio_get_vring_indexes_from_host(vq_priv->pd, drv_addr, dev_addr,
-				                      vq_priv->snap_attr.vattr.dma_mkey,
-					              &vra, &vru
+						      vq_priv->snap_attr.vattr.dma_mkey,
+						      &vra, &vru
 						     );
 	if (ret) {
 		snap_error("failed to get vring indexes from host memory for queue %d\n",
@@ -1308,7 +1307,7 @@ static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
 static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 {
 	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-	struct fs_virtq_cmd* cmd = &vq_priv->cmd_arr[cmd_idx];
+	struct fs_virtq_cmd *cmd = &vq_priv->cmd_arr[cmd_idx];
 
 	while (cmd->state == FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
 	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {

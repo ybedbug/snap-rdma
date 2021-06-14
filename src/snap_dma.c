@@ -667,7 +667,7 @@ static int snap_modify_lb_qp_to_rts(struct ibv_qp *qp,
 #define SNAP_IB_GRH_FLOWLABEL_MASK            (0x000FFFFF)
 
 static uint16_t snap_get_udp_sport(uint16_t roce_min_src_udp_port,
-                       uint32_t lqpn, uint32_t rqpn)
+				   uint32_t lqpn, uint32_t rqpn)
 {
 	/* flow_label is a field in ipv6 header, how ipv6 flow label
 	 * and udp source port are related, please refer to:
@@ -1565,11 +1565,11 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 
 	/*
 	 * Going to modify three properties of KLM mkey:
- 	 *  1. 'free' field: change this mkey from in free to in use
- 	 *  2. 'len' field: to include the total bytes in iovec
- 	 *  3. 'start_addr' field: use the address of first element as
- 	 *       the start_addr of this mkey
- 	 * */
+	 *  1. 'free' field: change this mkey from in free to in use
+	 *  2. 'len' field: to include the total bytes in iovec
+	 *  3. 'start_addr' field: use the address of first element as
+	 *       the start_addr of this mkey
+	 * */
 	ctrl->mkey_mask = htobe64(MLX5_WQE_UMR_CTRL_MKEY_MASK_FREE |
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_LEN |
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_START_ADDR);

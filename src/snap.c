@@ -3734,7 +3734,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
 	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
 						 sizeof(out));
-	if(!cmkey->devx_obj)
+	if (!cmkey->devx_obj)
 		goto out_err;
 
 	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;

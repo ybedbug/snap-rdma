@@ -58,7 +58,7 @@ int snap_virtio_fs_query_device(struct snap_device *sdev,
 	}
 
 	snap_update_pci_bdf(sdev->pci, attr->vattr.pci_bdf);
-	
+
 	tag = DEVX_ADDR_OF(virtio_fs_device_emulation, device_emulation_out,
 				virtio_fs_config.tag);
 	memcpy(attr->tag, tag, SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN);
