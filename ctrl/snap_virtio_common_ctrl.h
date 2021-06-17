@@ -46,6 +46,7 @@ struct snap_virtio_ctrl_queue;
 enum snap_virtio_ctrl_type {
 	SNAP_VIRTIO_BLK_CTRL,
 	SNAP_VIRTIO_NET_CTRL,
+	SNAP_VIRTIO_FS_CTRL,
 };
 
 /*

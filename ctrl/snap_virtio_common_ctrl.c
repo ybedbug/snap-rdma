@@ -867,6 +867,10 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		ctrl->max_queues = sctx->virtio_net_caps.max_emulated_virtqs;
 		ctrl->sdev_attr.type = attr->pci_type;
 		break;
+	case SNAP_VIRTIO_FS_CTRL:
+		ctrl->max_queues = sctx->virtio_fs_caps.max_emulated_virtqs;
+		ctrl->sdev_attr.type = attr->pci_type;
+		break;
 	default:
 		ret = -EINVAL;
 		goto err;
