@@ -362,7 +362,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		}
 
 		cmd->fake_iov = calloc(seg_max, sizeof(struct iovec));
-		if (!cmd->iov) {
+		if (!cmd->fake_iov) {
 			snap_error("failed to allocate fake iov for virtq %d\n",
 				   idx);
 			ret = -ENOMEM;
