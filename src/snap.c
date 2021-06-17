@@ -522,7 +522,7 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->emulation_caps |= SNAP_VIRTIO_BLK;
 	if (DEVX_GET(query_hca_cap_out, out,
 		capability.cmd_hca_cap.virtio_fs_device_emulation_manager) &&
-	    general_obj_types & (1 << MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION))
+	    general_obj_types & (1UL << MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION))
 		sctx->emulation_caps |= SNAP_VIRTIO_FS;
 	if (DEVX_GET(query_hca_cap_out, out,
 		capability.cmd_hca_cap.resources_on_nvme_emulation_manager))
@@ -828,13 +828,13 @@ static int snap_query_hotplug_caps(struct snap_context *sctx)
 				capability.hotplug_cap.log_max_bar_size);
 	supported_types = DEVX_GET(query_hca_cap_out, out,
 			capability.hotplug_cap.hotplug_device_types_supported);
-	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_NVME))
+	if (supported_types & MLX5_HOTPLUG_DEVICE_BIT_MASK_NVME)
 		sctx->hotplug.supported_types |= SNAP_NVME;
-	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET))
+	if (supported_types & MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_NET)
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_NET;
-	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK))
+	if (supported_types & MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_BLK)
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_BLK;
-	if (supported_types & (1 << MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_FS))
+	if (supported_types & MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_FS)
 		sctx->hotplug.supported_types |= SNAP_VIRTIO_FS;
 
 	return 0;
@@ -2657,6 +2657,9 @@ static void snap_set_virtio_fs_hotplug_device(struct snap_hotplug_attr *attr,
 	DEVX_SET64(device, device_in,
 		   emulation_initial_regs.virtio_fs.device_features,
 		   attr->regs.virtio_fs.device_features);
+	DEVX_SET(device, device_in,
+		 emulation_initial_regs.virtio_fs.num_queues,
+		 attr->regs.virtio_fs.num_request_queues + 1);
 	DEVX_SET(device, device_in,
 		 emulation_initial_regs.virtio_fs.queue_size,
 		 attr->regs.virtio_fs.queue_size);

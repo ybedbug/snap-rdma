@@ -894,7 +894,8 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 	u8	 reserved_at_40[0x20];
 
-	u8	 reserved_at_60[0x10];
+	u8	 resources_on_virtio_fs_emulation_manager[0x1];
+	u8	 reserved_at_61[0xf];
 	u8	 relaxed_ordering_write_pci_enabled[0x1];
 	u8	 reserved_at_71[0xf];
 
@@ -955,7 +956,7 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 	u8	 reserved_at_140[0xa];
 	u8	 log_max_ra_req_qp[0x6];
-	u8	 resources_on_virtio_fs_emulation_manager[0x1];
+	u8       reserved_at_150[0x1];
 	u8	 rts2rts_udp_sport[0x1];
 	u8	 rts2rts_lag_tx_port_affinity[0x1];
 	u8	 dma_mmo[0x1];
@@ -1510,11 +1511,20 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8	 reserved_at_60[0x600];
 };
 
+// PRM - HotPlug Device Object Fields
 enum {
 	MLX5_HOTPLUG_DEVICE_TYPE_NVME		= 0x0,
 	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET	= 0x1,
 	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK	= 0x2,
-	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_FS	= 0x4,
+	MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_FS	= 0x3,
+};
+
+// PRM - Hotplug Capabilities Field Descriptions
+enum {
+	MLX5_HOTPLUG_DEVICE_BIT_MASK_NVME	= 1 << 0x0,
+	MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_NET	= 1 << 0x1,
+	MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_BLK	= 1 << 0x2,
+	MLX5_HOTPLUG_DEVICE_BIT_MASK_VIRTIO_FS	= 1 << 0x4,
 };
 
 enum {
@@ -1615,12 +1625,13 @@ struct mlx5_ifc_query_hca_cap_in_bits {
 	u8	 reserved_at_60[0x20];
 };
 
+// PRM - QUERY_EMULATED_FUNCTIONS_INFO Input Structure Field Descriptions
 enum {
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_PHYSICAL_FUNCTIONS = 0x0,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_PHYSICAL_FUNCTIONS = 0x1,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS = 0x2,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS = 0x3,
-	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_FS_PHYSICAL_FUNCTIONS = 0x4
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_FS_PHYSICAL_FUNCTIONS = 0x5
 };
 
 struct mlx5_ifc_emulated_function_info_bits {
@@ -1689,6 +1700,7 @@ enum mlx5_cap_type {
 	MLX5_CAP_ATOMIC = 3,
 };
 
+// PRM - QUERY_HCA_CAP Input Structure Field Descriptions
 enum {
 	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE	      = 0x0 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_ROCE		      = 0x4 << 1,
@@ -1699,8 +1711,8 @@ enum {
 	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_NET_DEVICE_EMULATION = 0x16 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_BLK_DEVICE_EMULATION = 0x17 << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_HOTPLUG		     = 0x18 << 1,
-	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_FS_DEVICE_EMULATION  = 0x1e << 1,
 	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2	     = 0x20 << 1,
+	MLX5_SET_HCA_CAP_OP_MOD_VIRTIO_FS_DEVICE_EMULATION  = 0x23 << 1,
 };
 
 struct mlx5_ifc_mac_address_layout_bits {
@@ -2510,6 +2522,7 @@ struct mlx5_ifc_alloc_flow_counter_out_bits {
 	u8	reserved_at_60[0x20];
 };
 
+// PRM - HCA Capabilities Field Descriptions
 enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_NVME_DEVICE_EMULATION = 0x0006,
 	MLX5_OBJ_TYPE_NVME_SQ = 0x0007,
@@ -2525,12 +2538,10 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION = 0x0015,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION = 0x0016,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_Q = 0x0017,
-	// TODO - 0x1b occupied in the latest PRM
-	MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION = 0x001b,
 	MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS = 0x001c,
-	MLX5_OBJ_TYPE_VIRTIO_FS_Q = 0x001d,
 	MLX5_OBJ_TYPE_NVME_SQ_BE = 0x0038,
-
+	MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION = 0x003d,
+	MLX5_OBJ_TYPE_VIRTIO_FS_Q = 0x003e,
 };
 
 enum {
@@ -2836,12 +2847,13 @@ struct mlx5_ifc_virtio_blk_initial_registers_bits {
 struct mlx5_ifc_virtio_fs_config_bits {
 	u8         tag[0x120];
 	u8	   num_request_queues[0x20];
+	u8	   reserved_at_140[0x140];
 };
 
 struct mlx5_ifc_virtio_fs_initial_registers_bits {
 	u8	device_features[0x40];
 
-	u8	reserved_at_40[0x10];
+	u8	num_queues[0x10];
 	u8	queue_size[0x10];
 
 	u8	reserved_at_60[0x20];
