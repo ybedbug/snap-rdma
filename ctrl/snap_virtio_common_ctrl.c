@@ -39,8 +39,7 @@
  * for the device to use.
  */
 #define SNAP_VIRTIO_CTRL_LIVE_DETECTED(vctrl) \
-		!!(!(vctrl->bar_prev->status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK) && \
-		    (vctrl->bar_curr->status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
+		!!(vctrl->bar_curr->status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK)
 
 /**
  * snap_virtio_ctrl_critical_bar_change_detected
@@ -55,6 +54,7 @@ bool
 snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl)
 {
 	return ((ctrl->bar_curr->status != ctrl->bar_prev->status) ||
+		(ctrl->bar_curr->enabled != ctrl->bar_prev->enabled) ||
 		 SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl) ||
 		 SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl));
 }
