@@ -7,6 +7,7 @@
 #include "snap_test.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_net.h"
+#include "snap_virtio_fs.h"
 #include "mlx5_ifc.h"
 
 struct snap_sf {
@@ -87,6 +88,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 						qp = snap_create_qp(ibpd, ibcq);
 						if (!qp)
 							break;
+						battr.vattr.pd = ibpd;
 					}
 					battr.qp = qp;
 					vbq = snap_virtio_blk_create_queue(sdev, &battr);
@@ -111,6 +113,70 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 				snap_virtio_blk_teardown_device(sdev);
 			} else {
 				fprintf(stderr, "failed to init Virtio blk dev for pf %d ret=%d\n",
+					attr.pf_id, ret);
+				fflush(stderr);
+			}
+			snap_close_device(sdev);
+		} else {
+			fprintf(stderr, "failed to create device %d for %s\n",
+				attr.pf_id, name);
+			fflush(stderr);
+		}
+	} else if (type == SNAP_VIRTIO_FS) {
+		attr.type = SNAP_VIRTIO_FS_PF;
+		sdev = snap_open_device(sctx, &attr);
+		if (sdev) {
+			ret = snap_virtio_fs_init_device(sdev);
+			if (!ret) {
+				fprintf(stdout, "created Virtio fs dev for pf %d. Creating %d queues\n",
+					attr.pf_id, num_queues);
+				fflush(stdout);
+				for (j = 0; j < num_queues; j++) {
+					struct snap_virtio_fs_queue_attr fs_attr = {};
+					struct snap_virtio_fs_queue *vfsq;
+					struct ibv_qp *qp = NULL;
+
+					fs_attr.vattr.type = q_type;
+					fs_attr.vattr.ev_mode = ev_mode;
+					fs_attr.vattr.idx = j;
+					fs_attr.vattr.size = 16;
+					fs_attr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
+					fs_attr.vattr.full_emulation = true;
+					fs_attr.vattr.virtio_version_1_0 = true;
+					fs_attr.vattr.max_tunnel_desc = 4;
+					fs_attr.vattr.pd = sf->pd;
+					if (sf && sf->context && sf->cq && sf->pd) {
+						qp = snap_create_qp(sf->pd, sf->cq);
+						if (!qp)
+							break;
+					} else {
+						qp = snap_create_qp(ibpd, ibcq);
+						if (!qp)
+							break;
+					}
+					fs_attr.qp = qp;
+					vfsq = snap_virtio_fs_create_queue(sdev, &fs_attr);
+					if (vfsq) {
+						memset(&fs_attr, 0, sizeof(fs_attr));
+						if (!snap_virtio_fs_query_queue(vfsq, &fs_attr)) {
+							fprintf(stdout, "Query virtio fs queue idx=0x%x, depth=%d, state=0x%x\n",
+								fs_attr.vattr.idx, fs_attr.vattr.size, fs_attr.vattr.state);
+							fflush(stdout);
+						} else {
+							fprintf(stderr, "Failed to Query virtio fs queue id=0x%x\n", j);
+							fflush(stderr);
+						}
+						snap_virtio_fs_destroy_queue(vfsq);
+					} else {
+						fprintf(stderr, "failed to create Virtio fs queue id=%d err=%d\n", j, errno);
+						fflush(stderr);
+					}
+					if (qp)
+						ibv_destroy_qp(qp);
+				}
+				snap_virtio_fs_teardown_device(sdev);
+			} else {
+				fprintf(stderr, "failed to init Virtio fs dev for pf %d ret=%d\n",
 					attr.pf_id, ret);
 				fflush(stderr);
 			}
@@ -247,17 +313,19 @@ int main(int argc, char **argv)
 				dev_type = SNAP_VIRTIO_BLK;
 			else if (!strcmp(optarg, "virtio_net"))
 				dev_type = SNAP_VIRTIO_NET;
+			else if (!strcmp(optarg, "virtio_fs"))
+				dev_type = SNAP_VIRTIO_FS;
 			else
 				printf("Unknown type %s. Using default\n", optarg);
 			break;
 		default:
-			printf("Usage: snap_create_destroy_virtio_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type> [-v (event_channel) -s (SF)]\n");
+			printf("Usage: snap_create_destroy_virtio_queue -n <num_queues> -t <q_type> -e <ev_mode> -d <dev_type: all, virtio_blk, virtio_net, virtio_fs> [-v (event_channel) -s (SF)]\n");
 			exit(1);
 		}
 	}
 
 	if (!dev_type)
-		dev_type = SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET;
+		dev_type = SNAP_VIRTIO_BLK | SNAP_VIRTIO_NET | SNAP_VIRTIO_FS;
 
 	list = ibv_get_device_list(&dev_count);
 	if (!list) {
@@ -302,6 +370,11 @@ int main(int argc, char **argv)
 		ret = -errno;
 		goto out_free;
 	}
+	else {
+		fprintf(stdout, "opened snap ctx for %d types on %s\n", dev_type,
+			sctx->context->device->name);
+		fflush(stdout);
+	}
 
 	if (dev_type & SNAP_VIRTIO_BLK)
 		ret |= snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_BLK,
@@ -315,8 +388,14 @@ int main(int argc, char **argv)
 							ev_mode,
 							sctx->context->device->name,
 							ev, &sf);
-
+	if (dev_type & SNAP_VIRTIO_FS)
+		ret |= snap_create_destroy_virtq_helper(sctx, SNAP_VIRTIO_FS,
+							num_queues, q_type,
+							ev_mode,
+							sctx->context->device->name,
+							ev, &sf);
 	snap_ctx_close(sctx);
+	fprintf(stdout, "closed snap ctx for %d types\n", dev_type);
 
 out_free:
 	if (sf.cq)

@@ -80,14 +80,22 @@ BLK_FILES = ../blk/snap_null_blk_dev.c \
 	    ../blk/snap_blk_dev.c \
 	    ../blk/snap_blk_dev.h
 
+FS_FILES = ../fs/snap_fsd_dev.c \
+	   ../fs/snap_fs_dev.c \
+	   ../fs/snap_fs_dev.h \
+	   ../fs/snap_fsd_dev.h
+
 snap_create_destroy_virtio_ctrl_CFLAGS = $(LOCAL_CFLAGS) \
 					 -I$(top_srcdir)/ctrl \
-					 -I$(top_srcdir)/blk
-snap_create_destroy_virtio_ctrl_SOURCES = snap_create_destroy_virtio_ctrl.c \
-					  $(BLK_FILES)
+					 -I$(top_srcdir)/blk \
+					 -I$(top_srcdir)/fs
+snap_create_destroy_virtio_ctrl_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_virtio_ctrl.c \
+					  $(BLK_FILES) \
+					  $(FS_FILES)
 snap_create_destroy_virtio_ctrl_LDADD = $(IBVERBS_LIBS) \
 					$(top_builddir)/ctrl/libsnap-virtio-net-ctrl.la \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la \
+					$(top_builddir)/ctrl/libsnap-virtio-fs-ctrl.la \
 				        $(top_builddir)/src/libsnap.la
 
 snap_create_destroy_nvme_ctrl_CFLAGS = $(LOCAL_CFLAGS) \
