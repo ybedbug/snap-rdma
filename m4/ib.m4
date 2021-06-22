@@ -53,7 +53,8 @@ AS_IF([test "x$with_ib" == xyes],
                         ibv_query_gid, \
                         ibv_get_device_name, \
                         ibv_create_srq, \
-                        ibv_get_async_event],
+                        ibv_get_async_event,
+                        ibv_query_gid_ex],
                        [],
                        [have_ib_funcs=no],
                        [#include <infiniband/verbs.h>])

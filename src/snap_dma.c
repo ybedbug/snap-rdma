@@ -7,6 +7,8 @@
 #include "mlx5_ifc.h"
 #include "snap_internal.h"
 
+#include "config.h"
+
 /* memory barriers */
 
 #define snap_compiler_fence() asm volatile(""::: "memory")
@@ -660,6 +662,30 @@ static uint16_t snap_get_udp_sport(uint16_t roce_min_src_udp_port,
 
 	return (uint16_t)(fl_low | roce_min_src_udp_port);
 }
+
+#if !HAVE_DECL_IBV_QUERY_GID_EX
+enum ibv_gid_type {
+	IBV_GID_TYPE_IB,
+	IBV_GID_TYPE_ROCE_V1,
+	IBV_GID_TYPE_ROCE_V2,
+};
+
+struct ibv_gid_entry {
+	union ibv_gid gid;
+	uint32_t gid_index;
+	uint32_t port_num;
+	uint32_t gid_type; /* enum ibv_gid_type */
+	uint32_t ndev_ifindex;
+};
+
+static int ibv_query_gid_ex(struct ibv_context *context, uint32_t port_num,
+			    uint32_t gid_index, struct ibv_gid_entry *entry,
+			    uint32_t flags)
+{
+	snap_error("ibv_query_gid_ex() is not implemented\n");
+	return -1;
+}
+#endif
 
 static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 				 bool ib_en, uint16_t lid,
