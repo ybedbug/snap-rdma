@@ -3098,7 +3098,7 @@ out_err:
 	return ret;
 }
 
-static void snap_hotunplug_device(struct snap_pci *pf)
+static int snap_hotunplug_device(struct snap_pci *pf)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(hotunplug_device_input)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(hotunplug_device_output)] = {0};
@@ -3112,7 +3112,8 @@ static void snap_hotunplug_device(struct snap_pci *pf)
 						- DEVX_ST_SZ_BYTES(device));
 	DEVX_SET(device, device_in, vhca_id, pf->mpci.vhca_id);
 
-	mlx5dv_devx_general_cmd(context, in, sizeof(in), out, sizeof(out));
+	// 0 is returned or the value of errno on a failure
+	return mlx5dv_devx_general_cmd(context, in, sizeof(in), out, sizeof(out));
 }
 
 /**
@@ -3120,21 +3121,29 @@ static void snap_hotunplug_device(struct snap_pci *pf)
  * @pf:        snap physical PCI function
  *
  * Unplug a previously hot-plugged snap physical PCI function from the host.
+ *
+ * Return 0 on success or errno on failure.
  */
-void snap_hotunplug_pf(struct snap_pci *pf)
+int snap_hotunplug_pf(struct snap_pci *pf)
 {
+	int ret = 0;
+
 	if (!pf->plugged)
-		return;
+		return ret;
 
 	if (!pf->hotplugged)
-		return;
+		return ret;
 
-	snap_free_virtual_functions(pf);
+	ret = snap_hotunplug_device(pf);
+	if (!ret) {
+		snap_free_virtual_functions(pf);
 
-	snap_hotunplug_device(pf);
-	pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
-	pf->hotplugged = false;
-	pf->plugged = false;
+		pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+		pf->hotplugged = false;
+		pf->plugged = false;
+	}
+
+	return ret;
 }
 
 /**
