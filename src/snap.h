@@ -162,6 +162,7 @@ struct snap_cross_mkey {
 struct snap_indirect_mkey {
 	struct mlx5dv_devx_obj *devx_obj;
 	uint32_t mkey;
+	uint64_t addr;
 	struct mlx5_klm *klm_array;
 };
 

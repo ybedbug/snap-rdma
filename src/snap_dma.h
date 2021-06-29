@@ -36,6 +36,8 @@
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
 
+#include "snap.h"
+
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
 struct snap_dma_q;
@@ -110,6 +112,7 @@ struct snap_dma_ibv_qp {
 	struct ibv_cq  *rx_cq;
 	struct ibv_mr  *rx_mr;
 	char           *rx_buf;
+	int            mode;
 
 	/* used when working in devx mode */
 	struct snap_dv_qp  dv_qp;
@@ -251,6 +254,9 @@ int snap_dma_q_progress(struct snap_dma_q *q);
 int snap_dma_q_flush(struct snap_dma_q *q);
 int snap_dma_q_arm(struct snap_dma_q *q);
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
+int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
+			int klm_entries, struct snap_indirect_mkey *klm_mkey,
+			struct snap_dma_completion *comp);
 
 /**
  * snap_dma_q_ctx - get queue context
