@@ -645,7 +645,7 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
 int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 {
 	int n_enabled = 0;
-	int i;
+	int i, ret;
 	struct snap_pg *pg;
 
 	if (snap_virtio_ctrl_is_stopped(ctrl))
@@ -677,7 +677,9 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 			pg = snap_pg_get_next(&ctrl->pg_ctx);
 		snap_virtio_ctrl_desched_q_nolock(ctrl->queues[i]);
 		ctrl->queues[i]->pg = pg;
-		ctrl->q_ops->resume(ctrl->queues[i]);
+		ret = ctrl->q_ops->resume(ctrl->queues[i]);
+		if (ret)
+			return ret;
 		snap_virtio_ctrl_sched_q_nolock(ctrl, ctrl->queues[i], pg);
 		n_enabled++;
 	}
