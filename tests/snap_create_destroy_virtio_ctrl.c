@@ -99,8 +99,9 @@ static struct snap_context *get_snap_ctxt(int *pf_id, int emu_type,
 			hp_attr.pci_attr.class_code = 0x018000;
 			hp_attr.pci_attr.device_id = 0x105A;
 			hp_attr.pci_attr.vendor_id = 0x1AF4;
-			hp_attr.pci_attr.subsystem_id = 0x1100;
-			hp_attr.pci_attr.subsystem_vendor_id = 0x1AF4;
+			hp_attr.pci_attr.subsystem_id = 0x6004;
+			// 15b3  Mellanox Technologies
+			hp_attr.pci_attr.subsystem_vendor_id = 0x15b3;
 			// From virtio-fs env.:
 			// 00:07.0 Mass storage controller: Red Hat, Inc Device 105a (rev 01)
 			// Subsystem: Red Hat, Inc Device 1100
