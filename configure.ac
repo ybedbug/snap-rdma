@@ -41,6 +41,9 @@ AC_SEARCH_LIBS([pthread_create],[pthread])
 # check for IB
 m4_include([m4/ib.m4])
 
+# APU/FLEX IO SDK
+m4_include([m4/flexio.m4])
+
 # configure gtest
 m4_include([m4/gtest.m4])
 
