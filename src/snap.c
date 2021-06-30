@@ -3751,14 +3751,17 @@ int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
 
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf)
 {
-       if (spci->hotplugged && spci->pci_bdf.raw != pci_bdf) {
-               spci->pci_bdf.raw = pci_bdf;
-               snprintf(spci->pci_number, sizeof(spci->pci_number), "%02x:%02x.%d",
-                       spci->pci_bdf.bdf.bus, spci->pci_bdf.bdf.device,
-                       spci->pci_bdf.bdf.function);
-               snap_warn("sctx:%p pci function(%d) pci_bdf changed to:%s\n",
-                           spci->sctx, spci->id, spci->pci_number);
-       }
+	char old_bdf[16];
+
+	if (spci->pci_bdf.raw != pci_bdf) {
+		strncpy(old_bdf, spci->pci_number, sizeof(old_bdf));
+		spci->pci_bdf.raw = pci_bdf;
+		snprintf(spci->pci_number, sizeof(spci->pci_number), "%02x:%02x.%d",
+			spci->pci_bdf.bdf.bus, spci->pci_bdf.bdf.device,
+			spci->pci_bdf.bdf.function);
+		snap_warn("sctx:%p pci function(%d) pci_bdf changed from:%s to:%s\n",
+			spci->sctx, spci->id, old_bdf, spci->pci_number);
+	}
 }
 
 static bool
