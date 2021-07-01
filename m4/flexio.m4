@@ -45,4 +45,4 @@ AS_IF([test "x$flexio_app" == xyes], [
 	],[:])
 
 AM_CONDITIONAL([HAVE_FLEXIO], [test "x$flexio_app" != xno])
-AM_CONDITIONAL([HAVE_APU_CC], [test "$APU_CC" != xno])
+AM_CONDITIONAL([HAVE_APU_CC], [test "x$flexio_app" != xno -a "x$APU_CC" != xno])
