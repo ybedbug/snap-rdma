@@ -1,7 +1,14 @@
 #include <stdint.h>
-// TODO - add under configure flag
-//#include <linux/virtio_fs.h>
+#include <linux/virtio_config.h>
 
+#include "snap_virtio_fs_ctrl.h"
+#include "snap_virtio_fs_virtq.h"
+
+#include "config.h"
+
+#ifdef HAVE_LINUX_VIRTIO_FS_H
+#include <linux/virtio_fs.h>
+#else
 struct virtio_fs_config {
         /* Filesystem name (UTF-8, not NUL-terminated, padded with NULs) */
         uint8_t tag[36];
@@ -9,11 +16,7 @@ struct virtio_fs_config {
         /* Number of request queues */
         uint32_t num_request_queues;
 } __attribute__((packed));
-
-#include <linux/virtio_config.h>
-
-#include "snap_virtio_fs_ctrl.h"
-#include "snap_virtio_fs_virtq.h"
+#endif
 
 #define SNAP_VIRTIO_FS_MODIFIABLE_FTRS (1ULL << VIRTIO_F_VERSION_1)
 #define SNAP_VIRTIO_FS_SEG_SIZE_MAX (4096)

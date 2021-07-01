@@ -35,6 +35,7 @@ AC_CHECK_HEADER([stdlib.h])
 AC_CHECK_HEADER([sys/queue.h],
                 [],
                 [AC_MSG_ERROR("Cannot find sys/queue.h needed for compilation")])
+AC_CHECK_HEADERS([linux/virtio_fs.h])
 
 AC_SEARCH_LIBS([pthread_create],[pthread])
 
