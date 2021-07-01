@@ -67,6 +67,7 @@ AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile
+                 apu/Makefile
                  ctrl/Makefile
                  rpc/Makefile
                  tests/Makefile])
