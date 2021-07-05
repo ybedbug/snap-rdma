@@ -425,6 +425,8 @@ struct snap_context {
 #define SNAP_ALIGN_CEIL(val, align) \
 	SNAP_ALIGN_FLOOR(((val) + ((typeof(val)) (align) - 1)), align)
 
+#define SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM   128
+
 void snap_close_device(struct snap_device *sdev);
 struct snap_device *snap_open_device(struct snap_context *sctx,
 		struct snap_device_attr *attr);

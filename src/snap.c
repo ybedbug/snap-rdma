@@ -3661,28 +3661,34 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	struct mlx5_klm *klm_array = attr->klm_array;
 	int klm_num = attr->klm_num;
 	int in_size_dw = DEVX_ST_SZ_DW(create_mkey_in) +
-			(klm_num ? SNAP_ALIGN_CEIL(klm_num, 4) : 0) * DEVX_ST_SZ_DW(klm);
+			SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM * DEVX_ST_SZ_DW(klm);
 	uint32_t in[in_size_dw];
 	uint32_t out[DEVX_ST_SZ_DW(create_mkey_out)] = {0};
 	void *mkc;
-	uint32_t translation_size;
+	uint32_t translation_size = 0;
 	struct snap_indirect_mkey *cmkey;
 	struct ibv_context *ctx = pd->context;
 	uint32_t pd_id;
+	int i = 0;
+	uint8_t *klm;
 
 	cmkey = calloc(1, sizeof(*cmkey));
 	if (!cmkey) {
 		snap_error("failed to alloc cross_mkey \n");
 		return NULL;
 	}
+
 	memset(in, 0, in_size_dw * 4);
 	DEVX_SET(create_mkey_in, in, opcode, MLX5_CMD_OP_CREATE_MKEY);
 	mkc = DEVX_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
+	klm = (uint8_t *)DEVX_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
+
 	if (klm_num > 0) {
-		int i;
-		uint8_t *klm = (uint8_t *)DEVX_ADDR_OF(create_mkey_in, in,
-						       klm_pas_mtt);
 		translation_size = SNAP_ALIGN_CEIL(klm_num, 4);
+		if (translation_size > SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM) {
+			snap_error("Too large translaion entry tables \n");
+			goto out_err;
+		}
 
 		for (i = 0; i < klm_num; i++) {
 			DEVX_SET(klm, klm, byte_count, klm_array[i].byte_count);
@@ -3690,21 +3696,25 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 			DEVX_SET64(klm, klm, address, klm_array[i].address);
 			klm += DEVX_ST_SZ_BYTES(klm);
 		}
-		for (; i < (int)translation_size; i++) {
-			DEVX_SET(klm, 	klm, byte_count, 0x0);
-			DEVX_SET(klm, 	klm, mkey, 0x0);
-			DEVX_SET64(klm, klm, address, 0x0);
-			klm += DEVX_ST_SZ_BYTES(klm);
-		}
-		DEVX_SET(mkc, mkc, access_mode_1_0, attr->log_entity_size ?
-			 MLX5_MKC_ACCESS_MODE_KLMFBS :
-			 MLX5_MKC_ACCESS_MODE_KLMS);
-		DEVX_SET(mkc, mkc, log_page_size, attr->log_entity_size);
 	}
+
+	for (; i < SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM; i++) {
+		DEVX_SET(klm, 	klm, byte_count, 0x0);
+		DEVX_SET(klm, 	klm, mkey, 0x0);
+		DEVX_SET64(klm, klm, address, 0x0);
+		klm += DEVX_ST_SZ_BYTES(klm);
+	}
+
+	DEVX_SET(mkc, mkc, access_mode_1_0, attr->log_entity_size ?
+		 MLX5_MKC_ACCESS_MODE_KLMFBS :
+		 MLX5_MKC_ACCESS_MODE_KLMS);
+	DEVX_SET(mkc, mkc, log_page_size, attr->log_entity_size);
 
 	snap_get_pd_id(pd, &pd_id);
 	DEVX_SET(create_mkey_in, in, translations_octword_actual_size,
 		 klm_num);
+	if (klm_num == 0)
+		DEVX_SET(mkc, mkc, free, 0x1);
 	DEVX_SET(mkc, mkc, lw, 0x1);
 	DEVX_SET(mkc, mkc, lr, 0x1);
 	DEVX_SET(mkc, mkc, rw, 0x1);
@@ -3712,7 +3722,8 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, umr_en, 0x1);
 	DEVX_SET(mkc, mkc, qpn, 0xffffff);
 	DEVX_SET(mkc, mkc, pd, pd_id);
-	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey, translation_size);
+	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey,
+		SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM);
 	DEVX_SET(mkc, mkc, relaxed_ordering_write,
 		attr->relaxed_ordering_write);
 	DEVX_SET(mkc, mkc, relaxed_ordering_read,
