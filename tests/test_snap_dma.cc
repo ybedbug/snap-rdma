@@ -565,3 +565,60 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	snap_close(sctx);
 	host_uio_dma_destroy();
 }
+
+TEST_F(SnapDmaTest, create_destory_indirect_mkey_0) {
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = 0;
+	mkey_attr.relaxed_ordering_read = 0;
+	mkey_attr.klm_array = NULL;
+	mkey_attr.klm_num = 0;
+
+	klm_mkey = snap_create_indirect_mkey(m_pd, &mkey_attr);
+	ASSERT_TRUE(klm_mkey);
+
+	snap_destroy_indirect_mkey(klm_mkey);
+}
+
+TEST_F(SnapDmaTest, create_destory_indirect_mkey_1) {
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+	struct mlx5_klm *klm;
+	char *buf;
+	struct ibv_mr *mr;
+
+	buf = (char *)malloc(4096);
+	if (!buf)
+		FAIL() << "buffer allocation";
+
+	mr = ibv_reg_mr(m_pd, buf, 4096, IBV_ACCESS_LOCAL_WRITE);
+	if (!mr)
+		FAIL() << "memory register";
+
+	klm = (struct mlx5_klm *)malloc(sizeof(*klm));
+	if (!klm)
+		FAIL() << "klm buffer allocation";
+
+	klm->byte_count = mr->length;
+	klm->mkey = mr->lkey;
+	klm->address = (uintptr_t)mr->addr;
+
+	mkey_attr.addr = klm->address;
+	mkey_attr.size = klm->byte_count;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = 0;
+	mkey_attr.relaxed_ordering_read = 0;
+	mkey_attr.klm_array = klm;
+	mkey_attr.klm_num = 1;
+
+	klm_mkey = snap_create_indirect_mkey(m_pd, &mkey_attr);
+	ASSERT_TRUE(klm_mkey);
+
+	snap_destroy_indirect_mkey(klm_mkey);
+	ibv_dereg_mr(mr);
+	free(buf);
+}
