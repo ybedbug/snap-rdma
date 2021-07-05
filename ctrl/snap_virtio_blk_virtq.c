@@ -148,7 +148,7 @@ struct blk_virtq_cmd {
 	uint32_t total_in_len;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool use_dmem;
-	blk_virtq_io_cmd_stat_t *io_cmd_stat;
+	struct snap_virtio_ctrl_queue_counter *io_cmd_stat;
 	uint16_t cmd_available_index;
 	struct virtio_blk_outftr blk_req_ftr;
 	bool zcopy;
@@ -1583,6 +1583,13 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 	state->hw_available_index = priv->ctrl_available_index;
 	state->hw_used_index = attr.hw_used_index;
 	return 0;
+}
+
+const struct snap_virtio_ctrl_queue_stats *
+blk_virtq_get_io_stats(struct blk_virtq_ctx *q)
+{
+	struct blk_virtq_priv *priv = q->priv;
+	return &priv->vq_ctx.io_stat;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)

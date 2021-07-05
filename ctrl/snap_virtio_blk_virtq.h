@@ -45,25 +45,11 @@
  * @fatal_err:	Fatal error flag
  * @priv:	Opaque privte struct used for implementation
  */
-
-typedef struct blk_virtq_io_cmd_stat {
-    uint64_t total;
-    uint64_t success;
-    uint64_t fail;
-    uint64_t unordered;
-} blk_virtq_io_cmd_stat_t;
-
-typedef struct blk_virtq_io_stat {
-    blk_virtq_io_cmd_stat_t read;
-    blk_virtq_io_cmd_stat_t write;
-    blk_virtq_io_cmd_stat_t flush;
-} blk_virtq_io_stat_t;
-
 struct blk_virtq_ctx {
     int idx;
     bool fatal_err;
     void *priv;
-    blk_virtq_io_stat_t io_stat;
+    struct snap_virtio_ctrl_queue_stats io_stat;
 };
 
 /**
@@ -121,6 +107,8 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q);
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q);
 int blk_virtq_get_state(struct blk_virtq_ctx *q,
 			struct snap_virtio_ctrl_queue_state *state);
+const struct snap_virtio_ctrl_queue_stats *
+blk_virtq_get_io_stats(struct blk_virtq_ctx *q);
 
 /* debug */
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx);

@@ -816,6 +816,13 @@ static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *v
 	return blk_virtq_get_state(vbq->q_impl, state);
 }
 
+const struct snap_virtio_ctrl_queue_stats *
+snap_virtio_blk_ctrl_queue_get_io_stats(struct snap_virtio_ctrl_queue *vq)
+{
+	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+	return blk_virtq_get_io_stats(vbq->q_impl);
+}
+
 static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl)
 {
 	int ret;
@@ -854,7 +861,8 @@ static struct snap_virtio_queue_ops snap_virtio_blk_queue_ops = {
 	.suspend = snap_virtio_blk_ctrl_queue_suspend,
 	.is_suspended = snap_virtio_blk_ctrl_queue_is_suspended,
 	.resume = snap_virtio_blk_ctrl_queue_resume,
-	.get_state = snap_virtio_blk_ctrl_queue_get_state
+	.get_state = snap_virtio_blk_ctrl_queue_get_state,
+	.get_io_stats = snap_virtio_blk_ctrl_queue_get_io_stats
 };
 
 /**

@@ -1697,3 +1697,14 @@ free_buf:
 	free(buf);
 	return ret;
 }
+
+const struct snap_virtio_ctrl_queue_stats *
+snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx)
+{
+	if (q_idx < ctrl->max_queues) {
+		if (ctrl->queues[q_idx] && ctrl->q_ops->get_io_stats)
+			return  ctrl->q_ops->get_io_stats(ctrl->queues[q_idx]);
+	}
+
+	return NULL;
+}
