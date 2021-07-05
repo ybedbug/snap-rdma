@@ -52,7 +52,7 @@ struct snap_virtio_blk_queue_attr {
 
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
-
+	struct blk_virtq_q_ops* q_ops;
 	struct snap_virtio_blk_device	*vbdev;
 };
 
@@ -73,6 +73,22 @@ struct snap_virtio_blk_device_attr {
 struct snap_virtio_blk_device {
 	uint32_t				num_queues;
 	struct snap_virtio_blk_queue		*virtqs;
+};
+
+struct blk_virtq_q_ops {
+	struct snap_virtio_blk_queue *(*create)(struct snap_device *sdev,
+			struct snap_virtio_blk_queue_attr *attr);
+	int (*destroy)(struct snap_virtio_blk_queue *vbq);
+	int (*query)(struct snap_virtio_blk_queue *vbq,
+			struct snap_virtio_blk_queue_attr *attr);
+	int (*modify)(struct snap_virtio_blk_queue *vbq,
+			uint64_t mask, struct snap_virtio_blk_queue_attr *attr);
+};
+
+enum {
+	SNAP_HW_Q_PROVIDER = 0,
+	SNAP_SW_Q_PROVIDER = 1,
+	SNAP_DPA_Q_PROVIDER = 2,
 };
 
 int snap_virtio_blk_init_device(struct snap_device *sdev);

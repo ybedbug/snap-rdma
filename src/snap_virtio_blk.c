@@ -1,6 +1,9 @@
 #include "snap_virtio_blk.h"
-
+#include "snap_env.h"
 #include "mlx5_ifc.h"
+
+#define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
 
 /**
  * snap_virtio_blk_query_device() - Query an Virtio block snap device
@@ -115,6 +118,21 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev)
 		return ret;
 
 	sdev->mod_allowed_mask = attr.modifiable_fields;
+
+	return 0;
+}
+
+static int
+snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
+{
+	struct snap_virtio_blk_queue_attr attr = {};
+	int ret;
+
+	ret = snap_virtio_blk_query_queue(vbq, &attr);
+	if (ret)
+		return ret;
+
+	vbq->virtq.mod_allowed_mask = attr.modifiable_fields;
 
 	return 0;
 }
@@ -263,33 +281,17 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
 }
 
 /**
- * snap_virtio_blk_query_queue() - Query a Virtio block queue object
- * @vbq:        snap Virtio block queue
- * @attr:       attributes for the queue query (output)
- *
- * Query a Virtio block snap queue object.
- *
- * Return: 0 on success, and attr is filled with the query result.
- */
-int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
-		struct snap_virtio_blk_queue_attr *attr)
-{
-	return snap_virtio_query_queue(&vbq->virtq, &attr->vattr);
-}
-
-/**
- * snap_virtio_blk_create_queue() - Create a new Virtio block snap queue object
+ * snap_virtio_blk_create_hw_queue() - Create a new Virtio block snap hw queue object
  * @sdev:       snap device
  * @attr:       attributes for the queue creation
  *
- * Create a Virtio block snap queue object with the given attributes.
+ * Create a hw Virtio block snap queue object with the given attributes.
  *
  * Return: Returns snap_virtio_blk_queue in case of success, NULL otherwise and
  * errno will be set to indicate the failure reason.
  */
-struct snap_virtio_blk_queue*
-snap_virtio_blk_create_queue(struct snap_device *sdev,
-	struct snap_virtio_blk_queue_attr *attr)
+static struct snap_virtio_blk_queue* snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
+		struct snap_virtio_blk_queue_attr *attr)
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
@@ -341,7 +343,6 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 
 		vbq->virtq.virtq->consume_event = snap_consume_virtio_blk_queue_event;
 	}
-
 	vbq->virtq.idx = attr->vattr.idx;
 
 	return vbq;
@@ -357,14 +358,14 @@ out:
 }
 
 /**
- * snap_virtio_blk_destroy_queue() - Destroy Virtio block queue object
+ * snap_virtio_blk_destroy_hw_queue() - Destroy Virtio block hw queue object
  * @vbq:       Virtio block queue
  *
- * Destroy and free a snap virtio block queue context.
+ * Destroy and free a snap virtio block hw queue context.
  *
  * Return: Returns 0 on success.
  */
-int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
+static int snap_virtio_blk_destroy_hw_queue(struct snap_virtio_blk_queue *vbq)
 {
 	int mkey_ret, q_ret;
 
@@ -380,19 +381,130 @@ int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
 	return q_ret;
 }
 
-static int
-snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
+/**
+ * snap_virtio_blk_query_hw_queue() - Query a Virtio block hw queue object
+ * @vbq:        snap Virtio block queue
+ * @attr:       attributes for the queue query (output)
+ *
+ * Query a hw Virtio block snap queue object.
+ *
+ * Return: 0 on success, and attr is filled with the query result.
+ */
+static int snap_virtio_blk_query_hw_queue(struct snap_virtio_blk_queue *vbq,
+		struct snap_virtio_blk_queue_attr *attr)
 {
-	struct snap_virtio_blk_queue_attr attr = {};
+	return snap_virtio_query_queue(&vbq->virtq, &attr->vattr);
+}
+
+/**
+ * snap_virtio_blk_modify_hw_queue() - Modify a Virtio blk hw queue object
+ * @vbq:        snap Virtio blk queue
+ * @mask:       selected params to modify (mask of enum
+ *              snap_virtio_blk_queue_modify)
+ * @attr:       attributes for the virtq modify
+ *
+ * Modify a Virtio blk hw queue snap object according to a given mask.
+ *
+ * Return: 0 on success.
+ */
+static int snap_virtio_blk_modify_hw_queue(struct snap_virtio_blk_queue *vbq,
+		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
+{
 	int ret;
 
-	ret = snap_virtio_blk_query_queue(vbq, &attr);
-	if (ret)
-		return ret;
+	if (!vbq->virtq.mod_allowed_mask) {
+		ret = snap_virtio_blk_get_modifiable_virtq_fields(vbq);
+		if (ret)
+			return ret;
+	}
 
-	vbq->virtq.mod_allowed_mask = attr.modifiable_fields;
+	return snap_virtio_modify_queue(&vbq->virtq, mask, &attr->vattr);
+}
 
-	return 0;
+static struct blk_virtq_q_ops snap_virtq_blk_hw_ops = {
+	.create = snap_virtio_blk_create_hw_queue,
+	.destroy = snap_virtio_blk_destroy_hw_queue,
+	.query = snap_virtio_blk_query_hw_queue,
+	.modify = snap_virtio_blk_modify_hw_queue,
+};
+
+static struct blk_virtq_q_ops *snap_virtio_blk_queue_provider(void)
+{
+	int q_provider = snap_env_getenv(SNAP_QUEUE_PROVIDER);
+	struct blk_virtq_q_ops *queue_provider_ops;
+
+	switch (q_provider) {
+	case SNAP_HW_Q_PROVIDER:
+		queue_provider_ops = &snap_virtq_blk_hw_ops;
+		break;
+	case SNAP_SW_Q_PROVIDER:
+		queue_provider_ops = NULL;
+		break;
+	case SNAP_DPA_Q_PROVIDER:
+		queue_provider_ops = NULL;
+		break;
+	default:
+		snap_error("Invalid Queue provider received %d\n", q_provider);
+		queue_provider_ops = NULL;
+		break;
+	}
+
+	return queue_provider_ops;
+}
+
+/**
+ * snap_virtio_blk_query_queue() - Query a Virtio block queue object
+ * @vbq:        snap Virtio block queue
+ * @attr:       attributes for the queue query (output)
+ *
+ * Query a Virtio block snap queue object.
+ *
+ * Return: 0 on success, and attr is filled with the query result.
+ */
+int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
+		struct snap_virtio_blk_queue_attr *attr)
+{
+	return vbq->q_ops->query(vbq, attr);
+}
+
+/**
+ * snap_virtio_blk_create_queue() - Create a new Virtio block snap queue object
+ * @sdev:       snap device
+ * @attr:       attributes for the queue creation
+ *
+ * Create a Virtio block snap queue object with the given attributes.
+ *
+ * Return: Returns snap_virtio_blk_queue in case of success, NULL otherwise and
+ * errno will be set to indicate the failure reason.
+ */
+struct snap_virtio_blk_queue*
+snap_virtio_blk_create_queue(struct snap_device *sdev,
+	struct snap_virtio_blk_queue_attr *attr)
+{
+	struct snap_virtio_blk_queue *vbq;
+	struct blk_virtq_q_ops *q_ops = snap_virtio_blk_queue_provider();
+
+	if (!q_ops)
+		return NULL;
+
+	vbq = q_ops->create(sdev, attr);
+	if (vbq)
+		vbq->q_ops = q_ops;
+
+	return vbq;
+}
+
+/**
+ * snap_virtio_blk_destroy_queue() - Destroy Virtio block queue object
+ * @vbq:       Virtio block queue
+ *
+ * Destroy and free a snap virtio block queue context.
+ *
+ * Return: Returns 0 on success.
+ */
+int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
+{
+	return vbq->q_ops->destroy(vbq);
 }
 
 /**
@@ -409,13 +521,5 @@ snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
 int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
 {
-	int ret;
-
-	if (!vbq->virtq.mod_allowed_mask) {
-		ret = snap_virtio_blk_get_modifiable_virtq_fields(vbq);
-		if (ret)
-			return ret;
-	}
-
-	return snap_virtio_modify_queue(&vbq->virtq, mask, &attr->vattr);
+	return vbq->q_ops->modify(vbq, mask, attr);
 }

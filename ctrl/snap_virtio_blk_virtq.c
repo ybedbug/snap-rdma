@@ -1296,6 +1296,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	blk_virtq_cmd_progress(cmd, status);
 }
 
+
 /**
  * blk_virtq_create() - Creates a new blk virtq object, along with RDMA QPs.
  * @vbq:	parent virt queue
@@ -1392,8 +1393,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		snap_error("no fw qp exist when trying to create virtq\n");
 		goto release_rdma_qp;
 	}
-	vq_priv->snap_vbq = snap_virtio_blk_create_queue(snap_dev,
-							 &vq_priv->snap_attr);
+
+	vq_priv->snap_vbq = snap_virtio_blk_create_queue(snap_dev, &vq_priv->snap_attr);
 	if (!vq_priv->snap_vbq) {
 		snap_error("failed creating VIRTQ fw element\n");
 		goto release_rdma_qp;
