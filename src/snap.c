@@ -3709,6 +3709,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, lr, 0x1);
 	DEVX_SET(mkc, mkc, rw, 0x1);
 	DEVX_SET(mkc, mkc, rr, 0x1);
+	DEVX_SET(mkc, mkc, umr_en, 0x1);
 	DEVX_SET(mkc, mkc, qpn, 0xffffff);
 	DEVX_SET(mkc, mkc, pd, pd_id);
 	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey, translation_size);
