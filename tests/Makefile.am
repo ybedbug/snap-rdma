@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = apu
+SUBDIRS = dpa
 
 noinst_PROGRAMS = \
 		snap_open_close \

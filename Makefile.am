@@ -1,7 +1,7 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src apu ctrl rpc tests
+SUBDIRS = src dpa ctrl rpc tests
 
 include_HEADERS = blk/snap_blk_dev.h  blk/snap_blk_ops.h  blk/snap_null_blk_dev.h
 
