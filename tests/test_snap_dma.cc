@@ -622,3 +622,205 @@ TEST_F(SnapDmaTest, create_destory_indirect_mkey_1) {
 	ibv_dereg_mr(mr);
 	free(buf);
 }
+
+static int g_umr_wqe_comp;
+
+static void post_umr_completion(struct snap_dma_completion *comp, int status)
+{
+	g_umr_wqe_comp++;
+	g_last_comp_status = status;
+}
+
+static void post_umr_wqe(struct snap_dma_q *q,
+		struct ibv_pd *pd, int bsize, bool wait_umr_complete)
+{
+#define MTT_ENTRIES  5
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+	int i, j, n, ret;
+	char *lbuf[MTT_ENTRIES], *rbuf;
+	struct ibv_mr *lmr[MTT_ENTRIES], *rmr;
+	struct mlx5_klm *klm_mtt;
+	struct snap_dma_completion comp;
+
+	for (i = 0; i < MTT_ENTRIES; i++) {
+		lbuf[i] = (char *)malloc(bsize);
+		if (!lbuf[i])
+			FAIL() << "local buffer allocation";
+
+		lmr[i] = ibv_reg_mr(pd, lbuf[i], bsize, IBV_ACCESS_LOCAL_WRITE |
+				IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+		if (!lmr[i])
+			FAIL() << "local memory register";
+	}
+
+	rbuf = (char *)malloc(MTT_ENTRIES * bsize);
+	if (!rbuf)
+		FAIL() << "remote buffer allocation";
+
+	rmr = ibv_reg_mr(pd, rbuf, MTT_ENTRIES * bsize, IBV_ACCESS_LOCAL_WRITE |
+			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+	if (!rmr)
+		FAIL() << "remote memory register";
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = 0;
+	mkey_attr.relaxed_ordering_read = 0;
+	mkey_attr.klm_array = NULL;
+	mkey_attr.klm_num = 0;
+
+	klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+	ASSERT_TRUE(klm_mkey);
+
+	klm_mtt = (struct mlx5_klm *)malloc(MTT_ENTRIES * sizeof(*klm_mtt));
+	if (!klm_mtt)
+		FAIL() << "klm mtt allocation";
+
+	for (i = 0; i < MTT_ENTRIES; i++) {
+		klm_mtt[i].byte_count = lmr[i]->length;
+		klm_mtt[i].mkey = lmr[i]->lkey;
+		klm_mtt[i].address = (uintptr_t)lmr[i]->addr;
+	}
+
+	if (wait_umr_complete) {
+		comp.func = post_umr_completion;
+		comp.count = 1;
+		g_umr_wqe_comp = 0;
+		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, &comp);
+		ASSERT_EQ(ret, 0);
+
+		n = 0;
+		while (n < 10000) {
+			ret = snap_dma_q_progress(q);
+			if (ret == 1)
+				break;
+			n++;
+		}
+		ASSERT_EQ(1, g_umr_wqe_comp);
+		ASSERT_EQ(0, g_last_comp_status);
+	} else {
+		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, NULL);
+		ASSERT_EQ(ret, 0);
+	}
+
+	for (j = 0; j < 2; j++) {
+		comp.func = dma_completion;
+		comp.count = 1;
+		g_comp_count = 0;
+
+		if (j == 0) { /* read test */
+			for (i = 0; i < MTT_ENTRIES; i++) {
+				memset(rbuf + i * bsize, 'A' + i, bsize);
+				memset(lbuf[i], 0, bsize);
+			}
+
+			ret = snap_dma_q_read(q, (void *)klm_mkey->addr,
+					MTT_ENTRIES * bsize, klm_mkey->mkey, (uintptr_t)rbuf, rmr->lkey, &comp);
+		} else { /* write test */
+			memset(rbuf, 0,  MTT_ENTRIES * bsize);
+			for (i = 0; i < MTT_ENTRIES; i++)
+				memset(lbuf[i], 'a' + i, bsize);
+
+			ret = snap_dma_q_write(q, (void *)klm_mkey->addr,
+					MTT_ENTRIES * bsize, klm_mkey->mkey, (uintptr_t)rbuf, rmr->lkey, &comp);
+		}
+		ASSERT_EQ(ret, 0);
+
+		n = 0;
+		while (n < 10000) {
+			ret = snap_dma_q_progress(q);
+			if (g_comp_count == 1)
+				break;
+			n++;
+		}
+
+		ASSERT_EQ(1, g_comp_count);
+		ASSERT_EQ(0, g_last_comp_status);
+		ASSERT_EQ(0, comp.count);
+		for (i = 0; i < MTT_ENTRIES; i++)
+			ASSERT_EQ(0, memcmp(rbuf + i * bsize, lbuf[i], bsize));
+	}
+
+	free(klm_mtt);
+	ibv_dereg_mr(rmr);
+	free(rbuf);
+	for (i = 0; i < MTT_ENTRIES; i++) {
+		ibv_dereg_mr(lmr[i]);
+		free(lbuf[i]);
+	}
+	snap_destroy_indirect_mkey(klm_mkey);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_no_wait_complete) {
+	struct snap_dma_q *q;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	post_umr_wqe(q, m_pd, m_bsize, false);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_wait_complete) {
+	struct snap_dma_q *q;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	post_umr_wqe(q, m_pd, m_bsize, true);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_warp_around_no_wait_complete) {
+	struct snap_dma_q *q;
+	struct snap_dv_qp *dv_qp;
+	int i;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	/*
+	 * if test umr wqe warp around case, then post enough RDMA READ wqe
+	 * to make SQ only left 3 WQE BB to the end. Because the UMR WQE
+	 * used below need consume 4 WQE BB, so it will warp around.
+	 */
+
+	dv_qp = &q->sw_qp.dv_qp;
+	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
+		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	post_umr_wqe(q, m_pd, m_bsize, false);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_warp_around_wait_complete) {
+	struct snap_dma_q *q;
+	struct snap_dv_qp *dv_qp;
+	int i;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	/*
+	 * if test umr wqe warp around case, then post enough RDMA READ wqe
+	 * to make SQ only left 3 WQE BB to the end. Because the UMR WQE
+	 * used below need consume 4 WQE BB, so it will warp around.
+	 */
+
+	dv_qp = &q->sw_qp.dv_qp;
+	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
+		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	post_umr_wqe(q, m_pd, m_bsize, true);
+
+	snap_dma_q_destroy(q);
+}
