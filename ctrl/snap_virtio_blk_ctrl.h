@@ -39,7 +39,6 @@
 #include "snap_virtio_common_ctrl.h"
 #include "snap_virtio_blk.h"
 #include "snap_blk_ops.h"
-#include "snap_virtio_blk_virtq.h"
 
 #define VIRTIO_BLK_MAX_CTRL_NUM		128
 #define VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX	32
@@ -61,7 +60,7 @@ typedef struct snap_virtio_blk_ctrl_zcopy_ctx {
 struct snap_virtio_blk_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
 	const struct snap_virtio_blk_queue_attr	*attr;
-	struct blk_virtq_ctx *q_impl;
+	void *q_impl;
 	bool in_error;
 };
 

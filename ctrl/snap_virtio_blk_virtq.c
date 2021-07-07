@@ -11,19 +11,6 @@
 
 #define BDEV_SECTOR_SIZE 512
 #define VIRTIO_NUM_DESC(seg_max) ((seg_max) + NUM_HDR_FTR_DESCS)
-#define ERR_ON_CMD(cmd, fmt, ...) \
-	snap_error("queue:%d cmd_idx:%d err: " fmt, \
-		   (cmd)->vq_priv->vq_ctx.idx, (cmd)->idx, ## __VA_ARGS__)
-
-/* uncomment to enable fast path debugging */
-//#define VIRTQ_DEBUG_DATA
-#ifdef VIRTQ_DEBUG_DATA
-#define virtq_log_data(cmd, fmt, ...) \
-	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx.idx, (cmd)->idx, \
-	       ## __VA_ARGS__)
-#else
-#define virtq_log_data(cmd, fmt, ...)
-#endif
 
 #define VIRTIO_BLK_SNAP_MERGE_DESCS "VIRTIO_BLK_SNAP_MERGE_DESCS"
 SNAP_ENV_REG_ENV_VARIABLE(VIRTIO_BLK_SNAP_MERGE_DESCS, 1);
@@ -251,7 +238,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 
 	if (status != IBV_WC_SUCCESS) {
 		snap_error("error in dma for queue %d\n",
-			   cmd->vq_priv->vq_ctx.idx);
+			   cmd->vq_priv->vq_ctx.common_ctx.idx);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 	blk_virtq_cmd_progress(cmd, op_status);
@@ -465,7 +452,7 @@ alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 free_mem:
 	free(cmd_arr);
 	snap_error("failed allocating commands for queue %d\n",
-	        vq_priv->vq_ctx.idx);
+	        vq_priv->vq_ctx.common_ctx.idx);
 out:
 	return NULL;
 }
@@ -1197,7 +1184,7 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 		case VIRTQ_CMD_STATE_FATAL_ERR:
 			if (snap_unlikely(cmd->use_dmem))
 				virtq_rel_req_dbuf(cmd);
-			cmd->vq_priv->vq_ctx.fatal_err = -1;
+			cmd->vq_priv->vq_ctx.common_ctx.fatal_err = -1;
 			/*
 			 * TODO: propagate fatal error to the controller.
 			 * At the moment attempt to resume/state copy
@@ -1293,7 +1280,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 				       struct snap_bdev_ops *bdev_ops,
 				       void *bdev, struct snap_device *snap_dev,
-				       struct blk_virtq_create_attr *attr)
+				       struct virtq_create_attr *attr)
 {
 	struct snap_dma_q_create_attr rdma_qp_create_attr = {};
 	struct snap_virtio_blk_queue_attr qattr = {};
@@ -1306,12 +1293,12 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		goto err;
 
 	vq_ctx = &vq_priv->vq_ctx;
-	vq_ctx->priv = vq_priv;
+	vq_ctx->common_ctx.priv = vq_priv;
 	vq_priv->blk_dev.ops = bdev_ops;
 	vq_priv->blk_dev.ctx = bdev;
 	vq_priv->pd = attr->pd;
-	vq_ctx->idx = attr->idx;
-	vq_ctx->fatal_err = 0;
+	vq_ctx->common_ctx.idx = attr->idx;
+	vq_ctx->common_ctx.fatal_err = 0;
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
@@ -1416,17 +1403,17 @@ err:
  */
 void blk_virtq_destroy(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *vq_priv = q->priv;
+	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
 
-	snap_debug("destroying queue %d\n", q->idx);
+	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
 	if (vq_priv->swq_state != BLK_SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, "
 			  " %d commands outstanding\n",
-			  q->idx, vq_priv->cmd_cntr);
+			  q->common_ctx.idx, vq_priv->cmd_cntr);
 
 	if (snap_virtio_blk_destroy_queue(vq_priv->snap_vbq))
-		snap_error("queue %d: error destroying blk_virtq\n", q->idx);
+		snap_error("queue %d: error destroying blk_virtq\n", q->common_ctx.idx);
 
 	snap_dma_q_destroy(vq_priv->dma_q);
 	free_blk_virtq_cmd_arr(vq_priv);
@@ -1436,7 +1423,7 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat)
 {
-	struct blk_virtq_priv *vq_priv = q->priv;
+	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr virtq_attr = {};
 	struct snap_virtio_queue_counters_attr vqc_attr = {};
 	struct vring_avail vra;
@@ -1450,23 +1437,24 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 					              &vra, &vru
 						     );
 	if (ret) {
-		snap_error("failed to get vring indexes from host memory for queue %d\n", q->idx);
+		snap_error("failed to get vring indexes from host memory for queue %d\n",
+			   q->common_ctx.idx);
 		return ret;
 	}
 
 	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, &virtq_attr);
 	if (ret) {
-		snap_error("failed query queue %d debugstat\n", q->idx);
+		snap_error("failed query queue %d debugstat\n", q->common_ctx.idx);
 		return ret;
 	}
 
 	ret = snap_virtio_query_queue_counters(vq_priv->snap_vbq->virtq.ctrs_obj, &vqc_attr);
 	if (ret) {
-		snap_error("failed query virtio_q_counters %d debugstat\n", q->idx);
+		snap_error("failed query virtio_q_counters %d debugstat\n", q->common_ctx.idx);
 		return ret;
 	}
 
-	q_debugstat->qid = q->idx;
+	q_debugstat->qid = q->common_ctx.idx;
 	q_debugstat->hw_available_index = virtq_attr.hw_available_index;
 	q_debugstat->sw_available_index = vra.idx;
 	q_debugstat->hw_used_index = virtq_attr.hw_used_index;
@@ -1481,22 +1469,22 @@ int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 				struct snap_virtio_blk_queue_attr *attr)
 {
 	int ret;
-	struct blk_virtq_priv *vq_priv = q->priv;
+	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
 
 	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, attr);
 	if (ret) {
-		snap_error("failed query queue %d (update)\n", q->idx);
+		snap_error("failed query queue %d (update)\n", q->common_ctx.idx);
 		return ret;
 	}
 
 	if (attr->vattr.state == SNAP_VIRTQ_STATE_ERR &&
 		attr->vattr.error_type == SNAP_VIRTQ_ERROR_TYPE_NO_ERROR)
-		snap_warn("queue %d state is in error but error type is 0\n", q->idx);
+		snap_warn("queue %d state is in error but error type is 0\n", q->common_ctx.idx);
 
 	if (attr->vattr.state != SNAP_VIRTQ_STATE_ERR &&
 		attr->vattr.error_type != SNAP_VIRTQ_ERROR_TYPE_NO_ERROR) {
 		snap_warn("queue %d state is not in error but with error type %d\n",
-					q->idx, attr->vattr.error_type);
+					q->common_ctx.idx, attr->vattr.error_type);
 	}
 
 	return 0;
@@ -1504,7 +1492,7 @@ int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 
 static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr qattr = {};
 
 	/* TODO: add option to ignore commands in the bdev layer */
@@ -1517,10 +1505,10 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
 	if (snap_virtio_blk_modify_queue(priv->snap_vbq, SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
 					 &qattr)) {
-		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->idx);
+		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->common_ctx.idx);
 	}
 	/* at this point QP is in the error state and cannot be used anymore */
-	snap_info("queue %d: moving to the SUSPENDED state\n", q->idx);
+	snap_info("queue %d: moving to the SUSPENDED state\n", q->common_ctx.idx);
 	priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
 	return 0;
 }
@@ -1556,7 +1544,7 @@ static void blk_virq_progress_unordered(struct blk_virtq_priv *vq_priv)
  */
 int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 
 	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_SUSPENDED))
 		return 0;
@@ -1593,20 +1581,20 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
  */
 int blk_virtq_suspend(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 
 	if (priv->swq_state != BLK_SW_VIRTQ_RUNNING) {
 		snap_debug("queue %d: suspend was already requested\n",
-			   q->idx);
+			   q->common_ctx.idx);
 		return -EBUSY;
 	}
 
 	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n",
-		  q->idx, priv->cmd_cntr);
+		  q->common_ctx.idx, priv->cmd_cntr);
 
-	if (priv->vq_ctx.fatal_err)
+	if (priv->vq_ctx.common_ctx.fatal_err)
 		snap_warn("queue %d: fatal error. Resuming or live migration"
-			  " will not be possible\n", q->idx);
+			  " will not be possible\n", q->common_ctx.idx);
 
 	priv->swq_state = BLK_SW_VIRTQ_FLUSHING;
 	return 0;
@@ -1625,7 +1613,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
  */
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 	return priv->swq_state == BLK_SW_VIRTQ_SUSPENDED;
 }
 
@@ -1639,9 +1627,9 @@ bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
  * Return: void
  */
 void blk_virtq_start(struct blk_virtq_ctx *q,
-		     struct blk_virtq_start_attr *attr)
+		     struct virtq_start_attr *attr)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 
 	priv->pg_id = attr->pg_id;
 }
@@ -1665,13 +1653,13 @@ void blk_virtq_start(struct blk_virtq_ctx *q,
 int blk_virtq_get_state(struct blk_virtq_ctx *q,
 			struct snap_virtio_ctrl_queue_state *state)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr attr = {};
 	int ret;
 
 	ret = snap_virtio_blk_query_queue(priv->snap_vbq, &attr);
 	if (ret < 0) {
-		snap_error("failed to query blk queue %d\n", q->idx);
+		snap_error("failed to query blk queue %d\n", q->common_ctx.idx);
 		return ret;
 	}
 
@@ -1688,19 +1676,19 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 const struct snap_virtio_ctrl_queue_stats *
 blk_virtq_get_io_stats(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->priv;
+	struct blk_virtq_priv *priv = q->common_ctx.priv;
 	return &priv->vq_ctx.io_stat;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
 {
-	struct blk_virtq_priv *vpriv = ctx->priv;
+	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
 	return vpriv->dma_q;
 }
 
 int set_dma_mkey(struct blk_virtq_ctx *ctx, uint32_t mkey)
 {
-	struct blk_virtq_priv *vpriv = ctx->priv;
+	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
 	vpriv->snap_attr.vattr.dma_mkey = mkey;
 	return 0;
 }

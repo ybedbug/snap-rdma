@@ -2,6 +2,8 @@ ACLOCAL_AMFLAGS = -I m4
 
 lib_LTLIBRARIES = libsnap-virtio-blk-ctrl.la libsnap-virtio-net-ctrl.la libsnap-virtio-fs-ctrl.la libsnap-nvme-ctrl.la
 
+noinst_HEADERS = virtq_common.h
+
 SNAP_INCLUDE = -I$(top_srcdir)/src
 BLK_INCLUDE = -I$(top_srcdir)/blk
 FS_INCLUDE = -I$(top_srcdir)/fs
@@ -10,6 +12,7 @@ FS_INCLUDE = -I$(top_srcdir)/fs
 libsnap_virtio_blk_ctrl_ladir = $(includedir)/
 libsnap_virtio_blk_ctrl_la_HEADERS = snap_virtio_blk_ctrl.h \
 				     snap_virtio_common_ctrl.h \
+				     snap_virtio_blk_virtq.h \
 				     $(top_srcdir)/blk/snap_blk_ops.h \
 				     snap_poll_groups.h
 libsnap_virtio_blk_ctrl_la_SOURCES = snap_virtio_blk_ctrl.c \

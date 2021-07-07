@@ -3,6 +3,7 @@
 
 #include "snap_virtio_fs_ctrl.h"
 #include "snap_virtio_fs_virtq.h"
+#include "virtq_common.h"
 
 #include "config.h"
 
@@ -482,7 +483,7 @@ out:
 static int fs_virtq_create_helper(struct snap_virtio_fs_ctrl_queue *vfsq,
 				  struct snap_virtio_ctrl *vctrl, int index)
 {
-	struct fs_virtq_create_attr attr = {0};
+	struct virtq_create_attr attr = {0};
 	struct snap_virtio_fs_ctrl *fs_ctrl = to_fs_ctrl(vctrl);
 	struct snap_context *sctx = vctrl->sdev->sctx;
 	struct snap_virtio_fs_device_attr *dev_attr;
@@ -640,7 +641,7 @@ static void snap_virtio_fs_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq
 static void snap_virtio_fs_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_fs_ctrl_queue *vfsq = to_fs_ctrl_q(vq);
-	struct fs_virtq_start_attr attr = {};
+	struct virtq_start_attr attr = {};
 
 	attr.pg_id = vq->pg->id;
 	fs_virtq_start(vfsq->q_impl, &attr);

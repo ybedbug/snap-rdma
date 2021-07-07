@@ -1,4 +1,5 @@
 #include "snap_virtio_blk_ctrl.h"
+#include "snap_virtio_blk_virtq.h"
 #include <linux/virtio_blk.h>
 #include <linux/virtio_config.h>
 #include <sys/mman.h>
@@ -644,7 +645,7 @@ out:
 static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 				   struct snap_virtio_ctrl *vctrl, int index)
 {
-	struct blk_virtq_create_attr attr = {0};
+	struct virtq_create_attr attr = {0};
 	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(vctrl);
 	struct snap_context *sctx = vctrl->sdev->sctx;
 	struct snap_virtio_blk_device_attr *dev_attr;
@@ -802,7 +803,7 @@ static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *v
 static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
-	struct blk_virtq_start_attr attr = {};
+	struct virtq_start_attr attr = {};
 
 	attr.pg_id = vq->pg->id;
 	blk_virtq_start(vbq->q_impl, &attr);
