@@ -101,5 +101,25 @@ struct virtq_start_attr {
 	int pg_id;
 };
 
+/**
+ * struct virtq_split_tunnel_req_hdr - header of command received from FW
+ *
+ * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
+ */
+struct virtq_split_tunnel_req_hdr {
+	uint16_t descr_head_idx;
+	uint16_t num_desc;
+	uint32_t rsvd1;
+	uint32_t rsvd2;
+};
+
+/**
+ * struct virtq_split_tunnel_comp - header of completion sent to FW
+ */
+struct virtq_split_tunnel_comp {
+	uint32_t descr_head_idx;
+	uint32_t len;
+};
+
 #endif
 

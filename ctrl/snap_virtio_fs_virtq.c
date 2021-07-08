@@ -34,26 +34,6 @@
 struct fs_virtq_priv;
 
 /**
- * struct fs_split_tunnel_req_hdr - header of command received from FW
- *
- * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
- */
-struct fs_split_tunnel_req_hdr {
-	uint16_t descr_head_idx;
-	uint16_t num_desc;
-	uint32_t rsvd1;
-	uint32_t rsvd2;
-};
-
-/**
- * struct fs_split_tunnel_comp - header of completion sent to FW
- */
-struct fs_split_tunnel_comp {
-	uint32_t descr_head_idx;
-	uint32_t len;
-};
-
-/**
  * struct virtio_fs_outftr - footer of request, written to host memory
  */
 struct virtio_fs_outftr {
@@ -888,7 +868,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 				     enum fs_virtq_cmd_sm_op_status status)
 {
 	int ret;
-	struct fs_split_tunnel_comp tunnel_comp;
+	struct virtq_split_tunnel_comp tunnel_comp;
 
 	if (snap_unlikely(status != FS_VIRTQ_CMD_SM_OP_OK)) {
 		snap_error("failed to write the request status field\n");
@@ -917,11 +897,11 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 	tunnel_comp.len = cmd->total_in_len;
 	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
 		       tunnel_comp.descr_head_idx, tunnel_comp.len,
-		       sizeof(struct fs_split_tunnel_comp));
+		       sizeof(struct virtq_split_tunnel_comp));
 	fs_virtq_mark_dirty_mem(cmd, 0, 0, true);
 	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
 					 &tunnel_comp,
-					 sizeof(struct fs_split_tunnel_comp));
+					 sizeof(struct virtq_split_tunnel_comp));
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
 		ERR_ON_CMD(cmd, "failed to second completion\n");
@@ -1018,13 +998,13 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 		           uint32_t data_len, uint32_t imm_data)
 {
 	struct fs_virtq_priv *priv = (struct fs_virtq_priv *)q->uctx;
-	void *descs = data + sizeof(struct fs_split_tunnel_req_hdr);
+	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
 	enum fs_virtq_cmd_sm_op_status status = FS_VIRTQ_CMD_SM_OP_OK;
 	int cmd_idx, len;
 	struct fs_virtq_cmd *cmd;
-	struct fs_split_tunnel_req_hdr *split_hdr;
+	struct virtq_split_tunnel_req_hdr *split_hdr;
 
-	split_hdr = (struct fs_split_tunnel_req_hdr *)data;
+	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
 
 	cmd_idx = priv->ctrl_available_index % priv->snap_attr.vattr.size;
 	cmd = &priv->cmd_arr[cmd_idx];
@@ -1156,10 +1136,10 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 
 	rdma_qp_create_attr.tx_qsize = attr->queue_size;
-	rdma_qp_create_attr.tx_elem_size = snap_max(sizeof(struct fs_split_tunnel_comp), 
+	rdma_qp_create_attr.tx_elem_size = snap_max(sizeof(struct virtq_split_tunnel_comp),
 						sizeof(struct virtio_fs_outftr));
 	rdma_qp_create_attr.rx_qsize = attr->queue_size;
-	rdma_qp_create_attr.rx_elem_size = sizeof(struct fs_split_tunnel_req_hdr) +
+	rdma_qp_create_attr.rx_elem_size = sizeof(struct virtq_split_tunnel_req_hdr) +
 					   num_descs * sizeof(struct vring_desc);
 	rdma_qp_create_attr.uctx = vq_priv;
 	rdma_qp_create_attr.rx_cb = fs_virtq_rx_cb;
