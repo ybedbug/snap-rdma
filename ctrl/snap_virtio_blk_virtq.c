@@ -56,21 +56,6 @@ enum virtq_cmd_sm_state {
 	VIRTQ_CMD_STATE_FATAL_ERR,
 };
 
-/**
- * enum virtq_cmd_sm_op_status - status of last operation
- * @VIRTQ_CMD_SM_OP_OK: 	Last operation finished without a problem
- * @VIRQT_CMD_SM_OP_ERR:	Last operation failed
- *
- * State machine operates asynchronously, usually by calling a function
- * and providing a callback. Once callback is called it calls the state machine
- * progress again and provides it with the status of the function called.
- * This enum describes the status of the function called.
- */
-enum virtq_cmd_sm_op_status {
-	VIRTQ_CMD_SM_OP_OK,
-	VIRTQ_CMD_SM_OP_ERR,
-};
-
 struct blk_virtq_cmd_aux
 {
 	struct virtio_blk_outhdr header;
@@ -131,22 +116,6 @@ struct blk_virtq_cmd {
 };
 
 /**
- * enum blk_sw_virtq_state - state of sw virtq
- * @BLK_SW_VIRTQ_RUNNING:	Queue receives and operates commands
- * @BLK_SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
- * 				commands already received
- * @BLK_SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
- * 				commands to operate
- *
- * This is the state of the sw virtq (as opposed to VIRTQ_BLK_Q PRM FW object)
- */
-enum blk_sw_virtq_state {
-	BLK_SW_VIRTQ_RUNNING,
-	BLK_SW_VIRTQ_FLUSHING,
-	BLK_SW_VIRTQ_SUSPENDED,
-};
-
-/**
  * struct virtq_bdev - Backend block device
  * @ctx:	Opaque bdev context given to block device functions
  * @ops:	Block device operation pointers
@@ -157,7 +126,7 @@ struct virtq_bdev {
 };
 
 struct blk_virtq_priv {
-	volatile enum blk_sw_virtq_state swq_state;
+	volatile enum virtq_sw_state swq_state;
 	struct blk_virtq_ctx vq_ctx;
 	struct virtq_bdev blk_dev;
 	struct ibv_pd *pd;
@@ -1220,7 +1189,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	/* If new commands are not dropped there is a risk of never
 	 * completing the flush */
-	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING)) {
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
 		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->num_desc, data_len);
 		return;
@@ -1282,7 +1251,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
-	vq_priv->swq_state = BLK_SW_VIRTQ_RUNNING;
+	vq_priv->swq_state = SW_VIRTQ_RUNNING;
 	vq_priv->vbq = vbq;
 	if (vq_priv->blk_dev.ops->is_zcopy)
 		vq_priv->zcopy =
@@ -1387,7 +1356,7 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
-	if (vq_priv->swq_state != BLK_SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, "
 			  " %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
@@ -1489,7 +1458,7 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 	}
 	/* at this point QP is in the error state and cannot be used anymore */
 	snap_info("queue %d: moving to the SUSPENDED state\n", q->common_ctx.idx);
-	priv->swq_state = BLK_SW_VIRTQ_SUSPENDED;
+	priv->swq_state = SW_VIRTQ_SUSPENDED;
 	return 0;
 }
 
@@ -1526,7 +1495,7 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->common_ctx.priv;
 
-	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_SUSPENDED))
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
 		return 0;
 
 	snap_dma_q_progress(priv->dma_q);
@@ -1538,7 +1507,7 @@ int blk_virtq_progress(struct blk_virtq_ctx *q)
 	 * need to wait until all inflight requests
 	 * are finished before moving to the suspend state
 	 */
-	if (snap_unlikely(priv->swq_state == BLK_SW_VIRTQ_FLUSHING))
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING))
 		return blk_virtq_progress_suspend(q);
 
 	return 0;
@@ -1563,7 +1532,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->common_ctx.priv;
 
-	if (priv->swq_state != BLK_SW_VIRTQ_RUNNING) {
+	if (priv->swq_state != SW_VIRTQ_RUNNING) {
 		snap_debug("queue %d: suspend was already requested\n",
 			   q->common_ctx.idx);
 		return -EBUSY;
@@ -1576,7 +1545,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 		snap_warn("queue %d: fatal error. Resuming or live migration"
 			  " will not be possible\n", q->common_ctx.idx);
 
-	priv->swq_state = BLK_SW_VIRTQ_FLUSHING;
+	priv->swq_state = SW_VIRTQ_FLUSHING;
 	return 0;
 }
 
@@ -1594,7 +1563,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->common_ctx.priv;
-	return priv->swq_state == BLK_SW_VIRTQ_SUSPENDED;
+	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }
 
 /**

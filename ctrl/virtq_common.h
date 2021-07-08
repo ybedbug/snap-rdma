@@ -121,5 +121,38 @@ struct virtq_split_tunnel_comp {
 	uint32_t len;
 };
 
+
+/**
+ * enum virtq_cmd_sm_op_status - status of last operation
+ * @VIRTQ_CMD_SM_OP_OK: 	Last operation finished without a problem
+ * @VIRQT_CMD_SM_OP_ERR:	Last operation failed
+ *
+ * State machine operates asynchronously, usually by calling a function
+ * and providing a callback. Once callback is called it calls the state machine
+ * progress again and provides it with the status of the function called.
+ * This enum describes the status of the function called.
+ */
+enum virtq_cmd_sm_op_status {
+	VIRTQ_CMD_SM_OP_OK,
+	VIRTQ_CMD_SM_OP_ERR,
+};
+
+/**
+ * enum virtq_sw_state - state of sw virtq
+ * @SW_VIRTQ_RUNNING:	Queue receives and operates commands
+ * @SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
+ * 			commands already received
+ * @SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
+ * 			commands to operate
+ *
+ * This is the state of the sw virtq (as opposed to VIRTQ_BLK_Q PRM FW object)
+ */
+enum virtq_sw_state {
+	SW_VIRTQ_RUNNING,
+	SW_VIRTQ_FLUSHING,
+	SW_VIRTQ_SUSPENDED,
+};
+
+
 #endif
 

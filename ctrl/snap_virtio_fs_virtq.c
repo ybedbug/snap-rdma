@@ -72,21 +72,6 @@ enum fs_virtq_cmd_sm_state {
 	FS_VIRTQ_CMD_STATE_FATAL_ERR,
 };
 
-/**
- * enum fs_virtq_cmd_sm_op_status - status of last operation
- * @FS_VIRTQ_CMD_SM_OP_OK: 	Last operation finished without a problem
- * @FS_VIRTQ_CMD_SM_OP_ERR:	Last operation failed
- *
- * State machine operates asynchronously, usually by calling a function
- * and providing a callback. Once callback is called it calls the state machine
- * progress again and provides it with the status of the function called.
- * This enum describes the status of the function called.
- */
-enum fs_virtq_cmd_sm_op_status {
-	FS_VIRTQ_CMD_SM_OP_OK,
-	FS_VIRTQ_CMD_SM_OP_ERR,
-};
-
 struct fs_virtq_cmd_aux
 {
 	struct fuse_in_header header;
@@ -143,21 +128,6 @@ struct fs_virtq_cmd {
 };
 
 /**
- * enum fs_sw_virtq_state - state of sw virtq
- * @FS_SW_VIRTQ_RUNNING:	Queue receives and operates commands
- * @FS_SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
- * 				commands already received
- * @FS_SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
- * 				commands to operate
- * This is the state of the sw virtq (as opposed to VIRTQ_FS_Q PRM FW object)
- */
-enum fs_sw_virtq_state {
-	FS_SW_VIRTQ_RUNNING,
-	FS_SW_VIRTQ_FLUSHING,
-	FS_SW_VIRTQ_SUSPENDED,
-};
-
-/**
  * struct fs_virtq_dev - fs device
  * @ctx:	Opaque fs device context given to fs device functions
  * @ops:	FS device operation pointers
@@ -168,7 +138,7 @@ struct fs_virtq_dev {
 };
 
 struct fs_virtq_priv {
-	volatile enum fs_sw_virtq_state swq_state;
+	volatile enum virtq_sw_state swq_state;
 	struct fs_virtq_ctx vq_ctx;
 	struct fs_virtq_dev fs_dev;
 	struct ibv_pd *pd;
@@ -223,11 +193,11 @@ static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa
 }
 
 static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
-				 enum fs_virtq_cmd_sm_op_status status);
+				 enum virtq_cmd_sm_op_status status);
 
 static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 {
-	enum fs_virtq_cmd_sm_op_status op_status = FS_VIRTQ_CMD_SM_OP_OK;
+	enum virtq_cmd_sm_op_status op_status = VIRTQ_CMD_SM_OP_OK;
 	struct fs_virtq_cmd *cmd = container_of(self,
 						struct fs_virtq_cmd,
 						dma_comp);
@@ -235,7 +205,7 @@ static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 	if (status != IBV_WC_SUCCESS) {
 		ERR_ON_CMD(cmd, "error in dma for queue %d\n",
 			   cmd->vq_priv->vq_ctx.common_ctx.idx);
-		op_status = FS_VIRTQ_CMD_SM_OP_ERR;
+		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 	fs_virtq_cmd_progress(cmd, op_status);
 }
@@ -421,11 +391,11 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct fs_virtq_cmd *cmd)
 static void fs_dev_io_comp_cb(enum snap_fs_dev_op_status status, void *done_arg)
 {
 	struct fs_virtq_cmd *cmd = done_arg;
-	enum fs_virtq_cmd_sm_op_status op_status = FS_VIRTQ_CMD_SM_OP_OK;
+	enum virtq_cmd_sm_op_status op_status = VIRTQ_CMD_SM_OP_OK;
 
 	if (snap_unlikely(status != SNAP_FS_DEV_OP_SUCCESS)) {
 		snap_error("Failed iov completion!\n");
-		op_status = FS_VIRTQ_CMD_SM_OP_ERR;
+		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 
 	fs_virtq_cmd_progress(cmd, op_status);
@@ -513,11 +483,11 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
  * asynchronously.
  */
 static bool sm_fetch_cmd_descs(struct fs_virtq_cmd *cmd,
-			       enum fs_virtq_cmd_sm_op_status status)
+			       enum virtq_cmd_sm_op_status status)
 {
 	enum virtq_fetch_desc_status ret;
 
-	if (status != FS_VIRTQ_CMD_SM_OP_OK) {
+	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
 		           "command without response\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
@@ -684,13 +654,13 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
  * (error cases) or false if the state transition will be done asynchronously.
  */
 static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
-			        enum fs_virtq_cmd_sm_op_status status)
+			        enum virtq_cmd_sm_op_status status)
 {
 	struct fs_virtq_dev *fs_dev = &cmd->vq_priv->fs_dev;
 	int ret;
 	uint32_t r_descs, w_descs;
 
-	if (status != FS_VIRTQ_CMD_SM_OP_OK) {
+	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to get request data, returning failure\n");
 		set_cmd_error(cmd, EINVAL);
 		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
@@ -755,11 +725,11 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
  * (error cases) or false if the state transition will be done asynchronously.
  */
 static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
-				  enum fs_virtq_cmd_sm_op_status status)
+				  enum virtq_cmd_sm_op_status status)
 {
 	int i, ret;
 
-	if (status != FS_VIRTQ_CMD_SM_OP_OK) {
+	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr to host\n");
 		set_cmd_error(cmd, EIO);
 		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
@@ -804,10 +774,10 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
  * @status:	status of write operation
  */
 static void sm_handle_out_iov_done(struct fs_virtq_cmd *cmd,
-				   enum fs_virtq_cmd_sm_op_status status)
+				   enum virtq_cmd_sm_op_status status)
 {
 	cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
-	if (status != FS_VIRTQ_CMD_SM_OP_OK)
+	if (status != VIRTQ_CMD_SM_OP_OK)
 		set_cmd_error(cmd, EIO);
 }
 
@@ -820,13 +790,13 @@ static void sm_handle_out_iov_done(struct fs_virtq_cmd *cmd,
  * (error cases) or false if the state transition will be done asynchronously.
  */
 static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
-				   enum fs_virtq_cmd_sm_op_status status)
+				   enum virtq_cmd_sm_op_status status)
 {
 	if (snap_likely(cmd->pos_f_write > 0)) {
 
 		int ret;
 
-		if (snap_unlikely(status != FS_VIRTQ_CMD_SM_OP_OK))
+		if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
 			set_cmd_error(cmd, EIO);
 
 		virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx va %p len %lu\n",
@@ -865,12 +835,12 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
  * (error cases) or false if the state transition will be done asynchronously.
  */
 static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
-				     enum fs_virtq_cmd_sm_op_status status)
+				     enum virtq_cmd_sm_op_status status)
 {
 	int ret;
 	struct virtq_split_tunnel_comp tunnel_comp;
 
-	if (snap_unlikely(status != FS_VIRTQ_CMD_SM_OP_OK)) {
+	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
 		snap_error("failed to write the request status field\n");
 
 		/* TODO: if FS_VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
@@ -922,7 +892,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
  * Return: 0 (Currently no option to fail)
  */
 static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
-				 enum fs_virtq_cmd_sm_op_status status)
+				 enum virtq_cmd_sm_op_status status)
 {
 	bool repeat = true;
 
@@ -999,7 +969,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 {
 	struct fs_virtq_priv *priv = (struct fs_virtq_priv *)q->uctx;
 	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
-	enum fs_virtq_cmd_sm_op_status status = FS_VIRTQ_CMD_SM_OP_OK;
+	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
 	int cmd_idx, len;
 	struct fs_virtq_cmd *cmd;
 	struct virtq_split_tunnel_req_hdr *split_hdr;
@@ -1023,7 +993,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	/* If new commands are not dropped there is a risk of never
 	 * completing the flush */
-	if (snap_unlikely(priv->swq_state == FS_SW_VIRTQ_FLUSHING)) {
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
 		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->num_desc, data_len);
 		return;
@@ -1121,7 +1091,7 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
 	vq_priv->snap_attr.vattr.size = attr->queue_size;
-	vq_priv->swq_state = FS_SW_VIRTQ_RUNNING;
+	vq_priv->swq_state = SW_VIRTQ_RUNNING;
 	vq_priv->vfsq = vfsq;
 
 	vq_priv->cmd_arr = alloc_fs_virtq_cmd_arr(attr->size_max,
@@ -1224,7 +1194,7 @@ void fs_virtq_destroy(struct fs_virtq_ctx *q)
 
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
-	if (vq_priv->swq_state != FS_SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, "
 			  " %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
@@ -1327,7 +1297,7 @@ static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
 	}
 	/* at this point QP is in the error state and cannot be used anymore */
 	snap_info("queue %d: moving to the SUSPENDED state\n", q->common_ctx.idx);
-	priv->swq_state = FS_SW_VIRTQ_SUSPENDED;
+	priv->swq_state = SW_VIRTQ_SUSPENDED;
 	return 0;
 }
 
@@ -1345,7 +1315,7 @@ static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
 			       cmd->cmd_available_index, cmd->state);
 
-		fs_virtq_cmd_progress(cmd, FS_VIRTQ_CMD_SM_OP_OK);
+		fs_virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
 
 		cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
 		cmd = &vq_priv->cmd_arr[cmd_idx];
@@ -1364,7 +1334,7 @@ int fs_virtq_progress(struct fs_virtq_ctx *q)
 {
 	struct fs_virtq_priv *priv = q->common_ctx.priv;
 
-	if (snap_unlikely(priv->swq_state == FS_SW_VIRTQ_SUSPENDED))
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
 		return 0;
 
 	snap_dma_q_progress(priv->dma_q);
@@ -1376,7 +1346,7 @@ int fs_virtq_progress(struct fs_virtq_ctx *q)
 	 * need to wait until all inflight requests
 	 * are finished before moving to the suspend state
 	 */
-	if (snap_unlikely(priv->swq_state == FS_SW_VIRTQ_FLUSHING))
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING))
 		return fs_virtq_progress_suspend(q);
 
 	return 0;
@@ -1401,7 +1371,7 @@ int fs_virtq_suspend(struct fs_virtq_ctx *q)
 {
 	struct fs_virtq_priv *priv = q->common_ctx.priv;
 
-	if (priv->swq_state != FS_SW_VIRTQ_RUNNING) {
+	if (priv->swq_state != SW_VIRTQ_RUNNING) {
 		snap_debug("queue %d: suspend was already requested\n",
 			   q->common_ctx.idx);
 		return -EBUSY;
@@ -1414,7 +1384,7 @@ int fs_virtq_suspend(struct fs_virtq_ctx *q)
 		snap_warn("queue %d: fatal error. Resuming or live migration"
 			  " will not be possible\n", q->common_ctx.idx);
 
-	priv->swq_state = FS_SW_VIRTQ_FLUSHING;
+	priv->swq_state = SW_VIRTQ_FLUSHING;
 	return 0;
 }
 
@@ -1432,7 +1402,7 @@ int fs_virtq_suspend(struct fs_virtq_ctx *q)
 bool fs_virtq_is_suspended(struct fs_virtq_ctx *q)
 {
 	struct fs_virtq_priv *priv = q->common_ctx.priv;
-	return priv->swq_state == FS_SW_VIRTQ_SUSPENDED;
+	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }
 
 /**
