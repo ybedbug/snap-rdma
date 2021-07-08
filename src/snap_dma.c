@@ -236,6 +236,19 @@ static int snap_alloc_rx_wqes(struct snap_dma_ibv_qp *qp, int rx_qsize,
 	return 0;
 }
 
+static bool uar_memory_is_nc(struct snap_dv_qp *dv_qp)
+{
+	/*
+	 * Verify that the memory is indeed NC. It relies on a fact (hack) that
+	 * rdma-core is going to allocate NC uar if blue flame is disabled.
+	 * This is a short term solution.
+	 *
+	 * The right solution is to allocate uars exlicitely with the
+	 * mlx5dv_devx_alloc_uar()
+	 */
+	return dv_qp->qp.bf.size == 0;
+}
+
 static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		struct ibv_comp_channel *comp_channel, int comp_vector,
 		struct ibv_qp_init_attr *attr, struct snap_dma_ibv_qp *qp,
@@ -323,6 +336,17 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		   qp->dv_qp.qp.sq.wqe_cnt, qp->dv_qp.qp.sq.stride,
 		   qp->dv_qp.qp.rq.wqe_cnt, qp->dv_qp.qp.rq.stride,
 		   qp->dv_qp.qp.bf.reg, qp->dv_qp.qp.bf.size);
+
+	qp->dv_qp.tx_db_nc = uar_memory_is_nc(&qp->dv_qp);
+	if (!qp->dv_qp.tx_db_nc) {
+#if defined(__aarch64__)
+		snap_error("DB record must be in the non-cacheable memory on BF\n");
+		goto free_comps;
+#else
+		snap_warn("DB record is not in the non-cacheable memory. Performance may be reduced\n"
+			  "Try setting MLX5_SHUT_UP_BF environment variable\n");
+#endif
+	}
 
 	if (qp->dv_qp.qp.sq.stride != MLX5_SEND_WQE_BB ||
 	    qp->dv_qp.qp.rq.stride != SNAP_MLX5_RECV_WQE_BB)
@@ -1434,14 +1458,35 @@ static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
 static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
 	dv_qp->pi++;
+	/* 8.9.3.1  Posting a Work Request to Work Queue
+	 * 1. Write WQE to the WQE buffer sequentially to previously-posted
+	 * WQE (on WQEBB granularity)
+	 *
+	 * Use cpu barrier to prevent code reordering
+	 */
 	snap_memory_cpu_store_fence();
 
+	/* 2. Update Doorbell Record associated with that queue by writing
+	 *    the sq_wqebb_counter or wqe_counter for send and RQ respectively */
 	dv_qp->qp.dbrec[MLX5_SND_DBR] = htobe32(dv_qp->pi);
+
 	/* Make sure that doorbell record is written before ringing the doorbell */
 	snap_memory_bus_store_fence();
 
+	/* 3. For send request ring DoorBell by writing to the Doorbell
+	 *    Register field in the UAR associated with that queue
+	 */
 	*(uint64_t *)(dv_qp->qp.bf.reg) = *(uint64_t *)ctrl;
-	snap_memory_bus_store_fence();
+
+	/* If UAR is mapped as WC (write combined) we need another fence to
+	 * force write. Otherwise it may take a long time.
+	 * On BF2/1 uar is mapped as NC (non combined) and fence is not needed
+	 * here.
+	 */
+#if !defined(__aarch64__)
+	if (!dv_qp->tx_db_nc)
+		snap_memory_bus_store_fence();
+#endif
 }
 
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)

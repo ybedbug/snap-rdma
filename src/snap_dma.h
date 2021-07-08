@@ -95,6 +95,8 @@ struct snap_dv_qp {
 	/* used to hold GGA data */
 	struct mlx5_dma_opaque     *opaque_buf;
 	struct ibv_mr              *opaque_mr;
+	/* true if tx db is in the non cacheable memory */
+	bool tx_db_nc;
 };
 
 struct snap_dv_cq {
