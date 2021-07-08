@@ -18,7 +18,8 @@ libsnap_virtio_blk_ctrl_la_HEADERS = snap_virtio_blk_ctrl.h \
 libsnap_virtio_blk_ctrl_la_SOURCES = snap_virtio_blk_ctrl.c \
 				     snap_virtio_common_ctrl.c \
 				     snap_virtio_blk_virtq.c \
-				     snap_poll_groups.c
+				     snap_poll_groups.c \
+				     virtq_common.c
 libsnap_virtio_blk_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE) \
 				    $(BLK_INCLUDE)
 libsnap_virtio_blk_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread
@@ -45,7 +46,8 @@ libsnap_virtio_fs_ctrl_la_HEADERS = snap_virtio_fs_ctrl.h \
 libsnap_virtio_fs_ctrl_la_SOURCES = snap_virtio_fs_ctrl.c \
 				     snap_virtio_common_ctrl.c \
 				     snap_virtio_fs_virtq.c \
-				     snap_poll_groups.c
+				     snap_poll_groups.c \
+				     virtq_common.c
 libsnap_virtio_fs_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE) \
 				    $(FS_INCLUDE)
 libsnap_virtio_fs_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread
