@@ -707,6 +707,9 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		}
 		DEVX_SET(virtio_blk_q, virtq_in, hw_available_index, attr->hw_available_index);
 		DEVX_SET(virtio_blk_q, virtq_in, hw_used_index, attr->hw_used_index);
+		if (sdev->sctx->virtio_blk_caps.virtio_q_counters)
+			DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
+
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
 		struct snap_virtio_net_queue_attr *attr;
@@ -727,6 +730,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
 		DEVX_SET(virtio_net_q, virtq_in, hw_available_index, attr->hw_available_index);
 		DEVX_SET(virtio_net_q, virtq_in, hw_used_index, attr->hw_used_index);
+		DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
 	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
 		struct snap_virtio_fs_queue_attr *attr;
@@ -750,6 +754,8 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		}
 		DEVX_SET(virtio_fs_q, virtq_in, hw_available_index, attr->hw_available_index);
 		DEVX_SET(virtio_fs_q, virtq_in, hw_used_index, attr->hw_used_index);
+		DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
+
 	} else {
 		errno = EINVAL;
 		goto out;
@@ -783,7 +789,6 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET(virtio_q, virtq_ctx, queue_period, vattr->queue_period);
 	DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
 		 vattr->queue_max_count);
-	DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
 	DEVX_SET(virtio_q, virtq_ctx, virtio_q_mkey, vattr->dma_mkey);
 
 	if (umem[0].devx_umem) {

@@ -375,6 +375,7 @@ struct snap_virtio_caps {
 	uint32_t	umem_3_buffer_param_b;
 	uint16_t	min_num_vf_dynamic_msix;
 	uint16_t	max_num_vf_dynamic_msix;
+	bool		virtio_q_counters;
 };
 
 struct snap_context {

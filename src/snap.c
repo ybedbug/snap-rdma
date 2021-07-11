@@ -576,6 +576,14 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->virtio_fs_caps.crossing_vhca_mkey = false;
 	}
 
+	if (DEVX_GET(query_hca_cap_out, out,
+		capability.cmd_hca_cap.virtio_blk_device_emulation_manager) &&
+	    general_obj_types & (1UL << MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS)) {
+		sctx->virtio_blk_caps.virtio_q_counters = true;
+	} else {
+		sctx->virtio_blk_caps.virtio_q_counters = false;
+	}
+
 	return 0;
 }
 

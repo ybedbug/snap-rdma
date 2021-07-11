@@ -188,6 +188,7 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 {
 	struct snap_virtio_blk_device *vbdev;
 	int ret, i;
+	bool virtio_queue_counters_enabled = sdev->sctx->virtio_blk_caps.virtio_q_counters;
 
 	if (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
 	    sdev->pci->type != SNAP_VIRTIO_BLK_VF)
@@ -207,12 +208,17 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 
 	for (i = 0; i < vbdev->num_queues; i++) {
 		vbdev->virtqs[i].vbdev = vbdev;
-		vbdev->virtqs[i].virtq.ctrs_obj = snap_virtio_create_queue_counters(sdev);
-		if (!vbdev->virtqs[i].virtq.ctrs_obj) {
-			ret = -ENODEV;
-			goto out_destroy_counters;
+		if (virtio_queue_counters_enabled) {
+			vbdev->virtqs[i].virtq.ctrs_obj = snap_virtio_create_queue_counters(sdev);
+			if (!vbdev->virtqs[i].virtq.ctrs_obj) {
+				ret = -ENODEV;
+				goto out_destroy_counters;
+			}
 		}
 	}
+
+	if (!virtio_queue_counters_enabled)
+		snap_warn("Virtio queue counters are not supported and were not created.\n");
 
 	ret = snap_init_device(sdev);
 	if (ret)
@@ -223,9 +229,12 @@ int snap_virtio_blk_init_device(struct snap_device *sdev)
 	return 0;
 
 out_destroy_counters:
-	for (--i; i >= 0; i--)
-		snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
+	if (virtio_queue_counters_enabled) {
+		for (--i; i >= 0; i--)
+			snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
+	}
 	free(vbdev->virtqs);
+
 out_free:
 	free(vbdev);
 	return ret;
@@ -283,8 +292,10 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
 
 	ret = snap_teardown_device(sdev);
 
-	for (i = 0; i < vbdev->num_queues; i++)
-		snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
+	if (sdev->sctx->virtio_blk_caps.virtio_q_counters) {
+		for (i = 0; i < vbdev->num_queues; i++)
+			snap_devx_obj_destroy(vbdev->virtqs[i].virtq.ctrs_obj);
+	}
 
 	free(vbdev->virtqs);
 	free(vbdev);
@@ -328,7 +339,7 @@ snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
 		goto out;
 	}
 
-	if (vbq->virtq.ctrs_obj)
+	if (sdev->sctx->virtio_blk_caps.virtio_q_counters && vbq->virtq.ctrs_obj)
 		attr->vattr.ctrs_obj_id = vbq->virtq.ctrs_obj->obj_id;
 
 	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
