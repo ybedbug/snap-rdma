@@ -25,6 +25,9 @@
 #define virtq_log_data(cmd, fmt, ...)
 #endif
 
+#define VIRTIO_BLK_SNAP_MERGE_DESCS "VIRTIO_BLK_SNAP_MERGE_DESCS"
+SNAP_ENV_REG_ENV_VARIABLE(VIRTIO_BLK_SNAP_MERGE_DESCS, 1);
+
 struct blk_virtq_priv;
 
 /**
@@ -105,6 +108,7 @@ struct blk_virtq_cmd_aux
 {
 	struct virtio_blk_outhdr header;
 };
+
 /**
  * struct blk_virtq_cmd - command context
  * @idx:			descr_head_idx modulo queue size
@@ -134,6 +138,7 @@ struct blk_virtq_cmd {
 	int idx;
 	uint16_t descr_head_idx;
 	size_t num_desc;
+	uint32_t num_merges;
 	struct blk_virtq_priv *vq_priv;
 	enum virtq_cmd_sm_state state;
 	struct vring_desc *descs;
@@ -203,6 +208,7 @@ struct blk_virtq_priv {
 	/* current inorder value, for which completion should be sent */
 	uint16_t ctrl_used_index;
 	bool zcopy;
+	int merge_descs;
 };
 
 static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
@@ -346,6 +352,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->io_cmd_stat = NULL;
 	cmd->cmd_available_index = 0;
+	cmd->vq_priv->merge_descs = snap_env_getenv(VIRTIO_BLK_SNAP_MERGE_DESCS);
 
 	if (vq_priv->zcopy) {
 		if (req_size > VIRTIO_BLK_MAX_REQ_DATA) {
@@ -379,10 +386,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		ret = -ENOMEM;
 		goto free_fake_iov;
 	}
-
 	cmd->descs = (struct vring_desc*) ((uint8_t*) cmd->buf + req_size);
 	cmd->aux = (struct blk_virtq_cmd_aux*) ((uint8_t*) cmd->descs + descs_size);
-
 	cmd->mr = ibv_reg_mr(vq_priv->pd, cmd->buf, buf_size,
 					IBV_ACCESS_REMOTE_READ |
 					IBV_ACCESS_REMOTE_WRITE |
@@ -661,6 +666,93 @@ static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 }
 
 /**
+ * sequential_data_descs_merge() - merge descriptors with sequential addresses and data
+ * @cmd: Command being processed
+ *
+ * merge 2 data descriptors that are a continuation of one another into one,
+ * as a result, following descriptors that are not merged will be moved in the data_desc array
+ *
+ * Return: number of descs after merge
+ */
+static size_t virtq_sequential_data_descs_merge(struct vring_desc *descs,
+		size_t num_desc, uint32_t *num_merges) {
+	uint32_t merged_desc_num = num_desc;
+	uint32_t merged_index = 1;
+	uint32_t index_to_copy_to = 2;
+	uint32_t i;
+	*num_merges = 0;
+
+	for (i = 2; i < num_desc - 1; i++) {
+		if ((descs[i].addr == descs[merged_index].addr + descs[merged_index].len)
+				&& ((descs[merged_index].flags & VRING_DESC_F_WRITE)
+						== (descs[i].flags & VRING_DESC_F_WRITE))) {
+			/* merge two descriptors */
+			descs[merged_index].len += descs[i].len;
+			descs[merged_index].next = descs[i].next;
+			merged_desc_num--;
+			(*num_merges)++;
+		} else {
+			if (i != index_to_copy_to)
+				descs[index_to_copy_to] = descs[i];
+			merged_index = index_to_copy_to;
+			index_to_copy_to++;
+		}
+	}
+	if (i != index_to_copy_to)
+		descs[index_to_copy_to] = descs[i];
+	return merged_desc_num;
+}
+
+/**
+ * virtq_process_desc() - Handle descriptors received
+ * @cmd: Command being processed
+ *
+ * extract header, data and footer to separate descriptors
+ * (in case data is sent as part of header or footer descriptors)
+ *
+ * Return: number of descs after processing
+ */
+static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
+		uint32_t *num_merges, int merge_descs) {
+	uint32_t footer_len = sizeof(struct virtio_blk_outftr);
+	uint32_t header_len = sizeof(struct virtio_blk_outhdr);
+
+	if (snap_unlikely(num_desc < NUM_HDR_FTR_DESCS))
+		return num_desc;
+
+	if (snap_unlikely(descs[0].len != header_len)) {
+		/* header desc contains data, move data and header to seperate desc */
+		uint32_t i;
+		for (i = num_desc; i > 0; i--) {
+			descs[i].addr = descs[i - 1].addr;
+			descs[i].len = descs[i - 1].len;
+			descs[i].flags = descs[i - 1].flags;
+		}
+		descs[0].len = header_len;
+		descs[1].addr = descs[1].addr + header_len;
+		descs[1].len = descs[1].len - header_len;
+		descs[num_desc - 1].flags |= VRING_DESC_F_NEXT;
+		descs[num_desc - 1].next = num_desc;
+		descs[num_desc].next = 0;
+		num_desc++;
+	} else if (snap_unlikely(descs[num_desc - 1].len != footer_len)) {
+		/* footer desc contains data, move data and footer to seperate desc*/
+		descs[num_desc - 1].len = descs[num_desc - 1].len - footer_len;
+		descs[num_desc - 1].flags |= VRING_DESC_F_NEXT;
+		descs[num_desc - 1].next = num_desc;
+		descs[num_desc].addr = descs[num_desc - 1].addr
+				+ (descs[num_desc - 1].len - footer_len);
+		descs[num_desc].len = footer_len;
+		descs[num_desc].flags = descs[num_desc - 1].flags;
+		num_desc++;
+	}
+	if (merge_descs)
+		num_desc = virtq_sequential_data_descs_merge(descs, num_desc, num_merges);
+
+	return num_desc;
+}
+
+/**
  * virtq_read_req_from_host() - Read request from host
  * @cmd: Command being processed
  *
@@ -686,8 +778,14 @@ static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 	size_t offset, i;
 	int ret;
 
-	if (cmd->num_desc < NUM_HDR_FTR_DESCS)
+	cmd->num_desc = virtq_blk_process_desc(cmd->descs, cmd->num_desc,
+				&cmd->num_merges, cmd->vq_priv->merge_descs);
+	if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
+		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
+							   "command without response\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
+	}
 
 	cmd->zcopy = zcopy_check(cmd);
 	cmd->dma_comp.count = 1;
@@ -875,6 +973,8 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	    cmd->io_cmd_stat->total++;
 	    if (ret)
 	        cmd->io_cmd_stat->fail++;
+	    if (cmd->vq_priv->merge_descs)
+			cmd->io_cmd_stat->merged_desc += cmd->num_merges;
 	}
 
 	if (ret) {
@@ -965,13 +1065,13 @@ static inline bool sm_write_status(struct blk_virtq_cmd *cmd,
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 
 	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
-		       cmd->descs[cmd->num_desc - 1].addr,
+			cmd->descs[cmd->num_desc - 1].addr,
 		       sizeof(struct virtio_blk_outftr));
 	virtq_mark_dirty_mem(cmd, cmd->descs[cmd->num_desc - 1].addr,
 			     sizeof(struct virtio_blk_outftr), false);
 	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, &cmd->blk_req_ftr,
 				     sizeof(struct virtio_blk_outftr),
-				     cmd->descs[cmd->num_desc - 1].addr,
+					 cmd->descs[cmd->num_desc - 1].addr,
 				     cmd->vq_priv->snap_attr.vattr.dma_mkey);
 	if (snap_unlikely(ret)) {
 		/* TODO: at some point we will have to do pending queue */
