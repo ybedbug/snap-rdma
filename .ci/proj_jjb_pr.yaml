@@ -56,7 +56,7 @@
             cron: 'H/5 * * * *'
             trigger-phrase: '.*\bbot:retest\b.*'
             status-add-test-results: true
-            auth-id: '549927eb-7f38-4a8f-997a-81dd63605782'
+            auth-id: 'fb735938-fa1c-4b61-b568-a7c153b4fe74'
             org-list: ["Mellanox"]
             white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3", "mellanox-github"]
             allow-whitelist-orgs-as-admins: true
@@ -64,7 +64,7 @@
         scm:
             - git:
                 url: "{jjb_git}"
-                credentials-id: '549927eb-7f38-4a8f-997a-81dd63605782'
+                credentials-id: 'fb735938-fa1c-4b61-b568-a7c153b4fe74'
                 branches: ['$sha1']
                 shallow-clone: true
                 depth: 10
