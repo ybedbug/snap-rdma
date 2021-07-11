@@ -508,7 +508,9 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	 * for testing */
 	init_attr.cap.max_send_sge = 1;
 
-	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp, false);
+	/* the qp 'resources' are going to be replaced by the fw. We do not
+	 * need use DV or GGA here */
+	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS);
 	return rc;
 }
 
