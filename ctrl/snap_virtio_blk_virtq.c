@@ -45,7 +45,9 @@ struct virtio_blk_outftr {
 enum virtq_cmd_sm_state {
 	VIRTQ_CMD_STATE_IDLE,
 	VIRTQ_CMD_STATE_FETCH_CMD_DESCS,
-	VIRTQ_CMD_STATE_READ_REQ,
+	VIRTQ_CMD_STATE_READ_HEADER,
+	VIRTQ_CMD_STATE_PARSE_HEADER,
+	VIRTQ_CMD_STATE_READ_DATA,
 	VIRTQ_CMD_STATE_HANDLE_REQ,
 	VIRTQ_CMD_STATE_T_OUT_IOV_DONE,
 	VIRTQ_CMD_STATE_T_IN_IOV_DONE,
@@ -145,6 +147,9 @@ struct blk_virtq_priv {
 	bool zcopy;
 	int merge_descs;
 };
+
+static inline bool zcopy_check(struct blk_virtq_cmd *cmd);
+static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd);
 
 static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
 					uint32_t len, bool is_completion)
@@ -485,124 +490,6 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 }
 
 /**
- * sm_fetch_cmd_descs() - Fetch all of commands descs
- * @cmd: Command being processed
- * @status: Callback status
- *
- * Function collects all of the commands descriptors. Descriptors can be either
- * in the tunnel command itself, or in host memory.
- *
- * Return: True if state machine is moved to a new state synchronously (error
- * or all descs were fetched), false if the state transition will be done
- * asynchronously.
- */
-static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
-			       enum virtq_cmd_sm_op_status status)
-{
-	enum virtq_fetch_desc_status ret;
-
-	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
-			   "command without response\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-	ret = fetch_next_desc(cmd);
-	if (ret == VIRTQ_FETCH_DESC_ERR) {
-		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
-		cmd->state = VIRTQ_CMD_STATE_READ_REQ;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
-{
-	int mr_access = 0;
-	struct snap_relaxed_ordering_caps ro_caps = {};
-
-	cmd->req_buf = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
-	if (!cmd->req_buf) {
-		snap_error("failed to dynamically allocate %lu bytes for \
-			   command %d request\n", len, cmd->idx);
-		goto err;
-	}
-
-	mr_access = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE |
-		    IBV_ACCESS_LOCAL_WRITE;
-	if (!snap_query_relaxed_ordering_caps(cmd->vq_priv->pd->context,
-					      &ro_caps)) {
-		if (ro_caps.relaxed_ordering_write &&
-		    ro_caps.relaxed_ordering_read)
-			mr_access |= IBV_ACCESS_RELAXED_ORDERING;
-	} else
-		snap_warn("Failed to query relaxed ordering caps\n");
-
-	cmd->req_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->req_buf, len,
-				 mr_access);
-	if (!cmd->req_mr) {
-		snap_error("failed to register mr for commmand %d\n", cmd->idx);
-		goto free_buf;
-	}
-	cmd->use_dmem = true;
-	return 0;
-
-free_buf:
-	cmd->req_mr = cmd->mr;
-	free(cmd->req_buf);
-err:
-	cmd->req_buf = cmd->buf;
-	cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
-	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-	return -1;
-}
-
-static void virtq_rel_req_dbuf(struct blk_virtq_cmd *cmd)
-{
-	ibv_dereg_mr(cmd->req_mr);
-	cmd->vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
-	cmd->req_buf = cmd->buf;
-	cmd->req_mr = cmd->mr;
-	cmd->use_dmem = false;
-}
-
-static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
-{
-	int i;
-
-	for (i = 0; i < cmd->num_desc - NUM_HDR_FTR_DESCS; i++) {
-		cmd->iov[i].iov_base = (void *)cmd->aux->descs[i + 1].addr;
-		cmd->iov[i].iov_len = cmd->aux->descs[i + 1].len;
-
-		virtq_log_data(cmd, "pa 0x%llx len %u\n",
-			       cmd->descs[i + 1].addr, cmd->descs[i + 1].len);
-	}
-	cmd->iov_cnt = cmd->num_desc - NUM_HDR_FTR_DESCS;
-}
-
-static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
-{
-	struct blk_virtq_priv *priv = cmd->vq_priv;
-
-	if (!priv->zcopy)
-		return false;
-
-	if (cmd->num_desc == NUM_HDR_FTR_DESCS)
-		return false;
-
-	if (!priv->blk_dev.ops->is_zcopy_aligned)
-		return false;
-
-	/* cannot use zcopy if the first data addr is not zcopy aligned */
-	return priv->blk_dev.ops->is_zcopy_aligned(priv->blk_dev.ctx,
-						   (void *)cmd->aux->descs[1].addr);
-}
-
-/**
  * sequential_data_descs_merge() - merge descriptors with sequential addresses and data
  * @cmd: Command being processed
  *
@@ -690,6 +577,224 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
 }
 
 /**
+ * sm_fetch_cmd_descs() - Fetch all of commands descs
+ * @cmd: Command being processed
+ * @status: Callback status
+ *
+ * Function collects all of the commands descriptors. Descriptors can be either
+ * in the tunnel command itself, or in host memory.
+ *
+ * Return: True if state machine is moved to a new state synchronously (error
+ * or all descs were fetched), false if the state transition will be done
+ * asynchronously.
+ */
+static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
+			       enum virtq_cmd_sm_op_status status)
+{
+	size_t i;
+	enum virtq_fetch_desc_status ret;
+
+	if (status != VIRTQ_CMD_SM_OP_OK) {
+		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
+			   "command without response\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+	ret = fetch_next_desc(cmd);
+	if (ret == VIRTQ_FETCH_DESC_ERR) {
+		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
+		cmd->num_desc = virtq_blk_process_desc(cmd->aux->descs, cmd->num_desc,
+					&cmd->num_merges, cmd->vq_priv->merge_descs);
+
+		if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
+			ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
+						"command without response\n");
+			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+			return true;
+		}
+
+		cmd->zcopy = zcopy_check(cmd);
+		if (cmd->zcopy)
+			virtq_descs_to_iovec(cmd);
+
+		for (i = 1; i < cmd->num_desc - 1; i++)
+			cmd->total_seg_len += cmd->aux->descs[i].len;
+
+		cmd->state = VIRTQ_CMD_STATE_READ_HEADER;
+
+		return true;
+	} else {
+		return false;
+	}
+}
+
+static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
+{
+	int mr_access = 0;
+	struct snap_relaxed_ordering_caps ro_caps = {};
+
+	cmd->req_buf = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
+	if (!cmd->req_buf) {
+		snap_error("failed to dynamically allocate %lu bytes for \
+			   command %d request\n", len, cmd->idx);
+		goto err;
+	}
+
+	mr_access = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE |
+		    IBV_ACCESS_LOCAL_WRITE;
+	if (!snap_query_relaxed_ordering_caps(cmd->vq_priv->pd->context,
+					      &ro_caps)) {
+		if (ro_caps.relaxed_ordering_write &&
+		    ro_caps.relaxed_ordering_read)
+			mr_access |= IBV_ACCESS_RELAXED_ORDERING;
+	} else
+		snap_warn("Failed to query relaxed ordering caps\n");
+
+	cmd->req_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->req_buf, len,
+				 mr_access);
+	if (!cmd->req_mr) {
+		snap_error("failed to register mr for commmand %d\n", cmd->idx);
+		goto free_buf;
+	}
+	cmd->use_dmem = true;
+	return 0;
+
+free_buf:
+	cmd->req_mr = cmd->mr;
+	free(cmd->req_buf);
+err:
+	cmd->req_buf = cmd->buf;
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+	return -1;
+}
+
+static void virtq_rel_req_dbuf(struct blk_virtq_cmd *cmd)
+{
+	ibv_dereg_mr(cmd->req_mr);
+	cmd->vq_priv->blk_dev.ops->dma_free(cmd->req_buf);
+	cmd->req_buf = cmd->buf;
+	cmd->req_mr = cmd->mr;
+	cmd->use_dmem = false;
+}
+
+/**
+ * virtq_read_header() - Read header from host
+ * @cmd: Command being processed
+ *
+ * Return: True if state machine is moved synchronously to the new state
+ * (error or no data to fetch) or false if the state transition will be
+ * done asynchronously.
+ */
+static bool virtq_read_header(struct blk_virtq_cmd *cmd)
+{
+	int ret;
+	struct blk_virtq_priv *priv = cmd->vq_priv;
+
+	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
+			cmd->descs[0].addr, cmd->descs[0].len);
+
+	cmd->state = VIRTQ_CMD_STATE_PARSE_HEADER;
+
+	cmd->dma_comp.count = 1;
+	ret = snap_dma_q_read(priv->dma_q, &cmd->aux->header,
+		cmd->aux->descs[0].len, cmd->aux_mr->lkey,
+		cmd->aux->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
+	        &cmd->dma_comp);
+
+	if (ret) {
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * virtq_parse_header() - Parse received header
+ * @cmd: Command being processed
+ *
+ * Return: True if state machine is moved synchronously to the new state
+ * (error or no data to fetch) or false if the state transition will be
+ * done asynchronously.
+ */
+static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
+					enum virtq_cmd_sm_op_status status)
+{
+	if (status != VIRTQ_CMD_SM_OP_OK) {
+		ERR_ON_CMD(cmd, "failed to get header data, returning"
+			   " failure\n");
+		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+		return true;
+	}
+
+	if (cmd->zcopy) {
+		cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
+		return true;
+	}
+
+	if (snap_unlikely(cmd->total_seg_len > cmd->req_size)) {
+		if (virtq_alloc_req_dbuf(cmd, cmd->total_seg_len))
+			return true;
+	}
+
+	switch (cmd->aux->header.type) {
+	case VIRTIO_BLK_T_OUT:
+		cmd->state = VIRTQ_CMD_STATE_READ_DATA;
+		// TODO: Allocate buffer from memory pool
+		break;
+
+	case VIRTIO_BLK_T_IN:
+	case VIRTIO_BLK_T_GET_ID:
+		cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
+		// TODO: Allocate buffer from memory pool
+		break;
+
+	default:
+		cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
+		break;
+	}
+
+	return true;
+}
+
+static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
+{
+	int i;
+
+	for (i = 0; i < cmd->num_desc - NUM_HDR_FTR_DESCS; i++) {
+		cmd->iov[i].iov_base = (void *)cmd->aux->descs[i + 1].addr;
+		cmd->iov[i].iov_len = cmd->aux->descs[i + 1].len;
+
+		virtq_log_data(cmd, "pa 0x%llx len %u\n",
+			       cmd->descs[i + 1].addr, cmd->descs[i + 1].len);
+	}
+	cmd->iov_cnt = cmd->num_desc - NUM_HDR_FTR_DESCS;
+}
+
+static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
+{
+	struct blk_virtq_priv *priv = cmd->vq_priv;
+
+	if (!priv->zcopy)
+		return false;
+
+	if (cmd->num_desc == NUM_HDR_FTR_DESCS)
+		return false;
+
+	if (!priv->blk_dev.ops->is_zcopy_aligned)
+		return false;
+
+	/* cannot use zcopy if the first data addr is not zcopy aligned */
+	return priv->blk_dev.ops->is_zcopy_aligned(priv->blk_dev.ctx,
+						   (void *)cmd->aux->descs[1].addr);
+}
+
+/**
  * virtq_read_req_from_host() - Read request from host
  * @cmd: Command being processed
  *
@@ -709,59 +814,34 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
  * (error or no data to fetch) or false if the state transition will be
  * done asynchronously.
  */
-static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
+static bool virtq_read_data(struct blk_virtq_cmd *cmd)
 {
 	struct blk_virtq_priv *priv = cmd->vq_priv;
 	size_t offset, i;
 	int ret;
 
-	cmd->num_desc = virtq_blk_process_desc(cmd->aux->descs, cmd->num_desc,
-				&cmd->num_merges, cmd->vq_priv->merge_descs);
-	if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
-							   "command without response\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-
-	cmd->zcopy = zcopy_check(cmd);
-	cmd->dma_comp.count = 1;
-	for (i = 1; i < cmd->num_desc - 1; i++) {
-		cmd->total_seg_len += cmd->aux->descs[i].len;
-		if (!cmd->zcopy &&
-		    (cmd->aux->descs[i].flags & VRING_DESC_F_WRITE) == 0)
-			cmd->dma_comp.count++;
-	}
-
-	if (snap_unlikely(!cmd->zcopy && cmd->total_seg_len > cmd->req_size)) {
-		if (virtq_alloc_req_dbuf(cmd, cmd->total_seg_len))
-			return true;
-	}
-
-	offset = 0;
 	cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
 
-	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
-			cmd->descs[0].addr, cmd->descs[0].len);
-	ret = snap_dma_q_read(priv->dma_q, &cmd->aux->header, cmd->aux->descs[0].len,
-	        cmd->aux_mr->lkey, cmd->aux->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
-	        &cmd->dma_comp);
-	if (ret) {
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+	// Calculate number of descriptors we want to read
+	cmd->dma_comp.count = 0;
+	for (i = 1; i < cmd->num_desc - 1; i++) {
+		if (cmd->aux->descs[i].flags & VRING_DESC_F_WRITE)
+			continue;
+		cmd->dma_comp.count++;
+	}
+
+	// If we have nothing to read - move synchronously to
+	// VIRTQ_CMD_STATE_HANDLE_REQ
+	if (!cmd->dma_comp.count)
 		return true;
-	}
 
-	if (cmd->zcopy) {
-		virtq_descs_to_iovec(cmd);
-		return false;
-	}
-
+	offset = 0;
 	for (i = 1; i < cmd->num_desc - 1; i++) {
 		if (cmd->aux->descs[i].flags & VRING_DESC_F_WRITE)
 			continue;
 
 		virtq_log_data(cmd, "READ_DATA: pa 0x%llx len %u\n",
-				cmd->descs[i].addr, cmd->descs[i].len);
+				cmd->aux->descs[i].addr, cmd->aux->descs[i].len);
 		ret = snap_dma_q_read(priv->dma_q, cmd->req_buf + offset,
 				cmd->aux->descs[i].len, cmd->req_mr->lkey, cmd->aux->descs[i].addr,
 				priv->snap_attr.vattr.dma_mkey, &cmd->dma_comp);
@@ -771,6 +851,7 @@ static bool virtq_read_req_from_host(struct blk_virtq_cmd *cmd)
 		}
 		offset += cmd->aux->descs[i].len;
 	}
+
 	return false;
 }
 
@@ -1106,8 +1187,14 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 		case VIRTQ_CMD_STATE_FETCH_CMD_DESCS:
 			repeat = sm_fetch_cmd_descs(cmd, status);
 			break;
-		case VIRTQ_CMD_STATE_READ_REQ:
-			repeat = virtq_read_req_from_host(cmd);
+		case VIRTQ_CMD_STATE_READ_HEADER:
+			repeat = virtq_read_header(cmd);
+			break;
+		case VIRTQ_CMD_STATE_PARSE_HEADER:
+			repeat = virtq_parse_header(cmd, status);
+			break;
+		case VIRTQ_CMD_STATE_READ_DATA:
+			repeat = virtq_read_data(cmd);
 			break;
 		case VIRTQ_CMD_STATE_HANDLE_REQ:
 			repeat = virtq_handle_req(cmd, status);
