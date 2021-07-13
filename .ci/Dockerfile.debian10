@@ -4,7 +4,7 @@ ARG _GID=11429
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
 ARG DEBIAN_FRONTEND=noninteractive
-ARG MOFED_VER=5.3-1.0.0.1
+ARG MOFED_VER=5.4-1.0.3.0
 ENV TZ=Etc/UTC
 USER root
 
@@ -38,7 +38,7 @@ RUN apt-get update && \
 RUN wget -qO - https://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | \
     sudo apt-key add - && \
     cd /etc/apt/sources.list.d && \
-    wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/debian10.3/mellanox_mlnx_ofed.list
+    wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/debian10.8/mellanox_mlnx_ofed.list
 RUN apt update && apt install -y mlnx-ofed-basic-user-only
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
