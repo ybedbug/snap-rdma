@@ -33,7 +33,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 void blk_virtq_destroy(struct blk_virtq_ctx *q);
 void blk_virtq_start(struct blk_virtq_ctx *q,
 		     struct virtq_start_attr *attr);
-int blk_virtq_progress(struct blk_virtq_ctx *q);
+int blk_virtq_progress(struct blk_virtq_ctx *q, int thread_id);
 int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat);
 int blk_virtq_query_error_state(struct blk_virtq_ctx *q,

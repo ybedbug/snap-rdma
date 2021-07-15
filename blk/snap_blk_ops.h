@@ -14,6 +14,8 @@ enum snap_bdev_op_status {
 	SNAP_BDEV_OP_IO_ERROR,
 };
 
+struct ibv_mr;
+
 /**
  * typedef snap_bdev_io_done_cb_t - callback on io operations done
  * @status:	status of the finished operation
@@ -24,6 +26,9 @@ enum snap_bdev_op_status {
 typedef void (*snap_bdev_io_done_cb_t)(enum snap_bdev_op_status status,
 				       void *done_arg);
 
+typedef void (*snap_mem_pool_ready_cb_t)(void *data, struct ibv_mr *mr,
+					void *user);
+
 /**
  * struct snap_bdev_io_done_ctx - context given for bdev ops
  * @cb:		callback on io operation done
@@ -32,6 +37,14 @@ typedef void (*snap_bdev_io_done_cb_t)(enum snap_bdev_op_status status,
 struct snap_bdev_io_done_ctx {
 	snap_bdev_io_done_cb_t cb;
 	void *user_arg;
+};
+
+struct snap_blk_mempool_ctx {
+	void *ctx;
+	void *user;
+	snap_mem_pool_ready_cb_t callback;
+	void *tag;
+	int thread_id;
 };
 
 /**
@@ -85,6 +98,10 @@ struct snap_bdev_ops {
 	const char *(*get_bdev_name)(void *ctx);
 	bool (*is_zcopy)(void *ctx);
 	bool (*is_zcopy_aligned)(void *ctx, void *addr);
+	int (*dma_pool_malloc)(size_t size, struct snap_blk_mempool_ctx *mem_ctx);
+	void (*dma_pool_cancel)(struct snap_blk_mempool_ctx *mem_ctx);
+	void (*dma_pool_free)(struct snap_blk_mempool_ctx *ctx, void *buf);
+	bool (*dma_pool_enabled)(void *ctx);
 };
 
 #endif

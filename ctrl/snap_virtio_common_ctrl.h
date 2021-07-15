@@ -128,6 +128,7 @@ struct snap_virtio_ctrl_queue {
 	bool log_writes_to_host;
 
 	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
+	int thread_id;
 };
 
 struct snap_virtio_ctrl_queue_counter {
