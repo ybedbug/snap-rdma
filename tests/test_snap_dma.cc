@@ -787,11 +787,9 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_no_wait_complete) {
 	ASSERT_TRUE(q);
 
 	/*
-	 * if test umr wqe warp around case, then post enough RDMA READ wqe
-	 * to make SQ only left 3 WQE BB to the end. Because the UMR WQE
-	 * used below need consume 4 WQE BB, so it will warp around.
+	 * post enough RDMA READ wqe to make SQ only left 3 WQE BB to the end.
+	 * Because the UMR WQE used below need consume 4 WQE BB, so it will warp around.
 	 */
-
 	dv_qp = &q->sw_qp.dv_qp;
 	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
@@ -811,16 +809,58 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_wait_complete) {
 	ASSERT_TRUE(q);
 
 	/*
-	 * if test umr wqe warp around case, then post enough RDMA READ wqe
-	 * to make SQ only left 3 WQE BB to the end. Because the UMR WQE
-	 * used below need consume 4 WQE BB, so it will warp around.
+	 * post enough RDMA READ wqe to make SQ only left 3 WQE BB to the end.
+	 * Because the UMR WQE used below need consume 4 WQE BB, so it will warp around.
 	 */
-
 	dv_qp = &q->sw_qp.dv_qp;
 	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
 
 	post_umr_wqe(q, m_pd, m_bsize, true);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_reuse_wait_complete) {
+	struct snap_dma_q *q;
+	struct snap_dv_qp *dv_qp;
+	int i;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	/*
+	 * first post wqe_cnt RDMA READ wqe to occupied the whole SQ buffer,
+	 * then post umr wqe to let it reuse the WQE BBs which hold dirty data.
+	 */
+	dv_qp = &q->sw_qp.dv_qp;
+	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt; i++)
+		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	post_umr_wqe(q, m_pd, m_bsize, true);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, post_umr_wqe_reuse_no_wait_complete) {
+	struct snap_dma_q *q;
+	struct snap_dv_qp *dv_qp;
+	int i;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	/*
+	 * first post wqe_cnt RDMA READ wqe to occupied the whole SQ buffer,
+	 * then post umr wqe to let it reuse the WQE BBs which hold dirty data.
+	 */
+	dv_qp = &q->sw_qp.dv_qp;
+	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt; i++)
+		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	post_umr_wqe(q, m_pd, m_bsize, false);
 
 	snap_dma_q_destroy(q);
 }

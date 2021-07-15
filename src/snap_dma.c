@@ -1547,6 +1547,14 @@ static inline void snap_set_umr_mkey_seg(struct mlx5_wqe_mkey_context_seg *mkey,
 static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 					int klm_entries)
 {
+	/* explicitly set rsvd0 and rsvd1 from struct mlx5_wqe_umr_ctrl_seg to 0,
+	  otherwise post umr wqe will fail if reuse those WQE BB with dirty data. */
+	*(uint32_t *)ctrl = 0;
+	*((uint64_t *)ctrl + 2) = 0;
+	*((uint64_t *)ctrl + 3) = 0;
+	*((uint64_t *)ctrl + 4) = 0;
+	*((uint64_t *)ctrl + 5) = 0;
+
 	ctrl->flags = MLX5_WQE_UMR_CTRL_FLAG_INLINE |
 				MLX5_WQE_UMR_CTRL_FLAG_TRNSLATION_OFFSET;
 
@@ -1620,7 +1628,6 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 
 	/* build umr ctrl segment */
 	umr_ctrl = (struct mlx5_wqe_umr_ctrl_seg *)(gen_ctrl + 1);
-	memset(umr_ctrl, 0, sizeof(*umr_ctrl));
 	snap_set_umr_control_seg(umr_ctrl, klm_entries);
 
 	/* build mkey context segment */
@@ -1631,7 +1638,6 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	} else {
 		mkey = (struct mlx5_wqe_mkey_context_seg *)(umr_ctrl + 1);
 	}
-	memset(mkey, 0, sizeof(*mkey));
 	snap_set_umr_mkey_seg(mkey, klm_mtt, klm_entries);
 
 	/* build inline mtt entires */
