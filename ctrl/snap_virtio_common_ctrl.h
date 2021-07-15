@@ -137,6 +137,9 @@ struct snap_virtio_ctrl_queue_counter {
 	uint64_t fail;
 	uint64_t unordered;
 	uint64_t merged_desc;
+	uint64_t long_desc_chain;
+	uint64_t large_in_buf;
+
 };
 
 struct snap_virtio_ctrl_queue_stats {

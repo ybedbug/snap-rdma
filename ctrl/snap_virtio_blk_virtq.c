@@ -118,6 +118,7 @@ struct blk_virtq_cmd {
 	uint32_t total_in_len;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool use_dmem;
+	bool use_seg_dmem;
 	struct snap_virtio_ctrl_queue_counter *io_cmd_stat;
 	uint16_t cmd_available_index;
 	struct virtio_blk_outftr blk_req_ftr;
@@ -293,6 +294,30 @@ static void blk_virtq_cmd_fill_addr(struct blk_virtq_cmd *cmd)
 		   cmd->fake_addr, ctrlid, qid, reqid, global_req_idx);
 }
 
+static int alloc_aux(struct blk_virtq_cmd *cmd, uint32_t seg_max)
+{
+	const size_t descs_size = VIRTIO_NUM_DESC(seg_max) * sizeof(struct vring_desc);
+	const size_t aux_size = sizeof(struct blk_virtq_cmd_aux) + descs_size;
+
+	cmd->aux = calloc(1, aux_size);
+	if (!cmd->aux) {
+		snap_error("failed to allocate aux memory for virtq %d\n", cmd->idx);
+		return -ENOMEM;
+	}
+
+	cmd->aux_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->aux, aux_size,
+					IBV_ACCESS_REMOTE_READ |
+					IBV_ACCESS_REMOTE_WRITE |
+					IBV_ACCESS_LOCAL_WRITE);
+	if (!cmd->aux_mr) {
+		snap_error("failed to register mr for virtq %d\n", cmd->idx);
+		free(cmd->aux);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
 			      struct blk_virtq_priv *vq_priv)
@@ -336,24 +361,9 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	}
 
 	if (cmd->vq_priv->use_mem_pool) {
-
-		cmd->aux = calloc(1, aux_size);
-		if (!cmd->aux) {
-			snap_error("failed to allocate aux memory for virtq %d\n", idx);
-			ret = -ENOMEM;
+		ret = alloc_aux(cmd, seg_max);
+		if (ret)
 			goto free_fake_iov;
-		}
-
-		cmd->aux_mr = ibv_reg_mr(vq_priv->pd, cmd->aux, aux_size,
-						IBV_ACCESS_REMOTE_READ |
-						IBV_ACCESS_REMOTE_WRITE |
-						IBV_ACCESS_LOCAL_WRITE);
-		if (!cmd->aux_mr) {
-			snap_error("failed to register mr for virtq %d\n", idx);
-			ret = -1;
-			free(cmd->aux);
-			goto free_fake_iov;
-		}
 
 		cmd->dma_pool_ctx.ctx = vq_priv->blk_dev.ctx;
 		cmd->dma_pool_ctx.user = cmd;
@@ -484,6 +494,43 @@ enum virtq_fetch_desc_status {
 	VIRTQ_FETCH_DESC_READ,
 };
 
+static int virtq_alloc_desc_buf(struct blk_virtq_cmd *cmd, size_t old_len, size_t len)
+{
+	int aux_size = len * sizeof(struct vring_desc) + sizeof(struct virtio_blk_outhdr);
+	struct ibv_mr *new_aux_mr;
+	struct blk_virtq_cmd_aux *new_aux  = malloc(aux_size);
+
+	if (!new_aux) {
+		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",
+				len, cmd->idx);
+		goto err;
+	}
+	new_aux_mr = ibv_reg_mr(cmd->vq_priv->pd, new_aux, aux_size,
+					IBV_ACCESS_REMOTE_READ |
+					IBV_ACCESS_REMOTE_WRITE |
+					IBV_ACCESS_LOCAL_WRITE);
+	if (!new_aux_mr) {
+		snap_error("failed to register mr for virtq %d\n", cmd->idx);
+		free(new_aux);
+		goto err;
+	}
+	memcpy(new_aux->descs, cmd->aux->descs, old_len * sizeof(struct vring_desc));
+	if (cmd->vq_priv->use_mem_pool) {
+		//mem for aux was previously allocated with malloc
+		ibv_dereg_mr(cmd->aux_mr);
+		free(cmd->aux);
+	}
+	cmd->aux = new_aux;
+	cmd->use_seg_dmem = true;
+	cmd->aux_mr = new_aux_mr;
+
+	return 0;
+
+err:
+	cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
+	return -1;
+}
+
 /**
  * fetch_next_desc() - Fetches command descriptors from host memory
  * @cmd: command descriptors belongs to
@@ -507,6 +554,13 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
 		in_ring_desc_addr = cmd->aux->descs[cmd->num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
+
+	if (snap_unlikely(cmd->num_desc >=
+			VIRTIO_NUM_DESC(cmd->vq_priv->seg_max))) {
+		if (virtq_alloc_desc_buf(cmd, cmd->num_desc,
+				cmd->vq_priv->snap_attr.vattr.size))
+			return VIRTQ_FETCH_DESC_ERR;
+	}
 
 	srcaddr = cmd->vq_priv->snap_attr.vattr.desc +
 		  in_ring_desc_addr * sizeof(struct vring_desc);
@@ -691,7 +745,6 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
 		cmd->num_desc = virtq_blk_process_desc(cmd->aux->descs, cmd->num_desc,
 					&cmd->num_merges, cmd->vq_priv->merge_descs);
-
 		if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
 			ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
 			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
@@ -761,6 +814,37 @@ static void virtq_rel_req_dbuf(struct blk_virtq_cmd *cmd)
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 	cmd->use_dmem = false;
+}
+
+/**
+ * virtq_rel_req_desc() - release aux in case of extra segs received
+ * @cmd: Command being processed
+ *
+ * In case extra mem was allocated to accommodate unexpected segments,
+ * at release extra memory is freed, and aux size is returned to regular init size
+ *
+ * Return: True if state machine is moved to error state (alloc error),
+ *  false otherwise
+ */
+static bool virtq_rel_req_desc(struct blk_virtq_cmd *cmd)
+{
+	bool repeat = false;
+
+	ibv_dereg_mr(cmd->aux_mr);
+	free(cmd->aux);
+	if (cmd->vq_priv->use_mem_pool) {
+		if (alloc_aux(cmd, cmd->vq_priv->seg_max)) {
+			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+			//alloc fail, move to error state
+			repeat = true;
+		}
+	} else {
+		cmd->aux = (struct blk_virtq_cmd_aux *)((uint8_t *)cmd->buf + cmd->req_size);
+		cmd->aux_mr = cmd->mr;
+	}
+	cmd->use_seg_dmem = false;
+
+	return repeat;
 }
 
 /**
@@ -1045,7 +1129,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		len = snap_min(ret, cmd->aux->descs[1].len);
 		cmd->total_in_len += len;
 		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
-			       cmd->descs[1].addr, len);
+			       cmd->aux->descs[1].addr, len);
 		virtq_mark_dirty_mem(cmd, cmd->aux->descs[1].addr, len, false);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->req_buf,
@@ -1069,6 +1153,11 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			cmd->io_cmd_stat->fail++;
 		if (cmd->vq_priv->merge_descs)
 			cmd->io_cmd_stat->merged_desc += cmd->num_merges;
+		if (cmd->use_dmem)
+			cmd->io_cmd_stat->large_in_buf++;
+		if (cmd->use_seg_dmem)
+			cmd->io_cmd_stat->long_desc_chain++;
+
 	}
 
 	if (ret) {
@@ -1301,6 +1390,8 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 				virtq_rel_req_dbuf(cmd);
 			if (cmd->vq_priv->use_mem_pool)
 				virtq_rel_req_mempool_buf(cmd);
+			if (snap_unlikely(cmd->use_seg_dmem))
+				repeat = virtq_rel_req_desc(cmd);
 			cmd->vq_priv->cmd_cntr--;
 			break;
 		case VIRTQ_CMD_STATE_FATAL_ERR:
@@ -1308,6 +1399,8 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 				virtq_rel_req_dbuf(cmd);
 			if (cmd->vq_priv->use_mem_pool)
 				virtq_rel_req_mempool_buf(cmd);
+			if (snap_unlikely(cmd->use_seg_dmem))
+				virtq_rel_req_desc(cmd);
 			cmd->vq_priv->vq_ctx.common_ctx.fatal_err = -1;
 			/*
 			 * TODO: propagate fatal error to the controller.
@@ -1356,6 +1449,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->total_in_len = 0;
 	cmd->blk_req_ftr.status = VIRTIO_BLK_S_OK;
 	cmd->use_dmem = false;
+	cmd->use_seg_dmem = false;
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 	cmd->dma_pool_ctx.thread_id = priv->thread_id;
