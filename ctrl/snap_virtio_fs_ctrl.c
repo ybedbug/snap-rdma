@@ -16,7 +16,7 @@ struct virtio_fs_config {
 
 	/* Number of request queues */
 	uint32_t num_request_queues;
-} __packed;
+} __attribute__((packed));
 #endif
 
 #define SNAP_VIRTIO_FS_MODIFIABLE_FTRS (1ULL << VIRTIO_F_VERSION_1)
@@ -119,7 +119,7 @@ snap_virtio_fs_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 	return &vbbar->q_attrs[index].vattr;
 }
 
-static unsigned
+static size_t
 snap_virtio_fs_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 {
 	/* TODO use fs device config definition from linux/virtio_fs.h */
@@ -133,7 +133,7 @@ snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int
 	uint8_t last_ch;
 
 	if (len < snap_virtio_fs_ctrl_bar_get_state_size(ctrl)) {
-		snap_info(">>> fs_config: state is truncated (%d < %d)\n", len,
+		snap_info(">>> fs_config: state is truncated (%d < %lu)\n", len,
 			  snap_virtio_fs_ctrl_bar_get_state_size(ctrl));
 		return;
 	}
@@ -151,7 +151,7 @@ snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int
 static int
 snap_virtio_fs_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 				  struct snap_virtio_device_attr *vbar,
-				  void *buf, unsigned len)
+				  void *buf, size_t len)
 {
 	struct snap_virtio_fs_device_attr *vfsbar = to_fs_device_attr(vbar);
 	struct virtio_fs_config *dev_cfg;
@@ -214,6 +214,7 @@ static bool
 snap_virtio_fs_ctrl_bar_queue_attr_valid(struct snap_virtio_device_attr *vbar)
 {
 	struct snap_virtio_fs_device_attr *vfsbar = to_fs_device_attr(vbar);
+
 	return vfsbar->q_attrs ? true : false;
 }
 
@@ -318,8 +319,7 @@ int snap_virtio_fs_ctrl_bar_setup(struct snap_virtio_fs_ctrl *ctrl,
 	if (!regs->num_request_queues) {
 		if (bar.vattr.max_queues < 1 ||
 		    bar.vattr.max_queues > ctrl->common.max_queues) {
-			snap_warn("Invalid num_queues detected on bar. "
-				  "Clamping down to max possible (%lu)\n",
+			snap_warn("Invalid num_queues detected on bar. Clamping down to max possible (%lu)\n",
 				  ctrl->common.max_queues - 1);
 			regs->num_request_queues = ctrl->common.max_queues - 1;
 		}
@@ -623,7 +623,7 @@ static int snap_virtio_fs_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	if (ret)
 		return ret;
 
-	snap_info("queue %d: pg_id %d RESUMED with hw_avail %hu hw_used %hu\n",
+	snap_info("queue %d: pg_id %d RESUMED with hw_avail %u hw_used %u\n",
 		  vq->index, vq->pg->id,
 		  dev_attr->q_attrs[index].hw_available_index,
 		  dev_attr->q_attrs[index].hw_used_index);
@@ -659,8 +659,7 @@ static int snap_virtio_fs_ctrl_recover(struct snap_virtio_fs_ctrl *ctrl)
 	int ret;
 	struct snap_virtio_fs_device_attr fs_attr = {};
 
-	snap_info("create controller in recover mode - ctrl=%p"
-		  " max_queues=%ld enabled_queues=%ld \n",
+	snap_info("create controller in recover mode - ctrl=%p max_queues=%ld enabled_queues=%ld\n",
 		   ctrl, ctrl->common.max_queues, ctrl->common.enabled_queues);
 
 	fs_attr.queues = ctrl->common.max_queues;
@@ -845,7 +844,7 @@ void snap_virtio_fs_ctrl_io_progress(struct snap_virtio_fs_ctrl *ctrl)
 /**
  * snap_virtio_fs_ctrl_io_progress_thread() - Handle IO requests for thread
  * @ctrl:       controller instance
- * @thread_id: 	id queues belong to
+ * @thread_id:	id queues belong to
  *
  * Looks for any IO requests from host recieved on QPs which belong to thread
  * thread_id, and handles them based on the request's parameters.

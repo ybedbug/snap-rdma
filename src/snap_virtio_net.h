@@ -121,14 +121,14 @@ int snap_virtio_net_query_counters(struct snap_virtio_net_queue *vnq,
 static inline struct snap_virtio_net_queue_attr*
 to_net_queue_attr(struct snap_virtio_queue_attr *vattr)
 {
-    return container_of(vattr, struct snap_virtio_net_queue_attr,
-			vattr);
+	return container_of(vattr, struct snap_virtio_net_queue_attr,
+			    vattr);
 }
 
 static inline struct snap_virtio_net_queue*
 to_net_queue(struct snap_virtio_queue *virtq)
 {
-    return container_of(virtq, struct snap_virtio_net_queue, virtq);
+	return container_of(virtq, struct snap_virtio_net_queue, virtq);
 }
 
 static inline struct snap_virtio_net_device_attr*
@@ -140,9 +140,11 @@ to_net_device_attr(struct snap_virtio_device_attr *vattr)
 static inline void eth_random_addr(uint8_t *addr)
 {
 	struct timeval t;
+	uint64_t rand;
+
 	gettimeofday(&t, NULL);
 	srandom(t.tv_sec + t.tv_usec);
-	uint64_t rand = random();
+	rand = random();
 
 	rand = rand << 32 | random();
 

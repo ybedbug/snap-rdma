@@ -29,16 +29,17 @@ static int snap_env_dump_one_entry(struct mlnx_snap_env *env,
 				   char *buf,
 				   unsigned int buf_size)
 {
-	int written = snprintf(buf, buf_size, SNA_ENV_DUMP_FORMAT,
-			       env->name, env->defined ? "set" : "not set",
-			       env->default_val
-			       );
+	int written;
+
+	written = snprintf(buf, buf_size, SNA_ENV_DUMP_FORMAT, env->name,
+			   env->defined ? "set" : "not set", env->default_val);
 	return written;
 }
 
 static struct mlnx_snap_env *snap_env_find(const char *env_name)
 {
 	struct mlnx_snap_env *env = env_arr;
+
 	while (env->name) {
 		if (!strcmp(env_name, env->name))
 			return env;
@@ -69,6 +70,7 @@ int snap_env_add(const char *env_name, int default_val)
 int snap_env_getenv(const char *env_name)
 {
 	const struct mlnx_snap_env *env = snap_env_find(env_name);
+
 	if (env)
 		return env->default_val;
 
@@ -78,6 +80,7 @@ int snap_env_getenv(const char *env_name)
 int snap_env_is_set(const char *env_name)
 {
 	const struct mlnx_snap_env *env = snap_env_find(env_name);
+
 	return env ? env->defined : 0;
 }
 
@@ -85,6 +88,7 @@ snap_env_iter_t snap_env_dump_env_entry(snap_env_iter_t iter, char *buf, unsigne
 {
 	if (buf && buf_size) {
 		struct mlnx_snap_env *env = iter ? (struct mlnx_snap_env *)iter : env_arr;
+
 		if (env && env->name) {
 			snap_env_dump_one_entry(env, buf, buf_size);
 			++env;

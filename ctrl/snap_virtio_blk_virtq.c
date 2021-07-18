@@ -66,20 +66,20 @@ struct blk_virtq_cmd_aux {
 /**
  * struct blk_virtq_cmd - command context
  * @idx:			descr_head_idx modulo queue size
- * @descr_head_idx:	 	descriptor head index
- * @num_desc:		 	number of descriptors in the command
- * @vq_priv:		 	virtqueue command belongs to, private context
- * @state:		 	state of sm processing the command
- * @buf:		 	buffer holding the request data and aux data
- * @aux:		 	aux data resided in dma/mr memory
- * @mr:		  	buf mr
- * @req_buf:		 	pointer to request buffer
- * @req_mr:		 	request buffer mr
- * @req_size:		 	allocated request buffer size
- * @dma_comp:		 	struct given to snap library
- * @total_seg_len:	 	total length of the request data to be written/read
- * @total_in_len:	 	total length of data written to request buffers
- * @use_dmem:		  	command uses dynamic mem for req_buf
+ * @descr_head_idx:		descriptor head index
+ * @num_desc:			number of descriptors in the command
+ * @vq_priv:			virtqueue command belongs to, private context
+ * @state:			state of sm processing the command
+ * @buf:			buffer holding the request data and aux data
+ * @aux:			aux data resided in dma/mr memory
+ * @mr:				buf mr
+ * @req_buf:			pointer to request buffer
+ * @req_mr:			request buffer mr
+ * @req_size:			allocated request buffer size
+ * @dma_comp:			struct given to snap library
+ * @total_seg_len:		total length of the request data to be written/read
+ * @total_in_len:		total length of data written to request buffers
+ * @use_dmem:			command uses dynamic mem for req_buf
  * @cmd_available_index:	sequential number of the command according to arrival
  * @zcopy:			use ZCOPY
  * @iov:			command descriptors converted to the io vector
@@ -164,14 +164,14 @@ static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
 		/* spec 2.6 Split Virtqueues
 		 * mark all of the device area as dirty, in the worst case
 		 * it will cost an extra page or two. Device area size is
-		 * calculated according to the spec. */
+		 * calculated according to the spec.
+		 **/
 		pa = cmd->vq_priv->snap_attr.vattr.device;
 		len = 6 + 8 * cmd->vq_priv->snap_attr.vattr.size;
 	}
 	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
-		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel"
-			   " is not present\n");
+		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel is not present\n");
 		return;
 	}
 	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
@@ -548,6 +548,7 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
 	if (snap_unlikely(descs[0].len != header_len)) {
 		/* header desc contains data, move data and header to seperate desc */
 		uint32_t i;
+
 		for (i = num_desc; i > 0; i--) {
 			descs[i].addr = descs[i - 1].addr;
 			descs[i].len = descs[i - 1].len;
@@ -596,8 +597,7 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 	enum virtq_fetch_desc_status ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
-			   "command without response\n");
+		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
@@ -611,8 +611,7 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 					&cmd->num_merges, cmd->vq_priv->merge_descs);
 
 		if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
-			ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping "
-						"command without response\n");
+			ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
 			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
@@ -639,8 +638,8 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 
 	cmd->req_buf = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
 	if (!cmd->req_buf) {
-		snap_error("failed to dynamically allocate %lu bytes for \
-			   command %d request\n", len, cmd->idx);
+		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",
+			   len, cmd->idx);
 		goto err;
 	}
 
@@ -726,8 +725,7 @@ static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
 					enum virtq_cmd_sm_op_status status)
 {
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to get header data, returning"
-			   " failure\n");
+		ERR_ON_CMD(cmd, "failed to get header data, returning failure\n");
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -858,19 +856,19 @@ static bool virtq_read_data(struct blk_virtq_cmd *cmd)
 
 static inline void virtq_fill_fake_iov(struct blk_virtq_cmd *cmd)
 {
-    int i;
+	int i;
 
-    /* The first iov_base is always the same */
-    cmd->fake_iov[0].iov_base = cmd->fake_addr;
-    cmd->fake_iov[0].iov_len = cmd->iov[0].iov_len;
+	/* The first iov_base is always the same */
+	cmd->fake_iov[0].iov_base = cmd->fake_addr;
+	cmd->fake_iov[0].iov_len = cmd->iov[0].iov_len;
 
-    for (i = 1; i < cmd->iov_cnt; i++) {
-	void *prev_iov_base = cmd->fake_iov[i - 1].iov_base;
-	size_t prev_iov_len = cmd->fake_iov[i - 1].iov_len;
+	for (i = 1; i < cmd->iov_cnt; i++) {
+		void *prev_iov_base = cmd->fake_iov[i - 1].iov_base;
+		size_t prev_iov_len = cmd->fake_iov[i - 1].iov_len;
 
-	cmd->fake_iov[i].iov_base = prev_iov_base + prev_iov_len;
-	cmd->fake_iov[i].iov_len = cmd->iov[i].iov_len;
-    }
+		cmd->fake_iov[i].iov_base = prev_iov_base + prev_iov_len;
+		cmd->fake_iov[i].iov_len = cmd->iov[i].iov_len;
+	}
 }
 
 /**
@@ -894,8 +892,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	uint64_t offset;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to get request data, returning"
-			   " failure\n");
+		ERR_ON_CMD(cmd, "failed to get request data, returning failure\n");
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -944,8 +941,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	case VIRTIO_BLK_T_FLUSH:
 		cmd->io_cmd_stat = &cmd->vq_priv->vq_ctx.io_stat.flush;
 		if (cmd->aux->header.sector != 0) {
-			ERR_ON_CMD(cmd, "sector must be zero for flush "
-				   "command\n");
+			ERR_ON_CMD(cmd, "sector must be zero for flush command\n");
 			ret = -1;
 		} else {
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
@@ -981,8 +977,8 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 				       &(cmd->dma_comp));
 		break;
 	default:
-		ERR_ON_CMD(cmd, "invalid command - requested command type "
-				"0x%x is not implemented\n", cmd->aux->header.type);
+		ERR_ON_CMD(cmd, "invalid command - requested command type 0x%x is not implemented\n",
+			   cmd->aux->header.type);
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_UNSUPP;
 		return true;
@@ -997,7 +993,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	}
 
 	if (ret) {
-		ERR_ON_CMD(cmd, "failed while executing command %d \n",
+		ERR_ON_CMD(cmd, "failed while executing command %d\n",
 			cmd->aux->header.type);
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
@@ -1022,8 +1018,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 	size_t offset = 0;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr"
-			   " to host\n");
+		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr to host\n");
 		cmd->blk_req_ftr.status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -1134,7 +1129,7 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 	 */
 	if (snap_unlikely(cmd->vq_priv->force_in_order)) {
 		if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d \n",
+			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
 				cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
 			cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
 			if (cmd->io_cmd_stat)
@@ -1241,9 +1236,9 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 
 /**
  * blk_virtq_rx_cb() - callback for new command received from host
- * @q:   	queue on which command was received
+ * @q:		queue on which command was received
  * @data:	pointer to data sent for the command - should be
- * 		command header and optional descriptor list
+ *		command header and optional descriptor list
  * @data_len:	length of data
  * @imm_data:	immediate data
  *
@@ -1277,7 +1272,8 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 		cmd->cmd_available_index = priv->ctrl_available_index;
 
 	/* If new commands are not dropped there is a risk of never
-	 * completing the flush */
+	 * completing the flush
+	 **/
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
 		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->num_desc, data_len);
@@ -1436,7 +1432,7 @@ err:
  * @q: queue to be destryoed
  *
  * Context: 1. Destroy should be called only when queue is in suspended state.
- * 	    2. blk_virtq_progress() should not be called during destruction.
+ *	    2. blk_virtq_progress() should not be called during destruction.
  *
  * Return: void
  */
@@ -1447,8 +1443,7 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
 	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
-		snap_warn("queue %d: destroying while not in the SUSPENDED state, "
-			  " %d commands outstanding\n",
+		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
 
 	if (snap_virtio_blk_destroy_queue(vq_priv->snap_vbq))
@@ -1631,8 +1626,8 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 		  q->common_ctx.idx, priv->cmd_cntr);
 
 	if (priv->vq_ctx.common_ctx.fatal_err)
-		snap_warn("queue %d: fatal error. Resuming or live migration"
-			  " will not be possible\n", q->common_ctx.idx);
+		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n",
+			  q->common_ctx.idx);
 
 	priv->swq_state = SW_VIRTQ_FLUSHING;
 	return 0;
@@ -1652,12 +1647,13 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->common_ctx.priv;
+
 	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }
 
 /**
  * blk_virtq_start() - set virtq attributes used for operating
- * @q:  	queue to start
+ * @q:		queue to start
  * @attr:	attrs used to start the quue
  *
  * Function set attributes queue needs in order to operate.
@@ -1715,18 +1711,21 @@ const struct snap_virtio_ctrl_queue_stats *
 blk_virtq_get_io_stats(struct blk_virtq_ctx *q)
 {
 	struct blk_virtq_priv *priv = q->common_ctx.priv;
+
 	return &priv->vq_ctx.io_stat;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
 {
 	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
+
 	return vpriv->dma_q;
 }
 
 int set_dma_mkey(struct blk_virtq_ctx *ctx, uint32_t mkey)
 {
 	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
+
 	vpriv->snap_attr.vattr.dma_mkey = mkey;
 	return 0;
 }

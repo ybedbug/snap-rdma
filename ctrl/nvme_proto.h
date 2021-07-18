@@ -34,13 +34,13 @@
 #define SNAP_NVME_PROTO_H
 
 
-struct __attribute__((packed)) nvme_lbaf {
+struct nvme_lbaf {
 	uint16_t	ms;
 	uint8_t		ds;
 	uint8_t		rp;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_id_ns {
+struct nvme_id_ns {
 	uint64_t		nsze;
 	uint64_t		ncap;
 	uint64_t		nuse;
@@ -56,28 +56,28 @@ struct __attribute__((packed)) nvme_id_ns {
 	struct nvme_lbaf	lbaf[16];
 	uint8_t			res192[192];
 	uint8_t			vs[3712];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_sgl_desc {
+struct nvme_sgl_desc {
 	uint64_t		address;
 	uint32_t		length;
 	uint8_t			resv[3];
 	uint8_t			subtype : 4;
 	uint8_t			type : 4;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_keyed_sgl_desc {
+struct nvme_keyed_sgl_desc {
 	uint64_t	address;
 	uint64_t	length : 24;
 	uint64_t	key : 32;
 	uint64_t	subtype : 4;
 	uint64_t	type : 4;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_prp_desc {
+struct nvme_prp_desc {
 	uint64_t	prp1;
 	uint64_t	prp2;
-};
+} __attribute__((packed));
 
 union nvme_data_ptr {
 	struct nvme_prp_desc		prp;
@@ -85,7 +85,7 @@ union nvme_data_ptr {
 	struct nvme_keyed_sgl_desc	ksgl;
 };
 
-struct __attribute__((packed)) nvme_psd {
+struct nvme_psd {
 	uint16_t	mp;
 	uint16_t	reserved;
 	uint32_t	enlat;
@@ -95,9 +95,9 @@ struct __attribute__((packed)) nvme_psd {
 	uint8_t		rwt;
 	uint8_t		rwl;
 	uint8_t		resv[16];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_ctrl_id {
+struct nvme_ctrl_id {
 	uint16_t		vid;
 	uint16_t		ssvid;
 	uint8_t			sn[20];
@@ -155,18 +155,18 @@ struct __attribute__((packed)) nvme_ctrl_id {
 	uint8_t			rsvd2047[1024];
 	struct nvme_psd		psd[32];
 	uint8_t			vs[1024];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_cqe {
+struct nvme_cqe {
 	uint32_t	result;
 	uint32_t	rsvd;
 	uint16_t	sq_head;
 	uint16_t	sq_id;
 	uint16_t	cid;
 	uint16_t	status;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_sqe {
+struct nvme_sqe {
 	uint8_t			opcode;
 	uint8_t			fuse : 2; /* fused operation */
 	uint8_t			rsvd1 : 4;
@@ -182,9 +182,9 @@ struct __attribute__((packed)) nvme_sqe {
 	uint32_t		cdw13;
 	uint32_t		cdw14;
 	uint32_t		cdw15;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_abort {
+struct nvme_abort {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -192,9 +192,9 @@ struct __attribute__((packed)) nvme_abort {
 	uint16_t	abort_sqid;
 	uint16_t	abort_cid;
 	uint32_t	rsvd40[5];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_get_feature {
+struct nvme_get_feature {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -209,9 +209,9 @@ struct __attribute__((packed)) nvme_get_feature {
 	uint32_t	dw13;
 	uint32_t	dw14;
 	uint32_t	dw15;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_set_feature {
+struct nvme_set_feature {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -226,9 +226,9 @@ struct __attribute__((packed)) nvme_set_feature {
 	uint32_t	dw13;
 	uint32_t	dw14;
 	uint32_t	dw15;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_fw_slot_info_log {
+struct nvme_fw_slot_info_log {
 	uint8_t		afi;
 	uint8_t		reserved1[7];
 	uint8_t		frs1[8];
@@ -239,9 +239,9 @@ struct __attribute__((packed)) nvme_fw_slot_info_log {
 	uint8_t		frs6[8];
 	uint8_t		frs7[8];
 	uint8_t		reserved2[448];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_error_log {
+struct nvme_error_log {
 	uint64_t	error_count;
 	uint16_t	sqid;
 	uint16_t	cid;
@@ -251,9 +251,9 @@ struct __attribute__((packed)) nvme_error_log {
 	uint32_t	nsid;
 	uint8_t		vs;
 	uint8_t		resv[35];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_smart_log {
+struct nvme_smart_log {
 	uint8_t		critical_warning;
 	uint16_t	temperature;
 	uint8_t		available_spare;
@@ -271,13 +271,13 @@ struct __attribute__((packed)) nvme_smart_log {
 	uint64_t	media_errors[2];
 	uint64_t	number_of_error_log_entries[2];
 	uint8_t		reserved2[320];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_changed_nslist_log {
+struct nvme_changed_nslist_log {
 	uint32_t	ns_list[1024];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_identify {
+struct nvme_identify {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -289,17 +289,17 @@ struct __attribute__((packed)) nvme_identify {
 	uint8_t		rsvd3;
 	uint16_t	ctrlid;
 	uint32_t	rsvd11[5];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_eui64 {
+struct nvme_eui64 {
 	uint8_t		raw[8];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_nguid {
+struct nvme_nguid {
 	uint8_t		raw[16];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_uuid {
+struct nvme_uuid {
 	uint32_t      time_low;
 	uint16_t      time_mid;
 	uint16_t      time_hi_and_version;
@@ -308,22 +308,22 @@ struct __attribute__((packed)) nvme_uuid {
 		uint32_t  byte5;
 		uint16_t  byte1;
 	} node;
-};
+} __attribute__((packed));
 
-union __attribute__((packed)) nvme_id_ns_global {
+union nvme_id_ns_global {
 	struct nvme_eui64	eui64;
 	struct nvme_nguid	nguid;
 	struct nvme_uuid	uuid;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_id_ns_descriptor {
+struct nvme_id_ns_descriptor {
 	uint8_t				nidt;
 	uint8_t				nidl;
 	uint8_t				rsvd[2];
 	union nvme_id_ns_global		nid;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_create_cq {
+struct nvme_create_cq {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -335,9 +335,9 @@ struct __attribute__((packed)) nvme_create_cq {
 	uint16_t	cq_flags;
 	uint16_t	irq_vector;
 	uint32_t	rsvd12[4];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_create_sq {
+struct nvme_create_sq {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -349,9 +349,9 @@ struct __attribute__((packed)) nvme_create_sq {
 	uint16_t	sq_flags;
 	uint16_t	cqid;
 	uint32_t	rsvd12[4];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_get_page_log {
+struct nvme_get_page_log {
 	uint8_t		opcode;
 	uint8_t		flags;
 	uint16_t	cid;
@@ -363,19 +363,19 @@ struct __attribute__((packed)) nvme_get_page_log {
 	uint8_t		lsp;
 	uint16_t	num_dwords;
 	uint32_t	rsvd60[4];
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_delete_q {
-    uint8_t     opcode;
-    uint8_t     flags;
-    uint16_t    cid;
-    uint32_t    rsvd1[9];
-    uint16_t    qid;
-    uint16_t    rsvd10;
-    uint32_t    rsvd11[5];
-};
+struct nvme_delete_q {
+	uint8_t		opcode;
+	uint8_t		flags;
+	uint16_t	cid;
+	uint32_t	rsvd1[9];
+	uint16_t	qid;
+	uint16_t	rsvd10;
+	uint32_t	rsvd11[5];
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_rw {
+struct nvme_rw {
 	uint8_t			opcode;
 	uint8_t			flags;
 	uint16_t		cid;
@@ -390,9 +390,9 @@ struct __attribute__((packed)) nvme_rw {
 	uint32_t		reftag;
 	uint16_t		apptag;
 	uint16_t		appmask;
-};
+} __attribute__((packed));
 
-struct __attribute__((packed)) nvme_health_info_page {
+struct nvme_health_info_page {
 	uint8_t		critical_warning;
 	uint16_t	temperature;
 	uint8_t		available_spare;
@@ -413,6 +413,6 @@ struct __attribute__((packed)) nvme_health_info_page {
 	uint32_t	critical_temp_time;
 	uint32_t	temp_sensor[4];
 	uint8_t		reserved2[296];
-};
+} __attribute__((packed));
 
 #endif

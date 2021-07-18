@@ -146,21 +146,22 @@ struct snap_virtio_ctrl_queue {
 	struct snap_pg *pg;
 	struct snap_pg_q_entry pg_q;
 	bool log_writes_to_host;
+
 	TAILQ_ENTRY(snap_virtio_ctrl_queue) entry;
 };
 
 struct snap_virtio_ctrl_queue_counter {
-    uint64_t total;
-    uint64_t success;
-    uint64_t fail;
-    uint64_t unordered;
-    uint64_t merged_desc;
+	uint64_t total;
+	uint64_t success;
+	uint64_t fail;
+	uint64_t unordered;
+	uint64_t merged_desc;
 };
 
 struct snap_virtio_ctrl_queue_stats {
-    struct snap_virtio_ctrl_queue_counter read;
-    struct snap_virtio_ctrl_queue_counter write;
-    struct snap_virtio_ctrl_queue_counter flush;
+	struct snap_virtio_ctrl_queue_counter read;
+	struct snap_virtio_ctrl_queue_counter write;
+	struct snap_virtio_ctrl_queue_counter flush;
 };
 
 struct snap_virtio_ctrl_queue_state;
@@ -191,10 +192,10 @@ struct snap_virtio_ctrl_bar_ops {
 		      uint64_t mask, struct snap_virtio_device_attr *attr);
 	struct snap_virtio_queue_attr *(*get_queue_attr)(
 			struct snap_virtio_device_attr *vbar, int index);
-	unsigned (*get_state_size)(struct snap_virtio_ctrl *ctrl);
+	size_t (*get_state_size)(struct snap_virtio_ctrl *ctrl);
 	int (*get_state)(struct snap_virtio_ctrl *ctrl,
 			 struct snap_virtio_device_attr *attr, void *buf,
-			 unsigned len);
+			 size_t len);
 	int (*set_state)(struct snap_virtio_ctrl *ctrl,
 			 struct snap_virtio_device_attr *attr,
 			 struct snap_virtio_ctrl_queue_state *queue_state,
@@ -280,7 +281,7 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl);
 struct snap_virtio_ctrl_section {
 	uint16_t   len;
 	char       name[16];
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 /**
  * struct snap_virtio_ctrl_common_state - pci_common state
@@ -304,7 +305,7 @@ struct snap_virtio_ctrl_common_state {
 	uint8_t config_generation;
 
 	enum snap_virtio_ctrl_state ctrl_state;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 /**
  * struct snap_virtio_ctrl_queue_state - queue state
@@ -332,12 +333,12 @@ struct snap_virtio_ctrl_queue_state {
 
 	uint16_t hw_available_index;
 	uint16_t hw_used_index;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
-int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_cfg_len,
-				unsigned *queue_cfg_len, unsigned *dev_cfg_len);
-int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len);
-int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len);
+int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
+				size_t *queue_cfg_len, size_t *dev_cfg_len);
+int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
 
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 

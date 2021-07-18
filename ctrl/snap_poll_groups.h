@@ -10,6 +10,7 @@ struct snap_pg_q_entry {
 
 struct snap_pg {
 	int id;
+
 	TAILQ_HEAD(, snap_pg_q_entry) q_list;
 	pthread_spinlock_t lock;
 };

@@ -42,17 +42,17 @@
 	do { \
 		fprintf(stderr, "%s:%d ERR " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
 		fflush(stderr); \
-	 } while (0)
+	} while (0)
 #define snap_channel_warn(_fmt, ...) \
 	do { \
 		fprintf(stdout, "%s:%d WARN " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
 		fflush(stdout); \
-	 } while (0)
+	} while (0)
 #define snap_channel_info(_fmt, ...) \
 	do { \
 		fprintf(stdout, "%s:%d INFO " _fmt, __FILE__, __LINE__, ## __VA_ARGS__); \
 		fflush(stdout); \
-	 } while (0)
+	} while (0)
 
 
 /**

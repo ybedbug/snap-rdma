@@ -94,13 +94,13 @@ snap_virtio_net_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 	return &vnbar->q_attrs[index].vattr;
 }
 
-static unsigned
+static size_t
 snap_virtio_net_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 {
 	struct snap_virtio_net_ctrl *nctrl = to_net_ctrl(ctrl);
 	/* use net device config definition from linux/virtio_blk.h */
-	unsigned net_state_size = sizeof(struct virtio_net_config);
-	unsigned net_state_internal_size = nctrl->lm_cbs.get_internal_state_size(ctrl->cb_ctx);
+	size_t net_state_size = sizeof(struct virtio_net_config);
+	size_t net_state_internal_size = nctrl->lm_cbs.get_internal_state_size(ctrl->cb_ctx);
 
 	return net_state_size + net_state_internal_size;
 }
@@ -108,7 +108,7 @@ snap_virtio_net_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 static int
 snap_virtio_net_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 				   struct snap_virtio_device_attr *vbar,
-				   void *buf, unsigned len)
+				   void *buf, size_t len)
 {
 	struct snap_virtio_net_device_attr *vnbar = to_net_device_attr(vbar);
 	struct virtio_net_config *dev_cfg;
@@ -138,7 +138,7 @@ snap_virtio_net_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, in
 	struct snap_virtio_net_ctrl *nctrl = to_net_ctrl(ctrl);
 
 	if (len < snap_virtio_net_ctrl_bar_get_state_size(ctrl)) {
-		snap_info(">>> net_config: state is truncated (%d < %d)\n", len,
+		snap_info(">>> net_config: state is truncated (%d < %lu)\n", len,
 			  snap_virtio_net_ctrl_bar_get_state_size(ctrl));
 		return;
 	}
@@ -175,7 +175,7 @@ snap_virtio_net_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 		vnbar->q_attrs[i].hw_available_index = queue_state[i].hw_available_index;
 		vnbar->q_attrs[i].hw_used_index = queue_state[i].hw_used_index;
 		snap_info("[%s %d]dev %s q 0x%x , restore avl ix:0x%x, used ix:0x%x\n",
-			  __FUNCTION__, __LINE__, ctrl->sdev->pci->pci_number, i,
+			  __func__, __LINE__, ctrl->sdev->pci->pci_number, i,
 			  queue_state[i].hw_available_index, queue_state[i].hw_used_index);
 	}
 
@@ -272,7 +272,6 @@ static int snap_virtio_net_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *v
 static void snap_virtio_net_ctrl_queue_suspend(struct snap_virtio_ctrl_queue *vq)
 {
 	snap_debug("queue %d: suspend\n", vq->index);
-	return;
 }
 
 static int snap_virtio_net_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
@@ -284,7 +283,7 @@ static int snap_virtio_net_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	ctrl = vq->ctrl;
 	dev_attr = to_net_device_attr(ctrl->bar_curr);
 
-	snap_info("queue %d: pg_id %d RESUMED with hw_avail %hu hw_used %hu\n",
+	snap_info("queue %d: pg_id %d RESUMED with hw_avail %u hw_used %u\n",
 		  vq->index, vq->pg->id,
 		  dev_attr->q_attrs[index].hw_available_index,
 		  dev_attr->q_attrs[index].hw_used_index);

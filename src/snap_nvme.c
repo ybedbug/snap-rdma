@@ -24,8 +24,6 @@ static int snap_nvme_init_sq_legacy_mode(struct snap_device *sdev,
 					 const struct snap_nvme_sq_attr *attr);
 static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
 					      struct snap_nvme_sq *sq);
-int snap_nvme_query_sq(struct snap_nvme_sq *sq,
-		       struct snap_nvme_sq_attr *attr);
 
 bool snap_nvme_sq_is_fe_only(struct snap_nvme_sq *sq)
 {
@@ -169,9 +167,8 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 
 	/* we'll modify only allowed fields */
 	if (mask & ~sdev->mod_allowed_mask) {
-		snap_error("failed modify NVMe sdev 0x%p mask=0x%lx "
-			   "allowed_mask=0x%lx\n", sdev, mask,
-			   sdev->mod_allowed_mask);
+		snap_error("failed modify NVMe sdev 0x%p mask=0x%lx allowed_mask=0x%lx\n",
+			   sdev, mask, sdev->mod_allowed_mask);
 		return -EINVAL;
 	}
 
@@ -203,7 +200,7 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_CC;
 	if (mask & SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ)
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ;
-    if (modify_mask)
+	if (modify_mask)
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,
 			   modify_field_select, modify_mask);
 
@@ -707,7 +704,7 @@ put_dev:
 	snap_put_rdma_dev(sdev, sq->rdma_dev);
 	sq->rdma_dev = NULL;
 err:
-	return EINVAL;
+	return -1;
 }
 
 static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
@@ -777,8 +774,7 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 		 *  - Use alias SQ obj_id for SQ backend instead of
 		 *    the original SQ.
 		 */
-		snap_debug("Attach QP from RDMA context (vhca_id 0x%x) "
-			   "different than of emu_manager (vhca_id 0x%x)\n",
+		snap_debug("Attach QP from RDMA context (vhca_id 0x%x) different than of emu_manager (vhca_id 0x%x)\n",
 			   snap_get_dev_vhca_id(attr->qp->context),
 			   snap_get_dev_vhca_id(sdev->sctx->context));
 
@@ -900,9 +896,8 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	DEVX_SET(nvme_sq, sq_in, nvme_doorbell_offset,
 		 ndev->db_base + 2 * attr->id * (4 << NVME_DB_STRIDE));
 	DEVX_SET(nvme_sq, sq_in, nvme_cq_id, attr->cq->cq->obj_id);
-	if (attr->counter_set_id) {
-	    DEVX_SET(nvme_sq, sq_in, counter_set_id, attr->counter_set_id);
-	}
+	if (attr->counter_set_id)
+		DEVX_SET(nvme_sq, sq_in, counter_set_id, attr->counter_set_id);
 	if (attr->fe_only && sdev->mdev.vtunnel) {
 		snap_debug("fe_only flag is ignored for Bluefield-1\n");
 		attr->fe_only = false;
@@ -1084,12 +1079,14 @@ int snap_nvme_query_sq_counters(struct snap_nvme_sq_counters *sqc)
 
 int snap_nvme_destroy_sq_counters(struct snap_nvme_sq_counters *sqc)
 {
-	int ret = snap_devx_obj_destroy(sqc->obj);
+	int ret;
+
+	ret = snap_devx_obj_destroy(sqc->obj);
 	free(sqc);
 	return ret;
 }
 
-struct snap_nvme_ctrl_counters*
+struct snap_nvme_ctrl_counters *
 snap_nvme_create_ctrl_counters(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
@@ -1175,7 +1172,9 @@ int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 
 int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 {
-	int ret = mlx5dv_devx_obj_destroy(ctrlc->obj);
+	int ret;
+
+	ret = mlx5dv_devx_obj_destroy(ctrlc->obj);
 	free(ctrlc);
 	return ret;
 }

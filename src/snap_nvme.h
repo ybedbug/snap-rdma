@@ -57,6 +57,7 @@ struct snap_nvme_namespace {
 	struct mlx5_snap_devx_obj		*ns;
 	int					src_id;
 	int					dst_id;
+
 	TAILQ_ENTRY(snap_nvme_namespace)	entry;
 };
 
@@ -143,6 +144,7 @@ struct snap_nvme_device {
 	uint32_t				db_base;
 
 	pthread_mutex_t				lock;
+
 	TAILQ_HEAD(, snap_nvme_namespace)	ns_list;
 
 	struct snap_nvme_cq			*cqs;
@@ -150,40 +152,40 @@ struct snap_nvme_device {
 };
 
 struct snap_nvme_sq_counters {
-    uint32_t data_read;
-    uint32_t data_write;
-    uint16_t cmd_read;
-    uint16_t cmd_write;
-    uint32_t error_cqes;
-    uint16_t integrity_errors;
-    uint16_t fabric_errors;
-    uint16_t busy_time;
-    uint16_t power_cycle;
-    uint16_t power_on_hours;
-    uint16_t unsafe_shutdowns;
-    uint16_t error_information_log_entries;
+	uint32_t data_read;
+	uint32_t data_write;
+	uint16_t cmd_read;
+	uint16_t cmd_write;
+	uint32_t error_cqes;
+	uint16_t integrity_errors;
+	uint16_t fabric_errors;
+	uint16_t busy_time;
+	uint16_t power_cycle;
+	uint16_t power_on_hours;
+	uint16_t unsafe_shutdowns;
+	uint16_t error_information_log_entries;
 
-    struct mlx5_snap_devx_obj *obj;
+	struct mlx5_snap_devx_obj *obj;
 };
 
 struct snap_nvme_ctrl_counters {
-    uint32_t data_read;
-    uint32_t data_write;
-    uint16_t cmd_read;
-    uint16_t cmd_write;
-    uint32_t error_cqes;
-    uint32_t flrs;
-    uint32_t bad_doorbells;
-    uint16_t integrity_errors;
-    uint16_t fabric_errors;
-    uint16_t busy_time;
-    uint16_t power_cycle;
-    uint16_t power_on_hours;
-    uint16_t unsafe_shutdowns;
-    uint16_t error_information_log_entries;
+	uint32_t data_read;
+	uint32_t data_write;
+	uint16_t cmd_read;
+	uint16_t cmd_write;
+	uint32_t error_cqes;
+	uint32_t flrs;
+	uint32_t bad_doorbells;
+	uint16_t integrity_errors;
+	uint16_t fabric_errors;
+	uint16_t busy_time;
+	uint16_t power_cycle;
+	uint16_t power_on_hours;
+	uint16_t unsafe_shutdowns;
+	uint16_t error_information_log_entries;
 
-    struct mlx5dv_devx_obj *obj;
-    uint32_t id;
+	struct mlx5dv_devx_obj *obj;
+	uint32_t id;
 };
 
 int snap_nvme_init_device(struct snap_device *sdev);

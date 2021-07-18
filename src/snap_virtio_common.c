@@ -449,6 +449,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		}
 		if (mask & (SNAP_VIRTIO_MOD_NUM_MSIX | SNAP_VIRTIO_MOD_ALL)) {
 			void *pci_params;
+
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX;
 			pci_params = DEVX_ADDR_OF(virtio_net_device_emulation, device_emulation_in,
 						  pci_params);
@@ -1159,7 +1160,7 @@ out_free_buf_2:
 out_free_buf_1:
 	snap_umem_free(&virtq->umem[0]);
 out_free_buf_0:
-	return ENOMEM;
+	return -ENOMEM;
 }
 
 void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
@@ -1215,7 +1216,7 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 
 	dma_q = snap_dma_q_create(pd, &dma_q_attr);
 	if (!dma_q) {
-		snap_error("failed to create dma_q for for drv: 0x%lx dev: 0x%lx\n",
+		snap_error("failed to create dma_q for drv: 0x%lx dev: 0x%lx\n",
 			   drv_addr, dev_addr);
 		return -EINVAL;
 	}
@@ -1223,16 +1224,16 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 	vra_mr = ibv_reg_mr(pd, vra, sizeof(vra),
 			    IBV_ACCESS_LOCAL_WRITE);
 	if (!vra_mr) {
-		snap_error("failed to register vring_avail mr for drv: 0x%lx "
-			   "dev: 0x%lx\n", drv_addr, dev_addr);
+		snap_error("failed to register vring_avail mr for drv: 0x%lx dev: 0x%lx\n",
+			   drv_addr, dev_addr);
 		goto err;
 	}
 
 	vru_mr = ibv_reg_mr(pd, vru, sizeof(vru),
 			    IBV_ACCESS_LOCAL_WRITE);
 	if (!vru_mr) {
-		snap_error("failed to register vring_used mr for drv: 0x%lx "
-			   "dev: 0x%lx\n", drv_addr, dev_addr);
+		snap_error("failed to register vring_used mr for drv: 0x%lx dev: 0x%lx\n",
+			   drv_addr, dev_addr);
 		goto dereg_vra_mr;
 	}
 

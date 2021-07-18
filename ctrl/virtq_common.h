@@ -58,9 +58,9 @@
  */
 
 struct virtq_common_ctx {
-    int idx;
-    bool fatal_err;
-    void *priv;
+	int idx;
+	bool fatal_err;
+	void *priv;
 };
 
 /**
@@ -124,7 +124,7 @@ struct virtq_split_tunnel_comp {
 
 /**
  * enum virtq_cmd_sm_op_status - status of last operation
- * @VIRTQ_CMD_SM_OP_OK: 	Last operation finished without a problem
+ * @VIRTQ_CMD_SM_OP_OK:		Last operation finished without a problem
  * @VIRQT_CMD_SM_OP_ERR:	Last operation failed
  *
  * State machine operates asynchronously, usually by calling a function
@@ -141,9 +141,9 @@ enum virtq_cmd_sm_op_status {
  * enum virtq_sw_state - state of sw virtq
  * @SW_VIRTQ_RUNNING:	Queue receives and operates commands
  * @SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
- * 			commands already received
+ *			commands already received
  * @SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
- * 			commands to operate
+ *			commands to operate
  *
  * This is the state of the sw virtq (as opposed to VIRTQ_BLK_Q PRM FW object)
  */

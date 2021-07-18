@@ -189,8 +189,8 @@ static void snap_nvme_ctrl_progress_mmio(struct snap_nvme_ctrl *ctrl)
 		ctrl->sdev = snap_open_device(ctrl->sctx, &sdev_attr);
 		if (!ctrl->sdev)
 			return;
-		else
-			ctrl->reset_device = false;
+
+		ctrl->reset_device = false;
 	}
 
 	ret = snap_nvme_ctrl_bar_read(ctrl);

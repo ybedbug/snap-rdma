@@ -50,11 +50,12 @@
 #define VIRTIO_BLK_MAX_REQ_DATA		(VIRTIO_BLK_CTRL_PAGE_SIZE * (1 << VIRTIO_BLK_CTRL_MDTS_MAX))
 
 typedef struct snap_virtio_blk_ctrl_zcopy_ctx {
-    void *fake_addr_table;
-    size_t fake_addr_table_size;
-    uintptr_t *request_table;
-    struct snap_context *sctx;
-    LIST_ENTRY(snap_virtio_blk_ctrl_zcopy_ctx) entry;
+	void *fake_addr_table;
+	size_t fake_addr_table_size;
+	uintptr_t *request_table;
+	struct snap_context *sctx;
+
+	LIST_ENTRY(snap_virtio_blk_ctrl_zcopy_ctx) entry;
 } snap_virtio_blk_ctrl_zcopy_ctx_t;
 
 struct snap_virtio_blk_ctrl_queue {

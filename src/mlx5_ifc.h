@@ -462,10 +462,10 @@ struct mlx5_ifc_create_flow_group_out_bits {
 };
 
 enum {
-	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_OUTER_HEADERS     = 0x0,
-	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS   = 0x1,
-	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_INNER_HEADERS     = 0x2,
-	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS_2 = 0x3,
+	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_OUTER_HEADERS		= 0x0,
+	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS		= 0x1,
+	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_INNER_HEADERS		= 0x2,
+	MLX5_CREATE_FLOW_GROUP_IN_MATCH_CRITERIA_ENABLE_MISC_PARAMETERS_2	= 0x3,
 };
 
 struct mlx5_ifc_fte_match_param_bits {
@@ -4125,95 +4125,95 @@ struct mlx5_ifc_dr_action_hw_copy_bits {
 };
 
 struct mlx5_ifc_nvme_sq_counters_bits {
-    u8     modify_field_select[0x40];
+	u8	modify_field_select[0x40];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 
-    u8     data_read[0x20];
-    u8     data_write[0x20];
-    u8     cmd_read[0x10];
-    u8     cmd_write[0x10];
-    u8     error_cqes[0x20];
+	u8	data_read[0x20];
+	u8	data_write[0x20];
+	u8	cmd_read[0x10];
+	u8	cmd_write[0x10];
+	u8	error_cqes[0x20];
 
-    u8     integrity_errors[0x10];
-    u8     fabric_errors[0x10];
-    u8     busy_time[0x10];
-    u8     power_cycle[0x10];
-    u8     power_on_hours[0x10];
-    u8     unsafe_shutdowns[0x10];
-    u8     error_information_log_entries[0x10];
-    u8     reserved_at_170[0x10];
+	u8	integrity_errors[0x10];
+	u8	fabric_errors[0x10];
+	u8	busy_time[0x10];
+	u8	power_cycle[0x10];
+	u8	power_on_hours[0x10];
+	u8	unsafe_shutdowns[0x10];
+	u8	error_information_log_entries[0x10];
+	u8	reserved_at_170[0x10];
 
-    u8     nvme_pci_errors[0x20];
+	u8	nvme_pci_errors[0x20];
 
-    u8     reserved_at_1a0[0x660];
+	u8	reserved_at_1a0[0x660];
 };
 
 struct mlx5_ifc_nvme_ctrl_counters_bits {
-    u8     modify_field_select[0x40];
+	u8	modify_field_select[0x40];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 
-    u8     data_read[0x20];
-    u8     data_write[0x20];
-    u8     cmd_read[0x10];
-    u8     cmd_write[0x10];
-    u8     error_cqes[0x20];
+	u8	data_read[0x20];
+	u8	data_write[0x20];
+	u8	cmd_read[0x10];
+	u8	cmd_write[0x10];
+	u8	error_cqes[0x20];
 
-    u8     flrs[0x20];
-    u8     bad_doorbells[0x20];
-    u8     integrity_errors[0x10];
-    u8     fabric_errors[0x10];
-    u8     busy_time[0x10];
-    u8     power_cycle[0x10];
-    u8     power_on_hours[0x10];
-    u8     unsafe_shutdowns[0x10];
-    u8     error_information_log_entries[0x10];
-    u8     reserved_at_1B0[0x10];
+	u8	flrs[0x20];
+	u8	bad_doorbells[0x20];
+	u8	integrity_errors[0x10];
+	u8	fabric_errors[0x10];
+	u8	busy_time[0x10];
+	u8	power_cycle[0x10];
+	u8	power_on_hours[0x10];
+	u8	unsafe_shutdowns[0x10];
+	u8	error_information_log_entries[0x10];
+	u8	reserved_at_1B0[0x10];
 
-    u8     reserved_at_1c0[0x660];
+	u8	reserved_at_1c0[0x660];
 };
 
 struct mlx5_ifc_hotplug_device_input_bits {
-    u8     opcode[0x10];
-    u8     uid[0x10];
+	u8	opcode[0x10];
+	u8	uid[0x10];
 
-    u8     reserved_at_20[0x20];
+	u8	reserved_at_20[0x20];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 
-    struct mlx5_ifc_device_bits	hotplug_device_object;
+	struct	mlx5_ifc_device_bits	hotplug_device_object;
 };
 
 struct mlx5_ifc_hotplug_device_output_bits {
-    u8     status[0x8];
-    u8     reserved_at_8[0x18];
+	u8	status[0x8];
+	u8	reserved_at_8[0x18];
 
-    u8     syndrome[0x20];
+	u8	syndrome[0x20];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 
-    struct mlx5_ifc_device_bits	hotplug_device_object;
+	struct mlx5_ifc_device_bits	hotplug_device_object;
 };
 
 struct mlx5_ifc_hotunplug_device_input_bits {
-    u8     opcode[0x10];
-    u8     uid[0x10];
+	u8	opcode[0x10];
+	u8	uid[0x10];
 
-    u8     reserved_at_20[0x20];
+	u8	reserved_at_20[0x20];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 
-    struct mlx5_ifc_device_bits	hotplug_device_object;
+	struct mlx5_ifc_device_bits	hotplug_device_object;
 };
 
 struct mlx5_ifc_hotunplug_device_output_bits {
-    u8     status[0x8];
-    u8     reserved_at_8[0x18];
+	u8	status[0x8];
+	u8	reserved_at_8[0x18];
 
-    u8     syndrome[0x20];
+	u8	syndrome[0x20];
 
-    u8     reserved_at_40[0x40];
+	u8	reserved_at_40[0x40];
 };
 
 enum {

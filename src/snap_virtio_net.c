@@ -232,7 +232,7 @@ int snap_virtio_net_teardown_device(struct snap_device *sdev)
 	for (i = 0; i < vndev->num_queues && vndev->virtqs[i].virtq.ctrs_obj; i++) {
 		ret = snap_devx_obj_destroy(vndev->virtqs[i].virtq.ctrs_obj);
 		if (ret)
-			snap_error("Failed to destroy net virtq counter obj \n");
+			snap_error("Failed to destroy net virtq counter obj\n");
 	}
 
 	free(vndev->virtqs);

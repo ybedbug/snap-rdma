@@ -278,7 +278,7 @@ struct snap_nvme_registers {
 	uint32_t bpinfo;
 	uint32_t bprsel;
 	uint32_t bpmbl;
-} __packed;
+} __attribute__((packed));
 
 struct snap_virtio_net_registers {
 	uint64_t	device_features;
@@ -323,7 +323,7 @@ struct snap_virtio_fs_registers {
 	uint16_t	queue_size;
 
 	uint8_t		tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN];
-	uint16_t 	num_request_queues;
+	uint16_t	num_request_queues;
 };
 
 union snap_device_registers {
@@ -415,8 +415,9 @@ struct snap_context {
 	struct snap_hotplug_context		hotplug;
 
 	pthread_mutex_t				lock;
-	TAILQ_HEAD(, snap_device)		device_list;
 	pthread_mutex_t				hotplug_lock;
+
+	TAILQ_HEAD(, snap_device)		device_list;
 	TAILQ_HEAD(, snap_hotplug_device)	hotplug_device_list;
 };
 

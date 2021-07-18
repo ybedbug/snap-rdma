@@ -122,8 +122,7 @@ static int snap_channel_stop_dirty_track(struct snap_rdma_channel *schannel,
 	pthread_mutex_lock(&dirty_pages->copy_lock);
 	if (!dirty_pages->bmap) {
 		ret = -EPERM;
-		snap_channel_error("dirty pages logging already stopped or "
-				   "didn't start\n");
+		snap_channel_error("dirty pages logging already stopped or didn't start\n");
 		cqe->status = MLX5_SNAP_SC_ALREADY_STOPPED_LOG;
 		goto out;
 	}
@@ -553,7 +552,7 @@ static int snap_channel_process_cmd(struct snap_rdma_channel *schannel,
 	struct ibv_send_wr *send_wr, *bad_wr = NULL;
 	struct mlx5_snap_completion *cqe;
 	__u8 opcode = cmd->opcode;
-	 __u64 idx;
+	__u64 idx;
 	int ret = 0;
 	bool send_rsp = true;
 
@@ -664,8 +663,8 @@ retry:
 
 	ret = ibv_post_recv(schannel->qp, recv_wr, &bad_wr);
 	if (ret)
-		snap_channel_error("schannel failed posting rdma recv,"
-				   " ret = %d index %lld\n", ret, idx);
+		snap_channel_error("schannel failed posting rdma recv, ret = %d index %lld\n",
+				   ret, idx);
 
 	return ret;
 }
@@ -681,8 +680,7 @@ static int snap_channel_handle_completion(struct ibv_wc *wc,
 		switch (wc->opcode) {
 		case IBV_WC_RECV:
 			if (wc->byte_len != SNAP_CHANNEL_DESC_SIZE) {
-				snap_channel_error("recv length %u is different"
-						   " than expected size\n",
+				snap_channel_error("recv length %u is different than expected size\n",
 						   wc->byte_len);
 				return -1;
 			}
@@ -721,8 +719,8 @@ static int snap_channel_handle_completion(struct ibv_wc *wc,
 			}
 			break;
 		default:
-			snap_channel_error("Received an unexpected completion "
-					   "with opcode: %d\n", wc->opcode);
+			snap_channel_error("Received an unexpected completion with opcode: %d\n",
+					   wc->opcode);
 			return -1;
 		}
 	} else if (wc->status == IBV_WC_WR_FLUSH_ERR) {
@@ -755,8 +753,8 @@ static int snap_channel_cq_event_handler(struct snap_rdma_channel *schannel)
 	}
 
 	if (n) {
-		snap_channel_error("still have %d elements to process for "
-				   "channel 0x%p\n", n, schannel);
+		snap_channel_error("still have %d elements to process for channel 0x%p\n",
+				   n, schannel);
 		return -1;
 	}
 
@@ -798,8 +796,7 @@ static void *cq_thread(void *arg)
 		if (handle) {
 			ret = snap_channel_cq_event_handler(schannel);
 			if (ret)
-				snap_channel_error("Failed to handle cq "
-						   "event\n");
+				snap_channel_error("Failed to handle cq event\n");
 		}
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	}
@@ -868,8 +865,8 @@ static int snap_channel_setup_buffers(struct snap_rdma_channel *schannel)
 
 		ret = ibv_post_recv(schannel->qp, recv_wr, &bad_wr);
 		if (ret) {
-			snap_channel_error("schannel failed posting rdma recv, "
-					   "ret = %d index %d\n", ret, i);
+			snap_channel_error("schannel failed posting rdma recv, ret = %d index %d\n",
+					   ret, i);
 			goto out_dereg_mr;
 		}
 	}
@@ -1016,8 +1013,7 @@ static int snap_channel_cm_event_handler(struct rdma_cm_id *cm_id,
 			schannel->cm_id = cm_id;
 			ret = rdma_accept(cm_id, NULL);
 			if (ret) {
-				snap_channel_error("schannel 0x%p failed to "
-						   "accept connection ID 0x%p\n",
+				snap_channel_error("schannel 0x%p failed to accept connection ID 0x%p\n",
 						   schannel, cm_id);
 				snap_channel_clean_qp(schannel);
 			}
@@ -1055,8 +1051,8 @@ static void *cm_thread(void *arg)
 		ret = snap_channel_cm_event_handler(event->id, event);
 		rdma_ack_cm_event(event);
 		if (ret)
-			snap_channel_error("failed to handle CM event 0x%p ret"
-					   " %d\n", schannel, ret);
+			snap_channel_error("failed to handle CM event 0x%p ret %d\n",
+					   schannel, ret);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	}
 

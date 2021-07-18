@@ -109,14 +109,14 @@ int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 static inline struct snap_virtio_blk_queue_attr*
 to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)
 {
-    return container_of(vattr, struct snap_virtio_blk_queue_attr,
-			vattr);
+	return container_of(vattr, struct snap_virtio_blk_queue_attr,
+			    vattr);
 }
 
 static inline struct snap_virtio_blk_queue*
 to_blk_queue(struct snap_virtio_queue *virtq)
 {
-    return container_of(virtq, struct snap_virtio_blk_queue, virtq);
+	return container_of(virtq, struct snap_virtio_blk_queue, virtq);
 }
 
 static inline struct snap_virtio_blk_device_attr*

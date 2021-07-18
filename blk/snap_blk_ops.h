@@ -26,7 +26,7 @@ typedef void (*snap_bdev_io_done_cb_t)(enum snap_bdev_op_status status,
 
 /**
  * struct snap_bdev_io_done_ctx - context given for bdev ops
- * @cb: 	callback on io operation done
+ * @cb:		callback on io operation done
  * @user_arg:	user opaque argument given to cb
  */
 struct snap_bdev_io_done_ctx {
@@ -41,18 +41,18 @@ struct snap_bdev_io_done_ctx {
  * @flush:		pointer to function which flushes bdev
  * @write_zeros:	pointer to function which writes zeros to bdev
  * @discard:		pointer to function which discards blocks in bdev
- * @dma_malloc: 	pointer to function which allocates host memory
- * 			(like malloc). some block device frameworks (e.g. spdk)
- * 			require their own malloc-like function to be used.
+ * @dma_malloc:		pointer to function which allocates host memory
+ *			(like malloc). some block device frameworks (e.g. spdk)
+ *			require their own malloc-like function to be used.
  * @dma_free:		free memory allocated by dma_malloc
  * @get_num_blocks:	pointer to function which gets number of blocks in bdev
  * @get_block_size:	pointer to function which gets bdev block size
  * @get_bdev_name:	pointer to function which returns null terminated bdev
- * 			name
+ *			name
  * @is_zcopy:		pointer to function which returns true if bdev supports
- * 			ZCOPY
+ *			ZCOPY
  * @is_zcopy_aligned:	pointer to function which returns true if address is
- * 			ZCOPY and bdev aligned
+ *			ZCOPY and bdev aligned
  *
  * operations provided by the block device given to the virtio controller
  * ToDo: add mechanism to tell which block operations are supported

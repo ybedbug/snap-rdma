@@ -93,7 +93,8 @@ struct mlx5_snap_devx_obj {
 	struct mlx5dv_devx_obj		*obj;
 	uint32_t			obj_id;
 	struct snap_device		*sdev;
-	int (*consume_event)(struct mlx5_snap_devx_obj*, struct snap_event*);
+	int (*consume_event)(struct mlx5_snap_devx_obj *obj,
+			     struct snap_event *event);
 
 	/* destructor for tunneld objects */
 	struct mlx5_snap_devx_obj	*vtunnel;
@@ -104,21 +105,21 @@ struct mlx5_snap_devx_obj {
 };
 
 struct mlx5_snap_flow_table {
-	struct mlx5_snap_devx_obj       	*ft;
+	struct mlx5_snap_devx_obj		*ft;
 	uint32_t				table_id;
 	uint32_t				table_type;
 	uint8_t					level;
 	uint64_t				ft_size;
 
 	pthread_mutex_t				lock;
-	TAILQ_HEAD(, mlx5_snap_flow_group)	fg_list;
 
+	TAILQ_HEAD(, mlx5_snap_flow_group)	fg_list;
 
 	struct mlx5_snap_flow_table_entry	*ftes;
 };
 
 struct mlx5_snap_flow_group {
-	struct mlx5_snap_devx_obj       	*fg;
+	struct mlx5_snap_devx_obj		*fg;
 	uint32_t				group_id;
 	uint32_t				start_idx;
 	uint32_t				end_idx;
@@ -132,7 +133,7 @@ struct mlx5_snap_flow_group {
 };
 
 struct mlx5_snap_flow_table_entry {
-	struct mlx5_snap_devx_obj       	*fte;
+	struct mlx5_snap_devx_obj		*fte;
 	uint32_t				idx;
 
 	struct mlx5_snap_flow_group		*fg;
@@ -148,7 +149,7 @@ struct mlx5_snap_hw_qp {
 	struct mlx5dv_flow_matcher		*rdma_matcher;
 	struct ibv_flow				*rdma_flow;
 
-	struct ibv_qp 				*parent_qp;
+	struct ibv_qp				*parent_qp;
 };
 
 struct mlx5_snap_device {

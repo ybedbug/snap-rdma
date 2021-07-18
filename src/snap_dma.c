@@ -161,8 +161,7 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 	if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
 		/* we only support local IB addressing for now */
 		if (port_attr.flags & IBV_QPF_GRH_REQUIRED) {
-			snap_error("IB enabled and GRH addressing is required"
-				   " but only local addressing is supported\n");
+			snap_error("IB enabled and GRH addressing is required but only local addressing is supported\n");
 			return -1;
 		}
 		*mtu = port_attr.active_mtu;
@@ -287,7 +286,8 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		/* Enable scatter to cqe on the receive side.
 		 * NOTE: it seems that scatter is enabled by default in the
 		 * rdma-core lib. We only have to make sure that cqe size is
-		 * 128 bytes to use it. */
+		 * 128 bytes to use it.
+		 **/
 		cq_ex_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
 		qp->rx_cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(ibv_ctx, &cq_attr, &cq_ex_attr));
 	}
@@ -505,12 +505,12 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	init_attr.cap.max_send_wr = snap_max(attr->tx_qsize / 4,
 					     SNAP_DMA_FW_QP_MIN_SEND_WR);
 	init_attr.cap.max_recv_wr = 1;
-	/* give one sge so that we can post which is useful
-	 * for testing */
+	/* give one sge so that we can post which is useful for testing */
 	init_attr.cap.max_send_sge = 1;
 
 	/* the qp 'resources' are going to be replaced by the fw. We do not
-	 * need use DV or GGA here */
+	 * need use DV or GGA here
+	 **/
 	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS);
 	return rc;
 }
@@ -671,18 +671,21 @@ static uint16_t snap_get_udp_sport(uint16_t roce_min_src_udp_port,
 {
 	/* flow_label is a field in ipv6 header, how ipv6 flow label
 	 * and udp source port are related, please refer to:
-	 * https://www.spinics.net/lists/linux-rdma/msg87626.html. */
+	 * https://www.spinics.net/lists/linux-rdma/msg87626.html.
+	 **/
 	uint32_t fl, fl_low, fl_high;
 	uint64_t v = (uint64_t)lqpn * rqpn;
 
 	/* hash function to calc fl from lqpn and rqpn.
-	 * a copy of rdma_calc_flow_label() from kernel */
+	 * a copy of rdma_calc_flow_label() from kernel
+	 **/
 	v ^= v >> 20;
 	v ^= v >> 40;
 	fl = (uint32_t)(v & SNAP_IB_GRH_FLOWLABEL_MASK);
 
 	/* hash function to calc udp_sport from fl.
-	 * a copy of rdma_flow_label_to_udp_sport() from kernel */
+	 * a copy of rdma_flow_label_to_udp_sport() from kernel
+	 **/
 	fl_low = fl & 0x03FFF;
 	fl_high = fl & 0xFC000;
 	fl_low ^= fl_high >> 14;
@@ -709,7 +712,7 @@ static int ibv_query_gid_ex(struct ibv_context *context, uint32_t port_num,
 			    uint32_t gid_index, struct ibv_gid_entry *entry,
 			    uint32_t flags)
 {
-	snap_error("ibv_query_gid_ex() is not implemented\n");
+	snap_error("%s is not implemented\n", __func__);
 	return -1;
 }
 #endif
@@ -823,7 +826,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		     IBV_QP_MAX_QP_RD_ATOMIC;
 
 	/* once QPs were moved to RTR using devx, they must also move to RTS
-	 * using devx since kernel doesn't know QPs are on RTR state */
+	 * using devx since kernel doesn't know QPs are on RTR state
+	 **/
 	rc = snap_modify_lb_qp_to_rts(q->sw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTS errno=%d\n", rc);
@@ -856,8 +860,8 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 
 	/* If IB is supported, can immediately advance to QP activation */
 	if (ib_en)
-	    return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL, NULL,
-					&roce_caps);
+		return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL,
+					     NULL, &roce_caps);
 
 	rc = fill_roce_caps(q->sw_qp.qp->context, &roce_caps);
 	if (rc)
@@ -884,8 +888,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 			return rc;
 		}
 	} else {
-		snap_error("RoCE is disabled and force-loopback option "
-			   "is not supported. Cannot create queue\n");
+		snap_error("RoCE is disabled and force-loopback option is not supported. Cannot create queue\n");
 		return -ENOTSUP;
 	}
 
@@ -1043,9 +1046,8 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 	/* in case we have tx moderation we need at least one
 	 * available to be able to send a flush command
 	 */
-	while (!qp_can_tx(q)) {
+	while (!qp_can_tx(q))
 		n += q->ops->progress_tx(q);
-	}
 
 	/* only dv/gga have tx moderation at the moment, flush all outstanding
 	 * ops by issueing a zero length inline rdma write
@@ -1319,9 +1321,8 @@ static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_bu
 	send_wr.wr_id = 0;
 
 	rc = ibv_post_send(qp, &send_wr, &bad_wr);
-	if (snap_unlikely(rc)) {
+	if (snap_unlikely(rc))
 		snap_error("DMA queue %p: failed to post send: %m\n", q);
-	}
 
 	return rc;
 }
@@ -1339,8 +1340,8 @@ static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 		return 0;
 
 	if (snap_unlikely(n < 0)) {
-	   snap_error("dma queue %p: failed to poll rx cq: errno=%d\n", q, n);
-	   return 0;
+		snap_error("dma queue %p: failed to poll rx cq: errno=%d\n", q, n);
+		return 0;
 	}
 
 	for (i = 0; i < n; i++) {
@@ -1348,8 +1349,7 @@ static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 			if (wcs[i].status == IBV_WC_WR_FLUSH_ERR) {
 				snap_debug("dma queue %p: got FLUSH_ERROR\n", q);
 			} else {
-				snap_error("dma queue %p: got unexpected "
-					   "completion status 0x%x, opcode 0x%x\n",
+				snap_error("dma queue %p: got unexpected completion status 0x%x, opcode 0x%x\n",
 					   q, wcs[i].status, wcs[i].opcode);
 			}
 			return n;
@@ -1395,11 +1395,11 @@ static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 
 	for (i = 0; i < n; i++) {
 		if (snap_unlikely(wcs[i].status != IBV_WC_SUCCESS))
-			snap_error("dma queue %p: got unexpected completion "
-					"status 0x%x, opcode 0x%x\n",
-					q, wcs[i].status, wcs[i].opcode);
+			snap_error("dma queue %p: got unexpected completion status 0x%x, opcode 0x%x\n",
+				   q, wcs[i].status, wcs[i].opcode);
 		/* wr_id, status, qp_num and vendor_err are still valid in
-		 * case of error */
+		 * case of error
+		 **/
 		comp = (struct snap_dma_completion *)wcs[i].wr_id;
 		if (!comp)
 			continue;
@@ -1470,10 +1470,12 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	snap_memory_cpu_store_fence();
 
 	/* 2. Update Doorbell Record associated with that queue by writing
-	 *    the sq_wqebb_counter or wqe_counter for send and RQ respectively */
+	 *    the sq_wqebb_counter or wqe_counter for send and RQ respectively
+	 **/
 	dv_qp->qp.dbrec[MLX5_SND_DBR] = htobe32(dv_qp->pi);
 
-	/* Make sure that doorbell record is written before ringing the doorbell */
+	/* Make sure that doorbell record is written before ringing the doorbell
+	 **/
 	snap_memory_bus_store_fence();
 
 	/* 3. For send request ring DoorBell by writing to the Doorbell
@@ -1548,7 +1550,8 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 					int klm_entries)
 {
 	/* explicitly set rsvd0 and rsvd1 from struct mlx5_wqe_umr_ctrl_seg to 0,
-	  otherwise post umr wqe will fail if reuse those WQE BB with dirty data. */
+	 * otherwise post umr wqe will fail if reuse those WQE BB with dirty data.
+	 **/
 	*(uint32_t *)ctrl = 0;
 	*((uint64_t *)ctrl + 2) = 0;
 	*((uint64_t *)ctrl + 3) = 0;
@@ -1569,7 +1572,7 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 	 *  2. 'len' field: to include the total bytes in iovec
 	 *  3. 'start_addr' field: use the address of first element as
 	 *       the start_addr of this mkey
-	 * */
+	 **/
 	ctrl->mkey_mask = htobe64(MLX5_WQE_UMR_CTRL_MKEY_MASK_FREE |
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_LEN |
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_START_ADDR);
@@ -1617,8 +1620,9 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	to_end = (dv_qp->qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
 
 	/* sizeof(gen_ctrl) + sizeof(umr_ctrl) == MLX5_SEND_WQE_BB,
-	 * so do not need to worry about wqe buffer warp around. */
-	/* build genenal ctrl segment */
+	 * so do not need to worry about wqe buffer warp around.
+	 * build genenal ctrl segment
+	 **/
 	gen_ctrl = ctrl;
 	gen_ctrl->rsvd[0] = gen_ctrl->rsvd[1] = 0;
 	fm_ce_se = cq_up | MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
@@ -1663,7 +1667,8 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 
 	/* fill PAD if existing */
 	/* PAD entries is to make whole mtt aligned to 64B(MLX5_SEND_WQE_BB),
-	 * So it will not happen warp around case during fill PAD entries. */
+	 * So it will not happen warp around case during fill PAD entries.
+	 **/
 	for (; i < translation_size; i++) {
 		memset(klm, 0, sizeof(*klm));
 		klm = klm + 1;
@@ -1707,7 +1712,8 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 
 	/* it is better to start dma as soon as possible and do
-	 * bookkeeping later */
+	 * bookkeeping later
+	 **/
 	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
 	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
 	return 0;
@@ -1813,7 +1819,8 @@ static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq, int c
 
 	/* note: that the cq_size is known at the compilation time. We pass it
 	 * down here so that branch and multiplication will be done at the
-	 * compile time during inlining */
+	 * compile time during inlining
+	 **/
 	cqe = (struct mlx5_cqe64 *)(dv_cq->cq.buf + (dv_cq->ci & (dv_cq->cq.cqe_cnt - 1)) *
 				    cqe_size);
 	return cqe_size == 64 ? cqe : cqe + 1;
@@ -2002,7 +2009,8 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 
 		n++;
 		/* optimize for NVMe where SQE is 64 bytes and will always
-		 * be scattered */
+		 * be scattered
+		 **/
 		if (snap_likely(cqe->op_own & MLX5_INLINE_SCATTER_64)) {
 			__builtin_prefetch(cqe - 1);
 			q->rx_cb(q, cqe - 1, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
@@ -2035,7 +2043,7 @@ static struct snap_dma_q_ops dv_ops = {
 };
 
 /* GGA */
-__attribute__ ((unused)) static void dump_gga_wqe(int op, volatile uint32_t *wqe)
+__attribute__((unused)) static void dump_gga_wqe(int op, uint32_t *wqe)
 {
 	int i;
 

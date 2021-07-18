@@ -597,7 +597,7 @@ static int snap_query_flow_table_caps(struct snap_context *sctx)
 		capability.flow_table_nic_cap.flow_table_properties_nic_transmit_rdma.ft_support);
 
 	if (!rx_supported || !tx_supported)
-		return -ENOSYS;
+		return -ENOTSUP;
 
 	max_ft_level_rx = DEVX_GET(query_hca_cap_out, out,
 		capability.flow_table_nic_cap.flow_table_properties_nic_receive_rdma.max_ft_level);
@@ -2138,7 +2138,8 @@ int snap_teardown_device(struct snap_device *sdev)
 		return 0;
 
 	/* ignore failures from destroying pd and steering because
-	 * the objects may have been destroyed by the FLR */
+	 * the objects may have been destroyed by the FLR
+	 **/
 	snap_destroy_pd(sdev->mdev.tunneled_pd);
 	snap_reset_steering(sdev);
 
@@ -2277,7 +2278,7 @@ out_err:
  *                       Only valid for BF-1 (for BF-2 and above, this function
  *                       doesn't relevant).
  * @sdev:    snap device
- * @context: ibv_context that will be associated to snap snap device.
+ * @context: ibv_context that will be associated to snap device.
  */
 void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context)
 {
@@ -2301,7 +2302,7 @@ void snap_put_rdma_dev(struct snap_device *sdev, struct ibv_context *context)
  * snap_find_get_rdma_dev() - Find the RDMA networking device and increase its
  *                            reference count if matches to the given context.
  * @sdev:    snap device
- * @context: ibv_context that will be associated to snap snap device.
+ * @context: ibv_context that will be associated to snap device.
  *
  * For BF-1, by design, only 1 RDMA device allowed to be associated to the snap
  * device (because of the steering rules), and it's address used to set the
@@ -2704,7 +2705,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	int ret;
 
 	if (!sdev->pci->plugged)
-		return ENODEV;
+		return -ENODEV;
 
 	switch (sdev->pci->type) {
 	case SNAP_NVME_PF:
@@ -2740,7 +2741,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 		}
 		break;
 	default:
-		return EINVAL;
+		return -EINVAL;
 	}
 
 	return ret;
@@ -3556,11 +3557,11 @@ uint16_t snap_get_vhca_id(struct snap_device *sdev)
  *   sctx = snap_open();
  *   sdev = snap_open_device(sctx, attrs);
  *
- *   // Create protection domain
+ *   // Create protection domain:
  *   ib_ctx = ibv_open_device();
  *   pd = ibv_alloc_pd(ib_ctx);
  *
- *   // create mkey
+ *   // create mkey:
  *   mkey = snap_create_cross_mkey(pd, sdev);
  *
  *   // create qp using dma layer or directly with ibv_create_qp()
@@ -3674,7 +3675,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 
 	cmkey = calloc(1, sizeof(*cmkey));
 	if (!cmkey) {
-		snap_error("failed to alloc cross_mkey \n");
+		snap_error("failed to alloc cross_mkey\n");
 		return NULL;
 	}
 
@@ -3686,7 +3687,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	if (klm_num > 0) {
 		translation_size = SNAP_ALIGN_CEIL(klm_num, 4);
 		if (translation_size > SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM) {
-			snap_error("Too large translaion entry tables \n");
+			snap_error("Too large translaion entry tables\n");
 			goto out_err;
 		}
 
@@ -3699,8 +3700,8 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	}
 
 	for (; i < SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM; i++) {
-		DEVX_SET(klm, 	klm, byte_count, 0x0);
-		DEVX_SET(klm, 	klm, mkey, 0x0);
+		DEVX_SET(klm, klm, byte_count, 0x0);
+		DEVX_SET(klm, klm, mkey, 0x0);
 		DEVX_SET64(klm, klm, address, 0x0);
 		klm += DEVX_ST_SZ_BYTES(klm);
 	}

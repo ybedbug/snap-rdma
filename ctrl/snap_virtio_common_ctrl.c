@@ -74,7 +74,7 @@ struct snap_virtio_ctrl_state_hdrs {
 };
 
 static void snap_virtio_ctrl_init_section(struct snap_virtio_ctrl_section *hdr,
-					  unsigned len, const char *name)
+					  size_t len, const char *name)
 {
 	hdr->len = len;
 	snprintf((char *)hdr->name, sizeof(hdr->name), "%s", name);
@@ -85,14 +85,15 @@ snap_virtio_ctrl_get_section(struct snap_virtio_ctrl_state_hdrs *state_hdrs,
 			     uint32_t offset)
 {
 	char *hdr_start = (char *)state_hdrs->ghdr + offset;
+
 	return (struct snap_virtio_ctrl_section *)hdr_start;
 }
 
 /**
  * snap_virtio_ctrl_save_init_hdrs() - init sections for controller's state
  * @ctrl:	virtio controller
- * @buf:      	buffer to save the controller state
- * @len:      	buffer length
+ * @buf:	buffer to save the controller state
+ * @len:	buffer length
  * @state_hdrs:	state sections
 
  * This function will initialize/setup all needed state sections
@@ -107,13 +108,13 @@ snap_virtio_ctrl_get_section(struct snap_virtio_ctrl_state_hdrs *state_hdrs,
  */
 static int snap_virtio_ctrl_save_init_hdrs(struct snap_virtio_ctrl *ctrl,
 					   void *buf,
-					   unsigned len,
+					   size_t len,
 					   struct snap_virtio_ctrl_state_hdrs *state_hdrs
 					  )
 {
 	int total_len;
-	unsigned dev_cfg_len, queue_cfg_len, common_cfg_len;
-	unsigned offset = 0;
+	size_t dev_cfg_len, queue_cfg_len, common_cfg_len;
+	size_t offset = 0;
 
 	total_len = snap_virtio_ctrl_state_size(ctrl, &common_cfg_len,
 						&queue_cfg_len,	&dev_cfg_len);
@@ -470,8 +471,8 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 
 	/* controller can be created in the suspended state */
 	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING) {
-		snap_error("cannot start controller while it is being suspended,"
-			   " ctrl state: %d\n", ctrl->state);
+		snap_error("cannot start controller while it is being suspended, ctrl state: %d\n",
+			   ctrl->state);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -610,7 +611,8 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
 
 	if (!ctrl->q_ops->suspend) {
 		/* pretend that suspend was done. It is done for the compatibility
-		 * reasons. TODO: return error */
+		 * reasons. TODO: return error
+		 **/
 		ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDED;
 		return 0;
 	}
@@ -657,7 +659,8 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 
 	if (!ctrl->q_ops->suspend) {
 		/* pretend that resume was done. It is done for the compatibility
-		 * reasons. TODO: return error */
+		 * reasons. TODO: return error
+		 **/
 		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
 		return 0;
 	}
@@ -982,13 +985,13 @@ void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable)
  * Total state size including section headers
  * < 0 on error
  */
-int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_cfg_len,
-				unsigned *queue_cfg_len, unsigned *dev_cfg_len)
+int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
+				size_t *queue_cfg_len, size_t *dev_cfg_len)
 {
-	unsigned tmp_common_cfg_len, tmp_queue_cfg_len, tmp_dev_cfg_len;
-	unsigned *common_cfg_len_p = common_cfg_len ? common_cfg_len : &tmp_common_cfg_len;
-	unsigned *queue_cfg_len_p  = queue_cfg_len  ? queue_cfg_len  : &tmp_queue_cfg_len;
-	unsigned *dev_cfg_len_p    = dev_cfg_len    ? dev_cfg_len    : &tmp_dev_cfg_len;
+	size_t tmp_common_cfg_len, tmp_queue_cfg_len, tmp_dev_cfg_len;
+	size_t *common_cfg_len_p = common_cfg_len ? common_cfg_len : &tmp_common_cfg_len;
+	size_t *queue_cfg_len_p  = queue_cfg_len  ? queue_cfg_len  : &tmp_queue_cfg_len;
+	size_t *dev_cfg_len_p    = dev_cfg_len    ? dev_cfg_len    : &tmp_dev_cfg_len;
 
 	if (ctrl->bar_ops->get_state_size)
 		*dev_cfg_len_p = ctrl->bar_ops->get_state_size(ctrl);
@@ -1003,15 +1006,14 @@ int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, unsigned *common_
 	*common_cfg_len_p = sizeof(struct snap_virtio_ctrl_section) +
 			  sizeof(struct snap_virtio_ctrl_common_state);
 
-	snap_debug("common_cfg %d dev_cfg %d queue_cfg %d max_queue %d\n",
+	snap_debug("common_cfg %lu dev_cfg %lu queue_cfg %lu max_queue %d\n",
 		   *common_cfg_len_p, *dev_cfg_len_p, *queue_cfg_len_p, (int)ctrl->max_queues);
 
 	return sizeof(struct snap_virtio_ctrl_section) + *dev_cfg_len_p +
 	       *queue_cfg_len_p + *common_cfg_len_p;
 }
 
-static __attribute__ ((unused)) void dump_state(struct snap_virtio_ctrl *ctrl,
-						void *buf)
+__attribute__((unused)) static void dump_state(struct snap_virtio_ctrl *ctrl, void *buf)
 {
 	struct snap_virtio_ctrl_section *hdr;
 	struct snap_virtio_ctrl_common_state *common_state;
@@ -1027,9 +1029,7 @@ static __attribute__ ((unused)) void dump_state(struct snap_virtio_ctrl *ctrl,
 	len = hdr->len;
 	snap_info(">> %s %d bytes\n", hdr->name, hdr->len);
 	common_state = (struct snap_virtio_ctrl_common_state *)(hdr + 1);
-	snap_info(">>> ctrl_state: %d dev_ftr_sel: %d dev_ftrs: 0x%lx "
-		  "drv_ftr_sel: %d drv_ftrs: 0x%lx msi_x: 0x%0x num_queues: %d "
-		  "queue_select: %d status: 0x%0x config_gen: %d\n",
+	snap_info(">>> ctrl_state: %d dev_ftr_sel: %d dev_ftrs: 0x%lx drv_ftr_sel: %d drv_ftrs: 0x%lx msi_x: 0x%0x num_queues: %d queue_select: %d status: 0x%0x config_gen: %d\n",
 		  common_state->ctrl_state,
 		  common_state->device_feature_select,
 		  common_state->device_feature,
@@ -1046,9 +1046,7 @@ static __attribute__ ((unused)) void dump_state(struct snap_virtio_ctrl *ctrl,
 	snap_info(">> %s %d bytes\n", hdr->name, hdr->len);
 	queue_state = (struct snap_virtio_ctrl_queue_state *)(hdr + 1);
 	for (i = 0; i < common_state->num_queues; i++) {
-		snap_info(">>> size: %d msix: %d enable: %d notify_offset: %d "
-			  "desc 0x%lx driver 0x%lx device 0x%lx hw_avail_idx: %d "
-			  "hw_used_idx: %d\n",
+		snap_info(">>> size: %d msix: %d enable: %d notify_offset: %d desc 0x%lx driver 0x%lx device 0x%lx hw_avail_idx: %d hw_used_idx: %d\n",
 			  queue_state[i].queue_size,
 			  queue_state[i].queue_msix_vector,
 			  queue_state[i].queue_enable,
@@ -1111,7 +1109,7 @@ snap_virtio_ctrl_save_queue_state(struct snap_virtio_ctrl_queue_state *queue_sta
 
 static int snap_virtio_ctrl_save_dev_state(struct snap_virtio_ctrl *ctrl,
 					   struct snap_virtio_device_attr *attr,
-					   void *buf, unsigned dev_cfg_len)
+					   void *buf, size_t dev_cfg_len)
 {
 	int ret = 0;
 
@@ -1144,7 +1142,7 @@ static int snap_virtio_ctrl_save_dev_state(struct snap_virtio_ctrl *ctrl,
  * Return:
  * total state length or -errno on error
  */
-int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsigned len)
+int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len)
 {
 	int total_len;
 	int i, ret;
@@ -1167,11 +1165,13 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
 	snap_pgs_suspend(&ctrl->pg_ctx);
 	for (i = 0; i < ctrl->max_queues; i++) {
 		struct snap_virtio_queue_attr *vq;
+
 		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
 		snap_virtio_ctrl_save_queue_state(&queue_state[i], vq);
 
 		/* if enabled, call specific queue impl to get
-		 * hw_avail and used */
+		 * hw_avail and used
+		 **/
 		if (vq->enable && ctrl->q_ops->get_state) {
 			ret = ctrl->q_ops->get_state(ctrl->queues[i], &queue_state[i]);
 			if (ret) {
@@ -1215,7 +1215,7 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, unsign
  * total state length or -errno on error
  */
 int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf,
-				   unsigned len)
+				   size_t len)
 {
 	struct snap_virtio_ctrl_section *hdr;
 	struct snap_virtio_ctrl_common_state *common_state;
@@ -1419,7 +1419,7 @@ err:
 static int snap_virtio_ctrl_get_state_size(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
-	unsigned dev_cfg_len, queue_cfg_len, common_cfg_len, len;
+	size_t dev_cfg_len, queue_cfg_len, common_cfg_len, len;
 
 	snap_info("%p: get_state_size ", ctrl);
 	snap_virtio_ctrl_progress_lock(ctrl);
@@ -1434,7 +1434,7 @@ static int snap_virtio_ctrl_get_state_size(void *data)
 					  &dev_cfg_len);
 
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%d\n", len);
+	snap_info("%lu\n", len);
 	return len;
 }
 
@@ -1488,7 +1488,7 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	bdf = ctrl->bar_curr->pci_bdf;
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: get_pci_bdf: 0x0%hx\n", ctrl, bdf);
+	snap_info("%p: get_pci_bdf: 0x0%x\n", ctrl, bdf);
 	return bdf;
 }
 
@@ -1621,7 +1621,7 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	int i, ret, total_len;
 	int outstanding = 0;
 
-	snap_debug("recover the virtio ctrl \n");
+	snap_debug("recover the virtio ctrl\n");
 
 	if (!snap_virtio_ctrl_is_suspended(ctrl)) {
 		snap_error("original controller state (%d) must be SUSPENDED\n",
@@ -1637,9 +1637,8 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	/* at the moment always allow saving state but limit restore */
 	total_len = snap_virtio_ctrl_state_size(ctrl, NULL, NULL, NULL);
 	buf = calloc(1, total_len);
-	if (!buf) {
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	/* reserve the 'place' for the sections and the sections data */
 	ret = snap_virtio_ctrl_save_init_hdrs(ctrl, buf, total_len, &state_hdrs);
@@ -1675,10 +1674,7 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	}
 
 	if (outstanding)
-		snap_warn("Outstanding requests are detected on queue(s)."
-			  " If the previous controller was not run in ordered mode"
-			  " the recovery may not work correctly.\n");
-
+		snap_warn("Outstanding requests are detected on queue(s). If the previous controller was not run in ordered mode the recovery may not work correctly.\n");
 	device_state = section_hdr_to_data(state_hdrs.dev_state_hdr);
 	if (device_state) {
 		ret = snap_virtio_ctrl_save_dev_state(ctrl, attr, device_state,

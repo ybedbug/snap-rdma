@@ -83,18 +83,21 @@ static void snap_null_blk_dev_dma_free(void *buf)
 static uint64_t snap_null_blk_dev_get_num_blocks(void *ctx)
 {
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
+
 	return bdev->attrs.size_b;
 }
 
 static uint32_t snap_null_blk_dev_get_block_size(void *ctx)
 {
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
+
 	return bdev->attrs.blk_size;
 }
 
 static const char *snap_null_blk_dev_get_bdev_name(void *ctx)
 {
 	struct snap_blk_dev *bdev = (struct snap_blk_dev *)ctx;
+
 	return bdev->name;
 }
 

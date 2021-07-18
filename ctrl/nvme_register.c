@@ -103,8 +103,7 @@ static int nvme_reg_cap_mpsmax(uint64_t cap)
 
 static void nvme_reg_cap_dump(struct nvme_register_desc *reg, uint64_t cap)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {MQES:%d CQR:%d AMS:%d TO:%d "
-	       "DSTRD:%d NSSRS:%d CSS:%d BPS:%d MPSMIN:%d MPSMAX:%d}\n",
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {MQES:%d CQR:%d AMS:%d TO:%d DSTRD:%d NSSRS:%d CSS:%d BPS:%d MPSMIN:%d MPSMAX:%d}\n",
 	       reg->name, reg->desc, reg->offset, reg->offset + reg->size, cap,
 	       nvme_reg_cap_mqes(cap), nvme_reg_cap_cqr(cap),
 	       nvme_reg_cap_ams(cap), nvme_reg_cap_to(cap),
@@ -176,8 +175,7 @@ static int nvme_reg_cc_iocqes(uint32_t cc)
 
 static void nvme_reg_cc_dump(struct nvme_register_desc *reg, uint64_t cc)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {EN:%d CSS:%d MPS:%d AMS:%d "
-	       "SHN:%d IOSQES:%d IOCQES:%d}\n", reg->name, reg->desc,
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {EN:%d CSS:%d MPS:%d AMS:%d SHN:%d IOSQES:%d IOCQES:%d}\n", reg->name, reg->desc,
 	       reg->offset, reg->offset + reg->size, cc, nvme_reg_cc_en(cc),
 	       nvme_reg_cc_css(cc), nvme_reg_cc_mps(cc), nvme_reg_cc_ams(cc),
 	       nvme_reg_cc_shn(cc), nvme_reg_cc_iosqes(cc),
@@ -211,9 +209,8 @@ static int nvme_reg_csts_pp(uint32_t csts)
 
 static void nvme_reg_csts_dump(struct nvme_register_desc *reg, uint64_t csts)
 {
-	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {RDY:%d CFS:%d SHST:%d "
-	       "NSSRO:%d PP:%d}\n", reg->name, reg->desc,
-	       reg->offset, reg->offset + reg->size, csts,
+	printf("%-6s [%s, 0x%02x..0x%02x]: 0x%lx {RDY:%d CFS:%d SHST:%d NSSRO:%d PP:%d}\n",
+	       reg->name, reg->desc, reg->offset, reg->offset + reg->size, csts,
 	       nvme_reg_csts_rdy(csts), nvme_reg_csts_cfs(csts),
 	       nvme_reg_csts_shst(csts), nvme_reg_csts_nssro(csts),
 	       nvme_reg_csts_pp(csts));
@@ -245,7 +242,7 @@ static uint64_t nvme_register_get_value(struct nvme_register_desc *reg,
 		return *((uint64_t *)(bar + reg->offset));
 }
 
-__attribute__ ((unused)) static void nvme_register_set_value(struct nvme_register_desc *reg, void *bar,
+__attribute__((unused)) static void nvme_register_set_value(struct nvme_register_desc *reg, void *bar,
 		uint64_t new_value)
 {
 	if (reg->size == 4)
@@ -299,46 +296,6 @@ out_err:
 	return -EINVAL;
 }
 
-#if 0
-static const char *nvme_reg_str(unsigned int reg)
-{
-	switch (reg) {
-	case NVME_REG_CAP:
-		return "Controller Capabilities (CAP)";
-	case NVME_REG_VS:
-		return "Controller Version (VS)";
-	case NVME_REG_INTMS:
-		return "Interrupt Mask Set (INTMS)";
-	case NVME_REG_INTMC:
-		return "Interrupt Mask Set (INTMC)";
-	case NVME_REG_CC:
-		return "Controller Configuration (CC)";
-	case NVME_REG_CSTS:
-		return "Controller Status (CSTS)";
-	case NVME_REG_NSSR:
-		return "NVM Subsystem Reset (NSSR)";
-	case NVME_REG_AQA:
-		return "Admin Queue Attributes (AQA)";
-	case NVME_REG_ASQ:
-		return "Admin Submission Queue Base Address (ASQ)";
-	case NVME_REG_ACQ:
-		return "Admin Completion Queue Base Address (ACQ)";
-	case NVME_REG_CMBLOC:
-		return "Controller Memory Buffer Location (CMBLOC)";
-	case NVME_REG_CMBSZ:
-		return "Controller Memory Buffer Size (CMBSZ)";
-	case NVME_REG_BPINFO:
-		return "Boot Partition Information (BPINFO)";
-	case NVME_REG_BPRSEL:
-		return "Boot Partition Select (BPRSEL)";
-	case NVME_REG_BPMBL:
-		return "Boot Partition Memory Buffer Location (BPMBL)";
-	default:
-		return "unrecognized register";
-	}
-}
-
-#endif
 void nvme_register_identify_change(struct nvme_bar *prev,
 		struct nvme_bar *curr, nvme_register_change_cb_t change_cb,
 		void *ctx)

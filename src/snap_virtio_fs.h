@@ -91,14 +91,14 @@ int snap_virtio_fs_modify_queue(struct snap_virtio_fs_queue *vfsq,
 static inline struct snap_virtio_fs_queue_attr*
 to_fs_queue_attr(struct snap_virtio_queue_attr *vattr)
 {
-    return container_of(vattr, struct snap_virtio_fs_queue_attr,
-			vattr);
+	return container_of(vattr, struct snap_virtio_fs_queue_attr,
+			    vattr);
 }
 
 static inline struct snap_virtio_fs_queue*
 to_fs_queue(struct snap_virtio_queue *virtq)
 {
-    return container_of(virtq, struct snap_virtio_fs_queue, virtq);
+	return container_of(virtq, struct snap_virtio_fs_queue, virtq);
 }
 
 static inline struct snap_virtio_fs_device_attr*
