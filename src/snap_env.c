@@ -14,16 +14,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "snap_env.h"
 
-#define SNA_ENV_DUMP_FORMAT "%-22s : %-7s : %-3d"
+#define SNA_ENV_DUMP_FORMAT "%-27s : %-7s : %-3lld"
 #define SNA_ENV_MAX_ENTRIES_NUM 8
 
 struct mlnx_snap_env {
 	const char *name;
 	int defined;
-	int default_val;
+	unsigned long long default_val;
 };
 
 static int last_used_idx;
@@ -31,9 +32,43 @@ static struct mlnx_snap_env env_arr[SNA_ENV_MAX_ENTRIES_NUM + 1] = {{0}};
 
 static void snap_env_set_val(struct mlnx_snap_env *env)
 {
-	if (getenv(env->name)) {
+	char *env_str = getenv(env->name);
+
+	if (env_str) {
+		char *end;
+		unsigned long long env_val;
+
 		env->defined = 1;
-		env->default_val = atoi(getenv(env->name));
+		env_val = strtoull(env_str, &end, 10);
+		if (env_val == ULLONG_MAX && errno == ERANGE)
+			return;
+
+		switch (*end) {
+		case '\0':
+			break;
+		case 'K':
+		case 'k':
+			env_val *= 1024;
+			end++;
+			break;
+		case 'M':
+		case 'm':
+			env_val *= 1024*1024;
+			end++;
+			break;
+		case 'G':
+		case 'g':
+			env_val *= 1024*1024*1024;
+			end++;
+			break;
+		default:
+			return;
+		}
+
+		if (*end)
+			return;
+
+		env->default_val = env_val;
 	}
 }
 
@@ -79,7 +114,7 @@ int snap_env_add(const char *env_name, int default_val)
 	return -EINVAL;
 }
 
-int snap_env_getenv(const char *env_name)
+long long snap_env_getenv(const char *env_name)
 {
 	const struct mlnx_snap_env *env = snap_env_find(env_name);
 

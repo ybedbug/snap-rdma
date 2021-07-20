@@ -58,7 +58,7 @@ __attribute__((constructor)) void snap_env_register_##env_name(void) \
  *
  * Returns: -EINVAL on failure, integer value >= 0 upon success
  */
-int snap_env_getenv(const char *env_name);
+long long snap_env_getenv(const char *env_name);
 
 /**
  * snap_env_is_set - check if the env. variable was set
