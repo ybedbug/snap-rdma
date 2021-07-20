@@ -868,3 +868,134 @@ TEST_F(SnapDmaTest, post_umr_wqe_reuse_no_wait_complete) {
 
 	snap_dma_q_destroy(q);
 }
+
+static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
+		struct ibv_pd *pd, int bsize)
+{
+#define IOV_CNT 3
+	struct snap_dma_q *q;
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+	int i, j, n, ret;
+	char *lbuf, *rbuf;
+	struct ibv_mr *lmr, *rmr;
+	struct iovec iov[2][IOV_CNT];
+	struct snap_dma_completion comp;
+
+	q = snap_dma_q_create(pd, dma_q_attr);
+	ASSERT_TRUE(q);
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = 0;
+	mkey_attr.relaxed_ordering_read = 0;
+	mkey_attr.klm_array = NULL;
+	mkey_attr.klm_num = 0;
+
+	klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+	ASSERT_TRUE(klm_mkey);
+
+	lbuf = (char *)malloc(bsize * IOV_CNT * 2);
+	if (!lbuf)
+		FAIL() << "local buffer allocation";
+
+	lmr = ibv_reg_mr(pd, lbuf, bsize * IOV_CNT * 2, IBV_ACCESS_LOCAL_WRITE |
+			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+	if (!lmr)
+		FAIL() << "local memory register";
+
+	rbuf = (char *)malloc(IOV_CNT * bsize);
+	if (!rbuf)
+		FAIL() << "remote buffer allocation";
+
+	rmr = ibv_reg_mr(pd, rbuf, IOV_CNT * bsize, IBV_ACCESS_LOCAL_WRITE |
+			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+	if (!rmr)
+		FAIL() << "remote memory register";
+
+	/*
+	 * iov[0] ----->  --------
+	 *               |iov_base|--> lbuf[0 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |iov_base|--> lbuf[2 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |iov_base|--> lbuf[4 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |    .   |
+	 *               |    .   |
+	 *
+	 * iov[1] ----->  --------
+	 *               |iov_base|--> lbuf[1 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |iov_base|--> lbuf[3 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |iov_base|--> lbuf[5 * bsize]
+	 *               |iov_len |
+	 *                --------
+	 *               |    .   |
+	 *               |    .   |
+	 */
+	for (j = 0; j < IOV_CNT; j++) {
+		iov[0][j].iov_base = lbuf + (2 * j) * bsize;
+		iov[0][j].iov_len =  bsize;
+		iov[1][j].iov_base = lbuf + (2 * j + 1) * bsize;
+		iov[1][j].iov_len =  bsize;
+	}
+
+	memset(rbuf, 0, bsize * IOV_CNT);
+	for (i = 0; i < IOV_CNT; i++) {
+		memset(lbuf + 2 * i * bsize, 'A' + i, bsize);
+		memset(lbuf + (2 * i + 1) * bsize, 'a' + i, bsize);
+	}
+
+	for (j = 0; j < 2; j++) {
+		comp.func = dma_completion;
+		comp.count = 1;
+		g_comp_count = 0;
+
+		if (j == 0) { /* readv: iov[0] --> rbuf */
+			ret = snap_dma_q_readv(q, rbuf, rmr->lkey, &iov[0][0], IOV_CNT, lmr->lkey, &comp);
+		} else { /* writev: rbuf --> iov[1] */
+			ret = snap_dma_q_writev(q, rbuf, rmr->lkey, &iov[1][0], IOV_CNT, lmr->lkey, &comp);
+		}
+		ASSERT_EQ(ret, 0);
+
+		n = 0;
+		while (n < 10000) {
+			ret = snap_dma_q_progress(q);
+			if (g_comp_count == 1)
+				break;
+			n++;
+		}
+
+		ASSERT_EQ(1, g_comp_count);
+		ASSERT_EQ(0, g_last_comp_status);
+		ASSERT_EQ(0, comp.count);
+	}
+
+	for (i = 0; i < IOV_CNT; i++)
+		ASSERT_EQ(0, memcmp(lbuf + 2 * i * bsize, lbuf + (2 * i + 1) * bsize, bsize));
+
+	ibv_dereg_mr(rmr);
+	free(rbuf);
+	ibv_dereg_mr(lmr);
+	free(lbuf);
+	snap_destroy_indirect_mkey(klm_mkey);
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, rdma_iov_rw_dv) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	snap_dma_q_rw_iov(&m_dma_q_attr, m_pd, m_bsize);
+}
+
+TEST_F(SnapDmaTest, rdma_iov_rw_gga) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_GGA;
+	snap_dma_q_rw_iov(&m_dma_q_attr, m_pd, m_bsize);
+}
