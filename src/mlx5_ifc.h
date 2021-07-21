@@ -1542,6 +1542,7 @@ enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG = 1 << 7,
 	MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX = 1 << 8,
 	MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET = 1 << 9,
+	MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE = 1 << 10,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -1549,7 +1550,8 @@ struct mlx5_ifc_hotplug_cap_bits {
 	u8	 log_max_bar_size[0x8];
 	u8	 max_hotplug_devices[0x8];
 
-	u8	 reserved_at_20[0x10];
+	u8	 pci_hotplug_state_change[0x1];
+	u8	 reserved_at_21[0x0f];
 	u8	 max_total_vfs[0x10];
 
 	u8	 reserved_at_40[0x7c0];
@@ -2970,7 +2972,9 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
 	u8	   reset[0x1];
-	u8	   reserved_at_62[0x1d];
+	u8	   reserved_at_62[0x2];
+	u8	   pci_hotplug_state[0x3];
+	u8	   reserved_at_68[0x18];
 
 	u8	   reserved_at_80[0x40];
 

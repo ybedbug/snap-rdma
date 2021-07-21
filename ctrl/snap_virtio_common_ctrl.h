@@ -323,4 +323,5 @@ int snap_virtio_ctrl_should_recover(struct snap_virtio_ctrl *ctrl);
 const struct snap_virtio_ctrl_queue_stats *
 snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx);
 
+int snap_virtio_ctrl_hotunplug(struct snap_virtio_ctrl *ctrl);
 #endif

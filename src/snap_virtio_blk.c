@@ -95,6 +95,9 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 				       device_emulation_out, enabled);
 	attr->vattr.reset = DEVX_GET(virtio_blk_device_emulation,
 				     device_emulation_out, reset);
+	attr->vattr.pci_hotplug_state = DEVX_GET(virtio_blk_device_emulation,
+						 device_emulation_out,
+						 pci_hotplug_state);
 	attr->modifiable_fields = 0;
 	dev_allowed = DEVX_GET64(virtio_blk_device_emulation,
 				 device_emulation_out, modify_field_select);
@@ -111,6 +114,8 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ALL;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_QUEUE_CFG;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
 	}
 
 out_free:

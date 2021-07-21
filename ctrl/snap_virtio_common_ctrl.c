@@ -191,6 +191,7 @@ static inline void snap_virtio_ctrl_bar_copy(struct snap_virtio_ctrl *ctrl,
 	copy->enabled = orig->enabled;
 	copy->reset = orig->reset;
 	copy->num_of_vfs = orig->num_of_vfs;
+	copy->pci_hotplug_state = orig->pci_hotplug_state;
 }
 
 static inline int snap_virtio_ctrl_bar_update(struct snap_virtio_ctrl *ctrl,
@@ -825,6 +826,15 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 
 out:
 	snap_virtio_ctrl_progress_unlock(ctrl);
+}
+
+int snap_virtio_ctrl_hotunplug(struct snap_virtio_ctrl *ctrl)
+{
+	struct snap_virtio_device_attr *attr = ctrl->bar_curr;
+	uint64_t mask = SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
+
+	attr->pci_hotplug_state = SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE;
+	return snap_virtio_ctrl_bar_modify(ctrl, mask, attr);
 }
 
 static inline struct snap_virtio_ctrl_queue *

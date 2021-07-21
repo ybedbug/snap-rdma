@@ -887,6 +887,8 @@ static int snap_query_hotplug_caps(struct snap_context *sctx)
 				capability.hotplug_cap.max_hotplug_devices);
 	sctx->hotplug.log_max_bar_size = DEVX_GET(query_hca_cap_out, out,
 				capability.hotplug_cap.log_max_bar_size);
+	sctx->hotplug.pci_hotplug_state_change = DEVX_GET(query_hca_cap_out, out,
+				capability.hotplug_cap.pci_hotplug_state_change);
 	supported_types = DEVX_GET(query_hca_cap_out, out,
 			capability.hotplug_cap.hotplug_device_types_supported);
 	if (supported_types & MLX5_HOTPLUG_DEVICE_BIT_MASK_NVME)

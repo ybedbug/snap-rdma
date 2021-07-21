@@ -207,6 +207,14 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_QUEUE_CFG = 1 << 7,
 	SNAP_VIRTIO_MOD_NUM_MSIX = 1 << 8,
 	SNAP_VIRTIO_MOD_DYN_MSIX_RESET = 1 << 9,
+	SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE = 1 << 10,
+};
+
+enum snap_virtio_pci_hotplug_state {
+	SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTPLUG		= 1,
+	SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE	= 2,
+	SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF		= 3,
+	SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_ON		= 4,
 };
 
 struct snap_virtio_device_attr {
@@ -227,6 +235,7 @@ struct snap_virtio_device_attr {
 	uint8_t				device_feature_select;
 	uint8_t				driver_feature_select;
 	uint16_t			queue_select;
+	uint8_t				pci_hotplug_state;
 };
 
 /**

@@ -378,6 +378,11 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 reset, attr->reset);
 		}
+		if (mask & (SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE | SNAP_VIRTIO_MOD_ALL)) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE;
+			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
+				 pci_hotplug_state, attr->pci_hotplug_state);
+		}
 		if (mask & (SNAP_VIRTIO_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
 			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,

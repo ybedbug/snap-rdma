@@ -307,6 +307,7 @@ struct snap_hotplug_context {
 	uint8_t		max_devices;
 	uint8_t		log_max_bar_size;
 	uint16_t	max_total_vfs;
+	bool		pci_hotplug_state_change;
 };
 
 struct snap_pfs_ctx {
