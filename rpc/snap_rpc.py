@@ -815,6 +815,15 @@ def main():
                    choices=['kernel', 'spdk'], required=False, type=str)
     p.set_defaults(func=storage_admin)
 
+    def mempool_get_debugstat(args):
+        params = {
+        }
+        result = args.client.call('mempool_get_debugstat', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('mempool_get_debugstat',
+                              help='Get debug statistics from memory pool')
+    p.set_defaults(func=mempool_get_debugstat)
+    
     def call_rpc_func(args):
         args.func(args)
 
