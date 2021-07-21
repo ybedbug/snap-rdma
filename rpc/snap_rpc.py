@@ -322,6 +322,8 @@ def main():
             params['suspend'] = args.suspend
         if args.recover:
             params['recover'] = args.recover
+        if args.mempool:
+            params['mempool'] = args.mempool            
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -352,6 +354,8 @@ def main():
                    'The controller must be explicitely resumed ',
                    required=False, action='store_true')
     p.add_argument('--recover', help='Recover controller data from host memory ',
+                   required=False, action='store_true')
+    p.add_argument('--mempool', help='Allocate I/O buffers at run time ',
                    required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_create)
 
