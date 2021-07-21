@@ -29,9 +29,10 @@ unique controller ID.
     "conf_file": "/etc/nvme_snap/nvme0.json",
     "nr_io_queues": 32,
     "mdts": 4,
-    "max_namespaces": 0,
+    "max_namespaces": 1024,
     "quirks": 0,
-    "rdma_device" : "mlx5_2"
+    "rdma_device" : "mlx5_2",
+    "version" : "1.3.0"
   }
 }
 

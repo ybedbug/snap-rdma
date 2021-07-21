@@ -8,6 +8,7 @@ import socket
 import time
 import os
 import copy
+import ctypes
 
 try:
     from shlex import quote
@@ -485,6 +486,8 @@ def main():
             params['quirks'] = args.quirks
         if args.rdma_device:
             params['rdma_device'] = args.rdma_device
+        if args.version:
+            params['version'] = args.version
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -512,13 +515,15 @@ def main():
     p.add_argument('-t', '--mdts', help='Maximum Data Transfer Size',
                    default=-1, type=int, required=False)
     p.add_argument('-m', '--max_namespaces', help='Maximun number of namespace',
-                   default=-1, type=int, required=False)
+                   default=1024, type=int, required=False)
     p.add_argument('-q', '--quirks', help='Bitmask for enabling specific NVMe '
                    'driver quirks in order to work with non NVMe spec compliant drivers',
                    default=-1, type=int, required=False)
     p.add_argument('-r', '--rdma_device', help='BlueField1 compatibility option. Should be '
                    'SF hca name. Usually "mlx5_2"',
                    type=str, required=False)
+    p.add_argument('-vs', '--version', help='Host driver NVM Express specification version ',
+                   default="1.3.0", type=str, required=False)
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
@@ -676,6 +681,10 @@ def main():
         }
         if args.nqn:
             params['nqn'] = args.nqn
+        if args.number_namespaces:
+            params['number_namespaces'] = args.number_namespaces
+        if args.maximum_namespaces:
+            params['maximum_namespaces'] = args.maximum_namespaces
         result = args.client.call('subsystem_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('subsystem_nvme_create',
@@ -683,6 +692,12 @@ def main():
     p.add_argument('--nqn', help='Subsystem NQN', type=str, required=False)
     p.add_argument('serial_number', help='Subsystem serial number', type=str)
     p.add_argument('model_number', help='Subsystem model number', type=str)
+    p.add_argument('-nn', '--number_namespaces',
+                   help='Maximum value of a valid NSID for the NVM subsystem.',
+                   default=ctypes.c_uint32(0xfffffffe).value, type=int, required=False)
+    p.add_argument('-mnan', '--maximum_namespaces',
+                   help='Maximum number of namespaces supported by the NVM subsystem.',
+                   default=1024, type=int, required=False)
     p.set_defaults(func=subsystem_nvme_create)
 
     def subsystem_nvme_delete(args):

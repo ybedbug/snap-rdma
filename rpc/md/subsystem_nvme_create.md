@@ -24,7 +24,9 @@ in case of failure.
   "params": {
     "nqn": "nqn.2014.08.org.nvmexpress.snap:cnode1",
     "serial_number": "MNC12",
-    "model_number": "NVIDIA NVMe SNAP Controller"
+    "model_number": "NVIDIA NVMe SNAP Controller",
+    "nn": 0xFFFFFFFE,
+    "mnan": 1024
   }
 }
 
