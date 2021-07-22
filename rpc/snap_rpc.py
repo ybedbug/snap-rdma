@@ -323,8 +323,8 @@ def main():
             params['suspend'] = args.suspend
         if args.recover:
             params['recover'] = args.recover
-        if args.mempool:
-            params['mempool'] = args.mempool            
+        if args.mem:
+            params['mem'] = args.mem            
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -356,8 +356,8 @@ def main():
                    required=False, action='store_true')
     p.add_argument('--recover', help='Recover controller data from host memory ',
                    required=False, action='store_true')
-    p.add_argument('--mempool', help='Allocate I/O buffers at run time ',
-                   required=False, action='store_true')
+    p.add_argument('--mem', help='Memory model', type=str,
+                   required=False, choices=['static', 'pool']) 
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_virtio_blk_bdev_attach(args):
@@ -488,6 +488,8 @@ def main():
             params['rdma_device'] = args.rdma_device
         if args.version:
             params['version'] = args.version
+        if args.mem:
+            params['mem'] = args.mem            
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -524,6 +526,8 @@ def main():
                    type=str, required=False)
     p.add_argument('-vs', '--version', help='Host driver NVM Express specification version ',
                    default="1.3.0", type=str, required=False)
+    p.add_argument('--mem', help='Memory model', type=str,
+                   required=False, choices=['static', 'pool']) 
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
