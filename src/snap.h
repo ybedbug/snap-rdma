@@ -444,4 +444,6 @@ void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
 
 int snap_query_relaxed_ordering_caps(struct ibv_context *context,
 				     struct snap_relaxed_ordering_caps *caps);
+struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length);
+
 #endif

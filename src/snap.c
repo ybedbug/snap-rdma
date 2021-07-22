@@ -3995,3 +3995,34 @@ int snap_query_relaxed_ordering_caps(struct ibv_context *context,
 		out, capability.cmd_hca_cap.relaxed_ordering_read_umr);
 	return 0;
 }
+
+/**
+ *snap_reg_mr() - Register memort region with Relaxed-Ordering acess mode
+ *
+ * @pd:     ibv_pd to register with.
+ * @addr:   pointer to a memory region
+ * @length: size of the memory region
+ *
+ * Return:
+ * ibv_mr or NULL on error
+ */
+struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length)
+{
+	int mr_access = 0;
+	struct ibv_mr *mr;
+	struct snap_relaxed_ordering_caps ro_caps = {};
+
+	mr_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+						IBV_ACCESS_REMOTE_WRITE;
+
+	if (!snap_query_relaxed_ordering_caps(pd->context, &ro_caps)) {
+		if (ro_caps.relaxed_ordering_write &&
+					ro_caps.relaxed_ordering_read)
+			mr_access |= IBV_ACCESS_RELAXED_ORDERING;
+	} else
+		snap_warn("Failed to query relaxed ordering caps\n");
+
+	mr = ibv_reg_mr(pd, addr, length, mr_access);
+
+	return mr;
+}
