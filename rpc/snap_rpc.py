@@ -8,7 +8,6 @@ import socket
 import time
 import os
 import copy
-import ctypes
 
 try:
     from shlex import quote
@@ -685,8 +684,8 @@ def main():
         }
         if args.nqn:
             params['nqn'] = args.nqn
-        if args.number_namespaces:
-            params['number_namespaces'] = args.number_namespaces
+        if args.max_nsid:
+            params['number_namespaces'] = args.max_nsid
         if args.maximum_namespaces:
             params['maximum_namespaces'] = args.maximum_namespaces
         result = args.client.call('subsystem_nvme_create', params)
@@ -696,12 +695,12 @@ def main():
     p.add_argument('--nqn', help='Subsystem NQN', type=str, required=False)
     p.add_argument('serial_number', help='Subsystem serial number', type=str)
     p.add_argument('model_number', help='Subsystem model number', type=str)
-    p.add_argument('-nn', '--number_namespaces',
+    p.add_argument('-nn', '--max_nsid',
                    help='Maximum value of a valid NSID for the NVM subsystem.',
-                   default=ctypes.c_uint32(0xfffffffe).value, type=int, required=False)
+                   type=int, required=False)
     p.add_argument('-mnan', '--maximum_namespaces',
                    help='Maximum number of namespaces supported by the NVM subsystem.',
-                   default=1024, type=int, required=False)
+                   type=int, required=False)
     p.set_defaults(func=subsystem_nvme_create)
 
     def subsystem_nvme_delete(args):
