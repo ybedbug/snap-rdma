@@ -805,6 +805,10 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 			 capability.nvme_emulation_cap.max_emulated_devices);
 	sctx->nvme_caps.max_nvme_namespaces = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_nvme_offload_namespaces);
+	sctx->nvme_caps.max_nvme_nsid = 1 << DEVX_GET(query_hca_cap_out, out,
+		capability.nvme_emulation_cap.log_max_nvme_offload_nsid);
+	if (sctx->nvme_caps.max_nvme_nsid == 0)
+		sctx->nvme_caps.max_nvme_nsid = sctx->nvme_caps.max_nvme_namespaces;
 	sctx->nvme_caps.max_emulated_nvme_cqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_cq);
 	sctx->nvme_caps.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,

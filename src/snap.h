@@ -347,6 +347,7 @@ struct snap_pfs_ctx {
 struct snap_nvme_caps {
 	int		supported_types;//mask of snap_nvme_queue_type
 	uint32_t	max_nvme_namespaces;
+	uint32_t	max_nvme_nsid;
 	uint32_t	max_emulated_nvme_cqs;
 	uint32_t	max_emulated_nvme_sqs;
 	uint32_t	max_queue_depth;

@@ -1419,7 +1419,8 @@ struct mlx5_ifc_nvme_emulation_cap_bits {
 	u8	 reserved_at_10[0x7];
 	u8	 max_emulated_devices[0x10];
 
-	u8	 reserved_at_20[0x10];
+	u8	 reserved_at_20[0xb];
+	u8	 log_max_nvme_offload_nsid[0x5];
 	u8	 registers_size[0x10];
 
 	u8	 log_max_queue_depth[0x10];

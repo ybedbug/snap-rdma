@@ -338,6 +338,12 @@ snap_nvme_create_namespace(struct snap_device *sdev,
 	struct snap_nvme_device *ndev = (struct snap_nvme_device *)sdev->dd_data;
 	uint8_t *namespace_in;
 	struct snap_nvme_namespace *ns;
+	const struct snap_nvme_caps *hw_caps = &sdev->sctx->nvme_caps;
+
+	if (attr->src_nsid > hw_caps->max_nvme_nsid) {
+		errno = ENOTSUP;
+		goto out;
+	}
 
 	ns = calloc(1, sizeof(*ns));
 	if (!ns) {
