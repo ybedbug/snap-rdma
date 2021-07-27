@@ -119,3 +119,7 @@ ignore=body-max-line-length
 # [contrib-title-conventional-commits]
 # Specify allowed commit types. For details see: https://www.conventionalcommits.org/
 # types = bugfix,user-story,epic
+
+# subject: this is my description 
+[title-match-regex]
+regex=.*: .*
