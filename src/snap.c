@@ -26,6 +26,7 @@
 #define SNAP_PCI_ENUMERATE_TIME_WAIT 50000
 #define SNAP_PCI_ENUMERATE_MAX_RETRIES 100
 #define SNAP_UNINITIALIZED_VHCA_ID -1
+#define SNAP_NVME_MAX_QUEUE_DEPTH_LEGACY 2048
 
 static int snap_copy_roce_address(struct snap_device *sdev,
 		struct ibv_context *context, int idx);
@@ -808,6 +809,10 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		capability.nvme_emulation_cap.log_max_emulated_cq);
 	sctx->nvme_caps.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_sq);
+	sctx->nvme_caps.max_queue_depth = 1 << DEVX_GET(query_hca_cap_out, out,
+		capability.nvme_emulation_cap.log_max_queue_depth);
+	if (sctx->nvme_caps.max_queue_depth == 0)
+		sctx->nvme_caps.max_queue_depth = SNAP_NVME_MAX_QUEUE_DEPTH_LEGACY;
 	sctx->nvme_caps.cq_interrupt_disabled = DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.nvme_cq_interrupt_disabled);
 	sctx->nvme_caps.reg_size = DEVX_GET(query_hca_cap_out, out,

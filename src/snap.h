@@ -349,6 +349,7 @@ struct snap_nvme_caps {
 	uint32_t	max_nvme_namespaces;
 	uint32_t	max_emulated_nvme_cqs;
 	uint32_t	max_emulated_nvme_sqs;
+	uint32_t	max_queue_depth;
 	bool		cq_interrupt_disabled;
 	uint16_t	reg_size;
 	bool		crossing_vhca_mkey;

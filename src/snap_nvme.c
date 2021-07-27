@@ -467,6 +467,11 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 		goto out;
 	}
 
+	if (attr->queue_depth > hw_caps->max_queue_depth) {
+		errno = ENOTSUP;
+		goto out;
+	}
+
 	cq = &ndev->cqs[attr->id];
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -885,6 +890,7 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 	uint8_t *sq_in;
 	struct snap_nvme_sq *sq;
 	int offload_type;
+	const struct snap_nvme_caps *hw_caps = &sdev->sctx->nvme_caps;
 
 	if (attr->type == SNAP_NVME_RAW_MODE) {
 		offload_type = MLX5_NVME_SQ_OFFLOAD_TYPE_SQE;
@@ -897,6 +903,11 @@ snap_nvme_create_sq(struct snap_device *sdev, struct snap_nvme_sq_attr *attr)
 
 	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->queue_depth > hw_caps->max_queue_depth) {
+		errno = ENOTSUP;
 		goto out;
 	}
 
