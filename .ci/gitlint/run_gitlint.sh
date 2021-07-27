@@ -20,7 +20,7 @@ run_git_check(){
         ret_code=$((ret_code + $exit_code))
         handle_test_result $exit_code "$RESULT"
     done
-    # return $ret_code
+    exit $ret_code
 }
 
 handle_test_result(){
