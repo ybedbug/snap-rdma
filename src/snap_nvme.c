@@ -446,6 +446,7 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 	uint8_t *cq_in;
 	struct snap_nvme_cq *cq;
 	int offload_type;
+	const struct snap_nvme_caps *hw_caps = &sdev->sctx->nvme_caps;
 
 	if (attr->type == SNAP_NVME_RAW_MODE) {
 		offload_type = MLX5_NVME_CQ_OFFLOAD_TYPE_SQE;
@@ -458,6 +459,11 @@ snap_nvme_create_cq(struct snap_device *sdev, struct snap_nvme_cq_attr *attr)
 
 	if (attr->id >= ndev->num_queues) {
 		errno = EINVAL;
+		goto out;
+	}
+
+	if (attr->interrupt_disable && !hw_caps->cq_interrupt_disabled) {
+		errno = ENOTSUP;
 		goto out;
 	}
 

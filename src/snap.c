@@ -808,6 +808,8 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		capability.nvme_emulation_cap.log_max_emulated_cq);
 	sctx->nvme_caps.max_emulated_nvme_sqs = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_emulated_sq);
+	sctx->nvme_caps.cq_interrupt_disabled = DEVX_GET(query_hca_cap_out, out,
+		capability.nvme_emulation_cap.nvme_cq_interrupt_disabled);
 	sctx->nvme_caps.reg_size = DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.registers_size);
 	if (DEVX_GET(query_hca_cap_out, out,
