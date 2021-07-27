@@ -43,7 +43,8 @@ RUN yum install -y \
     chrpath flex graphviz tcl bison tk swig \
     python3-pip \
     numactl-devel openssl-devel libaio-devel libaio \
-    wget
+    wget \
+    ccache
 
 RUN cd /etc/yum.repos.d && wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/rhel8.3/mellanox_mlnx_ofed.repo
 RUN yum install -y mlnx-ofed-basic-user-only.noarch

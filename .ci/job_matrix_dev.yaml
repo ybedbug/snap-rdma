@@ -19,6 +19,11 @@ volumes:
   - {mountPath: /.autodirect/sw/release/mlnx_ofed, hostPath: /.autodirect/sw/release/mlnx_ofed}
   - {mountPath: /auto/sw/release/sw_acceleration, hostPath: /auto/sw/release/sw_acceleration}
 
+env:
+  CCACHE_ENABLE: 'true'
+  CCACHE_DIR: '/auto/mtrswgwork/swx_devops/ccache/$job'
+  CCACHE_TEMPDIR: '/tmp'
+
 runs_on_dockers:
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed53', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed53', arch: 'aarch64', tag: 'latest'}

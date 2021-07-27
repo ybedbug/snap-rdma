@@ -32,6 +32,7 @@ RUN apt-get update && \
         dpkg-dev fakeroot gpg dpkg-sig dh-python \
         ethtool libnl-route-3-dev python libnl-3-dev lsof pciutils kmod pkg-config libmnl0 \
         chrpath flex gfortran graphviz dpatch libgfortran5 tcl bison tk swig \
+        ccache \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN wget -qO - https://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | \

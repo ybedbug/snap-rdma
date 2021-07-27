@@ -40,7 +40,8 @@ RUN yum install -y \
     chrpath flex graphviz tcl bison tk swig \
     python3-pip \
     numactl-devel openssl-devel libaio-devel libaio \
-    wget
+    wget \
+    ccache
 
 RUN set -eux; \
   if [ $(uname -m) == "aarch64" ]; then \

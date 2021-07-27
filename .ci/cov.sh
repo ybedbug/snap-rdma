@@ -1,5 +1,9 @@
 #!/bin/bash -eEl
 
+if [ "$CCACHE_ENABLE" = true ]; then
+    export PATH="/usr/lib/ccache:/usr/lib64/ccache:$PATH"
+fi
+
 topdir=$(git rev-parse --show-toplevel)
 cd $topdir
 
