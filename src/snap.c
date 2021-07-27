@@ -815,7 +815,7 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 		capability.nvme_emulation_cap.log_max_emulated_sq);
 	sctx->nvme_caps.max_queue_depth = 1 << DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.log_max_queue_depth);
-	if (sctx->nvme_caps.max_queue_depth == 0)
+	if (sctx->nvme_caps.max_queue_depth == 1)
 		sctx->nvme_caps.max_queue_depth = SNAP_NVME_MAX_QUEUE_DEPTH_LEGACY;
 	sctx->nvme_caps.cq_interrupt_disabled = DEVX_GET(query_hca_cap_out, out,
 		capability.nvme_emulation_cap.nvme_cq_interrupt_disabled);
