@@ -252,23 +252,6 @@ static int snap_virtio_blk_ctrl_bar_modify(struct snap_virtio_ctrl *vctrl,
 	return snap_virtio_blk_modify_device(vctrl->sdev, mask, vbbar);
 }
 
-static int
-snap_virtio_blk_ctrl_bar_add_status(struct snap_virtio_blk_ctrl *ctrl,
-				    enum snap_virtio_common_device_status status)
-{
-	struct snap_virtio_blk_device_attr *bar;
-	int ret = 0;
-
-	bar = to_blk_device_attr(ctrl->common.bar_curr);
-	if (!(bar->vattr.status & status)) {
-		bar->vattr.status |= status;
-		ret = snap_virtio_blk_modify_device(ctrl->common.sdev,
-					     SNAP_VIRTIO_MOD_DEV_STATUS, bar);
-	}
-
-	return ret;
-}
-
 static struct snap_virtio_queue_attr*
 snap_virtio_blk_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 					int index)
@@ -1011,9 +994,6 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 			snap_virtio_blk_zcopy_ctxs_clear();
 	}
 
-	/* We must first notify host the device is no longer operational */
-	snap_virtio_blk_ctrl_bar_add_status(ctrl,
-				SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET);
 	snap_virtio_ctrl_stop(&ctrl->common);
 	snap_virtio_blk_teardown_device(ctrl->common.sdev);
 	snap_virtio_ctrl_close(&ctrl->common);
