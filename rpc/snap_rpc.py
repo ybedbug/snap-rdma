@@ -270,17 +270,12 @@ def main():
         }
         if args.f:
             params['force'] = args.f
-        if args.silent:
-            params['silent'] = args.silent
 
         args.client.call('controller_virtio_blk_delete', params)
     p = subparsers.add_parser('controller_virtio_blk_delete',
                               help='Destroy VirtIO BLK SNAP controller')
     p.add_argument('name', help='Controller Name', type=str)
     p.add_argument('--f', '--force', help='Force controller deletion',
-                   required=False, action='store_true')
-    p.add_argument('-s', '--silent', help='Close silently (without notifying '
-                                          'host driver about it)',
                    required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_delete)
 
