@@ -1192,6 +1192,7 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 {
 	int ret;
 	struct virtq_split_tunnel_comp tunnel_comp;
+	bool unordered = false;
 
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
 		snap_error("failed to write the request status field\n");
@@ -1203,19 +1204,20 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 		return true;
 	}
 
+	if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
+		virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
+			cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
+		if (cmd->io_cmd_stat)
+			++cmd->io_cmd_stat->unordered;
+		unordered = true;
+	}
+
 	/* check order of completed command, if the command unordered - wait for
 	 * other completions
 	 */
-	if (snap_unlikely(cmd->vq_priv->force_in_order)) {
-		if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
-				cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
-			cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
-			if (cmd->io_cmd_stat)
-				++cmd->io_cmd_stat->unordered;
-
-			return false;
-		}
+	if (snap_unlikely(cmd->vq_priv->force_in_order) && snap_unlikely(unordered)) {
+		cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
+		return false;
 	}
 
 	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
@@ -1357,9 +1359,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 	cmd->dma_pool_ctx.thread_id = priv->thread_id;
-
-	if (snap_unlikely(cmd->vq_priv->force_in_order))
-		cmd->cmd_available_index = priv->ctrl_available_index;
+	cmd->cmd_available_index = priv->ctrl_available_index;
 
 	/* If new commands are not dropped there is a risk of never
 	 * completing the flush
