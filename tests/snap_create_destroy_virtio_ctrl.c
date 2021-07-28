@@ -297,7 +297,7 @@ int main(int argc, char **argv)
 	}
 
 	if (ctrl_type == SNAP_VIRTIO_BLK_CTRL)
-		snap_virtio_blk_ctrl_close(blk_ctrl, 0);
+		snap_virtio_blk_ctrl_close(blk_ctrl);
 	else if (ctrl_type == SNAP_VIRTIO_NET_CTRL)
 		snap_virtio_net_ctrl_close(net_ctrl);
 	else

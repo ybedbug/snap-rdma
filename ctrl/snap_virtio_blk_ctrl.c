@@ -994,15 +994,11 @@ err:
 
 /**
  * snap_virtio_blk_ctrl_close() - Destroy a virtio-blk controller
- * @ctrl:	virtio-blk controller to close
- * @flags:	Options for closure type, represented as a bitmask.
- *		- Bit 0: silent. Don't notify host driver upon controller
- *		  closure. This bit may be handy for recovery case.
+ * @ctrl:       virtio-blk controller to close
  *
  * Destroy and free virtio-blk controller.
  */
-void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl,
-				uint32_t flags)
+void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 {
 	if (ctrl->zcopy_ctx) {
 		if (ctrl->cross_mkey) {
@@ -1016,8 +1012,7 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl,
 	}
 
 	/* We must first notify host the device is no longer operational */
-	if (!(flags & SNAP_VIRTIO_BLK_CTRL_CLOSE_FLAGS_SILENT))
-		snap_virtio_blk_ctrl_bar_add_status(ctrl,
+	snap_virtio_blk_ctrl_bar_add_status(ctrl,
 				SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET);
 	snap_virtio_ctrl_stop(&ctrl->common);
 	snap_virtio_blk_teardown_device(ctrl->common.sdev);

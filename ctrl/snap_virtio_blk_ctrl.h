@@ -61,17 +61,12 @@ struct snap_virtio_blk_ctrl {
 	struct snap_cross_mkey *cross_mkey;
 };
 
-enum snap_virtio_blk_ctrl_close_flags {
-	SNAP_VIRTIO_BLK_CTRL_CLOSE_FLAGS_SILENT = 1 << 0,
-};
-
 struct snap_virtio_blk_ctrl *
 snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			  struct snap_virtio_blk_ctrl_attr *attr,
 			  struct snap_bdev_ops *bdev_ops,
 			  void *bdev);
-void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl,
-				uint32_t flags);
+void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl);
 int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 				   struct snap_virtio_blk_registers *regs,
 				   uint16_t regs_mask);
