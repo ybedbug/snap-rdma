@@ -105,11 +105,12 @@ struct snap_dma_q_ops {
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		     struct snap_dma_completion *comp);
 	int (*write_short)(struct snap_dma_q *q, void *src_buf, size_t len,
-			   uint64_t dstaddr, uint32_t rmkey);
+			   uint64_t dstaddr, uint32_t rmkey, int *n_bb);
 	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		    struct snap_dma_completion *comp);
-	int (*send_completion)(struct snap_dma_q *q, void *src_buf, size_t len);
+	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
+			size_t len, int *n_bb);
 	int (*progress_tx)(struct snap_dma_q *q);
 	int (*progress_rx)(struct snap_dma_q *q);
 	int (*flush)(struct snap_dma_q *q);

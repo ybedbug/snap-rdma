@@ -96,7 +96,7 @@ static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp);
 static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq);
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
 				    int op, uint64_t raddr, uint32_t rkey,
-				    struct snap_dma_completion *flush_comp);
+				    struct snap_dma_completion *flush_comp, int *n_bb);
 
 
 static struct snap_dma_q_ops verb_ops;
@@ -1030,10 +1030,10 @@ int snap_dma_q_arm(struct snap_dma_q *q)
 	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
 }
 
-static inline int qp_can_tx(struct snap_dma_q *q)
+static inline bool qp_can_tx(struct snap_dma_q *q, int bb_needed)
 {
 	/* later we can also add cq space check */
-	return q->tx_available > 0;
+	return q->tx_available >= bb_needed;
 }
 
 /**
@@ -1051,14 +1051,14 @@ static inline int qp_can_tx(struct snap_dma_q *q)
  */
 int snap_dma_q_flush(struct snap_dma_q *q)
 {
-	int n, n_out;
+	int n, n_out, n_bb;
 	struct snap_dma_completion comp;
 
 	n = 0;
 	/* in case we have tx moderation we need at least one
 	 * available to be able to send a flush command
 	 */
-	while (!qp_can_tx(q))
+	while (!qp_can_tx(q, 1))
 		n += q->ops->progress_tx(q);
 
 	/* only dv/gga have tx moderation at the moment, flush all outstanding
@@ -1067,8 +1067,8 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 	n_out = q->sw_qp.dv_qp.n_outstanding;
 	if (n_out) {
 		comp.count = 2;
-		q->tx_available--;
-		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp);
+		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
+		q->tx_available -= n_bb;
 		n--;
 	}
 
@@ -1107,7 +1107,7 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 {
 	int rc;
 
-	if (snap_unlikely(!qp_can_tx(q)))
+	if (snap_unlikely(!qp_can_tx(q, 1)))
 		return -EAGAIN;
 
 	rc = q->ops->write(q, src_buf, len, lkey, dstaddr, rmkey, comp);
@@ -1145,19 +1145,16 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey)
 {
-	int rc;
+	int rc, n_bb;
 
 	if (snap_unlikely(len > q->tx_elem_size))
 		return -EINVAL;
 
-	if (snap_unlikely(!qp_can_tx(q)))
-		return -EAGAIN;
-
-	rc = q->ops->write_short(q, src_buf, len, dstaddr, rmkey);
+	rc = q->ops->write_short(q, src_buf, len, dstaddr, rmkey, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 
-	q->tx_available--;
+	q->tx_available -= n_bb;
 	return 0;
 }
 
@@ -1190,7 +1187,7 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 {
 	int rc;
 
-	if (snap_unlikely(!qp_can_tx(q)))
+	if (snap_unlikely(!qp_can_tx(q, 1)))
 		return -EAGAIN;
 
 	rc = q->ops->read(q, dst_buf, len, lkey, srcaddr, rmkey, comp);
@@ -1228,19 +1225,16 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
  */
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
 {
-	int rc;
+	int rc, n_bb;
 
 	if (snap_unlikely(len > q->tx_elem_size))
 		return -EINVAL;
 
-	if (snap_unlikely(!qp_can_tx(q)))
-		return -EAGAIN;
-
-	rc = q->ops->send_completion(q, src_buf, len);
+	rc = q->ops->send_completion(q, src_buf, len, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 
-	q->tx_available--;
+	q->tx_available -= n_bb;
 	return 0;
 }
 
@@ -1300,8 +1294,12 @@ static inline int verbs_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t 
 
 static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
 					  size_t len, uint64_t dstaddr,
-					  uint32_t rmkey)
+					  uint32_t rmkey, int *n_bb)
 {
+	*n_bb = 1;
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
 	return do_verbs_dma_xfer(q, src_buf, len, 0, dstaddr, rmkey,
 				 IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
 }
@@ -1315,12 +1313,16 @@ static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t l
 }
 
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
-					      size_t len)
+					      size_t len, int *n_bb)
 {
 	struct ibv_qp *qp = q->sw_qp.qp;
 	struct ibv_send_wr send_wr, *bad_wr;
 	struct ibv_sge sge;
 	int rc;
+
+	*n_bb = 1;
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
 
 	sge.addr = (uint64_t)src_buf;
 	sge.length = len;
@@ -1442,15 +1444,15 @@ static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dm
 }
 
 static inline void snap_dv_set_comp(struct snap_dv_qp *dv_qp, uint16_t pi,
-				    struct snap_dma_completion *comp, int cq_up)
+				    struct snap_dma_completion *comp, int cq_up, int n_bb)
 {
 	dv_qp->comps[pi].comp = comp;
 	if (cq_up != MLX5_WQE_CTRL_CQ_UPDATE) {
-		dv_qp->n_outstanding++;
+		dv_qp->n_outstanding += n_bb;
 		return;
 	}
 
-	dv_qp->comps[pi].n_outstanding = dv_qp->n_outstanding + 1;
+	dv_qp->comps[pi].n_outstanding = dv_qp->n_outstanding + n_bb;
 	dv_qp->n_outstanding = 0;
 }
 
@@ -1686,11 +1688,11 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 		klm = klm + 1;
 	}
 
-	n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB) - 1;
-	dv_qp->pi += n_bb;
+	n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB);
+	dv_qp->pi += (n_bb - 1);
 
 	snap_dv_ring_tx_db(dv_qp, ctrl);
-	snap_dv_set_comp(dv_qp, pi, comp, cq_up);
+	snap_dv_set_comp(dv_qp, pi, comp, cq_up, n_bb);
 
 	klm_mkey->addr = klm_mtt[0].address;
 
@@ -1727,7 +1729,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	 * bookkeeping later
 	 **/
 	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
-	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
+	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up, 1);
 	return 0;
 }
 
@@ -1749,13 +1751,13 @@ static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
 				    int op, uint64_t raddr, uint32_t rkey,
-				    struct snap_dma_completion *flush_comp)
+				    struct snap_dma_completion *flush_comp, int *n_bb)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	struct mlx5_wqe_ctrl_seg *ctrl;
 	struct mlx5_wqe_inl_data_seg *dseg;
 	struct mlx5_wqe_raddr_seg *rseg;
-	uint16_t pi, n_bb, wqe_size, to_end;
+	uint16_t pi, wqe_size, to_end;
 	int cq_up;
 	void *pdata;
 
@@ -1769,6 +1771,10 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 	 */
 	if (flush_comp)
 		wqe_size -= sizeof(*dseg);
+
+	*n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB);
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
 
 	cq_up = snap_dv_get_cq_update(dv_qp, flush_comp);
 
@@ -1802,27 +1808,25 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 		memcpy(pdata, src_buf, len);
 	}
 
-	/* calculate how many building blocks are used minus one */
-	n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB) - 1;
-	dv_qp->pi += n_bb;
+	dv_qp->pi += (*n_bb - 1);
 
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 
-	snap_dv_set_comp(dv_qp, pi, flush_comp, cq_up);
+	snap_dv_set_comp(dv_qp, pi, flush_comp, cq_up, *n_bb);
 	return 0;
 }
 
 static int dv_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
-				    size_t len)
+				    size_t len, int *n_bb)
 {
-	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0, NULL);
+	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0, NULL, n_bb);
 }
 
 static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
-				uint64_t dstaddr, uint32_t rmkey)
+				uint64_t dstaddr, uint32_t rmkey, int *n_bb)
 {
 	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_RDMA_WRITE,
-			dstaddr, rmkey, NULL);
+			dstaddr, rmkey, NULL, n_bb);
 }
 
 static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq, int cqe_size)
@@ -2093,7 +2097,7 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 
-	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up);
+	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up, 1);
 	return 0;
 }
 
