@@ -195,12 +195,12 @@ static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa
 	}
 	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
-		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel is not present\n");
+		ERR_ON_CMD_FS(cmd, "dirty memory logging enabled but migration channel is not present\n");
 		return;
 	}
 	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
 	if (rc)
-		ERR_ON_CMD(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
+		ERR_ON_CMD_FS(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
 }
 
 static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
@@ -214,7 +214,7 @@ static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 						dma_comp);
 
 	if (status != IBV_WC_SUCCESS) {
-		ERR_ON_CMD(cmd, "error in dma for queue %d\n",
+		ERR_ON_CMD_FS(cmd, "error in dma for queue %d\n",
 			   cmd->vq_priv->vq_ctx.common_ctx.idx);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
@@ -473,7 +473,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 	}
 
 	if (snap_unlikely(offset > cmd->req_size)) {
-		ERR_ON_CMD(cmd, "Increase cmd's buffer - offset: %d req_size: %d!\n",
+		ERR_ON_CMD_FS(cmd, "Increase cmd's buffer - offset: %d req_size: %d!\n",
 			   offset, cmd->req_size);
 		return -EINVAL;
 	}
@@ -499,13 +499,13 @@ static bool sm_fetch_cmd_descs(struct fs_virtq_cmd *cmd,
 	enum virtq_fetch_desc_status ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+		ERR_ON_CMD_FS(cmd, "failed to fetch commands descs, dumping command without response\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
 	ret = fetch_next_desc(cmd);
 	if (ret == VIRTQ_FETCH_DESC_ERR) {
-		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
+		ERR_ON_CMD_FS(cmd, "failed to RDMA READ desc from host\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
@@ -671,7 +671,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 	uint32_t r_descs, w_descs;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to get request data, returning failure\n");
+		ERR_ON_CMD_FS(cmd, "failed to get request data, returning failure\n");
 		set_cmd_error(cmd, EINVAL);
 		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -705,7 +705,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 				      &cmd->fs_dev_op_ctx);
 
 	if (ret) {
-		ERR_ON_CMD(cmd, "failed while executing command\n");
+		ERR_ON_CMD_FS(cmd, "failed while executing command\n");
 		set_cmd_error(cmd, EIO);
 		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -740,7 +740,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 	int i, ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr to host\n");
+		ERR_ON_CMD_FS(cmd, "failed to read from block device, send ioerr to host\n");
 		set_cmd_error(cmd, EIO);
 		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -823,7 +823,7 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
 					cmd->vq_priv->snap_attr.vattr.dma_mkey);
 		if (snap_unlikely(ret)) {
 			/* TODO: at some point we will have to do pending queue */
-			ERR_ON_CMD(cmd, "failed to send status, err=%d\n", ret);
+			ERR_ON_CMD_FS(cmd, "failed to send status, err=%d\n", ret);
 			cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
@@ -884,7 +884,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 					 sizeof(struct virtq_split_tunnel_comp));
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to second completion\n");
+		ERR_ON_CMD_FS(cmd, "failed to second completion\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
 		cmd->state = FS_VIRTQ_CMD_STATE_RELEASE;
@@ -955,7 +955,7 @@ static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
 			--cmd->vq_priv->cmd_cntr;
 			break;
 		default:
-			ERR_ON_CMD(cmd, "reached invalid state %d\n", cmd->state);
+			ERR_ON_CMD_FS(cmd, "reached invalid state %d\n", cmd->state);
 			break;
 		}
 	};
@@ -1033,25 +1033,25 @@ static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
 	 */
 	if (cmd->vq_priv->vq_ctx.common_ctx.idx > 0) {
 		if (cmd->pos_f_write == cmd->num_desc) {
-			ERR_ON_CMD(cmd, "No writable desciptor found !\n");
+			ERR_ON_CMD_FS(cmd, "No writable desciptor found !\n");
 			return false;
 		}
 
 		// First writable descriptor should point to virtio_fs_outftr
 		if (snap_unlikely(cmd->descs[cmd->pos_f_write].len != sizeof(struct virtio_fs_outftr))) {
-			ERR_ON_CMD(cmd, "Unexpected len: %d in desc[%d] - expected %ld bytes !\n",
+			ERR_ON_CMD_FS(cmd, "Unexpected len: %d in desc[%d] - expected %ld bytes !\n",
 				   cmd->descs[cmd->pos_f_write].len,
 				   cmd->pos_f_write, sizeof(struct virtio_fs_outftr));
 			return false;
 		}
 	} else {
 		if (snap_unlikely(cmd->descs[0].len > sizeof(struct fs_virtq_cmd_aux))) {
-			ERR_ON_CMD(cmd, "Unexpected len: %d of in header !\n",
+			ERR_ON_CMD_FS(cmd, "Unexpected len: %d of in header !\n",
 				   cmd->descs[0].len);
 			return false;
 		}
 		if (snap_unlikely(cmd->pos_f_write != 0)) {
-			ERR_ON_CMD(cmd, "Writable desciptor found !\n");
+			ERR_ON_CMD_FS(cmd, "Writable desciptor found !\n");
 			return false;
 		}
 	}

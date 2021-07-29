@@ -35,8 +35,15 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
+#include <sys/uio.h>
+#include "snap.h"
+#include "snap_dma.h"
 #define ERR_ON_CMD(cmd, fmt, ...) \
+	snap_error("queue:%d cmd_idx:%d err: " fmt, \
+		   (cmd)->vq_priv->vq_ctx.common_ctx.idx, (cmd)->common_cmd.idx, ## __VA_ARGS__)
+
+//scaffolding until fs uses common cmd also
+#define ERR_ON_CMD_FS(cmd, fmt, ...) \
 	snap_error("queue:%d cmd_idx:%d err: " fmt, \
 		   (cmd)->vq_priv->vq_ctx.common_ctx.idx, (cmd)->idx, ## __VA_ARGS__)
 
@@ -153,6 +160,46 @@ enum virtq_sw_state {
 	SW_VIRTQ_SUSPENDED,
 };
 
+/**
+ * struct virtq_cmd - command context
+ * @idx:				descr_head_idx modulo queue size
+ * @descr_head_idx:		descriptor head index
+ * @num_desc:			number of descriptors in the command
+ * @state:				state of sm processing the command
+ * @buf:				buffer holding the request data and aux data
+ * @req_size:			allocated request buffer size
+ * @aux:				aux data resided in dma/mr memory
+ * @mr:					buf mr
+ * @req_buf:			pointer to request buffer
+ * @req_mr:				request buffer mr
+ * @dma_comp:			struct given to snap library
+ * @total_seg_len:		total length of the request data to be written/read
+ * @total_in_len:		total length of data written to request buffers
+ * @use_dmem:			command uses dynamic mem for req_buf
+ * @cmd_available_index:sequential number of the command according to arrival
+ */
+struct virtq_cmd {
+	int idx;
+	uint16_t descr_head_idx;
+	size_t num_desc;
+	uint32_t num_merges;
+	int16_t state;
+	uint8_t *buf;
+	uint32_t req_size;
+	struct ibv_mr *aux_mr;
+	void *aux;
+	void *ftr;
+	struct ibv_mr *mr;
+	uint8_t *req_buf;
+	struct ibv_mr *req_mr;
+	struct snap_dma_completion dma_comp;
+	uint32_t total_seg_len;
+	uint32_t total_in_len;
+	bool use_dmem;
+	struct snap_virtio_ctrl_queue_counter *io_cmd_stat;
+	uint16_t cmd_available_index;
+	bool use_seg_dmem;
+};
 
 #endif
 
