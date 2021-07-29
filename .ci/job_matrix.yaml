@@ -78,7 +78,7 @@ steps:
       ./autogen.sh
       ./configure
       make -j 3 all
-      make -j 3 install
+      make install
 
   - name: Blackduck scan source
     enable: false
