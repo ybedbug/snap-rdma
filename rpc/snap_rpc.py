@@ -286,12 +286,13 @@ def main():
         if args.pci_bdf is not None and args.pf_id != -1:
             raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
                                        "both configured")
-        if args.suspend and args.recover:
+        if args.suspend and args.new is False:
             raise JsonRpcSnapException("suspend and recover cannot be "
                                        "both configured")
         params = {
             'emulation_manager': args.emu_manager,
             'bdev_type': args.bdev_type,
+            'recover': not bool(args.new)
         }
         if args.pci_bdf:
             params['pci_bdf'] = args.pci_bdf
@@ -315,8 +316,6 @@ def main():
             params['force_in_order'] = args.force_in_order
         if args.suspend:
             params['suspend'] = args.suspend
-        if args.recover:
-            params['recover'] = args.recover
         if args.mem:
             params['mem'] = args.mem            
         result = args.client.call('controller_virtio_blk_create', params)
@@ -348,7 +347,8 @@ def main():
     p.add_argument('--suspend', help='Created controller is in the SUSPENDED state. '
                    'The controller must be explicitely resumed ',
                    required=False, action='store_true')
-    p.add_argument('--recover', help='Recover controller data from host memory ',
+    p.add_argument('--new', help='Create a new cotroller. '
+                   'If recovery is needed - do not specify this flag. ',
                    required=False, action='store_true')
     p.add_argument('--mem', help='Memory model', type=str,
                    required=False, choices=['static', 'pool']) 
