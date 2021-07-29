@@ -128,6 +128,9 @@ def main():
             params['pci_bdf'] = args.pci_bdf
         if args.pci_index != -1:
             params['pci_index'] = args.pci_index
+        if args.force:
+            params['force'] = args.force
+
         args.client.call('emulation_device_detach', params)
     p = subparsers.add_parser('emulation_device_detach',
                               help='Detach (Unplug) SNAP device from host')
@@ -140,6 +143,8 @@ def main():
     p.add_argument('-i', '--pci_index', help='PCI index to start emulation on. '
                    'Must be set if \'--pci_bdf\' is not set',
                    default=-1, type=int, required=False)
+    p.add_argument('--force', help='Force emulation device detach.',
+                   required=False, action='store_true')
     p.set_defaults(func=emulation_device_detach)
 
     def emulation_device_attach(args):
