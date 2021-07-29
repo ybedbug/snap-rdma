@@ -317,7 +317,7 @@ def main():
         if args.suspend:
             params['suspend'] = args.suspend
         if args.mem:
-            params['mem'] = args.mem            
+            params['mem'] = args.mem
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -351,7 +351,7 @@ def main():
                    'If recovery is needed - do not specify this flag. ',
                    required=False, action='store_true')
     p.add_argument('--mem', help='Memory model', type=str,
-                   required=False, choices=['static', 'pool']) 
+                   required=False, choices=['static', 'pool'])
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_virtio_blk_bdev_attach(args):
@@ -483,7 +483,7 @@ def main():
         if args.version:
             params['version'] = args.version
         if args.mem:
-            params['mem'] = args.mem            
+            params['mem'] = args.mem
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -519,9 +519,9 @@ def main():
                    'SF hca name. Usually "mlx5_2"',
                    type=str, required=False)
     p.add_argument('-vs', '--version', help='Host driver NVM Express specification version ',
-                   default="1.3.0", type=str, required=False)
+                   type=str, required=False)
     p.add_argument('--mem', help='Memory model', type=str,
-                   required=False, choices=['static', 'pool']) 
+                   required=False, choices=['static', 'pool'])
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
@@ -714,7 +714,7 @@ def main():
     p = subparsers.add_parser('subsystem_nvme_list',
                               help='List NVMe subsystems')
     p.set_defaults(func=subsystem_nvme_list)
-    
+
     def controller_nvme_get_iostat(args):
         params = {
         }
@@ -725,11 +725,11 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_nvme_get_iostat',
                         help='Return NVMe SNAP controller I/O statistics')
-    p.add_argument('-c', '--name', help='Controller Name', 
+    p.add_argument('-c', '--name', help='Controller Name',
                    type=str, required=False)
-    
+
     p.set_defaults(func=controller_nvme_get_iostat)
-    
+
     def controller_nvme_get_debugstat(args):
         params = {
                 'fw_counters': args.fw_counters
@@ -743,13 +743,13 @@ def main():
                 help='Return NVMe SNAP controller debug statistics')
     p.add_argument('-c', '--name', help='Controller Name',
                    type=str, required=False)
-    p.add_argument('-fw', '--firmware', dest='fw_counters', 
-                   action='store_true', 
+    p.add_argument('-fw', '--firmware', dest='fw_counters',
+                   action='store_true',
                    help='Force using firmware counters (relevant for CC mode')
     p.set_defaults(fw_counters=False)
 
     p.set_defaults(func=controller_nvme_get_debugstat)
-            
+
     def controller_virtio_blk_get_iostat(args):
         params = {
         }
@@ -760,7 +760,7 @@ def main():
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_get_iostat',
                               help='Return VirtIO BLK SNAP controller I/O statistics')
-    p.add_argument('-c', '--name', help='Controller Name', 
+    p.add_argument('-c', '--name', help='Controller Name',
                    type=str, required=False)
     p.set_defaults(func=controller_virtio_blk_get_iostat)
 
@@ -772,7 +772,7 @@ def main():
     __help = 'List of parameters used in mlnx_snap ( /etc/default/mlnx_snap )'
     p = subparsers.add_parser('mlnx_snap_params_list', help=__help)
     p.set_defaults(func=mlnx_snap_params_list)
-    
+
     def storage_admin(args):
         params = {
             'protocol': args.protocol,
@@ -792,7 +792,7 @@ def main():
             params['type'] = args.type
 
         result = args.client.call('storage_admin', params)
-        print(json.dumps(result, indent=2))        
+        print(json.dumps(result, indent=2))
     p = subparsers.add_parser('storage_admin',
                               help='Execute a storage_admin command on ARM')
     p.add_argument('protocol', help='Storage protocol to use', type=str,
@@ -821,7 +821,7 @@ def main():
     p = subparsers.add_parser('mempool_get_debugstat',
                               help='Get debug statistics from memory pool')
     p.set_defaults(func=mempool_get_debugstat)
-    
+
     def call_rpc_func(args):
         args.func(args)
 
