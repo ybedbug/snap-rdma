@@ -27,8 +27,8 @@ struct snap_virtio_net_ctrl_queue {
 struct snap_virtio_net_ctrl_lm_cbs {
 	size_t (*get_internal_state_size)(void *cb_ctx);
 	int (*get_internal_state)(void *cb_ctx, void *buf, size_t len);
-	size_t (*dump_internal_state)(void *cb_ctx, void *buff, size_t len);
-	int (*set_internal_state)(void *cb_ctx, void *buf, size_t len);
+	void (*dump_internal_state)(void *cb_ctx, const void *buff, size_t len);
+	int (*set_internal_state)(void *cb_ctx, const void *buf, size_t len);
 };
 
 struct snap_virtio_net_ctrl_attr {

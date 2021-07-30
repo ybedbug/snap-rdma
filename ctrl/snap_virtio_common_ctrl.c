@@ -1032,9 +1032,10 @@ int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cf
 	       *queue_cfg_len_p + *common_cfg_len_p;
 }
 
-__attribute__((unused)) static void dump_state(struct snap_virtio_ctrl *ctrl, void *buf)
+__attribute__((unused)) static void dump_state(struct snap_virtio_ctrl *ctrl,
+					       const void *buf)
 {
-	struct snap_virtio_ctrl_section *hdr;
+	const struct snap_virtio_ctrl_section *hdr;
 	struct snap_virtio_ctrl_common_state *common_state;
 	struct snap_virtio_ctrl_queue_state *queue_state;
 	int i;
@@ -1233,13 +1234,13 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t
  * Return:
  * total state length or -errno on error
  */
-int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf,
-				   size_t len)
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
+				   const void *buf, size_t len)
 {
-	struct snap_virtio_ctrl_section *hdr;
+	const struct snap_virtio_ctrl_section *hdr;
 	struct snap_virtio_ctrl_common_state *common_state;
-	struct snap_virtio_ctrl_queue_state *queue_state;
-	void *device_state;
+	const struct snap_virtio_ctrl_queue_state *queue_state;
+	const void *device_state;
 	int total_len = 0;
 	int ret = 0;
 	int i;

@@ -122,7 +122,8 @@ snap_virtio_fs_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 }
 
 static void
-snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int len)
+snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl,
+				   const void *buf, int len)
 {
 	struct virtio_fs_config *dev_cfg;
 	uint8_t last_ch;
@@ -133,7 +134,7 @@ snap_virtio_fs_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int
 		return;
 	}
 
-	dev_cfg = buf;
+	dev_cfg = (void *)buf;
 	last_ch = dev_cfg->tag[sizeof(dev_cfg->tag) - 1];
 	if (last_ch != 0)
 		dev_cfg->tag[sizeof(dev_cfg->tag) - 1] = 0;
@@ -166,11 +167,11 @@ snap_virtio_fs_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 static int
 snap_virtio_fs_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 				  struct snap_virtio_device_attr *vbar,
-				  struct snap_virtio_ctrl_queue_state *queue_state,
-				  void *buf, int len)
+				  const struct snap_virtio_ctrl_queue_state *queue_state,
+				  const void *buf, int len)
 {
 	struct snap_virtio_fs_device_attr *vfsbar = to_fs_device_attr(vbar);
-	struct virtio_fs_config *dev_cfg;
+	const struct virtio_fs_config *dev_cfg;
 	int i, ret;
 
 	if (!buf)

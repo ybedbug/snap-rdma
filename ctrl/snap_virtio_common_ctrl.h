@@ -182,9 +182,9 @@ struct snap_virtio_ctrl_bar_ops {
 			 size_t len);
 	int (*set_state)(struct snap_virtio_ctrl *ctrl,
 			 struct snap_virtio_device_attr *attr,
-			 struct snap_virtio_ctrl_queue_state *queue_state,
-			 void *buf, int len);
-	void (*dump_state)(struct snap_virtio_ctrl *ctrl, void *buf, int len);
+			 const struct snap_virtio_ctrl_queue_state *queue_state,
+			 const void *buf, int len);
+	void (*dump_state)(struct snap_virtio_ctrl *ctrl, const void *buf, int len);
 	bool (*queue_attr_valid)(struct snap_virtio_device_attr *attr);
 
 };
@@ -322,8 +322,8 @@ struct snap_virtio_ctrl_queue_state {
 int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
 				size_t *queue_cfg_len, size_t *dev_cfg_len);
 int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
-int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
-
+int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
+				   const void *buf, size_t len);
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 
 int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);

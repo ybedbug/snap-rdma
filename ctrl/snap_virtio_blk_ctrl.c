@@ -269,9 +269,9 @@ snap_virtio_blk_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 }
 
 static void
-snap_virtio_blk_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, void *buf, int len)
+snap_virtio_blk_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, const void *buf, int len)
 {
-	struct virtio_blk_config *dev_cfg;
+	const struct virtio_blk_config *dev_cfg;
 
 	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl)) {
 		snap_info(">>> blk_config: state is truncated (%d < %lu)\n", len,
@@ -308,11 +308,11 @@ snap_virtio_blk_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 static int
 snap_virtio_blk_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 				   struct snap_virtio_device_attr *vbar,
-				   struct snap_virtio_ctrl_queue_state *queue_state,
-				   void *buf, int len)
+				   const struct snap_virtio_ctrl_queue_state *queue_state,
+				   const void *buf, int len)
 {
 	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
-	struct virtio_blk_config *dev_cfg;
+	const struct virtio_blk_config *dev_cfg;
 	int i, ret;
 
 	if (!buf)
