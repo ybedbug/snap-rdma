@@ -15,10 +15,13 @@
 
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
+#include <sys/queue.h>
 
 #include "snap_mr.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
+
+#define SNAP_DMA_Q_MAX_IOV_CNT		128
 
 struct snap_dma_q;
 struct snap_dma_completion;
@@ -60,6 +63,29 @@ typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
  * it is not safe to destroy or modify the dma queue.
  */
 typedef void (*snap_dma_comp_cb_t)(struct snap_dma_completion *comp, int status);
+
+/**
+ * struct snap_dma_completion - completion handle and callback
+ *
+ * This structure should be allocated by the user and can be passed to communication
+ * primitives. User has to initializes both fields of the structure.
+ *
+ * If snap_dma_q_write() or snap_dma_q_read() returns 0, this structure will be
+ * in use until the DMA operation completes. When the DMA completes, @count
+ * field is decremented by 1, and whenever it reaches 0 - the callback is called.
+ *
+ * Notes:
+ *  - The same structure can be passed multiple times to communication functions
+ *    without the need to wait for completion.
+ *  - If the number of operations is smaller than the initial value of the counter,
+ *    the callback will not be called at all, so it may be left undefined.
+ */
+struct snap_dma_completion {
+	/** @func: callback function. See &typedef snap_dma_comp_cb_t */
+	snap_dma_comp_cb_t func;
+	/** @count: completion counter */
+	int                count;
+};
 
 struct mlx5_dma_opaque;
 
@@ -117,6 +143,16 @@ struct snap_dma_q_ops {
 	int (*arm)(struct snap_dma_q *q);
 };
 
+struct snap_dma_q_io_ctx {
+	struct snap_dma_q *q;
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_klm klm_mtt[SNAP_DMA_Q_MAX_IOV_CNT];
+	struct snap_dma_completion comp;
+	void *uctx;
+
+	TAILQ_ENTRY(snap_dma_q_io_ctx) entry;
+};
+
 /**
  * struct snap_dma_q - DMA queue
  *
@@ -144,6 +180,11 @@ struct snap_dma_q {
 	snap_dma_rx_cb_t       rx_cb;
 	struct snap_dma_ibv_qp fw_qp;
 	struct snap_dma_q_ops  *ops;
+
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	TAILQ_HEAD(, snap_dma_q_io_ctx) free_io_ctx;
+
 	/* public: */
 	/** @uctx:  user supplied context */
 	void                  *uctx;
@@ -194,29 +235,6 @@ struct snap_dma_q_create_attr {
 	struct ibv_comp_channel *comp_channel;
 	int                      comp_vector;
 	void                    *comp_context;
-};
-
-/**
- * struct snap_dma_completion - completion handle and callback
- *
- * This structure should be allocated by the user and can be passed to communication
- * primitives. User has to initializes both fields of the structure.
- *
- * If snap_dma_q_write() or snap_dma_q_read() returns 0, this structure will be
- * in use until the DMA operation completes. When the DMA completes, @count
- * field is decremented by 1, and whenever it reaches 0 - the callback is called.
- *
- * Notes:
- *  - The same structure can be passed multiple times to communication functions
- *    without the need to wait for completion.
- *  - If the number of operations is smaller than the initial value of the counter,
- *    the callback will not be called at all, so it may be left undefined.
- */
-struct snap_dma_completion {
-	/** @func: callback function. See &typedef snap_dma_comp_cb_t */
-	snap_dma_comp_cb_t func;
-	/** @count: completion counter */
-	int                count;
 };
 
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,

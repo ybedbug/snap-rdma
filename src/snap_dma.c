@@ -928,6 +928,85 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
+static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd)
+{
+	int i, ret;
+	struct snap_relaxed_ordering_caps caps;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+
+	/*
+	 * io_ctx only required when post UMR WQE involved, and
+	 * post UMR WQE is not support on stardard verbs mode.
+	 */
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+		return 0;
+
+	ret = posix_memalign((void **)&q->io_ctx, SNAP_DMA_BUF_ALIGN,
+			q->tx_available * sizeof(struct snap_dma_q_io_ctx));
+	if (ret) {
+		snap_error("alloc dma_q io_ctx array failed");
+		return -ENOMEM;
+	}
+
+	memset(q->io_ctx, 0, q->tx_available * sizeof(struct snap_dma_q_io_ctx));
+
+	ret = snap_query_relaxed_ordering_caps(pd->context, &caps);
+	if (ret) {
+		snap_error("query relaxed_ordering_caps failed, ret:%d\n", ret);
+		goto free_io_ctx;
+	}
+
+	TAILQ_INIT(&q->free_io_ctx);
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = caps.relaxed_ordering_write;
+	mkey_attr.relaxed_ordering_read = caps.relaxed_ordering_read;
+	mkey_attr.klm_num = 0;
+	mkey_attr.klm_array = NULL;
+
+	for (i = 0; i < q->tx_available; i++) {
+		q->io_ctx[i].klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+		if (!q->io_ctx[i].klm_mkey) {
+			snap_error("create klm mkey for io_ctx[%d] failed\n", i);
+			goto destroy_klm_mkeys;
+		}
+
+		q->io_ctx[i].q = q;
+		TAILQ_INSERT_TAIL(&q->free_io_ctx, &q->io_ctx[i], entry);
+	}
+
+	return 0;
+
+destroy_klm_mkeys:
+	for (i--; i >= 0; i--) {
+		TAILQ_REMOVE(&q->free_io_ctx, &q->io_ctx[i], entry);
+		snap_destroy_indirect_mkey(q->io_ctx[i].klm_mkey);
+	}
+free_io_ctx:
+	free(q->io_ctx);
+	q->io_ctx = NULL;
+
+	return 1;
+}
+
+static void snap_destroy_io_ctx(struct snap_dma_q *q)
+{
+	int i;
+
+	if (!q->io_ctx)
+		return;
+
+	for (i = 0; i < q->tx_available; i++) {
+		TAILQ_REMOVE(&q->free_io_ctx, &q->io_ctx[i], entry);
+		snap_destroy_indirect_mkey(q->io_ctx[i].klm_mkey);
+	}
+
+	free(q->io_ctx);
+	q->io_ctx = NULL;
+}
+
 /**
  * snap_dma_q_create() - Create DMA queue
  * @pd:    protection domain to create qps
@@ -977,6 +1056,10 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_fw_qp;
 
+	rc = snap_create_io_ctx(q, pd);
+	if (rc)
+		goto free_fw_qp;
+
 	q->uctx = attr->uctx;
 	q->rx_cb = attr->rx_cb;
 	return q;
@@ -997,6 +1080,7 @@ free_q:
  */
 void snap_dma_q_destroy(struct snap_dma_q *q)
 {
+	snap_destroy_io_ctx(q);
 	snap_destroy_sw_qp(q);
 	snap_destroy_fw_qp(q);
 	free(q);
