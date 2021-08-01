@@ -20,7 +20,17 @@
 #define MAX_CHANNELS 8
 static const struct snap_channel_ops *channel_ops[MAX_CHANNELS];
 
-static const struct snap_channel_ops *lookup(const char *name)
+/*
+ * WA extra optimizations -O3 (probably -finline-functions) on
+ * gcc version 8.3.1 20190311 (Red Hat 8.3.1-3) (GCC) and CentOS 7.6
+ *
+ * Following pattern breaks with extra optimization:
+ * lookup(); dlopen(); lookup()
+ * Second lookup() uses old value of the channel_ops
+ *
+ * NOTE: Removing const/adding volatile does not help
+ */
+static __attribute__((noinline)) const struct snap_channel_ops *lookup(const char *name)
 {
 	int i;
 
