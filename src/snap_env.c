@@ -25,6 +25,7 @@ struct mlnx_snap_env {
 	const char *name;
 	int defined;
 	unsigned long long default_val;
+	int error;
 };
 
 static int last_used_idx;
@@ -39,9 +40,12 @@ static void snap_env_set_val(struct mlnx_snap_env *env)
 		unsigned long long env_val;
 
 		env->defined = 1;
+		env->error = 0;
 		env_val = strtoull(env_str, &end, 10);
-		if (env_val == ULLONG_MAX && errno == ERANGE)
+		if (env_val == ULLONG_MAX && errno == ERANGE) {
+			env->error = ERANGE;
 			return;
+		}
 
 		switch (*end) {
 		case '\0':
@@ -62,11 +66,14 @@ static void snap_env_set_val(struct mlnx_snap_env *env)
 			end++;
 			break;
 		default:
+			env->error = EINVAL;
 			return;
 		}
 
-		if (*end)
+		if (*end) {
+			env->error = EINVAL;
 			return;
+		}
 
 		env->default_val = env_val;
 	}
@@ -118,7 +125,7 @@ long long snap_env_getenv(const char *env_name)
 {
 	const struct mlnx_snap_env *env = snap_env_find(env_name);
 
-	if (env)
+	if (env && !env->error)
 		return env->default_val;
 
 	return -EINVAL;
