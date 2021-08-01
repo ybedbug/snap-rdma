@@ -90,6 +90,7 @@ struct snap_virtnet_migration_log {
 	uint32_t			num_sge;
 
 	uint32_t			dirty_map_mkey;
+	struct mlx5_klm			*klm_array;
 	struct snap_indirect_mkey	*indirect_mkey;
 	struct snap_cross_mkey		*crossing_mkey;
 	struct ibv_mr			*mr;

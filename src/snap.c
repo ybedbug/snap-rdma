@@ -3686,6 +3686,48 @@ int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
 	return ret;
 }
 
+/**
+ * snap_create_indirect_mkey() - Creates a new indirect mkey
+ * @pd:         a protection domain that will be used to access remote memory
+ * @attr:	attribute used to create indirect mkey
+ *		addr - Virtual address where this region/window starts
+ *		size - Region length
+ *		log_entity_size - determines the granuality of buffer discribed
+ *				  by each klm_array element, Must be >=12
+ *		klm_array - array of (address, len) which can be access by
+ *			    another mkey, the mkey being referenced can be
+ *			    cross mkey
+ *		klm_num   - length of klm_array
+ * The function creates a indirect memory key that can be used to
+ * access host memory via RDMA operations, it is useful when host side not
+ * able to provide large chunk of physically continuous memory. Indirect mkey
+ * can take multiple uncontinous chunks of memory and providing a continous va
+ * memory region.
+ *
+ * For QPs that use 'indirect' mkey there is no need to be attached to the snap
+ * emulation object.
+ *
+ * Sample usage pattern:
+ *   sctx = snap_open();
+ *   sdev = snap_open_device(sctx, attrs);
+ *
+ *   // Create protection domain:
+ *   ib_ctx = ibv_open_device();
+ *   pd = ibv_alloc_pd(ib_ctx);
+ *
+ *   // create mkey:
+ *   cross_mkey = snap_create_cross_mkey(pd, sdev);
+ *   // prepare attribete uses cross_mkey, create indirect mkey:
+ *   mkey = snap_create_indirect_mkey(pd, attr);
+ *   // create qp using dma layer or directly with ibv_create_qp()
+ *   dma_q = snap_dma_q_create(pd, attr);
+ *
+ *   // use mkey->mkey to access host memory
+ *   rc = snap_dma_q_write(dma_q, ldata, len, lkey, host_paddr, mkey->mkey, comp);
+ *
+ * Return:
+ * A memory key or NULL on error
+ */
 struct snap_indirect_mkey *
 snap_create_indirect_mkey(struct ibv_pd *pd,
 			  struct mlx5_devx_mkey_attr *attr)
@@ -3770,7 +3812,6 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 		goto out_err;
 
 	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;
-	cmkey->klm_array = klm_array;
 	return cmkey;
 
 out_err:
@@ -3784,9 +3825,6 @@ int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
 
 	if (mkey->devx_obj)
 		ret = mlx5dv_devx_obj_destroy(mkey->devx_obj);
-
-	if (mkey->klm_array)
-		free(mkey->klm_array);
 
 	free(mkey);
 
