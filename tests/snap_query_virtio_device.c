@@ -20,7 +20,7 @@ int snap_query_virtio_device_helper(struct snap_context *sctx,
 		sdev = snap_open_device(sctx, &attr);
 		if (sdev) {
 			struct snap_virtio_blk_device_attr blk_attr = {};
-			struct snap_virtio_blk_queue_attr q_attrs[4];
+			struct snap_virtio_common_queue_attr q_attrs[4];
 
 			blk_attr.queues = 4;
 			blk_attr.q_attrs = q_attrs;

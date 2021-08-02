@@ -174,6 +174,15 @@ struct snap_virtio_queue {
 	struct snap_cross_mkey			*snap_cross_mkey;
 };
 
+struct snap_virtio_common_queue_attr {
+	uint64_t			modifiable_fields;//mask of snap_virtio_queue_modify
+	struct ibv_qp			*qp;
+	uint16_t			hw_available_index;
+	uint16_t			hw_used_index;
+
+	struct snap_virtio_queue_attr   vattr;
+};
+
 enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_DEV_STATUS = 1 << 0,
 	SNAP_VIRTIO_MOD_LINK_STATUS = 1 << 1,

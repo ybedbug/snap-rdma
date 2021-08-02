@@ -536,7 +536,7 @@ snap_virtio_blk_ctrl_count_error(struct snap_virtio_blk_ctrl *ctrl)
 	int i, ret;
 	struct snap_virtio_ctrl_queue *vq;
 	struct snap_virtio_blk_ctrl_queue *vbq;
-	struct snap_virtio_blk_queue_attr *attr;
+	struct snap_virtio_common_queue_attr *attr;
 	struct snap_virtio_queue_attr *vattr;
 
 	for (i = 0; i < ctrl->common.max_queues; i++) {
@@ -548,7 +548,7 @@ snap_virtio_blk_ctrl_count_error(struct snap_virtio_blk_ctrl *ctrl)
 		if (vbq->in_error)
 			continue;
 
-		attr = (struct snap_virtio_blk_queue_attr *)(void *)vbq->attr;
+		attr = (struct snap_virtio_common_queue_attr *)(void *)vbq->attr;
 		ret = blk_virtq_query_error_state(vbq->q_impl, attr);
 		if (ret) {
 			snap_error("Failed to query queue error state\n");

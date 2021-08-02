@@ -1458,9 +1458,9 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 				       void *bdev, struct snap_device *snap_dev,
 				       struct virtq_create_attr *attr)
 {
-	struct snap_virtio_blk_queue_attr qattr = {};
+	struct snap_virtio_common_queue_attr qattr = {};
 	struct blk_virtq_ctx *vq_ctx;
-	struct snap_virtio_blk_queue_attr *snap_attr;
+	struct snap_virtio_common_queue_attr *snap_attr;
 	struct virtq_priv *vq_priv;
 	struct snap_virtio_blk_queue *snap_vbq;
 	int num_descs = VIRTIO_NUM_DESC(attr->seg_max);
@@ -1471,7 +1471,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	if (!vq_ctx)
 		goto err;
 
-	snap_attr = calloc(1, sizeof(struct snap_virtio_blk_queue_attr));
+	snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
 	if (!snap_attr)
 		goto release_ctx;
 	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr,
@@ -1566,7 +1566,7 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat)
 {
 	struct virtq_priv *vq_priv = q->common_ctx.priv;
-	struct snap_virtio_blk_queue_attr virtq_attr = {};
+	struct snap_virtio_common_queue_attr virtq_attr = {};
 	struct snap_virtio_queue_counters_attr vqc_attr = {};
 	struct vring_avail vra;
 	struct vring_used vru;
@@ -1607,7 +1607,7 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 }
 
 int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
-				struct snap_virtio_blk_queue_attr *attr)
+				struct snap_virtio_common_queue_attr *attr)
 {
 	int ret;
 	struct virtq_priv *vq_priv = q->common_ctx.priv;
@@ -1634,7 +1634,7 @@ int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 {
 	struct virtq_priv *priv = q->common_ctx.priv;
-	struct snap_virtio_blk_queue_attr qattr = {};
+	struct snap_virtio_common_queue_attr qattr = {};
 
 	/* TODO: add option to ignore commands in the bdev layer */
 	if (priv->cmd_cntr != 0)
@@ -1797,7 +1797,7 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 			struct snap_virtio_ctrl_queue_state *state)
 {
 	struct virtq_priv *priv = q->common_ctx.priv;
-	struct snap_virtio_blk_queue_attr attr = {};
+	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
 	ret = snap_virtio_blk_query_queue(to_blk_queue(priv->snap_vbq), &attr);

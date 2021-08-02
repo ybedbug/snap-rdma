@@ -137,7 +137,7 @@ snap_virtio_blk_get_modifiable_device_fields(struct snap_device *sdev)
 static int
 snap_virtio_blk_get_modifiable_virtq_fields(struct snap_virtio_blk_queue *vbq)
 {
-	struct snap_virtio_blk_queue_attr attr = {};
+	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
 	ret = snap_virtio_blk_query_queue(vbq, &attr);
@@ -315,7 +315,7 @@ int snap_virtio_blk_teardown_device(struct snap_device *sdev)
  */
 static struct snap_virtio_blk_queue *
 snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
-				struct snap_virtio_blk_queue_attr *attr)
+				struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
@@ -415,7 +415,7 @@ static int snap_virtio_blk_destroy_hw_queue(struct snap_virtio_blk_queue *vbq)
  * Return: 0 on success, and attr is filled with the query result.
  */
 static int snap_virtio_blk_query_hw_queue(struct snap_virtio_blk_queue *vbq,
-		struct snap_virtio_blk_queue_attr *attr)
+		struct snap_virtio_common_queue_attr *attr)
 {
 	return snap_virtio_query_queue(&vbq->virtq, &attr->vattr);
 }
@@ -432,7 +432,7 @@ static int snap_virtio_blk_query_hw_queue(struct snap_virtio_blk_queue *vbq,
  * Return: 0 on success.
  */
 static int snap_virtio_blk_modify_hw_queue(struct snap_virtio_blk_queue *vbq,
-		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
+		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	int ret;
 
@@ -486,7 +486,7 @@ static struct blk_virtq_q_ops *snap_virtio_blk_queue_provider(void)
  * Return: 0 on success, and attr is filled with the query result.
  */
 int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
-		struct snap_virtio_blk_queue_attr *attr)
+		struct snap_virtio_common_queue_attr *attr)
 {
 	return vbq->q_ops->query(vbq, attr);
 }
@@ -503,7 +503,7 @@ int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
  */
 struct snap_virtio_blk_queue*
 snap_virtio_blk_create_queue(struct snap_device *sdev,
-	struct snap_virtio_blk_queue_attr *attr)
+	struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_virtio_blk_queue *vbq;
 	struct blk_virtq_q_ops *q_ops = snap_virtio_blk_queue_provider();
@@ -543,7 +543,7 @@ int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq)
  * Return: 0 on success.
  */
 int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
-		uint64_t mask, struct snap_virtio_blk_queue_attr *attr)
+		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	return vbq->q_ops->modify(vbq, mask, attr);
 }

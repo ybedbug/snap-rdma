@@ -40,7 +40,7 @@ typedef struct snap_virtio_blk_ctrl_zcopy_ctx {
 
 struct snap_virtio_blk_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
-	const struct snap_virtio_blk_queue_attr	*attr;
+	const struct snap_virtio_common_queue_attr	*attr;
 	void *q_impl;
 	bool in_error;
 };

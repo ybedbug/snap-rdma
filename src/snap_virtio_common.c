@@ -686,7 +686,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 
 	if (sdev->pci->type == SNAP_VIRTIO_BLK_PF ||
 	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
-		struct snap_virtio_blk_queue_attr *attr;
+		struct snap_virtio_common_queue_attr *attr;
 		int vhca_id;
 
 		attr = to_blk_queue_attr(vattr);
@@ -1026,7 +1026,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 	virtq_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 	if (out == out_blk) {
-		struct snap_virtio_blk_queue_attr *attr;
+		struct snap_virtio_common_queue_attr *attr;
 
 		attr = to_blk_queue_attr(vattr);
 

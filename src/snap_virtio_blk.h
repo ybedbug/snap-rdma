@@ -41,15 +41,6 @@ enum snap_virtio_blk_queue_modify {
 	SNAP_VIRTIO_BLK_QUEUE_MOD_STATE	= 1 << 0,
 };
 
-struct snap_virtio_blk_queue_attr {
-	uint64_t			modifiable_fields;//mask of snap_virtio_blk_queue_modify
-	struct ibv_qp			*qp;
-	uint16_t			hw_available_index;
-	uint16_t			hw_used_index;
-
-	struct snap_virtio_queue_attr   vattr;
-};
-
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
 	struct blk_virtq_q_ops		*q_ops;
@@ -58,7 +49,7 @@ struct snap_virtio_blk_queue {
 
 struct snap_virtio_blk_device_attr {
 	struct snap_virtio_device_attr		vattr;
-	struct snap_virtio_blk_queue_attr	*q_attrs;
+	struct snap_virtio_common_queue_attr	*q_attrs;
 	unsigned int				queues;
 
 	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
@@ -77,12 +68,12 @@ struct snap_virtio_blk_device {
 
 struct blk_virtq_q_ops {
 	struct snap_virtio_blk_queue *(*create)(struct snap_device *sdev,
-			struct snap_virtio_blk_queue_attr *attr);
+			struct snap_virtio_common_queue_attr *attr);
 	int (*destroy)(struct snap_virtio_blk_queue *vbq);
 	int (*query)(struct snap_virtio_blk_queue *vbq,
-			struct snap_virtio_blk_queue_attr *attr);
+			struct snap_virtio_common_queue_attr *attr);
 	int (*modify)(struct snap_virtio_blk_queue *vbq,
-			uint64_t mask, struct snap_virtio_blk_queue_attr *attr);
+			uint64_t mask, struct snap_virtio_common_queue_attr *attr);
 };
 
 enum {
@@ -99,17 +90,17 @@ int snap_virtio_blk_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_blk_device_attr *attr);
 struct snap_virtio_blk_queue*
 snap_virtio_blk_create_queue(struct snap_device *sdev,
-	struct snap_virtio_blk_queue_attr *attr);
+	struct snap_virtio_common_queue_attr *attr);
 int snap_virtio_blk_destroy_queue(struct snap_virtio_blk_queue *vbq);
 int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
-		struct snap_virtio_blk_queue_attr *attr);
+		struct snap_virtio_common_queue_attr *attr);
 int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
-		uint64_t mask, struct snap_virtio_blk_queue_attr *attr);
+		uint64_t mask, struct snap_virtio_common_queue_attr *attr);
 
-static inline struct snap_virtio_blk_queue_attr*
+static inline struct snap_virtio_common_queue_attr*
 to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)
 {
-	return container_of(vattr, struct snap_virtio_blk_queue_attr,
+	return container_of(vattr, struct snap_virtio_common_queue_attr,
 			    vattr);
 }
 
