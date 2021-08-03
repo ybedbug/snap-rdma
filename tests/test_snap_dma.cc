@@ -314,10 +314,12 @@ TEST_F(SnapDmaTest, dma_write_short) {
 	struct snap_dma_q *q;
 	char cqe[m_dma_q_attr.tx_elem_size];
 	int rc;
-	int n;
+	int n, saved_tx_available;
 
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
 	ASSERT_TRUE(q);
+
+	saved_tx_available = q->tx_available;
 
 	memset(m_rbuf, 0, sizeof(cqe));
 	memset(cqe, 0xDA, sizeof(cqe));
@@ -326,14 +328,14 @@ TEST_F(SnapDmaTest, dma_write_short) {
 			            m_rmr->lkey);
 	ASSERT_EQ(0, rc);
 	n = 0;
-	while (q->tx_available < m_dma_q_attr.tx_qsize && n < 10000) {
+	while (q->tx_available < saved_tx_available && n < 10000) {
 		snap_dma_q_progress(q);
 		n++;
 	}
 
 	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
 	snap_dma_q_flush(q);
-	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
+	ASSERT_EQ(saved_tx_available, q->tx_available);
 
 	snap_dma_q_destroy(q);
 }
@@ -342,12 +344,14 @@ TEST_F(SnapDmaTest, send_completion) {
 	struct snap_dma_q *q;
 	char cqe[m_dma_q_attr.tx_elem_size];
 	int rc;
-	int n;
+	int n, saved_tx_available;
 	struct ibv_recv_wr rx_wr, *bad_wr;
 	struct ibv_sge rx_sge;
 
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
 	ASSERT_TRUE(q);
+
+	saved_tx_available = q->tx_available;
 
 	/* post one recv to the fw qp so that send can complete */
 	rx_sge.addr = (uintptr_t)m_rbuf;
@@ -366,7 +370,7 @@ TEST_F(SnapDmaTest, send_completion) {
 	rc = snap_dma_q_send_completion(q, cqe, sizeof(cqe));
 	ASSERT_EQ(0, rc);
 	n = 0;
-	while (q->tx_available < m_dma_q_attr.tx_qsize && n < 10000) {
+	while (q->tx_available < saved_tx_available && n < 10000) {
 		snap_dma_q_progress(q);
 		n++;
 	}
@@ -378,7 +382,7 @@ TEST_F(SnapDmaTest, send_completion) {
 	ASSERT_EQ(1, rc);
 
 	snap_dma_q_flush(q);
-	ASSERT_EQ(m_dma_q_attr.tx_qsize, q->tx_available);
+	ASSERT_EQ(saved_tx_available, q->tx_available);
 
 	snap_dma_q_destroy(q);
 }

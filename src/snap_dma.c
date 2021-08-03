@@ -465,6 +465,9 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (rc)
 		return rc;
 
+	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA)
+		q->tx_available = q->sw_qp.dv_qp.qp.sq.wqe_cnt;
+
 	rc = snap_alloc_rx_wqes(&q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
 	if (rc)
 		goto free_qp;
@@ -1052,6 +1055,7 @@ static inline bool qp_can_tx(struct snap_dma_q *q, int bb_needed)
 int snap_dma_q_flush(struct snap_dma_q *q)
 {
 	int n, n_out, n_bb;
+	int tx_available;
 	struct snap_dma_completion comp;
 
 	n = 0;
@@ -1072,7 +1076,12 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 		n--;
 	}
 
-	while (q->tx_available < q->tx_qsize)
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+		tx_available = q->tx_qsize;
+	else
+		tx_available = q->sw_qp.dv_qp.qp.sq.wqe_cnt;
+
+	while (q->tx_available < tx_available)
 		n += q->ops->progress_tx(q);
 
 	return n_out + n;
