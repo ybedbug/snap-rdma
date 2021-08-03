@@ -925,6 +925,29 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	if (ret)
 		goto close_ctrl;
 
+	if (attr->common.recover) {
+		/* Started from release 08/2021, the recovery flag
+		 * should be used as default during the creation of the controller.
+		 * We need to distinguish between 'real' recovery or
+		 * 'new creation' of the controller.
+		 * This can be done by testing the reset flag.
+		 * For 'new creation' it should be as following:
+		 * enabled=1 reset=1 status=0
+		 */
+		struct snap_virtio_blk_device_attr blk_attr = {};
+
+		ret = snap_virtio_blk_query_device(ctrl->common.sdev, &blk_attr);
+		if (ret) {
+			snap_error("Failed to query bar\n");
+			goto close_ctrl;
+		}
+
+		if (blk_attr.vattr.reset) {
+			snap_debug("Bar reset detected - create new VirtIO BLK controller.\n");
+			attr->common.recover = 0;
+		}
+	}
+
 	if (attr->common.suspended || attr->common.recover) {
 		/* Creating controller in the suspended state or recovery mode.
 		 * When created in the suspended state means that
