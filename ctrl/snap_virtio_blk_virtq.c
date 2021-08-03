@@ -445,7 +445,8 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 
 	if (snap_unlikely(status != SNAP_BDEV_OP_SUCCESS)) {
 		snap_error("Failed iov completion!\n");
-		op_status = VIRTQ_CMD_SM_OP_ERR;
+		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
+		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		cmd->common_cmd.io_cmd_stat->fail++;
 	} else
 		cmd->common_cmd.io_cmd_stat->success++;
