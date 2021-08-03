@@ -43,6 +43,8 @@ struct snap_compression_caps {
 	uint8_t compress_min_block_size:4;
 };
 
+void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
+
 int snap_allow_other_vhca_access(struct ibv_context *context,
 				 enum mlx5_obj_type obj_type,
 				 uint32_t obj_id,

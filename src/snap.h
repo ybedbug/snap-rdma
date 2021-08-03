@@ -405,7 +405,6 @@ int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs);
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
-void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
 
 int snap_query_relaxed_ordering_caps(struct ibv_context *context,
 				     struct snap_relaxed_ordering_caps *caps);
