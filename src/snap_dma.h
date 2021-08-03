@@ -13,6 +13,7 @@
 #ifndef SNAP_DMA_H
 #define SNAP_DMA_H
 
+#include <sys/uio.h>
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
 #include <sys/queue.h>
@@ -130,11 +131,17 @@ struct snap_dma_q_ops {
 	int (*write)(struct snap_dma_q *q, void *src_buf, size_t len,
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		     struct snap_dma_completion *comp);
+	int (*writev)(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
+			struct iovec *iov, int iov_cnt, uint32_t rmkey,
+			struct snap_dma_completion *comp, int *n_bb);
 	int (*write_short)(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey, int *n_bb);
 	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		    struct snap_dma_completion *comp);
+	int (*readv)(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
+			struct iovec *iov, int iov_cnt, uint32_t rmkey,
+			struct snap_dma_completion *comp, int *n_bb);
 	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
 			size_t len, int *n_bb);
 	int (*progress_tx)(struct snap_dma_q *q);
