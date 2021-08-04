@@ -1,7 +1,5 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = dpa
-
 noinst_PROGRAMS = \
 		snap_open_close \
 		snap_open_close_device \
@@ -134,11 +132,8 @@ sample_channel_la_LDFLAGS =  -avoid-version -module -shared -export-dynamic
 if HAVE_GTEST
 noinst_PROGRAMS += gtest_snap_rdma
 
-gtest_snap_rdma_CXXFLAGS = $(LOCAL_CFLAGS) \
-			   $(GTEST_CXXFLAGS) \
-			   -I$(top_srcdir)/src
-gtest_snap_rdma_CFLAGS = $(LOCAL_CFLAGS) \
-			 -I$(top_srcdir)/src
+gtest_snap_rdma_CXXFLAGS = $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS)
+gtest_snap_rdma_CFLAGS = $(LOCAL_CFLAGS)
 gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  test_snap_dma.h \
 			  test_snap_dma.cc \
@@ -150,4 +145,17 @@ gtest_snap_rdma_SOURCES = gtest_example.cc \
 gtest_snap_rdma_LDFLAGS = $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
 gtest_snap_rdma_LDADD = \
 			$(top_builddir)/src/libsnap.la
+
+if HAVE_FLEXIO
+noinst_PROGRAMS += gtest_snap_dpa
+
+gtest_snap_dpa_SOURCES = \
+			 tests_common.h \
+			 tests_common.cc \
+			 test_snap_dpa.cc
+
+gtest_snap_dpa_CXXFLAGS = $(FLEXIO_CFLAGS) $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS)
+gtest_snap_dpa_LDFLAGS = $(FLEXIO_LDFLAGS) $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
+gtest_snap_dpa_LDADD = $(top_builddir)/src/libsnap.la
+endif
 endif

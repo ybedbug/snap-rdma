@@ -70,8 +70,7 @@ AC_CONFIG_FILES([Makefile
                  dpa/Makefile
                  ctrl/Makefile
                  rpc/Makefile
-                 tests/Makefile
-                 tests/dpa/Makefile])
+                 tests/Makefile])
 
 if test ! -e debian/changelog; then
     AC_CONFIG_FILES([debian/changelog])
