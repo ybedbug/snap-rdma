@@ -35,12 +35,14 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <sys/uio.h>
 #include "snap.h"
+#include <sys/uio.h>
+#include "snap_virtio_common_ctrl.h"
 #include "snap_dma.h"
+
 #define ERR_ON_CMD(cmd, fmt, ...) \
 	snap_error("queue:%d cmd_idx:%d err: " fmt, \
-		   (cmd)->vq_priv->vq_ctx.common_ctx.idx, (cmd)->common_cmd.idx, ## __VA_ARGS__)
+		   (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, ## __VA_ARGS__)
 
 //scaffolding until fs uses common cmd also
 #define ERR_ON_CMD_FS(cmd, fmt, ...) \
@@ -51,10 +53,15 @@
 // #define VIRTQ_DEBUG_DATA
 #ifdef VIRTQ_DEBUG_DATA
 #define virtq_log_data(cmd, fmt, ...) \
+	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, \
+	       ## __VA_ARGS__)
+//scaffolding until fs uses common cmd also
+#define virtq_log_data_fs(cmd, fmt, ...) \
 	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx.common_ctx.idx, (cmd)->idx, \
 	       ## __VA_ARGS__)
 #else
 #define virtq_log_data(cmd, fmt, ...)
+#define virtq_log_data_fs(cmd, fmt, ...)
 #endif
 
 /**
@@ -183,6 +190,7 @@ struct virtq_cmd {
 	uint16_t descr_head_idx;
 	size_t num_desc;
 	uint32_t num_merges;
+	struct virtq_priv *vq_priv;
 	int16_t state;
 	uint8_t *buf;
 	uint32_t req_size;
@@ -201,5 +209,46 @@ struct virtq_cmd {
 	bool use_seg_dmem;
 };
 
+/**
+ * struct virtq_bdev - Backend device
+ * @ctx:	Opaque bdev context given to backend device functions
+ * @ops:	Backend device operation pointers
+ */
+struct virtq_bdev {
+	void *ctx;
+	void *ops;
+};
+
+struct virtq_priv {
+	volatile enum virtq_sw_state swq_state;
+	struct virtq_common_ctx *vq_ctx;
+	struct virtq_bdev blk_dev;
+	struct ibv_pd *pd;
+	struct snap_virtio_queue *snap_vbq;
+	struct snap_virtio_queue_attr *vattr;
+	struct snap_dma_q *dma_q;
+	struct virtq_cmd *cmd_arr;
+	int cmd_cntr;
+	int seg_max;
+	int size_max;
+	int pg_id;
+	struct snap_virtio_ctrl_queue *vbq;
+	uint16_t ctrl_available_index;
+	bool force_in_order;
+	/* current inorder value, for which completion should be sent */
+	uint16_t ctrl_used_index;
+	bool zcopy;
+	int merge_descs;
+	bool use_mem_pool;
+	int thread_id;
+};
+
+bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
+					struct virtq_create_attr *attr,
+					struct snap_virtio_queue_attr *vattr,
+					struct snap_virtio_ctrl_queue *vq,
+					void *bdev,
+					int rx_elem_size, uint16_t max_tunnel_desc, snap_dma_rx_cb_t cb);
+void virtq_ctx_destroy(struct virtq_priv *vq_priv);
 #endif
 

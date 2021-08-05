@@ -86,7 +86,6 @@ struct blk_virtq_cmd_aux {
  */
 struct blk_virtq_cmd {
 	struct virtq_cmd common_cmd;
-	struct blk_virtq_priv *vq_priv;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool zcopy;
 	struct iovec *iov;
@@ -96,42 +95,15 @@ struct blk_virtq_cmd {
 	struct snap_blk_mempool_ctx dma_pool_ctx;
 };
 
-/**
- * struct virtq_bdev - Backend block device
- * @ctx:	Opaque bdev context given to block device functions
- * @ops:	Block device operation pointers
- */
-struct virtq_bdev {
-	void *ctx;
-	struct snap_bdev_ops *ops;
-};
+static inline struct snap_bdev_ops *to_blk_bdev_ops(struct virtq_bdev *bdev)
+{
+	return (struct snap_bdev_ops *)bdev->ops;
+}
 
-struct blk_virtq_priv {
-	volatile enum virtq_sw_state swq_state;
-	struct blk_virtq_ctx vq_ctx;
-	struct virtq_bdev blk_dev;
-	struct ibv_pd *pd;
-	struct snap_virtio_blk_queue *snap_vbq;
-	struct snap_virtio_blk_queue_attr snap_attr;
-	struct snap_dma_q *dma_q;
-	struct blk_virtq_cmd *cmd_arr;
-	int cmd_cntr;
-	int seg_max;
-	int size_max;
-	int pg_id;
-	struct snap_virtio_blk_ctrl_queue *vbq;
-	uint16_t ctrl_available_index;
-	bool force_in_order;
-	/* current inorder value, for which completion should be sent */
-	uint16_t ctrl_used_index;
-	bool zcopy;
-	int merge_descs;
-	bool use_mem_pool;
-	int thread_id;
-};
-
-static inline bool zcopy_check(struct blk_virtq_cmd *cmd);
-static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd);
+static inline struct blk_virtq_ctx *to_blk_virtq_ctx(struct virtq_common_ctx *vq_ctx)
+{
+	return (struct blk_virtq_ctx *)vq_ctx;
+}
 
 static inline struct blk_virtq_cmd_aux *to_blk_cmd_aux(void *aux)
 {
@@ -143,10 +115,15 @@ static inline struct virtio_blk_outftr *to_blk_cmd_ftr(void *ftr)
 	return (struct virtio_blk_outftr *)ftr;
 }
 
-static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
+static inline struct blk_virtq_cmd *to_blk_cmd_arr(struct virtq_cmd *cmd_arr)
+{
+	return (struct blk_virtq_cmd *)cmd_arr;
+}
+
+static inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 					uint32_t len, bool is_completion)
 {
-	struct snap_virtio_ctrl_queue *vq = &cmd->vq_priv->vbq->common;
+	struct snap_virtio_ctrl_queue *vq = cmd->vq_priv->vbq;
 	int rc;
 
 	if (snap_likely(!vq->log_writes_to_host))
@@ -157,9 +134,9 @@ static inline void virtq_mark_dirty_mem(struct blk_virtq_cmd *cmd, uint64_t pa,
 		 * mark all of the device area as dirty, in the worst case
 		 * it will cost an extra page or two. Device area size is
 		 * calculated according to the spec.
-		 **/
-		pa = cmd->vq_priv->snap_attr.vattr.device;
-		len = 6 + 8 * cmd->vq_priv->snap_attr.vattr.size;
+		 */
+		pa = cmd->vq_priv->vattr->device;
+		len = 6 + 8 * cmd->vq_priv->vattr->size;
 	}
 	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
@@ -184,7 +161,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 
 	if (status != IBV_WC_SUCCESS) {
 		snap_error("error in dma for queue %d\n",
-			   cmd->vq_priv->vq_ctx.common_ctx.idx);
+			   cmd->common_cmd.vq_priv->vq_ctx->idx);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 	blk_virtq_cmd_progress(cmd, op_status);
@@ -231,12 +208,12 @@ void *blk_virtq_get_cmd_addr(void *ctx, void *ptr, size_t len)
 struct snap_cross_mkey *blk_virtq_get_cross_mkey(void *ctx, struct ibv_pd *pd)
 {
 	struct blk_virtq_cmd *cmd = ctx;
-	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->vq_priv->vbq->common.ctrl);
+	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->common_cmd.vq_priv->vbq->ctrl);
 
 	if (snap_likely(ctrl->cross_mkey))
 		return ctrl->cross_mkey;
 
-	ctrl->cross_mkey = snap_create_cross_mkey(pd, cmd->vq_priv->vbq->common.ctrl->sdev);
+	ctrl->cross_mkey = snap_create_cross_mkey(pd, cmd->common_cmd.vq_priv->vbq->ctrl->sdev);
 	if (!ctrl->cross_mkey) {
 		snap_error("Failed to create cross gvmi mkey\n");
 		return NULL;
@@ -249,10 +226,10 @@ struct snap_cross_mkey *blk_virtq_get_cross_mkey(void *ctx, struct ibv_pd *pd)
 
 static void blk_virtq_cmd_fill_addr(struct blk_virtq_cmd *cmd)
 {
-	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->vq_priv->vbq->common.ctrl);
+	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->common_cmd.vq_priv->vbq->ctrl);
 	int ctrlid = ctrl->idx;
 	int reqid = cmd->common_cmd.idx;
-	int qid = cmd->vq_priv->vbq->common.index;
+	int qid = cmd->common_cmd.vq_priv->vbq->index;
 	void *fake_addr_table = ctrl->zcopy_ctx->fake_addr_table;
 	uintptr_t *request_table = ctrl->zcopy_ctx->request_table;
 	size_t max_num_ctrl_req = VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX *
@@ -282,7 +259,7 @@ static int alloc_aux(struct blk_virtq_cmd *cmd, uint32_t seg_max)
 		return -ENOMEM;
 	}
 
-	cmd->common_cmd.aux_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->common_cmd.aux, aux_size,
+	cmd->common_cmd.aux_mr = ibv_reg_mr(cmd->common_cmd.vq_priv->pd, cmd->common_cmd.aux, aux_size,
 					IBV_ACCESS_REMOTE_READ |
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
@@ -297,7 +274,7 @@ static int alloc_aux(struct blk_virtq_cmd *cmd, uint32_t seg_max)
 
 static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
-			      struct blk_virtq_priv *vq_priv)
+			      struct virtq_priv *vq_priv)
 {
 	int ret;
 	const size_t req_size = size_max * seg_max;
@@ -305,20 +282,19 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	const size_t aux_size = sizeof(struct blk_virtq_cmd_aux) + descs_size;
 
 	cmd->common_cmd.idx = idx;
-	cmd->vq_priv = vq_priv;
+	cmd->common_cmd.vq_priv = vq_priv;
 	cmd->common_cmd.dma_comp.func = sm_dma_cb;
 	cmd->bdev_op_ctx.user_arg = cmd;
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->common_cmd.io_cmd_stat = NULL;
 	cmd->common_cmd.cmd_available_index = 0;
-	cmd->vq_priv->merge_descs = snap_env_getenv(VIRTIO_BLK_SNAP_MERGE_DESCS);
+	cmd->common_cmd.vq_priv->merge_descs = snap_env_getenv(VIRTIO_BLK_SNAP_MERGE_DESCS);
 	cmd->common_cmd.ftr = calloc(1, sizeof(struct virtio_blk_outftr));
 	if (!cmd->common_cmd.ftr) {
 		snap_error("failed to allocate footer for virtq %d\n",
 			   idx);
 		return -ENOMEM;
 	}
-
 	if (vq_priv->zcopy) {
 		if (req_size > VIRTIO_BLK_MAX_REQ_DATA) {
 			snap_error("reached max command data size (%zu/%d)\n",
@@ -343,7 +319,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		blk_virtq_cmd_fill_addr(cmd);
 	}
 
-	if (cmd->vq_priv->use_mem_pool) {
+	if (cmd->common_cmd.vq_priv->use_mem_pool) {
 		ret = alloc_aux(cmd, seg_max);
 		if (ret)
 			goto free_fake_iov;
@@ -353,14 +329,12 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		cmd->dma_pool_ctx.callback = virtq_mem_ready;
 	} else {
 		cmd->common_cmd.req_size = req_size;
-
-		cmd->common_cmd.buf = vq_priv->blk_dev.ops->dma_malloc(req_size + aux_size);
+		cmd->common_cmd.buf = to_blk_bdev_ops(&vq_priv->blk_dev)->dma_malloc(req_size + aux_size);
 		if (!cmd->common_cmd.buf) {
 			snap_error("failed to allocate memory for virtq %d\n", idx);
 			ret = -ENOMEM;
 			goto free_fake_iov;
 		}
-
 		cmd->common_cmd.mr = ibv_reg_mr(vq_priv->pd, cmd->common_cmd.buf, req_size + aux_size,
 						IBV_ACCESS_REMOTE_READ |
 						IBV_ACCESS_REMOTE_WRITE |
@@ -378,7 +352,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	return 0;
 
 free_cmd_buf:
-	vq_priv->blk_dev.ops->dma_free(cmd->common_cmd.buf);
+	to_blk_bdev_ops(&vq_priv->blk_dev)->dma_free(cmd->common_cmd.buf);
 free_fake_iov:
 	if (vq_priv->zcopy)
 		free(cmd->fake_iov);
@@ -390,16 +364,16 @@ free_iov:
 
 void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
 {
-	if (cmd->vq_priv->use_mem_pool) {
-		cmd->vq_priv->blk_dev.ops->dma_pool_cancel(&cmd->dma_pool_ctx);
+	if (cmd->common_cmd.vq_priv->use_mem_pool) {
+		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_pool_cancel(&cmd->dma_pool_ctx);
 		ibv_dereg_mr(cmd->common_cmd.aux_mr);
 		free(cmd->common_cmd.aux);
 	} else {
 		ibv_dereg_mr(cmd->common_cmd.mr);
-		cmd->vq_priv->blk_dev.ops->dma_free(cmd->common_cmd.buf);
+		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_free(cmd->common_cmd.buf);
 	}
 
-	if (cmd->vq_priv->zcopy) {
+	if (cmd->common_cmd.vq_priv->zcopy) {
 		free(cmd->fake_iov);
 		free(cmd->iov);
 	}
@@ -425,9 +399,9 @@ void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
  */
 static struct blk_virtq_cmd *
 alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
-			struct blk_virtq_priv *vq_priv)
+			struct virtq_priv *vq_priv)
 {
-	int i, k, ret, num = vq_priv->snap_attr.vattr.size;
+	int i, k, ret, num = vq_priv->vattr->size;
 	struct blk_virtq_cmd *cmd_arr;
 
 	cmd_arr = calloc(num, sizeof(struct blk_virtq_cmd));
@@ -449,18 +423,19 @@ alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 free_mem:
 	free(cmd_arr);
 	snap_error("failed allocating commands for queue %d\n",
-		vq_priv->vq_ctx.common_ctx.idx);
+			  vq_priv->vq_ctx->idx);
 out:
 	return NULL;
 }
 
-static void free_blk_virtq_cmd_arr(struct blk_virtq_priv *vq_priv)
+static void free_blk_virtq_cmd_arr(struct virtq_priv *vq_priv)
 {
-	const size_t num_cmds = vq_priv->snap_attr.vattr.size;
+	const size_t num_cmds = vq_priv->vattr->size;
 	size_t i;
+	struct blk_virtq_cmd *cmd_arr = to_blk_cmd_arr(vq_priv->cmd_arr);
 
 	for (i = 0; i < num_cmds; i++)
-		free_blk_virtq_cmds(&vq_priv->cmd_arr[i]);
+		free_blk_virtq_cmds(&cmd_arr[i]);
 
 	free(vq_priv->cmd_arr);
 }
@@ -477,7 +452,7 @@ enum virtq_fetch_desc_status {
 	VIRTQ_FETCH_DESC_READ,
 };
 
-static int virtq_alloc_desc_buf(struct blk_virtq_cmd *cmd, size_t old_len, size_t len)
+static int virtq_alloc_desc_buf(struct virtq_cmd *cmd, size_t old_len, size_t len)
 {
 	int aux_size = len * sizeof(struct vring_desc) + sizeof(struct virtio_blk_outhdr);
 	struct ibv_mr *new_aux_mr;
@@ -485,7 +460,7 @@ static int virtq_alloc_desc_buf(struct blk_virtq_cmd *cmd, size_t old_len, size_
 
 	if (!new_aux) {
 		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",
-				len, cmd->common_cmd.idx);
+				len, cmd->idx);
 		goto err;
 	}
 	new_aux_mr = ibv_reg_mr(cmd->vq_priv->pd, new_aux, aux_size,
@@ -493,24 +468,24 @@ static int virtq_alloc_desc_buf(struct blk_virtq_cmd *cmd, size_t old_len, size_
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
 	if (!new_aux_mr) {
-		snap_error("failed to register mr for virtq %d\n", cmd->common_cmd.idx);
+		snap_error("failed to register mr for virtq %d\n", cmd->idx);
 		free(new_aux);
 		goto err;
 	}
-	memcpy(new_aux->descs, to_blk_cmd_aux(cmd->common_cmd.aux)->descs, old_len * sizeof(struct vring_desc));
+	memcpy(new_aux->descs, to_blk_cmd_aux(cmd->aux)->descs, old_len * sizeof(struct vring_desc));
 	if (cmd->vq_priv->use_mem_pool) {
 		//mem for aux was previously allocated with malloc
-		ibv_dereg_mr(cmd->common_cmd.aux_mr);
-		free(cmd->common_cmd.aux);
+		ibv_dereg_mr(cmd->aux_mr);
+		free(cmd->aux);
 	}
-	cmd->common_cmd.aux = new_aux;
-	cmd->common_cmd.use_seg_dmem = true;
-	cmd->common_cmd.aux_mr = new_aux_mr;
+	cmd->aux = new_aux;
+	cmd->use_seg_dmem = true;
+	cmd->aux_mr = new_aux_mr;
 
 	return 0;
 
 err:
-	to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
+	to_blk_cmd_ftr(cmd->ftr)->status = VIRTIO_BLK_S_IOERR;
 	return -1;
 }
 
@@ -524,38 +499,37 @@ err:
  *
  * Return: virtq_fetch_desc_status
  */
-static enum virtq_fetch_desc_status fetch_next_desc(struct blk_virtq_cmd *cmd)
+static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 {
 	uint64_t srcaddr;
 	uint16_t in_ring_desc_addr;
 	int ret;
 
-	if (cmd->common_cmd.num_desc == 0)
-		in_ring_desc_addr = cmd->common_cmd.descr_head_idx %
-				    cmd->vq_priv->snap_attr.vattr.size;
-	else if (to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].flags & VRING_DESC_F_NEXT)
-		in_ring_desc_addr = to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].next;
+	if (cmd->num_desc == 0)
+		in_ring_desc_addr = cmd->descr_head_idx % cmd->vq_priv->vattr->size;
+	else if (to_blk_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
+		in_ring_desc_addr = to_blk_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
 
-	if (snap_unlikely(cmd->common_cmd.num_desc >=
+	if (snap_unlikely(cmd->num_desc >=
 			VIRTIO_NUM_DESC(cmd->vq_priv->seg_max))) {
-		if (virtq_alloc_desc_buf(cmd, cmd->common_cmd.num_desc,
-				cmd->vq_priv->snap_attr.vattr.size))
+		if (virtq_alloc_desc_buf(cmd, cmd->num_desc,
+				cmd->vq_priv->vattr->size))
 			return VIRTQ_FETCH_DESC_ERR;
 	}
 
-	srcaddr = cmd->vq_priv->snap_attr.vattr.desc +
+	srcaddr = cmd->vq_priv->vattr->desc +
 		  in_ring_desc_addr * sizeof(struct vring_desc);
-	cmd->common_cmd.dma_comp.count = 1;
+	cmd->dma_comp.count = 1;
 	virtq_log_data(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
-	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc],
-			      sizeof(struct vring_desc), cmd->common_cmd.aux_mr->lkey,
-			      srcaddr, cmd->vq_priv->snap_attr.vattr.dma_mkey,
-			      &(cmd->common_cmd.dma_comp));
+	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &to_blk_cmd_aux(cmd->aux)->descs[cmd->num_desc],
+			sizeof(struct vring_desc), cmd->aux_mr->lkey, srcaddr,
+			cmd->vq_priv->vattr->dma_mkey,
+			&(cmd->dma_comp));
 	if (ret)
 		return VIRTQ_FETCH_DESC_ERR;
-	cmd->common_cmd.num_desc++;
+	cmd->num_desc++;
 	return VIRTQ_FETCH_DESC_READ;
 }
 
@@ -583,7 +557,7 @@ static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
 		cmd->iov[i].iov_base = (void *)to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr;
 		cmd->iov[i].iov_len = to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len;
 
-		virtq_log_data(cmd, "pa 0x%llx len %u\n",
+		virtq_log_data(&cmd->common_cmd, "pa 0x%llx len %u\n",
 			       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len);
 	}
 	cmd->iov_cnt = cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS;
@@ -591,7 +565,7 @@ static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
 
 static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 {
-	struct blk_virtq_priv *priv = cmd->vq_priv;
+	struct virtq_priv *priv = cmd->common_cmd.vq_priv;
 
 	if (!priv->zcopy)
 		return false;
@@ -599,11 +573,11 @@ static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 	if (cmd->common_cmd.num_desc == NUM_HDR_FTR_DESCS)
 		return false;
 
-	if (!priv->blk_dev.ops->is_zcopy_aligned)
+	if (!to_blk_bdev_ops(&priv->blk_dev)->is_zcopy_aligned)
 		return false;
 
 	/* cannot use zcopy if the first data addr is not zcopy aligned */
-	return priv->blk_dev.ops->is_zcopy_aligned(priv->blk_dev.ctx,
+	return to_blk_bdev_ops(&priv->blk_dev)->is_zcopy_aligned(priv->blk_dev.ctx,
 						   (void *)to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr);
 }
 
@@ -716,21 +690,21 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 	enum virtq_fetch_desc_status ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to fetch commands descs, dumping command without response\n");
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
-	ret = fetch_next_desc(cmd);
+	ret = fetch_next_desc(&cmd->common_cmd);
 	if (ret == VIRTQ_FETCH_DESC_ERR) {
-		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to RDMA READ desc from host\n");
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
 		cmd->common_cmd.num_desc = virtq_blk_process_desc(to_blk_cmd_aux(cmd->common_cmd.aux)->descs, cmd->common_cmd.num_desc,
-					&cmd->common_cmd.num_merges, cmd->vq_priv->merge_descs);
+					&cmd->common_cmd.num_merges, cmd->common_cmd.vq_priv->merge_descs);
 
 		if (cmd->common_cmd.num_desc < NUM_HDR_FTR_DESCS) {
-			ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+			ERR_ON_CMD(&cmd->common_cmd, "failed to fetch commands descs, dumping command without response\n");
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
@@ -755,7 +729,7 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 	int mr_access = 0;
 	struct snap_relaxed_ordering_caps ro_caps = {};
 
-	cmd->common_cmd.req_buf = cmd->vq_priv->blk_dev.ops->dma_malloc(len);
+	cmd->common_cmd.req_buf = to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_malloc(len);
 	if (!cmd->common_cmd.req_buf) {
 		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",
 			   len, cmd->common_cmd.idx);
@@ -764,7 +738,7 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 
 	mr_access = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE |
 		    IBV_ACCESS_LOCAL_WRITE;
-	if (!snap_query_relaxed_ordering_caps(cmd->vq_priv->pd->context,
+	if (!snap_query_relaxed_ordering_caps(cmd->common_cmd.vq_priv->pd->context,
 					      &ro_caps)) {
 		if (ro_caps.relaxed_ordering_write &&
 		    ro_caps.relaxed_ordering_read)
@@ -772,7 +746,7 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 	} else
 		snap_warn("Failed to query relaxed ordering caps\n");
 
-	cmd->common_cmd.req_mr = ibv_reg_mr(cmd->vq_priv->pd, cmd->common_cmd.req_buf, len,
+	cmd->common_cmd.req_mr = ibv_reg_mr(cmd->common_cmd.vq_priv->pd, cmd->common_cmd.req_buf, len,
 				 mr_access);
 	if (!cmd->common_cmd.req_mr) {
 		snap_error("failed to register mr for commmand %d\n", cmd->common_cmd.idx);
@@ -794,7 +768,7 @@ err:
 static void virtq_rel_req_dbuf(struct blk_virtq_cmd *cmd)
 {
 	ibv_dereg_mr(cmd->common_cmd.req_mr);
-	cmd->vq_priv->blk_dev.ops->dma_free(cmd->common_cmd.req_buf);
+	to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_free(cmd->common_cmd.req_buf);
 	cmd->common_cmd.req_buf = cmd->common_cmd.buf;
 	cmd->common_cmd.req_mr = cmd->common_cmd.mr;
 	cmd->common_cmd.use_dmem = false;
@@ -816,8 +790,8 @@ static bool virtq_rel_req_desc(struct blk_virtq_cmd *cmd)
 
 	ibv_dereg_mr(cmd->common_cmd.aux_mr);
 	free(cmd->common_cmd.aux);
-	if (cmd->vq_priv->use_mem_pool) {
-		if (alloc_aux(cmd, cmd->vq_priv->seg_max)) {
+	if (cmd->common_cmd.vq_priv->use_mem_pool) {
+		if (alloc_aux(cmd, cmd->common_cmd.vq_priv->seg_max)) {
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 			//alloc fail, move to error state
 			repeat = true;
@@ -842,9 +816,9 @@ static bool virtq_rel_req_desc(struct blk_virtq_cmd *cmd)
 static bool virtq_read_header(struct blk_virtq_cmd *cmd)
 {
 	int ret;
-	struct blk_virtq_priv *priv = cmd->vq_priv;
+	struct virtq_priv *priv = cmd->common_cmd.vq_priv;
 
-	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
+	virtq_log_data(&cmd->common_cmd, "READ_HEADER: pa 0x%llx len %u\n",
 			to_blk_cmd_aux(cmd->common_cmd.aux)->descs[0].addr, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[0].len);
 
 	cmd->common_cmd.state = VIRTQ_CMD_STATE_PARSE_HEADER;
@@ -852,7 +826,7 @@ static bool virtq_read_header(struct blk_virtq_cmd *cmd)
 	cmd->common_cmd.dma_comp.count = 1;
 	ret = snap_dma_q_read(priv->dma_q, &to_blk_cmd_aux(cmd->common_cmd.aux)->header,
 		to_blk_cmd_aux(cmd->common_cmd.aux)->descs[0].len, cmd->common_cmd.aux_mr->lkey,
-		to_blk_cmd_aux(cmd->common_cmd.aux)->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
+		to_blk_cmd_aux(cmd->common_cmd.aux)->descs[0].addr, priv->vattr->dma_mkey,
 		&cmd->common_cmd.dma_comp);
 
 	if (ret) {
@@ -887,7 +861,7 @@ static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
 	size_t req_len;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to get header data, returning failure\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to get header data, returning failure\n");
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -914,16 +888,16 @@ static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
 		break;
 	}
 
-	if (cmd->vq_priv->use_mem_pool) {
+	if (cmd->common_cmd.vq_priv->use_mem_pool) {
 
 		if (!req_len)
 			return true;
 
-		rc = cmd->vq_priv->blk_dev.ops->dma_pool_malloc(
+		rc = to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_pool_malloc(
 					req_len, &cmd->dma_pool_ctx);
 
 		if (rc) {
-			ERR_ON_CMD(cmd, "failed to allocate memory, returning failure\n");
+			ERR_ON_CMD(&cmd->common_cmd, "failed to allocate memory, returning failure\n");
 			to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			return true;
@@ -962,7 +936,7 @@ static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
  */
 static bool virtq_read_data(struct blk_virtq_cmd *cmd)
 {
-	struct blk_virtq_priv *priv = cmd->vq_priv;
+	struct virtq_priv *priv = cmd->common_cmd.vq_priv;
 	size_t offset, i;
 	int ret;
 
@@ -986,11 +960,11 @@ static bool virtq_read_data(struct blk_virtq_cmd *cmd)
 		if (to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].flags & VRING_DESC_F_WRITE)
 			continue;
 
-		virtq_log_data(cmd, "READ_DATA: pa 0x%llx len %u\n",
+		virtq_log_data(&cmd->common_cmd, "READ_DATA: pa 0x%llx len %u\n",
 				to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].addr, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].len);
 		ret = snap_dma_q_read(priv->dma_q, cmd->common_cmd.req_buf + offset,
 				to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].len, cmd->common_cmd.req_mr->lkey, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].addr,
-				priv->snap_attr.vattr.dma_mkey, &cmd->common_cmd.dma_comp);
+				priv->vattr->dma_mkey, &cmd->common_cmd.dma_comp);
 		if (ret) {
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
@@ -1031,7 +1005,7 @@ static inline void virtq_fill_fake_iov(struct blk_virtq_cmd *cmd)
 static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 			     enum virtq_cmd_sm_op_status status)
 {
-	struct virtq_bdev *bdev = &cmd->vq_priv->blk_dev;
+	struct virtq_bdev *bdev = &cmd->common_cmd.vq_priv->blk_dev;
 	int ret, len;
 	uint64_t num_blocks;
 	uint32_t blk_size;
@@ -1039,7 +1013,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	uint64_t offset;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to get request data, returning failure\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to get request data, returning failure\n");
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -1048,60 +1022,60 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	cmd->common_cmd.io_cmd_stat = NULL;
 	switch (to_blk_cmd_aux(cmd->common_cmd.aux)->header.type) {
 	case VIRTIO_BLK_T_OUT:
-		cmd->common_cmd.io_cmd_stat = &cmd->vq_priv->vq_ctx.io_stat.write;
+		cmd->common_cmd.io_cmd_stat = &(to_blk_virtq_ctx(cmd->common_cmd.vq_priv->vq_ctx)->io_stat.write);
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_T_OUT_IOV_DONE;
 		offset = to_blk_cmd_aux(cmd->common_cmd.aux)->header.sector * BDEV_SECTOR_SIZE;
 		if (cmd->zcopy) {
 			virtq_fill_fake_iov(cmd);
-			ret = bdev->ops->writev(bdev->ctx, cmd->fake_iov,
+			ret = to_blk_bdev_ops(bdev)->writev(bdev->ctx, cmd->fake_iov,
 						cmd->iov_cnt, offset,
 						cmd->common_cmd.total_seg_len,
 						&cmd->bdev_op_ctx,
-						cmd->vq_priv->pg_id);
+						cmd->common_cmd.vq_priv->pg_id);
 		} else {
-			ret = bdev->ops->write(bdev->ctx, cmd->common_cmd.req_buf,
+			ret = to_blk_bdev_ops(bdev)->write(bdev->ctx, cmd->common_cmd.req_buf,
 					       offset, cmd->common_cmd.total_seg_len,
 					       &cmd->bdev_op_ctx,
-					       cmd->vq_priv->pg_id);
+					       cmd->common_cmd.vq_priv->pg_id);
 		}
 		break;
 	case VIRTIO_BLK_T_IN:
-		cmd->common_cmd.io_cmd_stat = &cmd->vq_priv->vq_ctx.io_stat.read;
+		cmd->common_cmd.io_cmd_stat = &(to_blk_virtq_ctx(cmd->common_cmd.vq_priv->vq_ctx)->io_stat.read);
 		offset = to_blk_cmd_aux(cmd->common_cmd.aux)->header.sector * BDEV_SECTOR_SIZE;
 		if (cmd->zcopy) {
 			virtq_fill_fake_iov(cmd);
 			cmd->common_cmd.total_in_len += cmd->common_cmd.total_seg_len;
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
-			ret = bdev->ops->readv(bdev->ctx, cmd->fake_iov,
+			ret = to_blk_bdev_ops(bdev)->readv(bdev->ctx, cmd->fake_iov,
 					       cmd->iov_cnt, offset,
 					       cmd->common_cmd.total_seg_len,
 					       &cmd->bdev_op_ctx,
-					       cmd->vq_priv->pg_id);
+					       cmd->common_cmd.vq_priv->pg_id);
 		} else {
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_T_IN_IOV_DONE;
-			ret = bdev->ops->read(bdev->ctx, cmd->common_cmd.req_buf,
+			ret = to_blk_bdev_ops(bdev)->read(bdev->ctx, cmd->common_cmd.req_buf,
 					      offset, cmd->common_cmd.total_seg_len,
 					      &cmd->bdev_op_ctx,
-					      cmd->vq_priv->pg_id);
+					      cmd->common_cmd.vq_priv->pg_id);
 		}
 		break;
 	case VIRTIO_BLK_T_FLUSH:
-		cmd->common_cmd.io_cmd_stat = &cmd->vq_priv->vq_ctx.io_stat.flush;
+		cmd->common_cmd.io_cmd_stat = &(to_blk_virtq_ctx(cmd->common_cmd.vq_priv->vq_ctx)->io_stat.flush);
 		if (to_blk_cmd_aux(cmd->common_cmd.aux)->header.sector != 0) {
-			ERR_ON_CMD(cmd, "sector must be zero for flush command\n");
+			ERR_ON_CMD(&cmd->common_cmd, "sector must be zero for flush command\n");
 			ret = -1;
 		} else {
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
-			num_blocks = bdev->ops->get_num_blocks(bdev->ctx);
-			blk_size = bdev->ops->get_block_size(bdev->ctx);
-			ret = bdev->ops->flush(bdev->ctx, 0,
+			num_blocks = to_blk_bdev_ops(bdev)->get_num_blocks(bdev->ctx);
+			blk_size = to_blk_bdev_ops(bdev)->get_block_size(bdev->ctx);
+			ret = to_blk_bdev_ops(bdev)->flush(bdev->ctx, 0,
 					       num_blocks * blk_size,
-					       &cmd->bdev_op_ctx, cmd->vq_priv->pg_id);
+					       &cmd->bdev_op_ctx, cmd->common_cmd.vq_priv->pg_id);
 		}
 		break;
 	case VIRTIO_BLK_T_GET_ID:
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
-		dev_name = bdev->ops->get_bdev_name(bdev->ctx);
+		dev_name = to_blk_bdev_ops(bdev)->get_bdev_name(bdev->ctx);
 		ret = snprintf((char *)cmd->common_cmd.req_buf, cmd->common_cmd.req_size, "%s",
 			       dev_name);
 		if (ret < 0) {
@@ -1112,19 +1086,19 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		cmd->common_cmd.dma_comp.count = 1;
 		len = snap_min(ret, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].len);
 		cmd->common_cmd.total_in_len += len;
-		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
-			       cmd->descs[1].addr, len);
-		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr, len, false);
-		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
+		virtq_log_data(&cmd->common_cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
+				to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr, len);
+		virtq_mark_dirty_mem(&cmd->common_cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr, len, false);
+		ret = snap_dma_q_write(cmd->common_cmd.vq_priv->dma_q,
 				       cmd->common_cmd.req_buf,
 				       len,
 				       cmd->common_cmd.req_mr->lkey,
 				       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr,
-				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
+				       cmd->common_cmd.vq_priv->vattr->dma_mkey,
 				       &(cmd->common_cmd.dma_comp));
 		break;
 	default:
-		ERR_ON_CMD(cmd, "invalid command - requested command type 0x%x is not implemented\n",
+		ERR_ON_CMD(&cmd->common_cmd, "invalid command - requested command type 0x%x is not implemented\n",
 			   to_blk_cmd_aux(cmd->common_cmd.aux)->header.type);
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_UNSUPP;
@@ -1135,7 +1109,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 		cmd->common_cmd.io_cmd_stat->total++;
 		if (ret)
 			cmd->common_cmd.io_cmd_stat->fail++;
-		if (cmd->vq_priv->merge_descs)
+		if (cmd->common_cmd.vq_priv->merge_descs)
 			cmd->common_cmd.io_cmd_stat->merged_desc += cmd->common_cmd.num_merges;
 		if (cmd->common_cmd.use_dmem)
 			cmd->common_cmd.io_cmd_stat->large_in_buf++;
@@ -1144,7 +1118,7 @@ static bool virtq_handle_req(struct blk_virtq_cmd *cmd,
 	}
 
 	if (ret) {
-		ERR_ON_CMD(cmd, "failed while executing command %d\n",
+		ERR_ON_CMD(&cmd->common_cmd, "failed while executing command %d\n",
 			to_blk_cmd_aux(cmd->common_cmd.aux)->header.type);
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
@@ -1169,7 +1143,7 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 	size_t offset = 0;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to read from block device, send ioerr to host\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to read from block device, send ioerr to host\n");
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
@@ -1178,16 +1152,16 @@ static bool sm_handle_in_iov_done(struct blk_virtq_cmd *cmd,
 	cmd->common_cmd.dma_comp.count = cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS;
 	cmd->common_cmd.state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	for (i = 0; i < cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS; i++) {
-		virtq_log_data(cmd, "WRITE_DATA: pa 0x%llx len %u\n",
+		virtq_log_data(&cmd->common_cmd, "WRITE_DATA: pa 0x%llx len %u\n",
 			       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len);
-		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr,
+		virtq_mark_dirty_mem(&cmd->common_cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr,
 				     to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len, false);
-		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
+		ret = snap_dma_q_write(cmd->common_cmd.vq_priv->dma_q,
 				       cmd->common_cmd.req_buf + offset,
 				       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len,
 				       cmd->common_cmd.req_mr->lkey,
 				       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr,
-				       cmd->vq_priv->snap_attr.vattr.dma_mkey,
+				       cmd->common_cmd.vq_priv->vattr->dma_mkey,
 				       &(cmd->common_cmd.dma_comp));
 		if (ret) {
 			to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
@@ -1229,18 +1203,18 @@ static inline bool sm_write_status(struct blk_virtq_cmd *cmd,
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
 		to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_IOERR;
 
-	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
+	virtq_log_data(&cmd->common_cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
 		       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].addr,
 		       sizeof(struct virtio_blk_outftr));
-	virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].addr,
+	virtq_mark_dirty_mem(&cmd->common_cmd, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].addr,
 			     sizeof(struct virtio_blk_outftr), false);
-	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, to_blk_cmd_ftr(cmd->common_cmd.ftr),
+	ret = snap_dma_q_write_short(cmd->common_cmd.vq_priv->dma_q, to_blk_cmd_ftr(cmd->common_cmd.ftr),
 				     sizeof(struct virtio_blk_outftr),
 				     to_blk_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].addr,
-				     cmd->vq_priv->snap_attr.vattr.dma_mkey);
+				     cmd->common_cmd.vq_priv->vattr->dma_mkey);
 	if (snap_unlikely(ret)) {
 		/* TODO: at some point we will have to do pending queue */
-		ERR_ON_CMD(cmd, "failed to send status, err=%d", ret);
+		ERR_ON_CMD(&cmd->common_cmd, "failed to send status, err=%d", ret);
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
@@ -1276,9 +1250,9 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 		return true;
 	}
 
-	if (snap_unlikely(cmd->common_cmd.cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-		virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
-			cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
+	if (snap_unlikely(cmd->common_cmd.cmd_available_index != cmd->common_cmd.vq_priv->ctrl_used_index)) {
+		virtq_log_data(&cmd->common_cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
+			cmd->common_cmd.idx, cmd->common_cmd.cmd_available_index, cmd->common_cmd.vq_priv->ctrl_used_index);
 		if (cmd->common_cmd.io_cmd_stat)
 			++cmd->common_cmd.io_cmd_stat->unordered;
 		unordered = true;
@@ -1287,27 +1261,27 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 	/* check order of completed command, if the command unordered - wait for
 	 * other completions
 	 */
-	if (snap_unlikely(cmd->vq_priv->force_in_order) && snap_unlikely(unordered)) {
+	if (snap_unlikely(cmd->common_cmd.vq_priv->force_in_order) && snap_unlikely(unordered)) {
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
 		return false;
 	}
 
 	tunnel_comp.descr_head_idx = cmd->common_cmd.descr_head_idx;
 	tunnel_comp.len = cmd->common_cmd.total_in_len;
-	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+	virtq_log_data(&cmd->common_cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
 		       tunnel_comp.descr_head_idx, tunnel_comp.len,
 		       sizeof(struct virtq_split_tunnel_comp));
-	virtq_mark_dirty_mem(cmd, 0, 0, true);
-	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
+	virtq_mark_dirty_mem(&cmd->common_cmd, 0, 0, true);
+	ret = snap_dma_q_send_completion(cmd->common_cmd.vq_priv->dma_q,
 					 &tunnel_comp,
 					 sizeof(struct virtq_split_tunnel_comp));
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to second completion\n");
+		ERR_ON_CMD(&cmd->common_cmd, "failed to second completion\n");
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_RELEASE;
-		++cmd->vq_priv->ctrl_used_index;
+		++cmd->common_cmd.vq_priv->ctrl_used_index;
 	}
 
 	return true;
@@ -1316,7 +1290,7 @@ static inline int sm_send_completion(struct blk_virtq_cmd *cmd,
 static void virtq_rel_req_mempool_buf(struct blk_virtq_cmd *cmd)
 {
 	if (cmd->common_cmd.req_buf)
-		cmd->vq_priv->blk_dev.ops->dma_pool_free(&cmd->dma_pool_ctx, cmd->common_cmd.req_buf);
+		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->blk_dev)->dma_pool_free(&cmd->dma_pool_ctx, cmd->common_cmd.req_buf);
 }
 
 /**
@@ -1371,27 +1345,27 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 		case VIRTQ_CMD_STATE_RELEASE:
 			if (snap_unlikely(cmd->common_cmd.use_dmem))
 				virtq_rel_req_dbuf(cmd);
-			if (cmd->vq_priv->use_mem_pool)
+			if (cmd->common_cmd.vq_priv->use_mem_pool)
 				virtq_rel_req_mempool_buf(cmd);
 			if (snap_unlikely(cmd->common_cmd.use_seg_dmem))
 				repeat = virtq_rel_req_desc(cmd);
-			cmd->vq_priv->cmd_cntr--;
+			cmd->common_cmd.vq_priv->cmd_cntr--;
 			break;
 		case VIRTQ_CMD_STATE_FATAL_ERR:
 			if (snap_unlikely(cmd->common_cmd.use_dmem))
 				virtq_rel_req_dbuf(cmd);
-			if (cmd->vq_priv->use_mem_pool)
+			if (cmd->common_cmd.vq_priv->use_mem_pool)
 				virtq_rel_req_mempool_buf(cmd);
 			if (snap_unlikely(cmd->common_cmd.use_seg_dmem))
 				virtq_rel_req_desc(cmd);
-			cmd->vq_priv->vq_ctx.common_ctx.fatal_err = -1;
+			cmd->common_cmd.vq_priv->vq_ctx->fatal_err = -1;
 			/*
 			 * TODO: propagate fatal error to the controller.
 			 * At the moment attempt to resume/state copy
 			 * of such controller will have unpredictable
 			 * results.
 			 */
-			cmd->vq_priv->cmd_cntr--;
+			cmd->common_cmd.vq_priv->cmd_cntr--;
 			break;
 		default:
 			snap_error("reached invalid state %d\n", cmd->common_cmd.state);
@@ -1415,7 +1389,7 @@ static int blk_virtq_cmd_progress(struct blk_virtq_cmd *cmd,
 static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 			    uint32_t data_len, uint32_t imm_data)
 {
-	struct blk_virtq_priv *priv = (struct blk_virtq_priv *)q->uctx;
+	struct virtq_priv *priv = (struct virtq_priv *)q->uctx;
 	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
 	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
 	int cmd_idx, len;
@@ -1424,8 +1398,8 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
 
-	cmd_idx = priv->ctrl_available_index % priv->snap_attr.vattr.size;
-	cmd = &priv->cmd_arr[cmd_idx];
+	cmd_idx = priv->ctrl_available_index % priv->vattr->size;
+	cmd = &to_blk_cmd_arr(priv->cmd_arr)[cmd_idx];
 	cmd->common_cmd.num_desc = split_hdr->num_desc;
 	cmd->common_cmd.descr_head_idx = split_hdr->descr_head_idx;
 	cmd->common_cmd.total_seg_len = 0;
@@ -1442,7 +1416,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	 * completing the flush
 	 **/
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
-		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
+		virtq_log_data(&cmd->common_cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->common_cmd.num_desc, data_len);
 		return;
 	}
@@ -1455,7 +1429,7 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	priv->cmd_cntr++;
 	priv->ctrl_available_index++;
 	cmd->common_cmd.state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
-	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->common_cmd.num_desc,
+	virtq_log_data(&cmd->common_cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->common_cmd.num_desc,
 		       data_len);
 	blk_virtq_cmd_progress(cmd, status);
 }
@@ -1484,113 +1458,79 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 				       void *bdev, struct snap_device *snap_dev,
 				       struct virtq_create_attr *attr)
 {
-	struct snap_dma_q_create_attr rdma_qp_create_attr = {};
 	struct snap_virtio_blk_queue_attr qattr = {};
 	struct blk_virtq_ctx *vq_ctx;
-	struct blk_virtq_priv *vq_priv;
+	struct snap_virtio_blk_queue_attr *snap_attr;
+	struct virtq_priv *vq_priv;
+	struct snap_virtio_blk_queue *snap_vbq;
 	int num_descs = VIRTIO_NUM_DESC(attr->seg_max);
+	int rx_elem_size = sizeof(struct virtq_split_tunnel_req_hdr) +
+				   num_descs * sizeof(struct vring_desc);
 
-	vq_priv = calloc(1, sizeof(struct blk_virtq_priv));
-	if (!vq_priv)
+	vq_ctx = calloc(1, sizeof(struct blk_virtq_ctx));
+	if (!vq_ctx)
 		goto err;
 
-	vq_ctx = &vq_priv->vq_ctx;
-	vq_ctx->common_ctx.priv = vq_priv;
+	snap_attr = calloc(1, sizeof(struct snap_virtio_blk_queue_attr));
+	if (!snap_attr)
+		goto release_ctx;
+	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr,
+			     &snap_attr->vattr, &vbq->common,
+			     bdev, rx_elem_size,
+			     attr->seg_max + NUM_HDR_FTR_DESCS, blk_virtq_rx_cb))
+		goto release_snap_attr;
+	vq_priv = vq_ctx->common_ctx.priv;
 	vq_priv->blk_dev.ops = bdev_ops;
-	vq_priv->blk_dev.ctx = bdev;
-	vq_priv->pd = attr->pd;
-	vq_ctx->common_ctx.idx = attr->idx;
-	vq_ctx->common_ctx.fatal_err = 0;
-	vq_priv->seg_max = attr->seg_max;
-	vq_priv->size_max = attr->size_max;
-	vq_priv->snap_attr.vattr.size = attr->queue_size;
-	vq_priv->swq_state = SW_VIRTQ_RUNNING;
-	vq_priv->vbq = vbq;
 	vq_priv->use_mem_pool = bdev_ops->dma_pool_enabled(vq_priv->blk_dev.ctx);
-
-	if (vq_priv->blk_dev.ops->is_zcopy)
-		vq_priv->zcopy =
-			vq_priv->blk_dev.ops->is_zcopy(vq_priv->blk_dev.ctx);
-
-	vq_priv->cmd_arr = alloc_blk_virtq_cmd_arr(attr->size_max,
+	if (bdev_ops->is_zcopy)
+		vq_priv->zcopy = bdev_ops->is_zcopy(vq_priv->blk_dev.ctx);
+	vq_priv->cmd_arr = (struct virtq_cmd *) alloc_blk_virtq_cmd_arr(attr->size_max,
 						   attr->seg_max, vq_priv);
 	if (!vq_priv->cmd_arr) {
 		snap_error("failed allocating cmd list for queue %d\n",
 			   attr->idx);
 		goto release_priv;
 	}
-	vq_priv->cmd_cntr = 0;
-	vq_priv->ctrl_available_index = attr->hw_available_index;
-	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 
-	rdma_qp_create_attr.tx_qsize = attr->queue_size;
-	rdma_qp_create_attr.tx_elem_size = sizeof(struct virtq_split_tunnel_comp);
-	rdma_qp_create_attr.rx_qsize = attr->queue_size;
-	rdma_qp_create_attr.rx_elem_size = sizeof(struct virtq_split_tunnel_req_hdr) +
-					   num_descs * sizeof(struct vring_desc);
-	rdma_qp_create_attr.uctx = vq_priv;
-	rdma_qp_create_attr.rx_cb = blk_virtq_rx_cb;
-	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
-	vq_priv->dma_q = snap_dma_q_create(attr->pd, &rdma_qp_create_attr);
-	if (!vq_priv->dma_q) {
-		snap_error("failed creating rdma qp loop\n");
+	snap_attr->hw_available_index = attr->hw_available_index;
+	snap_attr->hw_used_index = attr->hw_used_index;
+	snap_attr->qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
+	if (!snap_attr->qp) {
+		snap_error("no fw qp exist when trying to create virtq\n");
 		goto dealloc_cmd_arr;
 	}
-
-	vq_priv->snap_attr.vattr.type = SNAP_VIRTQ_SPLIT_MODE;
-	vq_priv->snap_attr.vattr.ev_mode = (attr->msix_vector == VIRTIO_MSI_NO_VECTOR) ?
-					    SNAP_VIRTQ_NO_MSIX_MODE :
-					    SNAP_VIRTQ_MSIX_MODE;
-	vq_priv->snap_attr.vattr.virtio_version_1_0 = attr->virtio_version_1_0;
-	vq_priv->snap_attr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
-	vq_priv->snap_attr.vattr.idx = attr->idx;
-	vq_priv->snap_attr.vattr.desc = attr->desc;
-	vq_priv->snap_attr.vattr.driver = attr->driver;
-	vq_priv->snap_attr.vattr.device = attr->device;
-	vq_priv->snap_attr.vattr.full_emulation = true;
-	vq_priv->snap_attr.vattr.max_tunnel_desc = snap_min(attr->max_tunnel_desc,
-							    attr->seg_max + NUM_HDR_FTR_DESCS);
-	vq_priv->snap_attr.vattr.event_qpn_or_msix = attr->msix_vector;
-	vq_priv->snap_attr.vattr.pd = attr->pd;
-	vq_priv->snap_attr.hw_available_index = attr->hw_available_index;
-	vq_priv->snap_attr.hw_used_index = attr->hw_used_index;
-	vq_priv->snap_attr.qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
-	if (!vq_priv->snap_attr.qp) {
-		snap_error("no fw qp exist when trying to create virtq\n");
-		goto release_rdma_qp;
-	}
-
-	vq_priv->snap_vbq = snap_virtio_blk_create_queue(snap_dev, &vq_priv->snap_attr);
-	if (!vq_priv->snap_vbq) {
+	snap_vbq = snap_virtio_blk_create_queue(snap_dev, snap_attr);
+	if (!snap_vbq) {
 		snap_error("failed creating VIRTQ fw element\n");
-		goto release_rdma_qp;
+		goto dealloc_cmd_arr;
 	}
-	if (snap_virtio_blk_query_queue(vq_priv->snap_vbq,
-					&vq_priv->snap_attr)) {
+	vq_priv->snap_vbq = &snap_vbq->virtq;
+
+	if (snap_virtio_blk_query_queue(snap_vbq, snap_attr)) {
 		snap_error("failed query created snap virtio blk queue\n");
 		goto destroy_virtio_blk_queue;
 	}
 	qattr.vattr.state = SNAP_VIRTQ_STATE_RDY;
-	if (snap_virtio_blk_modify_queue(vq_priv->snap_vbq,
+	if (snap_virtio_blk_modify_queue(snap_vbq,
 					 SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
 					 &qattr)) {
 		snap_error("failed to change virtq to READY state\n");
 		goto destroy_virtio_blk_queue;
 	}
-
-	vq_priv->force_in_order = attr->force_in_order;
 	snap_debug("created VIRTQ %d succesfully in_order %d\n", attr->idx,
 		   attr->force_in_order);
 	return vq_ctx;
 
 destroy_virtio_blk_queue:
-	snap_virtio_blk_destroy_queue(vq_priv->snap_vbq);
-release_rdma_qp:
-	snap_dma_q_destroy(vq_priv->dma_q);
+	snap_virtio_blk_destroy_queue(snap_vbq);
 dealloc_cmd_arr:
 	free_blk_virtq_cmd_arr(vq_priv);
 release_priv:
-	free(vq_priv);
+	virtq_ctx_destroy(vq_priv);
+release_snap_attr:
+	free(snap_attr);
+release_ctx:
+	free(vq_ctx);
 err:
 	snap_error("failed creating blk_virtq %d\n", attr->idx);
 	return NULL;
@@ -1607,7 +1547,7 @@ err:
  */
 void blk_virtq_destroy(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
+	struct virtq_priv *vq_priv = q->common_ctx.priv;
 
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
@@ -1615,28 +1555,27 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
 
-	if (snap_virtio_blk_destroy_queue(vq_priv->snap_vbq))
+	if (snap_virtio_blk_destroy_queue(to_blk_queue(vq_priv->snap_vbq)))
 		snap_error("queue %d: error destroying blk_virtq\n", q->common_ctx.idx);
 
-	snap_dma_q_destroy(vq_priv->dma_q);
 	free_blk_virtq_cmd_arr(vq_priv);
-	free(vq_priv);
+	virtq_ctx_destroy(vq_priv);
 }
 
 int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 			    struct snap_virtio_queue_debugstat *q_debugstat)
 {
-	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
+	struct virtq_priv *vq_priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr virtq_attr = {};
 	struct snap_virtio_queue_counters_attr vqc_attr = {};
 	struct vring_avail vra;
 	struct vring_used vru;
-	uint64_t drv_addr = vq_priv->snap_attr.vattr.driver;
-	uint64_t dev_addr = vq_priv->snap_attr.vattr.device;
+	uint64_t drv_addr = vq_priv->vattr->driver;
+	uint64_t dev_addr = vq_priv->vattr->device;
 	int ret;
 
 	ret = snap_virtio_get_vring_indexes_from_host(vq_priv->pd, drv_addr, dev_addr,
-						      vq_priv->snap_attr.vattr.dma_mkey,
+						      vq_priv->vattr->dma_mkey,
 						      &vra, &vru);
 	if (ret) {
 		snap_error("failed to get vring indexes from host memory for queue %d\n",
@@ -1644,13 +1583,13 @@ int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
 		return ret;
 	}
 
-	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, &virtq_attr);
+	ret = snap_virtio_blk_query_queue(to_blk_queue(vq_priv->snap_vbq), &virtq_attr);
 	if (ret) {
 		snap_error("failed query queue %d debugstat\n", q->common_ctx.idx);
 		return ret;
 	}
 
-	ret = snap_virtio_query_queue_counters(vq_priv->snap_vbq->virtq.ctrs_obj, &vqc_attr);
+	ret = snap_virtio_query_queue_counters(to_blk_queue(vq_priv->snap_vbq)->virtq.ctrs_obj, &vqc_attr);
 	if (ret) {
 		snap_error("failed query virtio_q_counters %d debugstat\n", q->common_ctx.idx);
 		return ret;
@@ -1671,9 +1610,9 @@ int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 				struct snap_virtio_blk_queue_attr *attr)
 {
 	int ret;
-	struct blk_virtq_priv *vq_priv = q->common_ctx.priv;
+	struct virtq_priv *vq_priv = q->common_ctx.priv;
 
-	ret = snap_virtio_blk_query_queue(vq_priv->snap_vbq, attr);
+	ret = snap_virtio_blk_query_queue(to_blk_queue(vq_priv->snap_vbq), attr);
 	if (ret) {
 		snap_error("failed query queue %d (update)\n", q->common_ctx.idx);
 		return ret;
@@ -1694,7 +1633,7 @@ int blk_virtq_query_error_state(struct blk_virtq_ctx *q,
 
 static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr qattr = {};
 
 	/* TODO: add option to ignore commands in the bdev layer */
@@ -1705,7 +1644,7 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
 
 	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
-	if (snap_virtio_blk_modify_queue(priv->snap_vbq, SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
+	if (snap_virtio_blk_modify_queue(to_blk_queue(priv->snap_vbq), SNAP_VIRTIO_BLK_QUEUE_MOD_STATE,
 					 &qattr)) {
 		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->common_ctx.idx);
 	}
@@ -1719,20 +1658,20 @@ static int blk_virtq_progress_suspend(struct blk_virtq_ctx *q)
  * blk_virq_progress_unordered() - Check & complete unordered commands
  * @vq_priv:	queue to progress
  */
-static void blk_virq_progress_unordered(struct blk_virtq_priv *vq_priv)
+static void blk_virq_progress_unordered(struct virtq_priv *vq_priv)
 {
-	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-	struct blk_virtq_cmd *cmd = &vq_priv->cmd_arr[cmd_idx];
+	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+	struct blk_virtq_cmd *cmd = &to_blk_cmd_arr(vq_priv->cmd_arr)[cmd_idx];
 
 	while (cmd->common_cmd.state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
-	       cmd->common_cmd.cmd_available_index == cmd->vq_priv->ctrl_used_index) {
-		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
+	       cmd->common_cmd.cmd_available_index == cmd->common_cmd.vq_priv->ctrl_used_index) {
+		virtq_log_data(&cmd->common_cmd, "PEND_COMP: ino_num:%d state:%d\n",
 			       cmd->common_cmd.cmd_available_index, cmd->common_cmd.state);
 
 		blk_virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
 
-		cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-		cmd = &vq_priv->cmd_arr[cmd_idx];
+		cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+		cmd = &to_blk_cmd_arr(vq_priv->cmd_arr)[cmd_idx];
 	}
 }
 
@@ -1746,7 +1685,7 @@ static void blk_virq_progress_unordered(struct blk_virtq_priv *vq_priv)
  */
 int blk_virtq_progress(struct blk_virtq_ctx *q, int thread_id)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
 		return 0;
@@ -1784,7 +1723,7 @@ int blk_virtq_progress(struct blk_virtq_ctx *q, int thread_id)
  */
 int blk_virtq_suspend(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 
 	if (priv->swq_state != SW_VIRTQ_RUNNING) {
 		snap_debug("queue %d: suspend was already requested\n",
@@ -1795,7 +1734,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
 	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n",
 		  q->common_ctx.idx, priv->cmd_cntr);
 
-	if (priv->vq_ctx.common_ctx.fatal_err)
+	if (priv->vq_ctx->fatal_err)
 		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n",
 			  q->common_ctx.idx);
 
@@ -1816,7 +1755,7 @@ int blk_virtq_suspend(struct blk_virtq_ctx *q)
  */
 bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 
 	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }
@@ -1833,7 +1772,7 @@ bool blk_virtq_is_suspended(struct blk_virtq_ctx *q)
 void blk_virtq_start(struct blk_virtq_ctx *q,
 		     struct virtq_start_attr *attr)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 
 	priv->pg_id = attr->pg_id;
 }
@@ -1851,17 +1790,17 @@ void blk_virtq_start(struct blk_virtq_ctx *q,
  *
  * NOTE: caller should suspend queue's polling group when calling from different
  *       context.
- *
  * Return: 0 on success, -errno on failure.
+ *
  */
 int blk_virtq_get_state(struct blk_virtq_ctx *q,
 			struct snap_virtio_ctrl_queue_state *state)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 	struct snap_virtio_blk_queue_attr attr = {};
 	int ret;
 
-	ret = snap_virtio_blk_query_queue(priv->snap_vbq, &attr);
+	ret = snap_virtio_blk_query_queue(to_blk_queue(priv->snap_vbq), &attr);
 	if (ret < 0) {
 		snap_error("failed to query blk queue %d\n", q->common_ctx.idx);
 		return ret;
@@ -1880,22 +1819,22 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 const struct snap_virtio_ctrl_queue_stats *
 blk_virtq_get_io_stats(struct blk_virtq_ctx *q)
 {
-	struct blk_virtq_priv *priv = q->common_ctx.priv;
+	struct virtq_priv *priv = q->common_ctx.priv;
 
-	return &priv->vq_ctx.io_stat;
+	return &to_blk_virtq_ctx(priv->vq_ctx)->io_stat;
 }
 
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx)
 {
-	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
+	struct virtq_priv *vpriv = ctx->common_ctx.priv;
 
 	return vpriv->dma_q;
 }
 
 int set_dma_mkey(struct blk_virtq_ctx *ctx, uint32_t mkey)
 {
-	struct blk_virtq_priv *vpriv = ctx->common_ctx.priv;
+	struct virtq_priv *vpriv = ctx->common_ctx.priv;
 
-	vpriv->snap_attr.vattr.dma_mkey = mkey;
+	vpriv->vattr->dma_mkey = mkey;
 	return 0;
 }

@@ -193,7 +193,7 @@ static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa
 		pa = cmd->vq_priv->snap_attr.vattr.device;
 		len = 6 + 8 * cmd->vq_priv->snap_attr.vattr.size;
 	}
-	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
+	virtq_log_data_fs(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
 		ERR_ON_CMD_FS(cmd, "dirty memory logging enabled but migration channel is not present\n");
 		return;
@@ -388,7 +388,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct fs_virtq_cmd *cmd)
 	srcaddr = cmd->vq_priv->snap_attr.vattr.desc +
 		in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->dma_comp.count = 1;
-	virtq_log_data(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
+	virtq_log_data_fs(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
 	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->descs[cmd->num_desc],
 			sizeof(struct vring_desc), cmd->mr->lkey,
 			srcaddr, cmd->vq_priv->snap_attr.vattr.dma_mkey,
@@ -437,7 +437,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 
 	num_desc = cmd->pos_f_write > 0 ? cmd->pos_f_write : cmd->num_desc;
 
-	virtq_log_data(cmd, "RH: iov[0] pa 0x%llx va %p, %ld\n",
+	virtq_log_data_fs(cmd, "RH: iov[0] pa 0x%llx va %p, %ld\n",
 		       cmd->descs[0].addr, cmd->iov[0].iov_base, cmd->iov[0].iov_len);
 
 	// Device-readable part
@@ -445,7 +445,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 		cmd->iov[i].iov_base = cmd->req_buf + offset;
 		cmd->iov[i].iov_len = cmd->descs[i].len;
 		offset += cmd->descs[i].len;
-		virtq_log_data(cmd, "RD: iov[%d] pa 0x%llx va %p, %ld\n",
+		virtq_log_data_fs(cmd, "RD: iov[%d] pa 0x%llx va %p, %ld\n",
 			       i, cmd->descs[i].addr, cmd->iov[i].iov_base,
 			       cmd->iov[i].iov_len);
 	}
@@ -455,7 +455,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 		cmd->iov[cmd->pos_f_write].iov_base = cmd->fs_req_ftr;
 		cmd->iov[cmd->pos_f_write].iov_len = sizeof(struct virtio_fs_outftr);
 
-		virtq_log_data(cmd, "WH: iov[%d] pa 0x%llx va %p, %ld\n", i,
+		virtq_log_data_fs(cmd, "WH: iov[%d] pa 0x%llx va %p, %ld\n", i,
 			       cmd->descs[cmd->pos_f_write].addr,
 			       cmd->iov[cmd->pos_f_write].iov_base,
 			       cmd->iov[cmd->pos_f_write].iov_len);
@@ -465,7 +465,7 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 			cmd->iov[i].iov_base = cmd->req_buf + offset;
 			cmd->iov[i].iov_len = cmd->descs[i].len;
 			offset += cmd->descs[i].len;
-			virtq_log_data(cmd, "WD: iov[%d] pa 0x%llx va %p, %ld\n", i,
+			virtq_log_data_fs(cmd, "WD: iov[%d] pa 0x%llx va %p, %ld\n", i,
 				       cmd->descs[i].addr, cmd->iov[i].iov_base,
 				       cmd->iov[i].iov_len);
 
@@ -628,7 +628,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	cmd->state = FS_VIRTQ_CMD_STATE_HANDLE_REQ;
 	num_desc = cmd->pos_f_write > 0 ? cmd->pos_f_write : cmd->num_desc;
 
-	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
+	virtq_log_data_fs(cmd, "READ_HEADER: pa 0x%llx len %u\n",
 		       cmd->descs[0].addr, cmd->descs[0].len);
 	ret = snap_dma_q_read(priv->dma_q, &cmd->aux->header, cmd->descs[0].len,
 		cmd->mr->lkey, cmd->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
@@ -639,7 +639,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	}
 
 	for (i = 1; i < num_desc; ++i) {
-		virtq_log_data(cmd, "READ_DATA: pa 0x%llx va %p len %u\n",
+		virtq_log_data_fs(cmd, "READ_DATA: pa 0x%llx va %p len %u\n",
 			       cmd->descs[i].addr, cmd->req_buf + offset, cmd->descs[i].len);
 		ret = snap_dma_q_read(priv->dma_q, cmd->req_buf + offset,
 				cmd->descs[i].len, cmd->req_mr->lkey, cmd->descs[i].addr,
@@ -719,7 +719,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 		cmd->state = FS_VIRTQ_CMD_STATE_IN_IOV_DONE;
 	else {
 		/* hiprio queue - do nothing, send tunneling completion only */
-		virtq_log_data(cmd, "hiprio - send completion\n");
+		virtq_log_data_fs(cmd, "hiprio - send completion\n");
 		cmd->state = FS_VIRTQ_CMD_STATE_SEND_COMP;
 	}
 
@@ -754,7 +754,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 		 * fuse_out_header status.
 		 */
 		for (i = cmd->pos_f_write + 1; i < cmd->num_desc; ++i) {
-			virtq_log_data(cmd, "WRITE_DATA: pa 0x%llx va %p len %u\n",
+			virtq_log_data_fs(cmd, "WRITE_DATA: pa 0x%llx va %p len %u\n",
 				       cmd->descs[i].addr, cmd->iov[i].iov_base,
 				       cmd->descs[i].len);
 			fs_virtq_mark_dirty_mem(cmd, cmd->descs[i].addr,
@@ -809,7 +809,7 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
 		if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
 			set_cmd_error(cmd, EIO);
 
-		virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx va %p len %lu\n",
+		virtq_log_data_fs(cmd, "WRITE_STATUS: pa 0x%llx va %p len %lu\n",
 			       cmd->descs[cmd->pos_f_write].addr,
 			       cmd->iov[cmd->pos_f_write].iov_base,
 			       sizeof(struct virtio_fs_outftr));
@@ -865,7 +865,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 	 */
 	if (snap_unlikely(cmd->vq_priv->force_in_order)) {
 		if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
+			virtq_log_data_fs(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
 				       cmd->idx, cmd->cmd_available_index,
 				       cmd->vq_priv->ctrl_used_index);
 			cmd->state = FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
@@ -875,7 +875,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 
 	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
 	tunnel_comp.len = cmd->total_in_len;
-	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+	virtq_log_data_fs(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
 		       tunnel_comp.descr_head_idx, tunnel_comp.len,
 		       sizeof(struct virtq_split_tunnel_comp));
 	fs_virtq_mark_dirty_mem(cmd, 0, 0, true);
@@ -1005,7 +1005,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	 * completing the flush
 	 **/
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
-		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
+		virtq_log_data_fs(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
 			       cmd->num_desc, data_len);
 		return;
 	}
@@ -1018,7 +1018,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	++priv->cmd_cntr;
 	++priv->ctrl_available_index;
 	cmd->state = FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
-	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, descr_head_idx %d, va %p (%d), rxlen %u\n",
+	virtq_log_data_fs(cmd, "NEW_CMD: %lu inline descs, descr_head_idx %d, va %p (%d), rxlen %u\n",
 		       cmd->num_desc, cmd->descr_head_idx, cmd->req_buf, cmd->req_size, data_len);
 	fs_virtq_cmd_progress(cmd, status);
 }
@@ -1322,7 +1322,7 @@ static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 
 	while (cmd->state == FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
 	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {
-		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
+		virtq_log_data_fs(cmd, "PEND_COMP: ino_num:%d state:%d\n",
 			       cmd->cmd_available_index, cmd->state);
 
 		fs_virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
