@@ -931,8 +931,8 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 		 * We need to distinguish between 'real' recovery or
 		 * 'new creation' of the controller.
 		 * This can be done by testing the reset flag.
-		 * For 'recovery' it should be as following:
-		 * enabled=1 reset=0 status=X when X doesn't indicate reset
+		 * For 'new creation' it should be as following:
+		 * enabled=1 reset=1 status=0
 		 */
 		struct snap_virtio_blk_device_attr blk_attr = {};
 
@@ -942,22 +942,9 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			goto close_ctrl;
 		}
 
-		bool is_reset = false, is_recovery_needed = false;
-
-		if (blk_attr.vattr.reset ||
-		    (blk_attr.vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET))
-			is_reset = true;
-
-		if (blk_attr.vattr.enabled) {
-			if (is_reset == 0 && blk_attr.vattr.status != SNAP_VIRTIO_DEVICE_S_ACKNOWLEDGE)
-				is_recovery_needed = true;
-		}
-
-		if (!is_recovery_needed) {
+		if (blk_attr.vattr.reset) {
+			snap_debug("Bar reset detected - create new VirtIO BLK controller.\n");
 			attr->common.recover = 0;
-			snap_info("Bar status - enabled: %d reset: %d status: 0x%x, recovery mode not applied.\n",
-				  blk_attr.vattr.enabled, blk_attr.vattr.reset,
-				  blk_attr.vattr.status);
 		}
 	}
 
