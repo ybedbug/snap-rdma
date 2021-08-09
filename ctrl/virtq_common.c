@@ -118,3 +118,36 @@ void virtq_ctx_destroy(struct virtq_priv *vq_priv)
 	snap_dma_q_destroy(vq_priv->dma_q);
 	free(vq_priv);
 }
+
+/**
+ * virtq_cmd_progress() - command state machine progress handle
+ * @cmd:	commad to be processed
+ * @status:	status of calling function (can be a callback)
+ *
+ * Return: 0 (Currently no option to fail)
+ */
+int virtq_cmd_progress(struct virtq_cmd *cmd,
+		enum virtq_cmd_sm_op_status status)
+{
+	struct virtq_state_machine *sm;
+	bool repeat = true;
+
+	while (repeat) {
+		repeat = false;
+		snap_debug("virtq cmd sm state: %d\n", cmd->state);
+		sm = cmd->vq_priv->custom_sm;
+		if (snap_likely(cmd->state < VIRTQ_CMD_NUM_OF_STATES))
+			repeat = sm->sm_array[cmd->state].sm_handler(cmd, status);
+		else
+			snap_error("reached invalid state %d\n", cmd->state);
+	}
+
+	return 0;
+}
+
+bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+{
+	snap_error("command in invalid state %d\n",
+					   VIRTQ_CMD_STATE_IDLE);
+	return false;
+}

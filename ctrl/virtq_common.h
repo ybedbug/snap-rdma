@@ -220,6 +220,7 @@ struct virtq_bdev {
 };
 
 struct virtq_priv {
+	struct virtq_state_machine *custom_sm;
 	volatile enum virtq_sw_state swq_state;
 	struct virtq_common_ctx *vq_ctx;
 	struct virtq_bdev blk_dev;
@@ -243,6 +244,54 @@ struct virtq_priv {
 	int thread_id;
 };
 
+struct virtq_sm_state {
+		bool (*sm_handler)(struct virtq_cmd *cmd,
+				enum virtq_cmd_sm_op_status status);
+};
+
+struct virtq_state_machine {
+		struct virtq_sm_state *sm_array;
+		uint16_t sme;
+};
+
+/**
+ * enum virtq_cmd_sm_state - state of the sm handling a cmd
+ * @VIRTQ_CMD_STATE_IDLE:               SM initialization state
+ * @VIRTQ_CMD_STATE_FETCH_CMD_DESCS:    SM received tunnel cmd and copied
+ *										immediate data, now fetch cmd descs
+ * @VIRTQ_CMD_STATE_READ_HEADER			Read request header data from host memory
+ * @VIRTQ_CMD_STATE_PARSE_HEADER		process header
+ * @VIRTQ_CMD_STATE_READ_DATA:          Read request data from host memory
+ * @VIRTQ_CMD_STATE_HANDLE_REQ:         Handle received request from host, perform
+ *                                      READ/WRITE/FLUSH
+ * @VIRTQ_CMD_STATE_T_OUT_IOV_DONE:     Finished writing to bdev, check write
+ *                                      status
+ * @VIRTQ_CMD_STATE_T_IN_IOV_DONE:      Write data pulled from bdev to host memory
+ * @VIRTQ_CMD_STATE_WRITE_STATUS:       Write cmd status to host memory
+ * @VIRTQ_CMD_STATE_SEND_COMP:          Send completion to FW
+ * @VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP: Send completion to FW for commands completed
+ *                                      unordered
+ * @VIRTQ_CMD_STATE_RELEASE:            Release command
+ * @VIRTQ_CMD_STATE_FATAL_ERR:          Fatal error, SM stuck here (until reset)
+ * @VIRTQ_CMD_NUM_OF_STATES				should always be the last enum
+ */
+enum virtq_cmd_sm_state {
+	VIRTQ_CMD_STATE_IDLE,
+	VIRTQ_CMD_STATE_FETCH_CMD_DESCS,
+	VIRTQ_CMD_STATE_READ_HEADER,
+	VIRTQ_CMD_STATE_PARSE_HEADER,
+	VIRTQ_CMD_STATE_READ_DATA,
+	VIRTQ_CMD_STATE_HANDLE_REQ,
+	VIRTQ_CMD_STATE_OUT_DATA_DONE,
+	VIRTQ_CMD_STATE_IN_DATA_DONE,
+	VIRTQ_CMD_STATE_WRITE_STATUS,
+	VIRTQ_CMD_STATE_SEND_COMP,
+	VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP,
+	VIRTQ_CMD_STATE_RELEASE,
+	VIRTQ_CMD_STATE_FATAL_ERR,
+	VIRTQ_CMD_NUM_OF_STATES,
+};
+
 bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 					struct virtq_create_attr *attr,
 					struct snap_virtio_queue_attr *vattr,
@@ -250,5 +299,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 					void *bdev,
 					int rx_elem_size, uint16_t max_tunnel_desc, snap_dma_rx_cb_t cb);
 void virtq_ctx_destroy(struct virtq_priv *vq_priv);
+int virtq_cmd_progress(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
+bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 #endif
 
