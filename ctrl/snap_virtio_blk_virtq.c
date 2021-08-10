@@ -576,6 +576,9 @@ static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 	if (!to_blk_bdev_ops(&priv->blk_dev)->is_zcopy_aligned)
 		return false;
 
+	if (to_blk_cmd_aux(cmd->common_cmd.aux)->header.type == VIRTIO_BLK_T_GET_ID)
+		return false;
+
 	/* cannot use zcopy if the first data addr is not zcopy aligned */
 	return to_blk_bdev_ops(&priv->blk_dev)->is_zcopy_aligned(priv->blk_dev.ctx,
 						   (void *)to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr);
@@ -708,10 +711,6 @@ static bool sm_fetch_cmd_descs(struct blk_virtq_cmd *cmd,
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
-
-		cmd->zcopy = zcopy_check(cmd);
-		if (cmd->zcopy)
-			virtq_descs_to_iovec(cmd);
 
 		for (i = 1; i < cmd->common_cmd.num_desc - 1; i++)
 			cmd->common_cmd.total_seg_len += to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i].len;
@@ -867,7 +866,10 @@ static bool virtq_parse_header(struct blk_virtq_cmd *cmd,
 		return true;
 	}
 
+	cmd->zcopy = zcopy_check(cmd);
+
 	if (cmd->zcopy) {
+		virtq_descs_to_iovec(cmd);
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_HANDLE_REQ;
 		return true;
 	}
