@@ -1647,7 +1647,7 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	 * build genenal ctrl segment
 	 **/
 	gen_ctrl = ctrl;
-	gen_ctrl->rsvd[0] = gen_ctrl->rsvd[1] = 0;
+	*(uint32_t *)((void *)gen_ctrl + 8) = 0;
 	fm_ce_se = cq_up | MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
 	mlx5dv_set_ctrl_seg(gen_ctrl, dv_qp->pi, MLX5_OPCODE_UMR, 0,
 				q->sw_qp.qp->qp_num, fm_ce_se,
