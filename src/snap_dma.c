@@ -2086,14 +2086,20 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	struct mlx5_dma_wqe *gga_wqe;
-	struct mlx5_wqe_ctrl_seg *ctrl;
+	/* struct mlx5_wqe_ctrl_seg changed to packed(4),
+	 * and struct mlx5_dma_wqe is use default packed attribute, which is 8.
+	 * in order to fix the compile issue on UB OS, make `ctrl` to void*,
+	 * and convert it to struct mlx5_wqe_ctrl_seg * when it is needed.
+	 */
+	void *ctrl;
 	uint16_t comp_idx;
 	int cq_up;
 
 	comp_idx = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
 	cq_up = snap_dv_get_cq_update(dv_qp, comp);
-	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
+	ctrl = snap_dv_get_wqe_bb(dv_qp);
+	mlx5dv_set_ctrl_seg((struct mlx5_wqe_ctrl_seg *)ctrl, dv_qp->pi,
+			    MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
 			    q->sw_qp.qp->qp_num, cq_up,
 			    4, 0, 0);
 
@@ -2104,7 +2110,7 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 	mlx5dv_set_data_seg(&gga_wqe->gather, len, s_lkey, saddr);
 	mlx5dv_set_data_seg(&gga_wqe->scatter, len, d_lkey, daddr);
 
-	snap_dv_ring_tx_db(dv_qp, ctrl);
+	snap_dv_ring_tx_db(dv_qp, (struct mlx5_wqe_ctrl_seg *)ctrl);
 
 	snap_dv_set_comp(dv_qp, comp_idx, comp, cq_up, 1);
 	return 0;
