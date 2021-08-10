@@ -820,7 +820,8 @@ snap_virtio_blk_ctrl_queue_get_io_stats(struct snap_virtio_ctrl_queue *vq)
 	return blk_virtq_get_io_stats(vbq->q_impl);
 }
 
-static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl)
+static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
+					struct snap_virtio_blk_ctrl_attr *attr)
 {
 	int ret;
 	struct snap_virtio_blk_device_attr blk_attr = {};
@@ -839,6 +840,16 @@ static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl)
 	ret = snap_virtio_blk_query_device(ctrl->common.sdev, &blk_attr);
 	if (ret) {
 		snap_error("Failed to query bar during recovery of controller\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	if (!(blk_attr.capacity == attr->regs.capacity &&
+	    blk_attr.blk_size == attr->regs.blk_size)) {
+		snap_error("The configured parameters don't fit bar data: bar.capacity: %lu conf.capacity: %lu bar.blk_size: %d conf.blk_size: %d\n",
+			   blk_attr.capacity, attr->regs.capacity,
+			   blk_attr.blk_size, attr->regs.blk_size
+			   );
 		ret = -EINVAL;
 		goto err;
 	}
@@ -986,7 +997,7 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 		goto teardown_dev;
 
 	if (attr->common.recover) {
-		ret = snap_virtio_blk_ctrl_recover(ctrl);
+		ret = snap_virtio_blk_ctrl_recover(ctrl, attr);
 		if (ret)
 			goto teardown_dev;
 	}
