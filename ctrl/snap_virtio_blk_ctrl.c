@@ -635,6 +635,19 @@ snap_virtio_blk_ctrl_global_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	return 0;
 }
 
+/**
+ * snap_virtio_blk_ctrl_get_debugstat() - Get debug statistics for
+ *  virtio-blk controller
+ *
+ * @ctrl:       virtio-blk controller
+ * @attr:       debug statistics attributes (output)
+ *
+ * The function queries for HW/FW/SW debug statistics attributes.
+ * The function is intended to be used for debug purposes only, and
+ * should NOT be called repeatedly, as it might damage performance.
+ *
+ * Return: 0 on success, errno on failure.
+ */
 int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 			struct snap_virtio_ctrl_debugstat *ctrl_debugstat)
 {
