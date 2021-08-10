@@ -1125,6 +1125,42 @@ int snap_dma_q_progress(struct snap_dma_q *q)
 }
 
 /**
+ * snap_dma_q_poll_rx() - Poll rx from dma queue
+ * @q: dma queue
+ * @rx_completions: array of pointers that stores polled events
+ * @max_completions: max supported events
+ *
+ * The function polls receive operations on the given dma
+ * queue. each operation is inserted into the rx_completions array
+ *
+ * Note: rx_buffers belong to the rx queue and will eventually be overwritten.
+ * The upper level protocol should implement flow control.
+ * Buffers that are needed for the long term should be copied.
+ *
+ * Return: number of send events that were polled
+ */
+int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion **rx_completions, int max_completions)
+{
+	return q->ops->poll_rx(q, rx_completions, max_completions);
+}
+
+/**
+ * snap_dma_q_poll_tx() - Poll tx from dma queue
+ * @q: dma queue
+ * @comp: array of pointers that stores polled events
+ * @max_completions: max supported events
+ *
+ * The function polls send operations on the given dma
+ * queue. each operation is inserted into the comp array
+ *
+ * Return: number of send events that were polled
+ */
+int snap_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions)
+{
+	return q->ops->poll_tx(q, comp, max_completions);
+}
+
+/**
  * snap_dma_q_arm() - Request notification
  * @q: dma queue
  *
@@ -1643,6 +1679,90 @@ static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 	return n;
 }
 
+static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
+		struct snap_rx_completion **rx_completions, int max_completions)
+{
+	struct ibv_wc wcs[max_completions];
+	int i, n;
+	int rc;
+	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
+	struct ibv_sge rx_sge[SNAP_DMA_MAX_RX_COMPLETIONS + 1];
+
+	n = ibv_poll_cq(q->sw_qp.rx_cq, max_completions, wcs);
+	if (n == 0)
+		return 0;
+
+	if (snap_unlikely(n < 0)) {
+		snap_error("dma queue %p: failed to poll rx cq: errno=%d\n", q, n);
+		return 0;
+	}
+
+	for (i = 0; i < n && i < max_completions; i++) {
+		if (snap_unlikely(wcs[i].status != IBV_WC_SUCCESS)) {
+			if (wcs[i].status == IBV_WC_WR_FLUSH_ERR) {
+				snap_debug("dma queue %p: got FLUSH_ERROR\n", q);
+			} else {
+				snap_error("dma queue %p: got unexpected completion status 0x%x, opcode 0x%x\n",
+					   q, wcs[i].status, wcs[i].opcode);
+			}
+			return n;
+		}
+
+		rx_completions[i]->data = (void *)wcs[i].wr_id;
+		rx_completions[i]->byte_len = wcs[i].byte_len;
+		rx_completions[i]->imm_data = wcs[i].imm_data;
+
+		rx_sge[i].addr = wcs[i].wr_id;
+		rx_sge[i].length = q->rx_elem_size;
+		rx_sge[i].lkey = q->sw_qp.rx_mr->lkey;
+
+		rx_wr[i].wr_id = rx_sge[i].addr;
+		rx_wr[i].next = &rx_wr[i + 1];
+		rx_wr[i].sg_list = &rx_sge[i];
+		rx_wr[i].num_sge = 1;
+	}
+
+	rx_wr[i - 1].next = NULL;
+	rc = ibv_post_recv(q->sw_qp.qp, rx_wr, &bad_wr);
+	if (snap_unlikely(rc))
+		snap_error("dma queue %p: failed to post recv: errno=%d\n",
+				q, rc);
+	return n;
+}
+
+static inline int verbs_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions)
+{
+	struct ibv_wc wcs[max_completions];
+	int i, n;
+	struct snap_dma_completion *dma_comp;
+
+	n = ibv_poll_cq(q->sw_qp.tx_cq, max_completions, wcs);
+	if (n == 0)
+		return 0;
+
+	if (snap_unlikely(n < 0)) {
+		snap_error("dma queue %p: failed to poll tx cq: errno=%d\n",
+				q, n);
+		return 0;
+	}
+
+	q->tx_available += n;
+
+	for (i = 0; i < n && i < max_completions; i++) {
+		if (snap_unlikely(wcs[i].status != IBV_WC_SUCCESS))
+			snap_error("dma queue %p: got unexpected completion status 0x%x, opcode 0x%x\n",
+				   q, wcs[i].status, wcs[i].opcode);
+		/* wr_id, status, qp_num and vendor_err are still valid in
+		 * case of error
+		 **/
+		dma_comp = (struct snap_dma_completion *)wcs[i].wr_id;
+		if (--dma_comp->count == 0)
+			comp[i] = dma_comp;
+	}
+
+	return n;
+}
+
 static struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
@@ -1652,6 +1772,8 @@ static struct snap_dma_q_ops verb_ops = {
 	.send_completion = verbs_dma_q_send_completion,
 	.progress_tx     = verbs_dma_q_progress_tx,
 	.progress_rx     = verbs_dma_q_progress_rx,
+	.poll_rx     = verbs_dma_q_poll_rx,
+	.poll_tx     = verbs_dma_q_poll_tx,
 };
 
 /* DV implementation */
@@ -2341,17 +2463,26 @@ static void snap_dv_cqe_err(struct mlx5_cqe64 *cqe)
 		   snap_dv_cqe_err_opcode(ecqe));
 }
 
-static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
+static inline struct snap_dma_completion *dv_dma_q_get_comp(struct snap_dma_q *q, struct mlx5_cqe64 *cqe)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
-	struct mlx5_cqe64 *cqe;
-	struct snap_dma_completion *comp;
 	uint16_t comp_idx;
-	int n;
 	uint32_t sq_mask;
 
-	n = 0;
 	sq_mask = dv_qp->qp.sq.wqe_cnt - 1;
+	comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
+	q->tx_available += dv_qp->comps[comp_idx].n_outstanding;
+
+	return dv_qp->comps[comp_idx].comp;
+}
+
+static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
+{
+	struct mlx5_cqe64 *cqe;
+	struct snap_dma_completion *comp;
+	int n;
+
+	n = 0;
 	do {
 		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
 		if (!cqe)
@@ -2361,9 +2492,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 			snap_dv_cqe_err(cqe);
 
 		n++;
-		comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
-		q->tx_available += dv_qp->comps[comp_idx].n_outstanding;
-		comp = dv_qp->comps[comp_idx].comp;
+		comp = dv_dma_q_get_comp(q, cqe);
 
 		if (comp && --comp->count == 0)
 			comp->func(comp, mlx5dv_get_cqe_opcode(cqe));
@@ -2373,14 +2502,36 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	return n;
 }
 
+static inline void dv_dma_q_get_rx_comp(struct snap_dma_q *q, struct mlx5_cqe64 *cqe, struct snap_rx_completion *rx_comp)
+{
+	int ri;
+	uint32_t rq_mask;
+
+	/* optimize for NVMe where SQE is 64 bytes and will always
+	 * be scattered
+	 **/
+	rq_mask = q->sw_qp.dv_qp.qp.rq.wqe_cnt - 1;
+	if (snap_likely(cqe->op_own & MLX5_INLINE_SCATTER_64)) {
+		__builtin_prefetch(cqe - 1);
+		rx_comp->data = cqe - 1;
+	} else if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+		rx_comp->data = cqe;
+	} else {
+		ri = be16toh(cqe->wqe_counter) & rq_mask;
+		__builtin_prefetch(q->sw_qp.rx_buf + ri * q->rx_elem_size);
+		rx_comp->data = q->sw_qp.rx_buf + ri * q->rx_elem_size;
+	}
+	rx_comp->byte_len = be32toh(cqe->byte_cnt);
+	rx_comp->imm_data = cqe->imm_inval_pkey;
+}
+
 static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 {
 	struct mlx5_cqe64 *cqe;
-	int n, ri;
+	int n;
 	int op;
-	uint32_t rq_mask;
+	struct snap_rx_completion rx_comp;
 
-	rq_mask = q->sw_qp.dv_qp.qp.rq.wqe_cnt - 1;
 	n = 0;
 	do {
 		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
@@ -2397,20 +2548,8 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 		snap_memory_cpu_load_fence();
 
 		n++;
-		/* optimize for NVMe where SQE is 64 bytes and will always
-		 * be scattered
-		 **/
-		if (snap_likely(cqe->op_own & MLX5_INLINE_SCATTER_64)) {
-			__builtin_prefetch(cqe - 1);
-			q->rx_cb(q, cqe - 1, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
-		} else if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-			q->rx_cb(q, cqe, be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
-		} else {
-			ri = be16toh(cqe->wqe_counter) & rq_mask;
-			__builtin_prefetch(q->sw_qp.rx_buf + ri * q->rx_elem_size);
-			q->rx_cb(q, q->sw_qp.rx_buf + ri * q->rx_elem_size,
-				 be32toh(cqe->byte_cnt), cqe->imm_inval_pkey);
-		}
+		dv_dma_q_get_rx_comp(q, cqe, &rx_comp);
+		q->rx_cb(q, rx_comp.data, rx_comp.byte_len, rx_comp.imm_data);
 
 	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
 
@@ -2419,6 +2558,60 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 
 	q->sw_qp.dv_qp.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+	return n;
+}
+
+static inline int dv_dma_q_poll_rx(struct snap_dma_q *q,
+		struct snap_rx_completion **rx_completions, int max_completions)
+{
+	struct mlx5_cqe64 *cqe;
+	int n;
+	int op;
+
+	n = 0;
+	do {
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
+		if (!cqe)
+			break;
+
+		op = mlx5dv_get_cqe_opcode(cqe);
+		if (snap_unlikely(op != MLX5_CQE_RESP_SEND &&
+				  op != MLX5_CQE_RESP_SEND_IMM)) {
+			snap_dv_cqe_err(cqe);
+			return n;
+		}
+
+		dv_dma_q_get_rx_comp(q, cqe, rx_completions[n]);
+		n++;
+	} while (n < max_completions);
+
+	q->sw_qp.dv_qp.ci += n;
+	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+	return n;
+}
+
+static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions)
+{
+	struct mlx5_cqe64 *cqe;
+	int n;
+	struct snap_dma_completion *dma_comp;
+
+	n = 0;
+	do {
+		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
+		if (!cqe)
+			break;
+		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe) != MLX5_CQE_REQ))
+			snap_dv_cqe_err(cqe);
+
+		dma_comp = dv_dma_q_get_comp(q, cqe);
+		if (dma_comp && --dma_comp->count == 0) {
+			comp[n] = dma_comp;
+			n++;
+		}
+
+	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
+
 	return n;
 }
 
@@ -2431,6 +2624,8 @@ static struct snap_dma_q_ops dv_ops = {
 	.send_completion = dv_dma_q_send_completion,
 	.progress_tx     = dv_dma_q_progress_tx,
 	.progress_rx     = dv_dma_q_progress_rx,
+	.poll_rx         = dv_dma_q_poll_rx,
+	.poll_tx         = dv_dma_q_poll_tx,
 };
 
 /* GGA */
@@ -2548,4 +2743,6 @@ static struct snap_dma_q_ops gga_ops = {
 	.send_completion = dv_dma_q_send_completion,
 	.progress_tx     = dv_dma_q_progress_tx,
 	.progress_rx     = dv_dma_q_progress_rx,
+	.poll_rx         = dv_dma_q_poll_rx,
+	.poll_tx         = dv_dma_q_poll_tx,
 };

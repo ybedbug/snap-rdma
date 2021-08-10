@@ -22,6 +22,8 @@ class SnapDmaTest : public ::testing::Test {
 
 	void dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mode,
 			void *rvaddr, void *rpaddr, uint32_t rkey, int len);
+	void poll_rx(int mode);
+	void poll_tx(int mode);
 	struct snap_dma_q *create_queue();
 	public:
 	/* Send data to sw qp */

@@ -387,6 +387,7 @@ TEST_F(SnapDmaTest, send_completion) {
 	snap_dma_q_destroy(q);
 }
 
+
 TEST_F(SnapDmaTest, flush) {
 	struct snap_dma_q *q;
 	int rc;
@@ -445,6 +446,94 @@ TEST_F(SnapDmaTest, rx_callback) {
 	ASSERT_EQ(1, g_rx_count);
 	ASSERT_EQ(0, memcmp(g_last_rx, sqe, m_dma_q_attr.rx_elem_size));
 	snap_dma_q_destroy(q);
+}
+
+void SnapDmaTest::poll_rx(int mode)
+{
+	struct snap_dma_q *q;
+	char *sqe = m_rbuf;
+	int rc, i;
+	int rx_reqs = 16;
+	struct snap_rx_completion *read_comp[rx_reqs];
+	int n;
+	m_dma_q_attr.mode = mode;
+	for(i = 0; i < rx_reqs; i++) {
+		read_comp[i] =(struct snap_rx_completion *) malloc(sizeof(struct snap_rx_completion));
+	}
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	memset(sqe, 0xDA, m_dma_q_attr.rx_elem_size);
+
+	g_rx_count = 0;
+	for(i = 0; i < rx_reqs; i++) {
+		rc = snap_dma_q_fw_send(q, sqe, m_dma_q_attr.rx_elem_size, m_rmr->lkey);
+		ASSERT_EQ(0, rc);
+	}
+	sleep(1);
+	n = snap_dma_q_poll_rx(q, read_comp, rx_reqs);
+	for(i = 0; i < n; i++) {
+		q->rx_cb(q, read_comp[i]->data, read_comp[i]->byte_len, read_comp[i]->imm_data);
+		free(read_comp[i]);
+	}
+	ASSERT_EQ(rx_reqs, g_rx_count);
+	ASSERT_EQ(0, memcmp(g_last_rx, sqe, m_dma_q_attr.rx_elem_size));
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, poll_rx_verbs)
+{
+	poll_rx(SNAP_DMA_Q_MODE_VERBS);
+}
+
+TEST_F(SnapDmaTest, poll_rx_dv)
+{
+	poll_rx(SNAP_DMA_Q_MODE_DV);
+}
+
+void SnapDmaTest::poll_tx(int mode)
+{
+	struct snap_dma_q *q;
+	int rc, i;
+	int tx_reqs = 64;
+	struct snap_dma_completion *write_comp[tx_reqs];
+	struct snap_dma_completion *read_comp[tx_reqs];
+	int n = 0;
+	m_dma_q_attr.mode = mode;
+
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	g_comp_count = 0;
+	for(i = 0; i < tx_reqs; i++) {
+		write_comp[i] =(struct snap_dma_completion *) malloc(sizeof(struct snap_dma_completion));
+		write_comp[i]->count = 1;
+		write_comp[i]->func = dma_completion;
+		memset(m_rbuf, 0, m_bsize);
+		memset(m_lbuf, 0xED, m_bsize);
+		rc = snap_dma_q_write(q, m_lbuf, m_bsize, m_lmr->lkey,
+				(uintptr_t)m_rbuf, m_rmr->lkey, write_comp[i]);
+		ASSERT_EQ(0, rc);
+	}
+
+	sleep(1);
+	n = snap_dma_q_poll_tx(q, read_comp, tx_reqs);
+	for(i = 0; i < n; i++) {
+		read_comp[i]->func(read_comp[i], 0);
+		free(write_comp[i]);
+	}
+	ASSERT_EQ(tx_reqs, g_comp_count);
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, poll_tx_verbs)
+{
+	poll_tx(SNAP_DMA_Q_MODE_VERBS);
+}
+
+TEST_F(SnapDmaTest, poll_tx_dv)
+{
+	poll_tx(SNAP_DMA_Q_MODE_DV);
 }
 
 TEST_F(SnapDmaTest, error_checks) {
