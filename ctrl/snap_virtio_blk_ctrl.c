@@ -106,6 +106,19 @@ snap_virtio_blk_get_zcopy_ctx(struct snap_context *sctx)
 	return zcopy_ctx;
 }
 
+/**
+ * snap_virtio_blk_ctrl_addr_trans() - Translate fake memory address
+ * @pd:         pd pointer
+ * @ptr:        memory address for translation
+ * @len:        length of the memory address
+ * @cross_mkey: memory key to fill
+ * @addr:       translated address to fill
+ *
+ * Translate fake memory address to the original address and return
+ * a memory key for it. The function should be used only for ZCOPY.
+ *
+ * Return: 0 on success, -1 on failure.
+ */
 int snap_virtio_blk_ctrl_addr_trans(struct ibv_pd *pd, void *ptr, size_t len,
 				    uint32_t *cross_mkey, void **addr)
 {
