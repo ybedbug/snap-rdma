@@ -90,9 +90,12 @@ struct virtq_common_ctx {
  * @desc:	Descriptor Area (from virtio spec Virtqueues section)
  * @driver:	Driver Area
  * @device:	Device Area
- *
+ * @max_tunnel_desc:	maximum amount of tunneled descsriptors
+ * @msix_vector:	Interrupt vector
+ * @virtio_version_1_0:	virtio version boolean
  * @hw_available_index:	initial value of the driver available index.
  * @hw_used_index:	initial value of the device used index
+ * @force_in_order:	handle reqs in order
  */
 struct virtq_create_attr {
 	int idx;
@@ -172,10 +175,14 @@ enum virtq_sw_state {
  * @idx:				descr_head_idx modulo queue size
  * @descr_head_idx:		descriptor head index
  * @num_desc:			number of descriptors in the command
+ * @num_merges:			number of descriptors merges in command
+ * @vq_priv:			virtq private context
  * @state:				state of sm processing the command
  * @buf:				buffer holding the request data and aux data
  * @req_size:			allocated request buffer size
+ * @aux_mr:				aux mr
  * @aux:				aux data resided in dma/mr memory
+ * @ftr:				footer data
  * @mr:					buf mr
  * @req_buf:			pointer to request buffer
  * @req_mr:				request buffer mr
@@ -183,7 +190,9 @@ enum virtq_sw_state {
  * @total_seg_len:		total length of the request data to be written/read
  * @total_in_len:		total length of data written to request buffers
  * @use_dmem:			command uses dynamic mem for req_buf
+ * @io_cmd_stat:		command io stats
  * @cmd_available_index:sequential number of the command according to arrival
+ * @use_seg_dmem:		command uses dynamic mem for descriptors
  */
 struct virtq_cmd {
 	int idx;
@@ -219,12 +228,37 @@ struct virtq_bdev {
 	void *ops;
 };
 
+/**
+ * struct virtq_priv - virtq private context
+ * @custom_sm:		state machine handlers array
+ * @ops:			state machine implementation specific ops
+ * @swq_state:		virtq state
+ * @vq_ctx:			virtq common context
+ * @virtq_dev:		virtq backend device
+ * @pd:				Protection domain on which rdma-qps will be opened
+ * @snap_vbq:		virtio queue
+ * @vattr:			virtio queue attributes
+ * @dma_q:			DMA queue
+ * @cmd_arr:		array holding all virtq commands
+ * @cmd_cntr:		active commands counter
+ * @size_max:		maximum size of any single segment
+ * @seg_max:		maximum number of segments in a request
+ * @pg_id:			poll group id
+ * @vbq:			virtio control queue
+ * @ctrl_available_index:next available index in queue
+ * @force_in_order:	handle reqs in order
+ * @ctrl_used_index:current inorder value, for which completion should be sent
+ * @zcopy:			uses zero copy
+ * @merge_descs:	merges sequntial descriptors
+ * @use_mem_pool:	uses memory pool for data act
+ * @thread_id:		thread id
+ */
 struct virtq_priv {
 	struct virtq_state_machine *custom_sm;
 	const struct virtq_impl_ops *ops;
 	volatile enum virtq_sw_state swq_state;
 	struct virtq_common_ctx *vq_ctx;
-	struct virtq_bdev blk_dev;
+	struct virtq_bdev virtq_dev;
 	struct ibv_pd *pd;
 	struct snap_virtio_queue *snap_vbq;
 	struct snap_virtio_queue_attr *vattr;
@@ -237,7 +271,6 @@ struct virtq_priv {
 	struct snap_virtio_ctrl_queue *vbq;
 	uint16_t ctrl_available_index;
 	bool force_in_order;
-	/* current inorder value, for which completion should be sent */
 	uint16_t ctrl_used_index;
 	bool zcopy;
 	int merge_descs;
@@ -268,6 +301,9 @@ struct virtq_impl_ops {
 	void (*status_data)(struct virtq_cmd *cmd, struct virtq_status_data *sd);
 	void (*release_cmd)(struct virtq_cmd *cmd);
 	void (*descs_processing)(struct virtq_cmd *cmd);
+	struct virtq_cmd* (*get_avail_cmd)(struct virtq_cmd *cmd_arr, uint16_t idx);
+	int (*progress_suspend)(struct snap_virtio_queue *snap_vbq,
+			struct snap_virtio_common_queue_attr *qattr);
 	void (*mem_pool_release)(struct virtq_cmd *cmd);
 	int (*seg_dmem)(struct virtq_cmd *cmd);
 	bool (*seg_dmem_release)(struct virtq_cmd *cmd);
@@ -332,5 +368,10 @@ bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 				     enum virtq_cmd_sm_op_status status);
 bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
+int virtq_progress(struct virtq_common_ctx *q, int thread_id);
+void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr);
+int virtq_suspend(struct virtq_common_ctx *q);
+bool virtq_is_suspended(struct virtq_common_ctx *q);
+void virtq_destroy(struct virtq_common_ctx *q);
 #endif
 

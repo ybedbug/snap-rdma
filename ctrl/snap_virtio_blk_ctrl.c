@@ -731,14 +731,14 @@ static void snap_virtio_blk_ctrl_queue_suspend(struct snap_virtio_ctrl_queue *vq
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	blk_virtq_suspend(vbq->q_impl);
+	virtq_suspend(&to_blk_ctx(vbq->q_impl)->common_ctx);
 }
 
 static bool snap_virtio_blk_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	if (!blk_virtq_is_suspended(vbq->q_impl))
+	if (!virtq_is_suspended(&to_blk_ctx(vbq->q_impl)->common_ctx))
 		return false;
 
 	snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
@@ -761,7 +761,7 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	 * the state restore
 	 */
 	if (vbq->q_impl) {
-		if (!blk_virtq_is_suspended(vbq->q_impl))
+		if (!virtq_is_suspended(&to_blk_ctx(vbq->q_impl)->common_ctx))
 			return -EINVAL;
 
 		/* save hw_used and hw_avail to allow resume */
@@ -772,7 +772,7 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 			return -EINVAL;
 		}
 
-		blk_virtq_destroy(vbq->q_impl);
+		virtq_destroy(&to_blk_ctx(vbq->q_impl)->common_ctx);
 		dev_attr->q_attrs[index].hw_available_index = state.hw_available_index;
 		dev_attr->q_attrs[index].hw_used_index = state.hw_used_index;
 	}
@@ -792,7 +792,7 @@ static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *v
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	blk_virtq_progress(vbq->q_impl, vq->thread_id);
+	virtq_progress(&to_blk_ctx(vbq->q_impl)->common_ctx, vq->thread_id);
 }
 
 static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
@@ -801,7 +801,7 @@ static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 	struct virtq_start_attr attr = {};
 
 	attr.pg_id = vq->pg->id;
-	blk_virtq_start(vbq->q_impl, &attr);
+	virtq_start(&to_blk_ctx(vbq->q_impl)->common_ctx, &attr);
 }
 
 static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *vq,

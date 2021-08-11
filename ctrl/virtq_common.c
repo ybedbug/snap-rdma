@@ -83,7 +83,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	vq_priv->vq_ctx = vq_ctx;
 	vq_ctx->priv = vq_priv;
 	vq_priv->vattr = vattr;
-	vq_priv->blk_dev.ctx = bdev;
+	vq_priv->virtq_dev.ctx = bdev;
 	vq_priv->pd = attr->pd;
 	vq_ctx->idx = attr->idx;
 	vq_ctx->fatal_err = 0;
@@ -293,7 +293,7 @@ inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 }
 
 /**
- * sm_write_status() - Write command status to host memory upon finish
+ * virtq_sm_write_status() - Write command status to host memory upon finish
  * @cmd:	command which requested the write
  * @status:	callback status, expected 0 for no errors
  *
@@ -311,7 +311,7 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
 		cmd->vq_priv->ops->error_status(cmd);
 
-	virtq_log_data(&cmd->common_cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
+	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %u\n",
 		       descs[sd.desc].addr,
 			   sd.status_size);
 	virtq_mark_dirty_mem(cmd, descs[sd.desc].addr,
@@ -359,7 +359,7 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 	}
 
 	if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-		virtq_log_data(&cmd->common_cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
+		virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
 			cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
 		if (cmd->io_cmd_stat)
 			++cmd->io_cmd_stat->unordered;
@@ -376,7 +376,7 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 
 	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
 	tunnel_comp.len = cmd->total_in_len;
-	virtq_log_data(&cmd->common_cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
 		       tunnel_comp.descr_head_idx, tunnel_comp.len,
 		       sizeof(struct virtq_split_tunnel_comp));
 	virtq_mark_dirty_mem(cmd, 0, 0, true);
@@ -436,4 +436,154 @@ bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status sta
 	 */
 
 	return false;
+}
+
+
+static int virtq_progress_suspend(struct virtq_common_ctx *q)
+{
+	struct virtq_priv *priv = q->priv;
+	struct snap_virtio_common_queue_attr qattr = { };
+
+	/* TODO: add option to ignore commands in the bdev layer */
+	if (priv->cmd_cntr != 0)
+		return 0;
+
+	snap_dma_q_flush(priv->dma_q);
+
+	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
+	/* TODO: check with FLR/reset. I see modify fail where it should not */
+	if (priv->ops->progress_suspend(priv->snap_vbq, &qattr))
+		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->idx);
+
+	/* at this point QP is in the error state and cannot be used anymore */
+	snap_info("queue %d: moving to the SUSPENDED state\n", q->idx);
+	priv->swq_state = SW_VIRTQ_SUSPENDED;
+	return 0;
+}
+
+/**
+ * blk_virq_progress_unordered() - Check & complete unordered commands
+ * @vq_priv:	queue to progress
+ */
+static void virtq_progress_unordered(struct virtq_priv *vq_priv)
+{
+	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+	struct virtq_cmd *cmd = vq_priv->ops->get_avail_cmd(vq_priv->cmd_arr,
+			cmd_idx);
+
+	while (cmd->state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP
+			&& cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {
+		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
+				cmd->cmd_available_index, cmd->state);
+
+		virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
+
+		cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+		cmd = vq_priv->ops->get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
+	}
+}
+
+/**
+ * virtq_progress() - Progress RDMA QPs,  Polls on QPs CQs
+ * @q:	queue to progress
+ *
+ * Context: Not thread safe
+ *
+ * Return: error code on failure, 0 on success
+ */
+int virtq_progress(struct virtq_common_ctx *q, int thread_id)
+{
+	struct virtq_priv *priv = q->priv;
+
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
+		return 0;
+
+	priv->thread_id = thread_id;
+	snap_dma_q_progress(priv->dma_q);
+
+	if (snap_unlikely(priv->force_in_order))
+		virtq_progress_unordered(priv);
+
+	/*
+	 * need to wait until all inflight requests
+	 * are finished before moving to the suspend state
+	 */
+	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING))
+		return virtq_progress_suspend(q);
+
+	return 0;
+}
+
+/**
+ * virtq_start() - set virtq attributes used for operating
+ * @q:		queue to start
+ * @attr:	attrs used to start the quue
+ *
+ * Function set attributes queue needs in order to operate.
+ *
+ * Return: void
+ */
+void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr)
+{
+	struct virtq_priv *priv = q->priv;
+
+	priv->pg_id = attr->pg_id;
+}
+
+void virtq_destroy(struct virtq_common_ctx *q)
+{
+	if (q)
+		free(q->priv);
+}
+
+/**
+ * virtq_suspend() - Request moving queue to suspend state
+ * @q:	queue to move to suspend state
+ *
+ * When suspend is requested the queue stops receiving new commands
+ * and moves to FLUSHING state. Once all commands already fetched are
+ * finished, the queue moves to SUSPENDED state.
+ *
+ * Context: Function is not thread safe with regard to virtq_progress
+ * and virtq_is_suspended. If called from a different thread than
+ * thread calling progress/is_suspended then application must take care of
+ * proper locking
+ *
+ * Return: 0 on success, else error code
+ */
+int virtq_suspend(struct virtq_common_ctx *q)
+{
+	struct virtq_priv *priv = q->priv;
+
+	if (priv->swq_state != SW_VIRTQ_RUNNING) {
+		snap_debug("queue %d: suspend was already requested\n", q->idx);
+		return -EBUSY;
+	}
+
+	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n", q->idx,
+			priv->cmd_cntr);
+
+	if (priv->vq_ctx->fatal_err)
+		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n", q->idx);
+
+	priv->swq_state = SW_VIRTQ_FLUSHING;
+	return 0;
+}
+
+/**
+ * virtq_is_suspended() - api for checking if queue in suspended state
+ * @q:		queue to check
+ *
+ * Context: Function is not thread safe with regard to virtq_progress
+ * and virtq_suspend. If called from a different thread than
+ * thread calling progress/suspend then application must take care of
+ * proper locking
+ *
+ * Return: True when queue suspended, and False for not suspended
+ */
+bool virtq_is_suspended(struct virtq_common_ctx *q)
+{
+	struct virtq_priv *priv = q->priv;
+
+	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }

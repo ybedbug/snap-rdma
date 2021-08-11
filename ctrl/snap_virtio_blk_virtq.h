@@ -46,7 +46,7 @@ int blk_virtq_get_state(struct blk_virtq_ctx *q,
 			struct snap_virtio_ctrl_queue_state *state);
 const struct snap_virtio_ctrl_queue_stats *
 blk_virtq_get_io_stats(struct blk_virtq_ctx *q);
-
+struct blk_virtq_ctx *to_blk_ctx(void *ctx);
 /* debug */
 struct snap_dma_q *get_dma_q(struct blk_virtq_ctx *ctx);
 int set_dma_mkey(struct blk_virtq_ctx *ctx, uint32_t mkey);
