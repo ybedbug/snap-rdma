@@ -111,6 +111,8 @@ int snap_nvme_query_device(struct snap_device *sdev,
 	attr->num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
+	attr->pci_hotplug_state = DEVX_GET(nvme_device_emulation,
+					device_emulation_out, pci_hotplug_state);
 	dev_allowed = DEVX_GET64(nvme_device_emulation, device_emulation_out,
 				 modify_field_select);
 
@@ -121,6 +123,8 @@ int snap_nvme_query_device(struct snap_device *sdev,
 		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_BAR_CC;
 	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ)
 		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ;
+	if (dev_allowed & MLX5_NVME_DEVICE_MODIFY_PCI_HOTPLUG_STATE)
+		attr->modifiable_fields |= SNAP_NVME_DEV_MOD_HOTPLUG_STATE;
 
 	attr->crossed_vhca_mkey = DEVX_GET(nvme_device_emulation,
 					   device_emulation_out,
@@ -212,6 +216,11 @@ int snap_nvme_modify_device(struct snap_device *sdev, uint64_t mask,
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_CC;
 	if (mask & SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ)
 		modify_mask |= MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ;
+	if (mask & SNAP_NVME_DEV_MOD_HOTPLUG_STATE) {
+		modify_mask |= MLX5_NVME_DEVICE_MODIFY_PCI_HOTPLUG_STATE;
+		DEVX_SET(nvme_device_emulation, device_emulation_in,
+		pci_hotplug_state, attr->pci_hotplug_state);
+	}
 	if (modify_mask)
 		DEVX_SET64(nvme_device_emulation, device_emulation_in,
 			   modify_field_select, modify_mask);

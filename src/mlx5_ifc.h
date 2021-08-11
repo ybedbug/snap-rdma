@@ -2576,6 +2576,8 @@ enum {
 	MLX5_NVME_DEVICE_MODIFY_BAR_CAP_VS_CSTS = 1 << 0,
 	MLX5_NVME_DEVICE_MODIFY_BAR_CC = 1 << 1,
 	MLX5_NVME_DEVICE_MODIFY_BAR_AQA_ASQ_ACQ = 1 << 2,
+	MLX5_NVME_DEVICE_MODIFY_PCI_HOTPLUG_STATE = 1 << 3,
+
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
@@ -3029,7 +3031,9 @@ struct mlx5_ifc_nvme_device_emulation_bits {
 
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
-	u8	   reserved_at_62[0x1e];
+	u8	   reserved_at_62[0x3];
+	u8	   pci_hotplug_state[0x3];
+	u8	   reserved_at_68[0x18];
 
 	u8	   counter_set_id[0x20];
 

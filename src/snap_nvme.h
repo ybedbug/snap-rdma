@@ -108,6 +108,7 @@ enum snap_nvme_device_modify {
 	SNAP_NVME_DEV_MOD_BAR_CAP_VS_CSTS	= 1 << 0,
 	SNAP_NVME_DEV_MOD_BAR_CC	= 1 << 1,
 	SNAP_NVME_DEV_MOD_BAR_AQA_ASQ_ACQ	= 1 << 2,
+	SNAP_NVME_DEV_MOD_HOTPLUG_STATE = 1 << 3,
 };
 
 struct snap_nvme_device_attr {
@@ -116,6 +117,7 @@ struct snap_nvme_device_attr {
 	uint64_t				modifiable_fields;//mask of snap_nvme_device_modify
 	uint16_t				num_of_vfs;
 	uint32_t				crossed_vhca_mkey;
+	uint8_t					pci_hotplug_state;
 };
 
 struct snap_nvme_device {
