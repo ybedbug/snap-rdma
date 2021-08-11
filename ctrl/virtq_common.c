@@ -13,6 +13,7 @@
 #include "virtq_common.h"
 #include <linux/virtio_ring.h>
 #include <linux/virtio_pci.h>
+#include "snap_channel.h"
 #include "snap_dma.h"
 #include "snap_env.h"
 
@@ -149,5 +150,290 @@ bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
 {
 	snap_error("command in invalid state %d\n",
 					   VIRTQ_CMD_STATE_IDLE);
+	return false;
+}
+
+/**
+ * enum virtq_fetch_desc_status - status of descriptors fetch process
+ * @VIRTQ_FETCH_DESC_DONE:	All descriptors were fetched
+ * @VIRTQ_FETCH_DESC_ERR:	Error while trying to fetch a descriptor
+ * @VIRTQ_FETCH_DESC_READ:	An Asynchronous read for desc was called
+ */
+enum virtq_fetch_desc_status {
+	VIRTQ_FETCH_DESC_DONE, VIRTQ_FETCH_DESC_ERR, VIRTQ_FETCH_DESC_READ,
+};
+
+/**
+ * fetch_next_desc() - Fetches command descriptors from host memory
+ * @cmd: command descriptors belongs to
+ *
+ * Function checks if there are descriptors that were not sent in the
+ * tunnled command, and if so it reads them from host memory one by one.
+ * Reading from host memory is done asynchronous
+ *
+ * Return: virtq_fetch_desc_status
+ */
+static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
+{
+	uint64_t srcaddr;
+	uint16_t in_ring_desc_addr;
+	int ret;
+	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
+
+	if (cmd->num_desc == 0)
+		in_ring_desc_addr = cmd->descr_head_idx % cmd->vq_priv->vattr->size;
+	else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
+		in_ring_desc_addr = descs[cmd->num_desc - 1].next;
+	else
+		return VIRTQ_FETCH_DESC_DONE;
+
+	if (cmd->vq_priv->ops->seg_dmem(cmd))
+		return VIRTQ_FETCH_DESC_ERR;
+
+	srcaddr = cmd->vq_priv->vattr->desc +
+		  in_ring_desc_addr * sizeof(struct vring_desc);
+	cmd->dma_comp.count = 1;
+	virtq_log_data(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
+	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->vq_priv->ops->get_descs(cmd)[cmd->num_desc],
+			sizeof(struct vring_desc), cmd->aux_mr->lkey, srcaddr,
+			cmd->vq_priv->vattr->dma_mkey,
+			&(cmd->dma_comp));
+	if (ret)
+		return VIRTQ_FETCH_DESC_ERR;
+	cmd->num_desc++;
+	return VIRTQ_FETCH_DESC_READ;
+}
+
+/**
+ * virtq_sm_fetch_cmd_descs() - Fetch all of commands descs
+ * @cmd: Command being processed
+ * @status: Callback status
+ *
+ * Function collects all of the commands descriptors. Descriptors can be either
+ * in the tunnel command itself, or in host memory.
+ *
+ * Return: True if state machine is moved to a new state synchronously (error
+ * or all descs were fetched), false if the state transition will be done
+ * asynchronously.
+ */
+bool virtq_sm_fetch_cmd_descs(struct virtq_cmd *cmd,
+			       enum virtq_cmd_sm_op_status status)
+{
+	size_t i;
+	enum virtq_fetch_desc_status ret;
+	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
+
+	if (status != VIRTQ_CMD_SM_OP_OK) {
+		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+	ret = fetch_next_desc(cmd);
+	if (ret == VIRTQ_FETCH_DESC_ERR) {
+		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
+		cmd->vq_priv->ops->descs_processing(cmd);
+		if (cmd->state == VIRTQ_CMD_STATE_FATAL_ERR)
+			return true;
+
+		for (i = 1; i < cmd->num_desc - 1; i++)
+			cmd->total_seg_len += descs[i].len;
+
+		cmd->state = VIRTQ_CMD_STATE_READ_HEADER;
+
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
+ * virtq_sm_write_back_done() - check write to bdev result status
+ * @cmd:	command which requested the write
+ * @status:	status of write operation
+ */
+bool virtq_sm_write_back_done(struct virtq_cmd *cmd,
+				   enum virtq_cmd_sm_op_status status)
+{
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+	if (status != VIRTQ_CMD_SM_OP_OK)
+		cmd->vq_priv->ops->error_status(cmd);
+
+	return true;
+}
+
+inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
+					uint32_t len, bool is_completion)
+{
+	struct snap_virtio_ctrl_queue *vq = cmd->vq_priv->vbq;
+	int rc;
+
+	if (snap_likely(!vq->log_writes_to_host))
+		return;
+
+	if (is_completion) {
+		/* spec 2.6 Split Virtqueues
+		 * mark all of the device area as dirty, in the worst case
+		 * it will cost an extra page or two. Device area size is
+		 * calculated according to the spec.
+		 */
+		pa = cmd->vq_priv->vattr->device;
+		len = 6 + 8 * cmd->vq_priv->vattr->size;
+	}
+	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
+	if (!vq->ctrl->lm_channel) {
+		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel is not present\n");
+		return;
+	}
+	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
+	if (rc)
+		ERR_ON_CMD(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
+}
+
+/**
+ * sm_write_status() - Write command status to host memory upon finish
+ * @cmd:	command which requested the write
+ * @status:	callback status, expected 0 for no errors
+ *
+ * Return: True if state machine is moved synchronously to the new state
+ * (error cases) or false if the state transition will be done asynchronously.
+ */
+inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
+				   enum virtq_cmd_sm_op_status status)
+{
+	int ret;
+	struct virtq_status_data sd;
+	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
+
+	cmd->vq_priv->ops->status_data(cmd, &sd);
+	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
+		cmd->vq_priv->ops->error_status(cmd);
+
+	virtq_log_data(&cmd->common_cmd, "WRITE_STATUS: pa 0x%llx len %lu\n",
+		       descs[sd.desc].addr,
+			   sd.status_size);
+	virtq_mark_dirty_mem(cmd, descs[sd.desc].addr,
+			sd.status_size, false);
+	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, sd.us_status,
+						sd.status_size,
+				     descs[sd.desc].addr,
+				     cmd->vq_priv->vattr->dma_mkey);
+	if (snap_unlikely(ret)) {
+		/* TODO: at some point we will have to do pending queue */
+		ERR_ON_CMD(cmd, "failed to send status, err=%d", ret);
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+
+	cmd->total_in_len += sd.status_size;
+	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
+	return true;
+}
+
+/**
+ * sm_send_completion() - send command completion to FW
+ * @cmd: Command being processed
+ * @status: Status of callback
+ *
+ * Return:
+ * True if state machine is moved synchronously to the new state
+ * (error cases) or false if the state transition will be done asynchronously.
+ */
+inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
+				     enum virtq_cmd_sm_op_status status)
+{
+	int ret;
+	struct virtq_split_tunnel_comp tunnel_comp;
+	bool unordered = false;
+
+	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
+		snap_error("failed to write the request status field\n");
+
+		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
+		 * handle case when cmd with VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
+		 */
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+
+	if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
+		virtq_log_data(&cmd->common_cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
+			cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
+		if (cmd->io_cmd_stat)
+			++cmd->io_cmd_stat->unordered;
+		unordered = true;
+	}
+
+	/* check order of completed command, if the command unordered - wait for
+	 * other completions
+	 */
+	if (snap_unlikely(cmd->vq_priv->force_in_order) && snap_unlikely(unordered)) {
+		cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
+		return false;
+	}
+
+	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
+	tunnel_comp.len = cmd->total_in_len;
+	virtq_log_data(&cmd->common_cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+		       tunnel_comp.descr_head_idx, tunnel_comp.len,
+		       sizeof(struct virtq_split_tunnel_comp));
+	virtq_mark_dirty_mem(cmd, 0, 0, true);
+	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
+					 &tunnel_comp,
+					 sizeof(struct virtq_split_tunnel_comp));
+	if (snap_unlikely(ret)) {
+		/* TODO: pending queue */
+		ERR_ON_CMD(cmd, "failed to second completion\n");
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+	} else {
+		cmd->state = VIRTQ_CMD_STATE_RELEASE;
+		++cmd->vq_priv->ctrl_used_index;
+	}
+
+	return true;
+}
+
+static void virtq_rel_req_dbuf(struct virtq_cmd *cmd)
+{
+	ibv_dereg_mr(cmd->req_mr);
+	cmd->vq_priv->ops->release_cmd(cmd);
+	cmd->req_buf = cmd->buf;
+	cmd->req_mr = cmd->mr;
+	cmd->use_dmem = false;
+}
+
+bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+{
+	bool repeat = false;
+
+	if (snap_unlikely(cmd->use_dmem))
+		virtq_rel_req_dbuf(cmd);
+	if (cmd->vq_priv->use_mem_pool)
+		cmd->vq_priv->ops->mem_pool_release(cmd);
+	if (snap_unlikely(cmd->use_seg_dmem))
+		repeat = cmd->vq_priv->ops->seg_dmem_release(cmd);
+	cmd->vq_priv->cmd_cntr--;
+
+	return repeat;
+}
+
+bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+{
+	if (snap_unlikely(cmd->use_dmem))
+		virtq_rel_req_dbuf(cmd);
+	if (cmd->vq_priv->use_mem_pool)
+		cmd->vq_priv->ops->mem_pool_release(cmd);
+	if (snap_unlikely(cmd->use_seg_dmem))
+		cmd->vq_priv->ops->seg_dmem_release(cmd);
+	cmd->vq_priv->vq_ctx->fatal_err = -1;
+	/*
+	 * TODO: propagate fatal error to the controller.
+	 * At the moment attempt to resume/state copy
+	 * of such controller will have unpredictable
+	 * results.
+	 */
+
 	return false;
 }

@@ -221,6 +221,7 @@ struct virtq_bdev {
 
 struct virtq_priv {
 	struct virtq_state_machine *custom_sm;
+	const struct virtq_impl_ops *ops;
 	volatile enum virtq_sw_state swq_state;
 	struct virtq_common_ctx *vq_ctx;
 	struct virtq_bdev blk_dev;
@@ -244,14 +245,32 @@ struct virtq_priv {
 	int thread_id;
 };
 
+struct virtq_status_data {
+	void *us_status;
+	uint16_t status_size;
+	uint16_t desc;
+};
+
+
 struct virtq_sm_state {
-		bool (*sm_handler)(struct virtq_cmd *cmd,
-				enum virtq_cmd_sm_op_status status);
+	bool (*sm_handler)(struct virtq_cmd *cmd,
+			enum virtq_cmd_sm_op_status status);
 };
 
 struct virtq_state_machine {
-		struct virtq_sm_state *sm_array;
-		uint16_t sme;
+	struct virtq_sm_state *sm_array;
+	uint16_t sme;
+};
+
+struct virtq_impl_ops {
+	struct vring_desc* (*get_descs)(struct virtq_cmd *cmd);
+	void (*error_status)(struct virtq_cmd *cmd);
+	void (*status_data)(struct virtq_cmd *cmd, struct virtq_status_data *sd);
+	void (*release_cmd)(struct virtq_cmd *cmd);
+	void (*descs_processing)(struct virtq_cmd *cmd);
+	void (*mem_pool_release)(struct virtq_cmd *cmd);
+	int (*seg_dmem)(struct virtq_cmd *cmd);
+	bool (*seg_dmem_release)(struct virtq_cmd *cmd);
 };
 
 /**
@@ -301,5 +320,17 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 void virtq_ctx_destroy(struct virtq_priv *vq_priv);
 int virtq_cmd_progress(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
+bool virtq_sm_fetch_cmd_descs(struct virtq_cmd *cmd,
+			       enum virtq_cmd_sm_op_status status);
+bool virtq_sm_write_back_done(struct virtq_cmd *cmd,
+				   enum virtq_cmd_sm_op_status status);
+void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
+					uint32_t len, bool is_completion);
+bool virtq_sm_write_status(struct virtq_cmd *cmd,
+				   enum virtq_cmd_sm_op_status status);
+bool virtq_sm_send_completion(struct virtq_cmd *cmd,
+				     enum virtq_cmd_sm_op_status status);
+bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
+bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 #endif
 
