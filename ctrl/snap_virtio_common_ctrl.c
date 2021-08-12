@@ -1505,7 +1505,7 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	uint16_t bdf;
 
 	snap_virtio_ctrl_progress_lock(ctrl);
-	bdf = ctrl->bar_curr->pci_bdf;
+	bdf = ctrl->sdev->pci->pci_bdf.raw;
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("%p: get_pci_bdf: 0x0%x\n", ctrl, bdf);
 	return bdf;
