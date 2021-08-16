@@ -52,38 +52,6 @@ struct virtio_fs_outftr {
 	struct fuse_out_header out_header;
 };
 
-/**
- * enum fs_virtq_cmd_sm_state - state of the sm handling a cmd
- * @FS_VIRTQ_CMD_STATE_IDLE:			SM initialization state
- * @FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS:		SM received tunnel cmd and copied
- *						immediate data, now fetch cmd descs
- * @FS_VIRTQ_CMD_STATE_READ_REQ:		Read request data from host memory
- * @FS_VIRTQ_CMD_STATE_HANDLE_REQ:		Handle received request from host, perform
- *						fuse operation (open/read/write/etc.)
- * @FS_VIRTQ_CMD_STATE_OUT_IOV_DONE:		Finished writing to fs device, check write
- *						status
- * @FS_VIRTQ_CMD_STATE_IN_IOV_DONE:		Write data pulled from fs device to host memory
- * @FS_VIRTQ_CMD_STATE_WRITE_STATUS:		Write cmd status to host memory
- * @FS_VIRTQ_CMD_STATE_SEND_COMP:		Send completion to FW
- * @FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP:	Send completion to FW for commands completed
- *						unordered
- * @FS_VIRTQ_CMD_STATE_RELEASE:			Release command
- * @FS_VIRTQ_CMD_STATE_FATAL_ERR:		Fatal error, SM stuck here (until reset)
- */
-enum fs_virtq_cmd_sm_state {
-	FS_VIRTQ_CMD_STATE_IDLE,
-	FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS,
-	FS_VIRTQ_CMD_STATE_READ_REQ,
-	FS_VIRTQ_CMD_STATE_HANDLE_REQ,
-	FS_VIRTQ_CMD_STATE_OUT_IOV_DONE,
-	FS_VIRTQ_CMD_STATE_IN_IOV_DONE,
-	FS_VIRTQ_CMD_STATE_WRITE_STATUS,
-	FS_VIRTQ_CMD_STATE_SEND_COMP,
-	FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP,
-	FS_VIRTQ_CMD_STATE_RELEASE,
-	FS_VIRTQ_CMD_STATE_FATAL_ERR,
-};
-
 struct fs_virtq_cmd_aux {
 	struct fuse_in_header header;
 	// TODO check why header len of q0 is 64
@@ -119,7 +87,7 @@ struct fs_virtq_cmd {
 	uint16_t descr_head_idx;
 	size_t num_desc;
 	struct fs_virtq_priv *vq_priv;
-	enum fs_virtq_cmd_sm_state state;
+	enum virtq_cmd_sm_state state;
 	struct vring_desc *descs;
 	uint8_t *buf;
 	uint32_t req_size;
@@ -500,16 +468,16 @@ static bool sm_fetch_cmd_descs(struct fs_virtq_cmd *cmd,
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD_FS(cmd, "failed to fetch commands descs, dumping command without response\n");
-		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
 	ret = fetch_next_desc(cmd);
 	if (ret == VIRTQ_FETCH_DESC_ERR) {
 		ERR_ON_CMD_FS(cmd, "failed to RDMA READ desc from host\n");
-		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
-		cmd->state = FS_VIRTQ_CMD_STATE_READ_REQ;
+		cmd->state = VIRTQ_CMD_STATE_READ_DATA;
 		return true;
 	} else {
 		return false;
@@ -555,7 +523,7 @@ free_buf:
 err:
 	cmd->req_buf = cmd->buf;
 	set_cmd_error(cmd, error);
-	cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	return -1;
 }
 
@@ -615,7 +583,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 
 	if (!FS_VIRTQ_CHECK_FS_REQ_FORMAT(cmd)) {
 		set_cmd_error(cmd, EINVAL);
-		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
 
@@ -625,7 +593,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	}
 
 	offset = 0;
-	cmd->state = FS_VIRTQ_CMD_STATE_HANDLE_REQ;
+	cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
 	num_desc = cmd->pos_f_write > 0 ? cmd->pos_f_write : cmd->num_desc;
 
 	virtq_log_data_fs(cmd, "READ_HEADER: pa 0x%llx len %u\n",
@@ -634,7 +602,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 		cmd->mr->lkey, cmd->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
 		&cmd->dma_comp);
 	if (ret) {
-		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
 
@@ -645,7 +613,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 				cmd->descs[i].len, cmd->req_mr->lkey, cmd->descs[i].addr,
 				priv->snap_attr.vattr.dma_mkey, &cmd->dma_comp);
 		if (ret) {
-			cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
 		offset += cmd->descs[i].len;
@@ -673,7 +641,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD_FS(cmd, "failed to get request data, returning failure\n");
 		set_cmd_error(cmd, EINVAL);
-		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
 
@@ -681,7 +649,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 
 	ret = set_iovecs(cmd);
 	if (ret) {
-		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		set_cmd_error(cmd, EINVAL);
 		return true;
 	}
@@ -707,7 +675,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 	if (ret) {
 		ERR_ON_CMD_FS(cmd, "failed while executing command\n");
 		set_cmd_error(cmd, EIO);
-		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
 
@@ -716,11 +684,11 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 	 * Writable, meaning the descriptor's data was 'filled' by fs device.
 	 */
 	if (snap_likely(cmd->vq_priv->vq_ctx.common_ctx.idx > 0))
-		cmd->state = FS_VIRTQ_CMD_STATE_IN_IOV_DONE;
+		cmd->state = VIRTQ_CMD_STATE_IN_DATA_DONE;
 	else {
 		/* hiprio queue - do nothing, send tunneling completion only */
 		virtq_log_data_fs(cmd, "hiprio - send completion\n");
-		cmd->state = FS_VIRTQ_CMD_STATE_SEND_COMP;
+		cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
 	}
 
 	return true;
@@ -742,11 +710,11 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD_FS(cmd, "failed to read from block device, send ioerr to host\n");
 		set_cmd_error(cmd, EIO);
-		cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
 	}
 
-	cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	cmd->dma_comp.count = cmd->num_desc - (cmd->pos_f_write + 1);
 	if (snap_likely(cmd->dma_comp.count > 0)) {
 
@@ -768,7 +736,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 					       &(cmd->dma_comp));
 			if (ret) {
 				set_cmd_error(cmd, -ret);
-				cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+				cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 				return true;
 			}
 			cmd->total_in_len += cmd->descs[i].len;
@@ -786,7 +754,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 static void sm_handle_out_iov_done(struct fs_virtq_cmd *cmd,
 				   enum virtq_cmd_sm_op_status status)
 {
-	cmd->state = FS_VIRTQ_CMD_STATE_WRITE_STATUS;
+	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 	if (status != VIRTQ_CMD_SM_OP_OK)
 		set_cmd_error(cmd, EIO);
 }
@@ -824,14 +792,14 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
 		if (snap_unlikely(ret)) {
 			/* TODO: at some point we will have to do pending queue */
 			ERR_ON_CMD_FS(cmd, "failed to send status, err=%d\n", ret);
-			cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
 
 		cmd->total_in_len += sizeof(struct virtio_fs_outftr);
 	}
 
-	cmd->state = FS_VIRTQ_CMD_STATE_SEND_COMP;
+	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
 	return true;
 }
 
@@ -853,10 +821,10 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
 		snap_error("failed to write the request status field\n");
 
-		/* TODO: if FS_VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
-		 * handle case when cmd with FS_VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
+		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
+		 * handle case when cmd with VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
 		 */
-		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
 
@@ -868,7 +836,7 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 			virtq_log_data_fs(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
 				       cmd->idx, cmd->cmd_available_index,
 				       cmd->vq_priv->ctrl_used_index);
-			cmd->state = FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
+			cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
 			return false;
 		}
 	}
@@ -885,9 +853,9 @@ static inline int sm_send_completion(struct fs_virtq_cmd *cmd,
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
 		ERR_ON_CMD_FS(cmd, "failed to second completion\n");
-		cmd->state = FS_VIRTQ_CMD_STATE_FATAL_ERR;
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
-		cmd->state = FS_VIRTQ_CMD_STATE_RELEASE;
+		cmd->state = VIRTQ_CMD_STATE_RELEASE;
 		++cmd->vq_priv->ctrl_used_index;
 	}
 
@@ -910,39 +878,39 @@ static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
 		repeat = false;
 		snap_debug("virtq cmd sm state: %d\n", cmd->state);
 		switch (cmd->state) {
-		case FS_VIRTQ_CMD_STATE_IDLE:
+		case VIRTQ_CMD_STATE_IDLE:
 			snap_error("command in invalid state %d\n",
-				   FS_VIRTQ_CMD_STATE_IDLE);
+				   VIRTQ_CMD_STATE_IDLE);
 			break;
-		case FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS:
+		case VIRTQ_CMD_STATE_FETCH_CMD_DESCS:
 			repeat = sm_fetch_cmd_descs(cmd, status);
 			break;
-		case FS_VIRTQ_CMD_STATE_READ_REQ:
+		case VIRTQ_CMD_STATE_READ_DATA:
 			repeat = fs_virtq_read_req_from_host(cmd);
 			break;
-		case FS_VIRTQ_CMD_STATE_HANDLE_REQ:
+		case VIRTQ_CMD_STATE_HANDLE_REQ:
 			repeat = fs_virtq_handle_req(cmd, status);
 			break;
-		case FS_VIRTQ_CMD_STATE_IN_IOV_DONE:
+		case VIRTQ_CMD_STATE_IN_DATA_DONE:
 			repeat = sm_handle_in_iov_done(cmd, status);
 			break;
-		case FS_VIRTQ_CMD_STATE_OUT_IOV_DONE:
+		case VIRTQ_CMD_STATE_OUT_DATA_DONE:
 			sm_handle_out_iov_done(cmd, status);
 			repeat = true;
 			break;
-		case FS_VIRTQ_CMD_STATE_WRITE_STATUS:
+		case VIRTQ_CMD_STATE_WRITE_STATUS:
 			repeat = sm_write_status(cmd, status);
 			break;
-		case FS_VIRTQ_CMD_STATE_SEND_COMP:
-		case FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP:
+		case VIRTQ_CMD_STATE_SEND_COMP:
+		case VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP:
 			repeat = sm_send_completion(cmd, status);
 			break;
-		case FS_VIRTQ_CMD_STATE_RELEASE:
+		case VIRTQ_CMD_STATE_RELEASE:
 			if (snap_unlikely(cmd->use_dmem))
 				fs_virtq_rel_req_dbuf(cmd);
 			--cmd->vq_priv->cmd_cntr;
 			break;
-		case FS_VIRTQ_CMD_STATE_FATAL_ERR:
+		case VIRTQ_CMD_STATE_FATAL_ERR:
 			if (snap_unlikely(cmd->use_dmem))
 				fs_virtq_rel_req_dbuf(cmd);
 			cmd->vq_priv->vq_ctx.common_ctx.fatal_err = -1;
@@ -1017,7 +985,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	++priv->cmd_cntr;
 	++priv->ctrl_available_index;
-	cmd->state = FS_VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
+	cmd->state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
 	virtq_log_data_fs(cmd, "NEW_CMD: %lu inline descs, descr_head_idx %d, va %p (%d), rxlen %u\n",
 		       cmd->num_desc, cmd->descr_head_idx, cmd->req_buf, cmd->req_size, data_len);
 	fs_virtq_cmd_progress(cmd, status);
@@ -1320,7 +1288,7 @@ static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
 	struct fs_virtq_cmd *cmd = &vq_priv->cmd_arr[cmd_idx];
 
-	while (cmd->state == FS_VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
+	while (cmd->state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
 	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {
 		virtq_log_data_fs(cmd, "PEND_COMP: ino_num:%d state:%d\n",
 			       cmd->cmd_available_index, cmd->state);
