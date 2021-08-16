@@ -449,9 +449,11 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
 			snap_error("bar change while in %s\n", lm_state2str(ctrl->lm_state));
 
-		ret = snap_virtio_ctrl_validate(ctrl);
-		if (!ret && SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
-			ret = snap_virtio_ctrl_start(ctrl);
+		if (SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl)) {
+			ret = snap_virtio_ctrl_validate(ctrl);
+			if (!ret)
+				ret = snap_virtio_ctrl_start(ctrl);
+		}
 	}
 	if (ret)
 		snap_virtio_ctrl_device_error(ctrl);
