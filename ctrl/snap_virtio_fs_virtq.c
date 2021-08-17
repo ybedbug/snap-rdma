@@ -24,7 +24,7 @@
 #define fs_virtq_dump_fs_opcode(cmd) \
 {\
 	const struct fuse_in_header *req_hdr_p; \
-	req_hdr_p =  (const struct fuse_in_header *)&cmd->aux->header; \
+	req_hdr_p =  (const struct fuse_in_header *)&to_fs_cmd_aux(cmd->aux)->header; \
 	snap_debug("\t fuse opcode: %d\n", req_hdr_p->opcode); \
 }
 #else
@@ -56,6 +56,7 @@ struct fs_virtq_cmd_aux {
 	struct fuse_in_header header;
 	// TODO check why header len of q0 is 64
 	uint8_t resrv[24];
+	struct vring_desc descs[0];
 };
 
 /**
@@ -87,11 +88,12 @@ struct fs_virtq_cmd {
 	uint16_t descr_head_idx;
 	size_t num_desc;
 	struct fs_virtq_priv *vq_priv;
-	enum virtq_cmd_sm_state state;
-	struct vring_desc *descs;
+	int16_t state;
 	uint8_t *buf;
 	uint32_t req_size;
-	struct fs_virtq_cmd_aux *aux;
+	struct ibv_mr *aux_mr;
+	void *aux;
+	void *ftr;
 	struct ibv_mr *mr;
 	uint8_t *req_buf;
 	struct ibv_mr *req_mr;
@@ -101,10 +103,19 @@ struct fs_virtq_cmd {
 	struct snap_fs_dev_io_done_ctx fs_dev_op_ctx;
 	bool use_dmem;
 	uint16_t cmd_available_index;
-	struct virtio_fs_outftr *fs_req_ftr;
 	struct iovec *iov;
 	int16_t pos_f_write;
 };
+
+static inline struct fs_virtq_cmd_aux *to_fs_cmd_aux(void *aux)
+{
+	return (struct fs_virtq_cmd_aux *)aux;
+}
+
+static inline struct virtio_fs_outftr *to_fs_cmd_ftr(void *ftr)
+{
+	return (struct virtio_fs_outftr *)ftr;
+}
 
 /**
  * struct fs_virtq_dev - fs device
@@ -138,9 +149,9 @@ struct fs_virtq_priv {
 
 static inline void set_cmd_error(struct fs_virtq_cmd *cmd, int error)
 {
-	memset(&cmd->fs_req_ftr->out_header, 0, sizeof(cmd->fs_req_ftr->out_header));
+	memset(&to_fs_cmd_ftr(cmd->ftr)->out_header, 0, sizeof(to_fs_cmd_ftr(cmd->ftr)->out_header));
 	// For more detail refer to fuse_lowlevel.c::fuse_reply_err
-	cmd->fs_req_ftr->out_header.error = -error;
+	to_fs_cmd_ftr(cmd->ftr)->out_header.error = -error;
 }
 
 static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa,
@@ -199,8 +210,9 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 	uint32_t n_descs = seg_max;
 	const size_t req_size = size_max * seg_max;
 	const size_t descs_size = n_descs * sizeof(struct vring_desc);
-	const size_t buf_size = req_size + descs_size +
-		sizeof(struct fs_virtq_cmd_aux) + sizeof(struct virtio_fs_outftr);
+	//const size_t buf_size = req_size + descs_size +
+	//	sizeof(struct fs_virtq_cmd_aux) + sizeof(struct virtio_fs_outftr);
+	const size_t aux_size = sizeof(struct fs_virtq_cmd_aux) + descs_size;
 	uint32_t iovcnt = seg_max + 2 /* + in_header & out_header*/;
 	int ret;
 
@@ -210,6 +222,12 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 	cmd->fs_dev_op_ctx.user_arg = cmd;
 	cmd->fs_dev_op_ctx.cb = fs_dev_io_comp_cb;
 	cmd->cmd_available_index = 0;
+	cmd->ftr = calloc(1, sizeof(struct virtio_fs_outftr));
+	if (!cmd->ftr) {
+		snap_error("failed to allocate footer for virtq %d\n",
+			   idx);
+		return -ENOMEM;
+	}
 	cmd->iov = calloc(iovcnt, sizeof(struct iovec));
 	if (!cmd->iov) {
 		snap_error("failed to allocate iov for virtq %d\n", idx);
@@ -218,18 +236,14 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 
 	cmd->req_size = req_size;
 
-	cmd->buf = vq_priv->fs_dev.ops->dma_malloc(buf_size);
+	cmd->buf = vq_priv->fs_dev.ops->dma_malloc(req_size + aux_size);
 	if (!cmd->buf) {
 		snap_error("failed to allocate memory for virtq %d\n", idx);
 		ret = -ENOMEM;
 		goto free_iov;
 	}
 
-	cmd->descs = (struct vring_desc *) ((uint8_t *) cmd->buf + req_size);
-	cmd->aux = (struct fs_virtq_cmd_aux *) ((uint8_t *) cmd->descs + descs_size);
-	cmd->fs_req_ftr = (struct virtio_fs_outftr *) ((uint8_t *) cmd->aux + sizeof(struct fs_virtq_cmd_aux));
-
-	cmd->mr = ibv_reg_mr(vq_priv->pd, cmd->buf, buf_size,
+	cmd->mr = ibv_reg_mr(vq_priv->pd, cmd->buf, req_size + aux_size,
 					IBV_ACCESS_REMOTE_READ |
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
@@ -238,6 +252,9 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 		ret = -1;
 		goto free_cmd_buf;
 	}
+
+	cmd->aux = (struct fs_virtq_cmd_aux *)((uint8_t *)cmd->buf + req_size);
+	cmd->aux_mr = cmd->mr;
 
 	return 0;
 
@@ -348,8 +365,8 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct fs_virtq_cmd *cmd)
 	if (cmd->num_desc == 0)
 		in_ring_desc_addr = cmd->descr_head_idx %
 				    cmd->vq_priv->snap_attr.vattr.size;
-	else if (cmd->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
-		in_ring_desc_addr = cmd->descs[cmd->num_desc - 1].next;
+	else if (to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
+		in_ring_desc_addr = to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
 
@@ -357,7 +374,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct fs_virtq_cmd *cmd)
 		in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->dma_comp.count = 1;
 	virtq_log_data_fs(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
-	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->descs[cmd->num_desc],
+	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc],
 			sizeof(struct vring_desc), cmd->mr->lkey,
 			srcaddr, cmd->vq_priv->snap_attr.vattr.dma_mkey,
 			&(cmd->dma_comp));
@@ -401,40 +418,40 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 
 	// Device-readable part - fuse in header
 	cmd->iov[0].iov_base = cmd->aux;
-	cmd->iov[0].iov_len = cmd->descs[0].len;
+	cmd->iov[0].iov_len = to_fs_cmd_aux(cmd->aux)->descs[0].len;
 
 	num_desc = cmd->pos_f_write > 0 ? cmd->pos_f_write : cmd->num_desc;
 
 	virtq_log_data_fs(cmd, "RH: iov[0] pa 0x%llx va %p, %ld\n",
-		       cmd->descs[0].addr, cmd->iov[0].iov_base, cmd->iov[0].iov_len);
+		       to_fs_cmd_aux(cmd->aux)->descs[0].addr, cmd->iov[0].iov_base, cmd->iov[0].iov_len);
 
 	// Device-readable part
 	for (i = 1; i < num_desc; ++i) {
 		cmd->iov[i].iov_base = cmd->req_buf + offset;
-		cmd->iov[i].iov_len = cmd->descs[i].len;
-		offset += cmd->descs[i].len;
+		cmd->iov[i].iov_len = to_fs_cmd_aux(cmd->aux)->descs[i].len;
+		offset += to_fs_cmd_aux(cmd->aux)->descs[i].len;
 		virtq_log_data_fs(cmd, "RD: iov[%d] pa 0x%llx va %p, %ld\n",
-			       i, cmd->descs[i].addr, cmd->iov[i].iov_base,
+			       i, to_fs_cmd_aux(cmd->aux)->descs[i].addr, cmd->iov[i].iov_base,
 			       cmd->iov[i].iov_len);
 	}
 
 	if (snap_likely(cmd->pos_f_write > 0)) {
 		// Device-writable part - fuse out header
-		cmd->iov[cmd->pos_f_write].iov_base = cmd->fs_req_ftr;
+		cmd->iov[cmd->pos_f_write].iov_base = cmd->ftr;
 		cmd->iov[cmd->pos_f_write].iov_len = sizeof(struct virtio_fs_outftr);
 
 		virtq_log_data_fs(cmd, "WH: iov[%d] pa 0x%llx va %p, %ld\n", i,
-			       cmd->descs[cmd->pos_f_write].addr,
+			       to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].addr,
 			       cmd->iov[cmd->pos_f_write].iov_base,
 			       cmd->iov[cmd->pos_f_write].iov_len);
 
 		// Device-writable part
 		for (i = cmd->pos_f_write + 1; i < cmd->num_desc; ++i) {
 			cmd->iov[i].iov_base = cmd->req_buf + offset;
-			cmd->iov[i].iov_len = cmd->descs[i].len;
-			offset += cmd->descs[i].len;
+			cmd->iov[i].iov_len = to_fs_cmd_aux(cmd->aux)->descs[i].len;
+			offset += to_fs_cmd_aux(cmd->aux)->descs[i].len;
 			virtq_log_data_fs(cmd, "WD: iov[%d] pa 0x%llx va %p, %ld\n", i,
-				       cmd->descs[i].addr, cmd->iov[i].iov_base,
+				       to_fs_cmd_aux(cmd->aux)->descs[i].addr, cmd->iov[i].iov_base,
 				       cmd->iov[i].iov_len);
 
 		}
@@ -566,11 +583,13 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	cmd->dma_comp.count = 1;
 	for (i = 1; i < cmd->num_desc; i++) {
 		snap_debug("\t desc[%d] --> pa 0x%llx len %d fl 0x%x F_WR %d\n", i,
-			   cmd->descs[i].addr, cmd->descs[i].len, cmd->descs[i].flags,
-			   (cmd->descs[i].flags & VRING_DESC_F_WRITE) ? 1 : 0);
+			   to_fs_cmd_aux(cmd->aux)->descs[i].addr,
+			   to_fs_cmd_aux(cmd->aux)->descs[i].len,
+			   to_fs_cmd_aux(cmd->aux)->descs[i].flags,
+			   (to_fs_cmd_aux(cmd->aux)->descs[i].flags & VRING_DESC_F_WRITE) ? 1 : 0);
 
-		cmd->total_seg_len += cmd->descs[i].len;
-		if ((cmd->descs[i].flags & VRING_DESC_F_WRITE) == 0) {
+		cmd->total_seg_len += to_fs_cmd_aux(cmd->aux)->descs[i].len;
+		if ((to_fs_cmd_aux(cmd->aux)->descs[i].flags & VRING_DESC_F_WRITE) == 0) {
 			++cmd->dma_comp.count;
 		} else {
 			if (snap_unlikely(!cmd->pos_f_write))
@@ -597,10 +616,13 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	num_desc = cmd->pos_f_write > 0 ? cmd->pos_f_write : cmd->num_desc;
 
 	virtq_log_data_fs(cmd, "READ_HEADER: pa 0x%llx len %u\n",
-		       cmd->descs[0].addr, cmd->descs[0].len);
-	ret = snap_dma_q_read(priv->dma_q, &cmd->aux->header, cmd->descs[0].len,
-		cmd->mr->lkey, cmd->descs[0].addr, priv->snap_attr.vattr.dma_mkey,
-		&cmd->dma_comp);
+		       to_fs_cmd_aux(cmd->aux)->descs[0].addr, 
+		       to_fs_cmd_aux(cmd->aux)->descs[0].len);
+	ret = snap_dma_q_read(priv->dma_q, &to_fs_cmd_aux(cmd->aux)->header, 
+			      to_fs_cmd_aux(cmd->aux)->descs[0].len,
+			      cmd->mr->lkey, to_fs_cmd_aux(cmd->aux)->descs[0].addr, 
+			      priv->snap_attr.vattr.dma_mkey,
+			      &cmd->dma_comp);
 	if (ret) {
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
@@ -608,15 +630,17 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 
 	for (i = 1; i < num_desc; ++i) {
 		virtq_log_data_fs(cmd, "READ_DATA: pa 0x%llx va %p len %u\n",
-			       cmd->descs[i].addr, cmd->req_buf + offset, cmd->descs[i].len);
+			       to_fs_cmd_aux(cmd->aux)->descs[i].addr, cmd->req_buf + offset,
+			       to_fs_cmd_aux(cmd->aux)->descs[i].len);
 		ret = snap_dma_q_read(priv->dma_q, cmd->req_buf + offset,
-				cmd->descs[i].len, cmd->req_mr->lkey, cmd->descs[i].addr,
+				to_fs_cmd_aux(cmd->aux)->descs[i].len, cmd->req_mr->lkey,
+				to_fs_cmd_aux(cmd->aux)->descs[i].addr,
 				priv->snap_attr.vattr.dma_mkey, &cmd->dma_comp);
 		if (ret) {
 			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
-		offset += cmd->descs[i].len;
+		offset += to_fs_cmd_aux(cmd->aux)->descs[i].len;
 	}
 	return false;
 }
@@ -723,15 +747,15 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 		 */
 		for (i = cmd->pos_f_write + 1; i < cmd->num_desc; ++i) {
 			virtq_log_data_fs(cmd, "WRITE_DATA: pa 0x%llx va %p len %u\n",
-				       cmd->descs[i].addr, cmd->iov[i].iov_base,
-				       cmd->descs[i].len);
-			fs_virtq_mark_dirty_mem(cmd, cmd->descs[i].addr,
-						cmd->descs[i].len, false);
+				       to_fs_cmd_aux(cmd->aux)->descs[i].addr, cmd->iov[i].iov_base,
+				       to_fs_cmd_aux(cmd->aux)->descs[i].len);
+			fs_virtq_mark_dirty_mem(cmd, to_fs_cmd_aux(cmd->aux)->descs[i].addr,
+						to_fs_cmd_aux(cmd->aux)->descs[i].len, false);
 			ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 					       cmd->iov[i].iov_base,
-					       cmd->descs[i].len,
+					       to_fs_cmd_aux(cmd->aux)->descs[i].len,
 					       cmd->req_mr->lkey,
-					       cmd->descs[i].addr,
+					       to_fs_cmd_aux(cmd->aux)->descs[i].addr,
 					       cmd->vq_priv->snap_attr.vattr.dma_mkey,
 					       &(cmd->dma_comp));
 			if (ret) {
@@ -739,7 +763,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 				cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 				return true;
 			}
-			cmd->total_in_len += cmd->descs[i].len;
+			cmd->total_in_len += to_fs_cmd_aux(cmd->aux)->descs[i].len;
 		}
 		return false;
 	}
@@ -778,16 +802,16 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
 			set_cmd_error(cmd, EIO);
 
 		virtq_log_data_fs(cmd, "WRITE_STATUS: pa 0x%llx va %p len %lu\n",
-			       cmd->descs[cmd->pos_f_write].addr,
+			       to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].addr,
 			       cmd->iov[cmd->pos_f_write].iov_base,
 			       sizeof(struct virtio_fs_outftr));
-		fs_virtq_mark_dirty_mem(cmd, cmd->descs[cmd->pos_f_write].addr,
+		fs_virtq_mark_dirty_mem(cmd, to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].addr,
 					sizeof(struct virtio_fs_outftr), false);
 
 		// tx_inline is 60 bytes, struct fuse_out_header is 16 bytes
-		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, cmd->fs_req_ftr,
+		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, cmd->ftr,
 					sizeof(struct virtio_fs_outftr),
-					cmd->descs[cmd->pos_f_write].addr,
+					to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].addr,
 					cmd->vq_priv->snap_attr.vattr.dma_mkey);
 		if (snap_unlikely(ret)) {
 			/* TODO: at some point we will have to do pending queue */
@@ -960,7 +984,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 	cmd->descr_head_idx = split_hdr->descr_head_idx;
 	cmd->total_seg_len = 0;
 	cmd->total_in_len = 0;
-	cmd->fs_req_ftr->out_header.error = 0;
+	to_fs_cmd_ftr(cmd->ftr)->out_header.error = 0;
 	cmd->use_dmem = false;
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
@@ -980,7 +1004,7 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	if (split_hdr->num_desc) {
 		len = sizeof(struct vring_desc) * split_hdr->num_desc;
-		memcpy(cmd->descs, descs, len);
+		memcpy(to_fs_cmd_aux(cmd->aux)->descs, descs, len);
 	}
 
 	++priv->cmd_cntr;
@@ -1006,16 +1030,16 @@ static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
 		}
 
 		// First writable descriptor should point to virtio_fs_outftr
-		if (snap_unlikely(cmd->descs[cmd->pos_f_write].len != sizeof(struct virtio_fs_outftr))) {
+		if (snap_unlikely(to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].len != sizeof(struct virtio_fs_outftr))) {
 			ERR_ON_CMD_FS(cmd, "Unexpected len: %d in desc[%d] - expected %ld bytes !\n",
-				   cmd->descs[cmd->pos_f_write].len,
+				   to_fs_cmd_aux(cmd->aux)->descs[cmd->pos_f_write].len,
 				   cmd->pos_f_write, sizeof(struct virtio_fs_outftr));
 			return false;
 		}
 	} else {
-		if (snap_unlikely(cmd->descs[0].len > sizeof(struct fs_virtq_cmd_aux))) {
+		if (snap_unlikely(to_fs_cmd_aux(cmd->aux)->descs[0].len > sizeof(struct fs_virtq_cmd_aux))) {
 			ERR_ON_CMD_FS(cmd, "Unexpected len: %d of in header !\n",
-				   cmd->descs[0].len);
+				   to_fs_cmd_aux(cmd->aux)->descs[0].len);
 			return false;
 		}
 		if (snap_unlikely(cmd->pos_f_write != 0)) {
