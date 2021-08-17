@@ -109,7 +109,7 @@ static void blk_virtq_status_data(struct virtq_cmd *cmd, struct virtq_status_dat
 
 static void blk_virtq_release_cmd(struct virtq_cmd *cmd)
 {
-	to_blk_bdev_ops(&cmd->vq_priv->blk_dev)->dma_free(cmd->buf);
+	to_blk_bdev_ops(&cmd->vq_priv->blk_dev)->dma_free(cmd->req_buf);
 }
 
 static void sm_dma_cb(struct snap_dma_completion *self, int status)
