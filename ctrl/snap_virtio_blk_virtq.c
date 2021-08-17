@@ -1083,7 +1083,10 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
 
-	cmd_idx = split_hdr->descr_head_idx % priv->vattr->size;
+	if (priv->force_in_order)
+		cmd_idx = priv->ctrl_available_index % priv->vattr->size;
+	else
+		cmd_idx = split_hdr->descr_head_idx % priv->vattr->size;
 	cmd = &to_blk_cmd_arr(priv->cmd_arr)[cmd_idx];
 	cmd->common_cmd.num_desc = split_hdr->num_desc;
 	cmd->common_cmd.descr_head_idx = split_hdr->descr_head_idx;
