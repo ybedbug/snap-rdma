@@ -96,9 +96,13 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_NUM_MSIX;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DYN_MSIX_RESET;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
 	}
 	attr->vattr.num_free_dynamic_vfs_msix = DEVX_GET(virtio_net_device_emulation,
 						   device_emulation_out, num_free_dynamic_vfs_msix);
+	attr->vattr.pci_hotplug_state = DEVX_GET(virtio_net_device_emulation,
+						   device_emulation_out, pci_hotplug_state);
 	attr->mtu = DEVX_GET(virtio_net_device_emulation,
 			     device_emulation_out, virtio_net_config.mtu);
 	attr->status = DEVX_GET(virtio_net_device_emulation,

@@ -469,6 +469,13 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 				 dynamic_vf_msix_reset, attr->dynamic_vf_msix_reset);
 			snap_debug("Setting SNAP_VIRTIO_MOD_DYN_MSIX_RESET on PF\n");
 		}
+		if (mask & (SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE | SNAP_VIRTIO_MOD_ALL)) {
+			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE;
+			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				 pci_hotplug_state, attr->pci_hotplug_state);
+			snap_debug("Setting SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE to %d\n",
+				   attr->pci_hotplug_state);
+		}
 		if (mask & (SNAP_VIRTIO_MOD_NUM_MSIX | SNAP_VIRTIO_MOD_ALL)) {
 			void *pci_params;
 
