@@ -16,7 +16,7 @@
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
 
-#include "snap.h"
+#include "snap_mr.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 

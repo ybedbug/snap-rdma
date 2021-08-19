@@ -7,6 +7,7 @@ noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h
 #snap lib
 libsnap_ladir = $(includedir)/
 libsnap_la_HEADERS = snap.h \
+		     snap_mr.h \
 		     snap_nvme.h \
 		     snap_virtio_common.h \
 		     snap_virtio_blk.h \
@@ -18,6 +19,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_env.h
 
 libsnap_la_SOURCES = snap.c \
+		     snap_mr.c \
 		     snap_nvme.c \
 		     snap_virtio_blk.c \
 		     snap_virtio_fs.c \

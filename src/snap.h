@@ -26,6 +26,7 @@
 
 #include <infiniband/verbs.h>
 
+#include "snap_mr.h"
 #include "mlx5_snap.h"
 
 #define PFX "snap: "
@@ -116,33 +117,6 @@ struct snap_device_attr {
 	/* for live migration */
 	struct snap_migration_ops	*ops;
 	void				*mig_data;
-};
-
-struct mlx5_klm {
-	uint32_t byte_count;
-	uint32_t mkey;
-	uint64_t address;
-};
-
-struct mlx5_devx_mkey_attr {
-	uint64_t addr;
-	uint64_t size;
-	uint32_t log_entity_size;
-	uint32_t relaxed_ordering_write:1;
-	uint32_t relaxed_ordering_read:1;
-	struct mlx5_klm *klm_array;
-	int klm_num;
-};
-
-struct snap_cross_mkey {
-	struct mlx5dv_devx_obj *devx_obj;
-	uint32_t mkey;
-};
-
-struct snap_indirect_mkey {
-	struct mlx5dv_devx_obj *devx_obj;
-	uint32_t mkey;
-	uint64_t addr;
 };
 
 struct snap_pci_bar {
@@ -431,21 +405,9 @@ int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs);
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
-
-struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
-					       struct snap_device *target_sdev);
-int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
-
-struct snap_indirect_mkey *
-snap_create_indirect_mkey(struct ibv_pd *pd,
-			  struct mlx5_devx_mkey_attr *attr);
-int
-snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
-
 void snap_update_pci_bdf(struct snap_pci *spci, uint16_t pci_bdf);
 
 int snap_query_relaxed_ordering_caps(struct ibv_context *context,
 				     struct snap_relaxed_ordering_caps *caps);
-struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length);
 
 #endif
