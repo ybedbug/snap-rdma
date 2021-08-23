@@ -84,3 +84,24 @@ TEST_F(SnapDpaTest, app_load_unload) {
 
 	snap_close(ctx);
 }
+
+TEST_F(SnapDpaTest, create_thread) {
+	struct snap_context *ctx;
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+
+	ctx = snap_open(get_ib_ctx()->device);
+	ASSERT_TRUE(ctx);
+
+	dpa_ctx = snap_dpa_app_create(ctx, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+	printf("thread is running now...\n");
+	//getchar();
+
+	snap_dpa_thread_destroy(dpa_thr);
+	snap_dpa_app_destroy(dpa_ctx);
+	snap_close(ctx);
+}
