@@ -252,6 +252,22 @@ static int snap_virtio_blk_ctrl_bar_modify(struct snap_virtio_ctrl *vctrl,
 	return snap_virtio_blk_modify_device(vctrl->sdev, mask, vbbar);
 }
 
+ // Return: Returns 0 in case of success and attr is filled.
+static int snap_virtio_blk_ctrl_bar_get_attr(struct snap_virtio_ctrl *vctrl,
+					     struct snap_virtio_device_attr *vbar)
+{
+	int rc;
+	struct snap_virtio_blk_device_attr blk_attr = {};
+
+	rc = snap_virtio_blk_query_device(vctrl->sdev, &blk_attr);
+	if (!rc)
+		memcpy(vbar, &blk_attr.vattr, sizeof(blk_attr.vattr));
+	else
+		snap_error("Failed to query bar\n");
+
+	return rc;
+}
+
 static struct snap_virtio_queue_attr*
 snap_virtio_blk_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 					int index)
@@ -365,7 +381,8 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 	.dump_state = snap_virtio_blk_ctrl_bar_dump_state,
 	.get_state = snap_virtio_blk_ctrl_bar_get_state,
 	.set_state = snap_virtio_blk_ctrl_bar_set_state,
-	.queue_attr_valid = snap_virtio_blk_ctrl_bar_queue_attr_valid
+	.queue_attr_valid = snap_virtio_blk_ctrl_bar_queue_attr_valid,
+	.get_attr = snap_virtio_blk_ctrl_bar_get_attr
 };
 
 static bool
@@ -947,31 +964,12 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 		 * driver is set up and ready to drive
 		 * the device (refer to 2.1 Device Status Field)
 		 */
-		struct snap_virtio_blk_device_attr blk_attr = {};
 
-		ret = snap_virtio_blk_query_device(ctrl->common.sdev, &blk_attr);
-		if (ret) {
-			snap_error("Failed to query bar\n");
+		ret = snap_virtio_ctrl_can_recover(&ctrl->common);
+		if (ret < 0)
 			goto close_ctrl;
-		}
 
-		bool is_reset = false, is_recovery_needed = false;
-
-		if (blk_attr.vattr.reset ||
-		    (blk_attr.vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET))
-			is_reset = true;
-
-		if (blk_attr.vattr.enabled) {
-			if (!is_reset && (blk_attr.vattr.status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
-				is_recovery_needed = true;
-		}
-
-		if (!is_recovery_needed) {
-			attr->common.recover = 0;
-			snap_info("Bar status - enabled: %d reset: %d status: 0x%x, recovery mode not applied.\n",
-				  blk_attr.vattr.enabled, blk_attr.vattr.reset,
-				  blk_attr.vattr.status);
-		}
+		attr->common.recover = ret;
 	}
 
 	if (attr->common.suspended || attr->common.recover) {
