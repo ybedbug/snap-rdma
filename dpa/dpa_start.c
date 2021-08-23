@@ -32,12 +32,35 @@
 
 #include "dpa.h"
 
-int main()
-{
-	dpa_print_string("hello, i am dummy dpa code\n");
-	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
-	dpa_print_string("All done. Exiting\n");
+extern int main();
 
-	return 0;
+// hack to force creation of the data section
+void *mbox_base __attribute__((section (".data")));
+uint32_t mbox_lkey __attribute__((section (".data")));
+
+static void dpa_mbox_config(struct snap_dpa_tcb *tcb)
+{
+	dpa_window_set_mkey(tcb->mbox_lkey);
+	mbox_base = (void *)window_get_base() + tcb->mbox_address;
+	mbox_lkey = tcb->mbox_lkey;
+}
+
+int __snap_dpa_thread_start(uint64_t tcb_addr)
+{
+	int ret;
+	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *)tcb_addr;
+
+	dpa_mbox_config(tcb);
+
+	dpa_print_string("==> Starting DPA thread\n");
+	dpa_print_string("TCB : "); dpa_print_hex(tcb_addr); dpa_print_string("\n");
+	dpa_print_string("Mailbox base: "); dpa_print_hex((uint64_t)mbox_base); dpa_print_string("\n");
+
+	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
+	/* may be let main do it after init is done */
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
+
+	ret = main();
+	dpa_print_string("==> DPA thread done\n");
+	return ret;
 }

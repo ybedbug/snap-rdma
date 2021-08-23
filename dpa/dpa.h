@@ -30,14 +30,54 @@
  * SOFTWARE.
  */
 
-#include "dpa.h"
+#ifndef _DPA_H
+#define _DPA_H
 
-int main()
+/* TODO: should be configurable */
+#define APU_BUILD 1
+
+#include <libflexio-dev/flexio_dev.h>
+#include <libflexio-dev/flexio_dev_debug.h>
+#include <apu_syscall.h>
+
+#include "snap_dpa_common.h"
+
+#if APU_BUILD
+#define dpa_print_string(str)   print_sim_str((str), 0)
+#define dpa_print_hex(num)      print_sim_hex((num), 0)
+#else
+#define dpa_print_string(str)
+#define dpa_print_hex(num)
+#endif
+
+/**
+ * dpa_window_set_mkey() - set window memory key
+ * @mkey:  memory key
+ *
+ * Each address range that is mapped into the window has its own memory key
+ * The key must be set each time a new mapping is accessed. Subsequent accesses
+ * can reuse current key.
+ */
+static inline void dpa_window_set_mkey(uint32_t mkey)
 {
-	dpa_print_string("hello, i am dummy dpa code\n");
-	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
-	dpa_print_string("All done. Exiting\n");
+	uint32_t *window_u_cfg;
 
-	return 0;
+	/* currently this is a hack based on flexio rpc entry_point.c */
+	window_u_cfg = (uint32_t *)window_get_cfg();
+	*window_u_cfg = mkey;
 }
+
+/**
+ * dpa_mbox() - get mailbox address
+ *
+ * Return:
+ * Mailbox address
+ */
+static inline void *dpa_mbox()
+{
+	extern void *mbox_base;
+
+	return mbox_base;
+}
+
+#endif

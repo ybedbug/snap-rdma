@@ -1,11 +1,8 @@
 OUTPUT_ARCH( "riscv" )
-EXTERN(flexio_hw_rpc)
-EXTERN(net_event_handler)
-EXTERN(event_handler_init)
 
 MEMORY
 {
-	code (rx) : ORIGIN =  0x0000000000000000, LENGTH = 128M
+	code (rx) : ORIGIN =  0x0000000010000000, LENGTH = 128M
 	sdata (rw) : ORIGIN = 0x0000000028000000, LENGTH = 128M
 }
 
