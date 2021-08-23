@@ -3,7 +3,7 @@ ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libsnap.la
 
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
-		 snap_dpa.h
+		 snap_dpa.h snap_dpa_common.h
 
 #snap lib
 libsnap_ladir = $(includedir)/
