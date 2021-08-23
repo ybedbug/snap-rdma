@@ -36,8 +36,7 @@
 #include <libflexio/flexio.h>
 
 #include "snap.h"
-
-#define SNAP_DPA_THREAD_ENTRY_POINT "__snap_dpa_thread_start"
+#include "snap_dpa_common.h"
 
 struct snap_dpa_ctx {
 	struct snap_context    *sctx;
@@ -48,5 +47,33 @@ struct snap_dpa_ctx {
 
 struct snap_dpa_ctx *snap_dpa_app_create(struct snap_context *ctx, const char *app_name);
 void snap_dpa_app_destroy(struct snap_dpa_ctx *app);
+
+enum {
+	SNAP_DPA_THREAD_ATTR_POLLING = 0x1
+};
+
+/**
+ * struct snap_dpa_thread_attr - DPA thread attributes
+ *
+ * At the moment attributes are not used yet
+ */
+struct snap_dpa_thread_attr {
+	/* private: */
+	uint32_t thread_attr;
+	uint32_t cpu_mask[16]; // hart, best effort according to PRM
+};
+
+struct snap_dpa_thread {
+	struct snap_dpa_ctx   *dctx;
+	struct flexio_thread  *dpa_thread;
+	struct flexio_window  *cmd_window;
+	void                  *cmd_mbox;
+	pthread_mutex_t       cmd_lock;
+	struct ibv_mr         *cmd_mr;
+};
+
+struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
+		struct snap_dpa_thread_attr *attr);
+void snap_dpa_thread_destroy(struct snap_dpa_thread *thr);
 
 #endif

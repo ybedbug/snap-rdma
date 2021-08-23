@@ -134,3 +134,144 @@ void snap_dpa_app_destroy(struct snap_dpa_ctx *app)
 	flexio_process_destroy(app->dpa_proc);
 	free(app);
 }
+
+static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr);
+
+/**
+ * snap_dpa_thread_create() - create DPA thread
+ * @dctx:  DPA application context
+ * @attr:  thread attributes
+ *
+ * The function creates a thread that runs on the DPA. On function return the
+ * thread is running and ready to accept commands via its mailbox.
+ *
+ * Return:
+ * dpa thread on success or NULL on failure
+ */
+struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
+		struct snap_dpa_thread_attr *attr)
+{
+	struct snap_dpa_thread *thr;
+	int ret;
+	flexio_status st;
+	flexio_uintptr_t *dpa_tcb_addr;
+	struct snap_dpa_tcb tcb;
+	struct snap_dpa_rsp *rsp;
+
+	thr = calloc(1, sizeof(*thr));
+	if (!thr) {
+		snap_error("Failed to create DPA thread\n");
+		return NULL;
+	}
+
+	thr->dctx = dctx;
+
+	ret = pthread_mutex_init(&thr->cmd_lock, NULL);
+	if (ret < 0) {
+		snap_error("Failed to init DPA thread mailbox lock\n");
+		goto free_thread;
+	}
+
+	ret = posix_memalign(&thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_ALIGN,
+			SNAP_DPA_THREAD_MBOX_LEN);
+	if (ret < 0) {
+		snap_error("Failed to allocate DPA thread mailbox\n");
+		goto free_mutex;
+	}
+
+	memset(thr->cmd_mbox, 0, SNAP_DPA_THREAD_MBOX_LEN);
+	thr->cmd_mr = ibv_reg_mr(thr->dctx->pd, thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_LEN, 0);
+	if (!thr->cmd_mr) {
+		snap_error("Failed to allocate DPA thread mailbox mr\n");
+		goto free_mbox;
+	}
+
+	st = flexio_window_create(thr->dctx->dpa_proc, thr->dctx->pd, &thr->cmd_window);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("Failed to create DPA thread mailbox window\n");
+		goto free_mr;
+	}
+
+	/* copy mailbox addr & lkey to the thread */
+	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
+	tcb.mbox_lkey = thr->cmd_mr->lkey;
+	snap_debug("tcb mailbox lkey 0x%x addr %p\n", thr->cmd_mr->lkey, thr->cmd_mbox);
+
+	st = flexio_copy_from_host(thr->dctx->dpa_proc, (uintptr_t)&tcb, sizeof(tcb), &dpa_tcb_addr);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("Failed to prepare DPA thread control block: %d\n", st);
+		goto free_window;
+	}
+
+	/*
+	 * NOTE: here we use modified flexio API to create a 'polling' thread.
+	 * In the future we can decide what type of thread to create based on
+	 * the attributes.
+	 */
+	st = flexio_thread_create(thr->dctx->dpa_proc, thr->dctx->entry_point, *dpa_tcb_addr,
+			thr->cmd_window, &thr->dpa_thread);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("Failed to create DPA thread: %d\n", st);
+		goto free_tcb;
+	}
+
+	/* wait for report back from the thread*/
+	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
+	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
+	if (rsp->status != SNAP_DPA_RSP_OK) {
+		snap_error("DPA thread failed to start\n");
+		snap_dpa_thread_destroy_force(thr);
+		flexio_memory_free(dpa_tcb_addr);
+		return NULL;
+	}
+
+	flexio_memory_free(dpa_tcb_addr);
+	return thr;
+
+free_tcb:
+	flexio_memory_free(dpa_tcb_addr);
+free_window:
+	flexio_window_destroy(thr->cmd_window);
+free_mr:
+	ibv_dereg_mr(thr->cmd_mr);
+free_mbox:
+	free(thr->cmd_mbox);
+free_mutex:
+	pthread_mutex_destroy(&thr->cmd_lock);
+free_thread:
+	free(thr);
+	return NULL;
+}
+
+static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
+{
+	flexio_thread_destroy(thr->dpa_thread);
+	flexio_window_destroy(thr->cmd_window);
+	ibv_dereg_mr(thr->cmd_mr);
+	pthread_mutex_destroy(&thr->cmd_lock);
+	free(thr->cmd_mbox);
+	free(thr);
+}
+
+/**
+ * snap_dpa_thread_destroy() - destroy DPA thread
+ * @thr:  DPA thread
+ *
+ * The function stops execution and clears all resources taken by the
+ * DPA thread.
+ *
+ * The function is blocking. It sends 'STOP' message to the DPA thread,
+ * waits for the ack and only then destroys thread and resources.
+ */
+void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
+{
+	struct snap_dpa_rsp *rsp;
+
+	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_STOP);
+	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
+	if (rsp->status != SNAP_DPA_RSP_OK)
+		snap_warn("DPA thread was not properly stopped\n");
+
+	snap_dpa_thread_destroy_force(thr);
+}
+
