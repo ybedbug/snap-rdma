@@ -105,6 +105,22 @@ static int snap_virtio_fs_ctrl_bar_modify(struct snap_virtio_ctrl *vctrl,
 	return snap_virtio_fs_modify_device(vctrl->sdev, mask, vbbar);
 }
 
+// Return: Returns 0 in case of success and attr is filled.
+static int snap_virtio_fs_ctrl_bar_get_attr(struct snap_virtio_ctrl *vctrl,
+					    struct snap_virtio_device_attr *vbar)
+{
+	int rc;
+	struct snap_virtio_fs_device_attr fs_attr = {};
+
+	rc = snap_virtio_fs_query_device(vctrl->sdev, &fs_attr);
+	if (!rc)
+		memcpy(vbar, &fs_attr.vattr, sizeof(fs_attr.vattr));
+	else
+		snap_error("Failed to query bar\n");
+
+	return rc;
+}
+
 static struct snap_virtio_queue_attr*
 snap_virtio_fs_ctrl_bar_get_queue_attr(struct snap_virtio_device_attr *vbar,
 				       int index)
@@ -225,7 +241,8 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_fs_ctrl_bar_ops = {
 	.dump_state = snap_virtio_fs_ctrl_bar_dump_state,
 	.get_state = snap_virtio_fs_ctrl_bar_get_state,
 	.set_state = snap_virtio_fs_ctrl_bar_set_state,
-	.queue_attr_valid = snap_virtio_fs_ctrl_bar_queue_attr_valid
+	.queue_attr_valid = snap_virtio_fs_ctrl_bar_queue_attr_valid,
+	.get_attr = snap_virtio_fs_ctrl_bar_get_attr
 };
 
 static bool
@@ -246,7 +263,8 @@ snap_virtio_fs_ctrl_bar_setup_valid(struct snap_virtio_fs_ctrl *ctrl,
 	}
 
 	/* Everything is configurable as long as driver is still down */
-	if (snap_virtio_ctrl_is_stopped(&ctrl->common))
+	if (snap_virtio_ctrl_is_stopped(&ctrl->common) ||
+	    snap_virtio_ctrl_is_suspended(&ctrl->common))
 		return true;
 
 	/* virtio_common_pci_config registers */
@@ -263,7 +281,6 @@ snap_virtio_fs_ctrl_bar_setup_valid(struct snap_virtio_fs_ctrl *ctrl,
 	}
 
 	/* virtio_fs_config registers */
-
 	if (memcmp(regs->tag, bar->tag, sizeof(regs->tag))) {
 		snap_error("Cant modify tag, host driver is up\n");
 		ret = false;
@@ -752,6 +769,25 @@ snap_virtio_fs_ctrl_open(struct snap_context *sctx,
 	ret = snap_virtio_fs_init_device(ctrl->common.sdev);
 	if (ret)
 		goto close_ctrl;
+
+	if (attr->common.recover) {
+		/* Started from release 08/2021, the recovery flag
+		 * should be used as default during the creation of the controller.
+		 * We need to distinguish between 'real' recovery or
+		 * 'new creation' of the controller.
+		 * This can be done by testing the reset flag.
+		 * For 'recovery' it should be as following:
+		 * enabled=1 reset=0 status=X when X indicates
+		 * driver is set up and ready to drive
+		 * the device (refer to 2.1 Device Status Field)
+		 */
+
+		ret = snap_virtio_ctrl_can_recover(&ctrl->common);
+		if (ret < 0)
+			goto close_ctrl;
+
+		attr->common.recover = ret;
+	}
 
 	if (attr->common.suspended || attr->common.recover) {
 		/* Creating controller in the suspended state or recovery mode.
