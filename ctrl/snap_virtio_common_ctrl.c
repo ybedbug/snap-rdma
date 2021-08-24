@@ -1715,6 +1715,42 @@ free_buf:
 	return ret;
 }
 
+/**
+ * snap_virtio_ctrl_can_recover() - check the virtio status fields
+ * @ctrl:	controller instance
+ *
+ * Query the status fields of the virtio bar (reset/enable/status).
+ * Check if recovery should be applied based on the values
+ * of the fileds.
+ *
+ * Return: -errno in case of error, otherwise if recovery
+ * mode should be applied.
+ */
+int snap_virtio_ctrl_can_recover(struct snap_virtio_ctrl *ctrl)
+{
+	int rc;
+	struct snap_virtio_device_attr vattr;
+	int is_reset = 0, is_recovery_needed = 0;
+
+	if (!ctrl->bar_ops->get_attr)
+		return -EINVAL;
+
+	rc = ctrl->bar_ops->get_attr(ctrl, &vattr);
+	if (rc)
+		return rc < 0 ? rc : -rc;
+	if (vattr.reset || (vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET))
+		is_reset = 1;
+	if (vattr.enabled) {
+		if (!is_reset && (vattr.status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
+			is_recovery_needed = 1;
+	}
+	if (!is_recovery_needed) {
+		snap_info("Bar status - enabled: %d reset: %d status: 0x%x, recovery mode not applied.\n",
+				vattr.enabled, vattr.reset, vattr.status);
+	}
+	return is_recovery_needed;
+}
+
 const struct snap_virtio_ctrl_queue_stats *
 snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx)
 {

@@ -186,6 +186,7 @@ struct snap_virtio_ctrl_bar_ops {
 			 const void *buf, int len);
 	void (*dump_state)(struct snap_virtio_ctrl *ctrl, const void *buf, int len);
 	bool (*queue_attr_valid)(struct snap_virtio_device_attr *attr);
+	int (*get_attr)(struct snap_virtio_ctrl *ctrl, struct snap_virtio_device_attr *attr);
 
 };
 
@@ -331,6 +332,7 @@ void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl);
 
 int  snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 			      struct snap_virtio_device_attr *attr);
+int snap_virtio_ctrl_can_recover(struct snap_virtio_ctrl *ctrl);
 
 const struct snap_virtio_ctrl_queue_stats *
 snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx);
