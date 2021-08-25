@@ -47,7 +47,7 @@
 //scaffolding until fs uses common cmd also
 #define ERR_ON_CMD_FS(cmd, fmt, ...) \
 	snap_error("queue:%d cmd_idx:%d err: " fmt, \
-		   (cmd)->vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, ## __VA_ARGS__)
+		   (cmd)->common_cmd.vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, ## __VA_ARGS__)
 
 /* uncomment to enable fast path debugging */
 // #define VIRTQ_DEBUG_DATA
@@ -57,7 +57,7 @@
 	       ## __VA_ARGS__)
 //scaffolding until fs uses common cmd also
 #define virtq_log_data_fs(cmd, fmt, ...) \
-	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, \
+	printf("queue:%d cmd_idx:%d " fmt, (cmd)->common_cmd.vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, \
 	       ## __VA_ARGS__)
 #else
 #define virtq_log_data(cmd, fmt, ...)
