@@ -733,7 +733,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
 	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
-		struct snap_virtio_fs_queue_attr *attr;
+		struct snap_virtio_common_queue_attr *attr;
 		int vhca_id;
 
 		attr = to_fs_queue_attr(vattr);
@@ -1080,7 +1080,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 		vattr->dirty_map_addr = DEVX_GET64(virtio_net_q, virtq_out, dirty_map_addr);
 		vattr->vhost_log_page = DEVX_GET(virtio_net_q, virtq_out, vhost_log_page);
 	} else {
-		struct snap_virtio_fs_queue_attr *attr;
+		struct snap_virtio_common_queue_attr *attr;
 
 		attr = to_fs_queue_attr(vattr);
 

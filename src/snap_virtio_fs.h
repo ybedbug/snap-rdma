@@ -41,15 +41,6 @@ enum snap_virtio_fs_queue_modify {
 	SNAP_VIRTIO_FS_QUEUE_MOD_STATE	= 1 << 0,
 };
 
-struct snap_virtio_fs_queue_attr {
-	uint64_t			modifiable_fields;//mask of snap_virtio_fs_queue_modify
-	struct ibv_qp			*qp;
-	uint16_t			hw_available_index;
-	uint16_t			hw_used_index;
-
-	struct snap_virtio_queue_attr   vattr;
-};
-
 struct snap_virtio_fs_queue {
 	struct snap_virtio_queue	virtq;
 
@@ -58,7 +49,7 @@ struct snap_virtio_fs_queue {
 
 struct snap_virtio_fs_device_attr {
 	struct snap_virtio_device_attr		vattr;
-	struct snap_virtio_fs_queue_attr	*q_attrs;
+	struct snap_virtio_common_queue_attr	*q_attrs;
 	unsigned int				queues;
 
 	uint64_t				modifiable_fields;//mask of snap_virtio_dev_modify
@@ -81,17 +72,17 @@ int snap_virtio_fs_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_fs_device_attr *attr);
 struct snap_virtio_fs_queue*
 snap_virtio_fs_create_queue(struct snap_device *sdev,
-	struct snap_virtio_fs_queue_attr *attr);
+	struct snap_virtio_common_queue_attr *attr);
 int snap_virtio_fs_destroy_queue(struct snap_virtio_fs_queue *vfsq);
 int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
-		struct snap_virtio_fs_queue_attr *attr);
+		struct snap_virtio_common_queue_attr *attr);
 int snap_virtio_fs_modify_queue(struct snap_virtio_fs_queue *vfsq,
-		uint64_t mask, struct snap_virtio_fs_queue_attr *attr);
+		uint64_t mask, struct snap_virtio_common_queue_attr *attr);
 
-static inline struct snap_virtio_fs_queue_attr*
+static inline struct snap_virtio_common_queue_attr*
 to_fs_queue_attr(struct snap_virtio_queue_attr *vattr)
 {
-	return container_of(vattr, struct snap_virtio_fs_queue_attr,
+	return container_of(vattr, struct snap_virtio_common_queue_attr,
 			    vattr);
 }
 

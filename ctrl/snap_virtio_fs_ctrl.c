@@ -391,7 +391,7 @@ snap_virtio_fs_ctrl_count_error(struct snap_virtio_fs_ctrl *ctrl)
 	int i, ret;
 	struct snap_virtio_ctrl_queue *vq;
 	struct snap_virtio_fs_ctrl_queue *vfsq;
-	struct snap_virtio_fs_queue_attr *attr;
+	struct snap_virtio_common_queue_attr *attr;
 	struct snap_virtio_queue_attr *vattr;
 
 	for (i = 0; i < ctrl->common.max_queues; i++) {
@@ -403,7 +403,7 @@ snap_virtio_fs_ctrl_count_error(struct snap_virtio_fs_ctrl *ctrl)
 		if (vfsq->in_error)
 			continue;
 
-		attr = (struct snap_virtio_fs_queue_attr *)(void *)vfsq->attr;
+		attr = (struct snap_virtio_common_queue_attr *)(void *)vfsq->attr;
 		ret = fs_virtq_query_error_state(vfsq->q_impl, attr);
 		if (ret) {
 			snap_error("Failed to query queue error state\n");

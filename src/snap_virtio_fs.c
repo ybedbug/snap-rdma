@@ -278,7 +278,7 @@ int snap_virtio_fs_teardown_device(struct snap_device *sdev)
  * Return: 0 on success, and attr is filled with the query result.
  */
 int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
-			       struct snap_virtio_fs_queue_attr *attr)
+			       struct snap_virtio_common_queue_attr *attr)
 {
 	return snap_virtio_query_queue(&vfsq->virtq, &attr->vattr);
 }
@@ -295,7 +295,7 @@ int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
  */
 struct snap_virtio_fs_queue*
 snap_virtio_fs_create_queue(struct snap_device *sdev,
-	struct snap_virtio_fs_queue_attr *attr)
+	struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_virtio_fs_device *vbdev;
 	struct snap_virtio_fs_queue *vfsq;
@@ -389,7 +389,7 @@ int snap_virtio_fs_destroy_queue(struct snap_virtio_fs_queue *vfsq)
 static int
 snap_virtio_fs_get_modifiable_virtq_fields(struct snap_virtio_fs_queue *vfsq)
 {
-	struct snap_virtio_fs_queue_attr attr = {};
+	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
 	ret = snap_virtio_fs_query_queue(vfsq, &attr);
@@ -413,7 +413,7 @@ snap_virtio_fs_get_modifiable_virtq_fields(struct snap_virtio_fs_queue *vfsq)
  * Return: 0 on success.
  */
 int snap_virtio_fs_modify_queue(struct snap_virtio_fs_queue *vfsq,
-		uint64_t mask, struct snap_virtio_fs_queue_attr *attr)
+		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	int ret;
 

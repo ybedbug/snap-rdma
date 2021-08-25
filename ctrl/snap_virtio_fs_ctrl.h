@@ -22,7 +22,7 @@
 
 struct snap_virtio_fs_ctrl_queue {
 	struct snap_virtio_ctrl_queue common;
-	const struct snap_virtio_fs_queue_attr	*attr;
+	const struct snap_virtio_common_queue_attr *attr;
 	struct fs_virtq_ctx *q_impl;
 	bool in_error;
 };
