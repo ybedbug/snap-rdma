@@ -75,6 +75,16 @@ struct fs_virtq_cmd {
 	int16_t pos_f_write;
 };
 
+static inline struct snap_fs_dev_ops *to_fs_dev_ops(struct virtq_bdev *dev)
+{
+	return (struct snap_fs_dev_ops *)dev->ops;
+}
+
+static inline struct fs_virtq_ctx *to_fs_virtq_ctx(struct virtq_common_ctx *vq_ctx)
+{
+	return (struct fs_virtq_ctx *)vq_ctx;
+}
+
 static inline struct fs_virtq_cmd_aux *to_fs_cmd_aux(void *aux)
 {
 	return (struct fs_virtq_cmd_aux *)aux;
@@ -84,6 +94,26 @@ static inline struct virtio_fs_outftr *to_fs_cmd_ftr(void *ftr)
 {
 	return (struct virtio_fs_outftr *)ftr;
 }
+
+static inline struct fs_virtq_cmd *to_fs_cmd_arr(struct virtq_cmd *cmd_arr)
+{
+	return (struct fs_virtq_cmd *)cmd_arr;
+}
+
+static inline struct fs_virtq_cmd *to_fs_virtq_cmd(struct virtq_cmd *cmd)
+{
+	return container_of(cmd, struct fs_virtq_cmd, common_cmd);
+}
+
+
+static inline struct virtq_cmd*
+fs_virtq_get_avail_cmd(struct virtq_cmd *cmd_arr, uint16_t idx)
+{
+	struct fs_virtq_cmd *fs_cmd_arr = to_fs_cmd_arr(cmd_arr);
+
+	return &fs_cmd_arr[idx].common_cmd;
+}
+
 
 /**
  * struct fs_virtq_dev - fs device
@@ -97,18 +127,18 @@ struct fs_virtq_dev {
 
 struct fs_virtq_priv {
 	volatile enum virtq_sw_state swq_state;
-	struct fs_virtq_ctx vq_ctx;
-	struct fs_virtq_dev fs_dev;
+	struct virtq_common_ctx *vq_ctx;
+	struct virtq_bdev virtq_dev;
 	struct ibv_pd *pd;
-	struct snap_virtio_fs_queue *snap_vfsq;
-	struct snap_virtio_fs_queue_attr snap_attr;
+	struct snap_virtio_queue *snap_vbq;
+	struct snap_virtio_queue_attr *vattr;
 	struct snap_dma_q *dma_q;
-	struct fs_virtq_cmd *cmd_arr;
+	struct virtq_cmd *cmd_arr;
 	int cmd_cntr;
 	int seg_max;
 	int size_max;
 	int pg_id;
-	struct snap_virtio_fs_ctrl_queue *vfsq;
+	struct snap_virtio_ctrl_queue *vbq;
 	uint16_t ctrl_available_index;
 	bool force_in_order;
 	/* current inorder value, for which completion should be sent */
@@ -126,7 +156,7 @@ static inline void set_cmd_error(struct fs_virtq_cmd *cmd, int error)
 static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa,
 					   uint32_t len, bool is_completion)
 {
-	struct snap_virtio_ctrl_queue *vq = &cmd->vq_priv->vfsq->common;
+	struct snap_virtio_ctrl_queue *vq = cmd->vq_priv->vbq;
 	int rc;
 
 	if (snap_likely(!vq->log_writes_to_host))
@@ -138,8 +168,8 @@ static inline void fs_virtq_mark_dirty_mem(struct fs_virtq_cmd *cmd, uint64_t pa
 		 * it will cost an extra page or two. Device area size is
 		 * calculated according to the spec.
 		 **/
-		pa = cmd->vq_priv->snap_attr.vattr.device;
-		len = 6 + 8 * cmd->vq_priv->snap_attr.vattr.size;
+		pa = cmd->vq_priv->vattr->device;
+		len = 6 + 8 * cmd->vq_priv->vattr->size;
 	}
 	virtq_log_data_fs(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
 	if (!vq->ctrl->lm_channel) {
@@ -162,7 +192,7 @@ static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 
 	if (status != IBV_WC_SUCCESS) {
 		ERR_ON_CMD_FS(cmd, "error in dma for queue %d\n",
-			   cmd->vq_priv->vq_ctx.common_ctx.idx);
+			   cmd->vq_priv->vq_ctx->idx);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 	fs_virtq_cmd_progress(cmd, op_status);
@@ -202,7 +232,7 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 
 	cmd->common_cmd.req_size = req_size;
 
-	cmd->common_cmd.buf = vq_priv->fs_dev.ops->dma_malloc(req_size + aux_size);
+	cmd->common_cmd.buf = to_fs_dev_ops(&vq_priv->virtq_dev)->dma_malloc(req_size + aux_size);
 	if (!cmd->common_cmd.buf) {
 		snap_error("failed to allocate memory for virtq %d\n", idx);
 		ret = -ENOMEM;
@@ -225,7 +255,7 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 	return 0;
 
 free_cmd_buf:
-	vq_priv->fs_dev.ops->dma_free(cmd->common_cmd.buf);
+	to_fs_dev_ops(&vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
 free_iov:
 	free(cmd->iov);
 
@@ -235,7 +265,7 @@ free_iov:
 void free_fs_virtq_cmd(struct fs_virtq_cmd *cmd)
 {
 	ibv_dereg_mr(cmd->common_cmd.mr);
-	cmd->vq_priv->fs_dev.ops->dma_free(cmd->common_cmd.buf);
+	to_fs_dev_ops(&cmd->vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
 	free(cmd->iov);
 }
 
@@ -261,7 +291,7 @@ static struct fs_virtq_cmd *
 alloc_fs_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 		       struct fs_virtq_priv *vq_priv)
 {
-	int i, k, ret, num = vq_priv->snap_attr.vattr.size;
+	int i, k, ret, num = vq_priv->vattr->size;
 	struct fs_virtq_cmd *cmd_arr;
 
 	cmd_arr = calloc(num, sizeof(struct fs_virtq_cmd));
@@ -283,18 +313,19 @@ alloc_fs_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 free_mem:
 	free(cmd_arr);
 	snap_error("failed allocating commands for queue %d\n",
-			vq_priv->vq_ctx.common_ctx.idx);
+			vq_priv->vq_ctx->idx);
 out:
 	return NULL;
 }
 
 static void free_fs_virtq_cmd_arr(struct fs_virtq_priv *vq_priv)
 {
-	const size_t num_cmds = vq_priv->snap_attr.vattr.size;
+	const size_t num_cmds = vq_priv->vattr->size;
 	size_t i;
+	struct fs_virtq_cmd *cmd_arr = to_fs_cmd_arr(vq_priv->cmd_arr);
 
 	for (i = 0; i < num_cmds; ++i)
-		free_fs_virtq_cmd(&vq_priv->cmd_arr[i]);
+		free_fs_virtq_cmd(&cmd_arr[i]);
 
 	free(vq_priv->cmd_arr);
 }
@@ -330,19 +361,19 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct fs_virtq_cmd *cmd)
 
 	if (cmd->common_cmd.num_desc == 0)
 		in_ring_desc_addr = cmd->common_cmd.descr_head_idx %
-				    cmd->vq_priv->snap_attr.vattr.size;
+				    cmd->vq_priv->vattr->size;
 	else if (to_fs_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].flags & VRING_DESC_F_NEXT)
 		in_ring_desc_addr = to_fs_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
 
-	srcaddr = cmd->vq_priv->snap_attr.vattr.desc +
+	srcaddr = cmd->vq_priv->vattr->desc +
 		in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->common_cmd.dma_comp.count = 1;
 	virtq_log_data_fs(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
 	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &to_fs_cmd_aux(cmd->common_cmd.aux)->descs[cmd->common_cmd.num_desc],
 			sizeof(struct vring_desc), cmd->common_cmd.mr->lkey,
-			srcaddr, cmd->vq_priv->snap_attr.vattr.dma_mkey,
+			srcaddr, cmd->vq_priv->vattr->dma_mkey,
 			&(cmd->common_cmd.dma_comp));
 	if (ret)
 		return VIRTQ_FETCH_DESC_ERR;
@@ -473,7 +504,7 @@ static int virtq_alloc_req_dbuf(struct fs_virtq_cmd *cmd, size_t len)
 	int mr_access = 0, error;
 	struct snap_relaxed_ordering_caps ro_caps = {};
 
-	cmd->common_cmd.req_buf = cmd->vq_priv->fs_dev.ops->dma_malloc(len);
+	cmd->common_cmd.req_buf = to_fs_dev_ops(&cmd->vq_priv->virtq_dev)->dma_malloc(len);
 	if (!cmd->common_cmd.req_buf) {
 		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",
 			   len, cmd->common_cmd.idx);
@@ -514,7 +545,7 @@ err:
 static void fs_virtq_rel_req_dbuf(struct fs_virtq_cmd *cmd)
 {
 	ibv_dereg_mr(cmd->common_cmd.req_mr);
-	cmd->vq_priv->fs_dev.ops->dma_free(cmd->common_cmd.req_buf);
+	to_fs_dev_ops(&cmd->vq_priv->virtq_dev)->dma_free(cmd->common_cmd.req_buf);
 	cmd->common_cmd.req_buf = cmd->common_cmd.buf;
 	cmd->common_cmd.req_mr = cmd->common_cmd.mr;
 	cmd->common_cmd.use_dmem = false;
@@ -588,7 +619,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 	ret = snap_dma_q_read(priv->dma_q, &cmd_aux->header,
 			      cmd_aux->descs[0].len,
 			      cmd->common_cmd.mr->lkey, cmd_aux->descs[0].addr,
-			      priv->snap_attr.vattr.dma_mkey,
+			      priv->vattr->dma_mkey,
 			      &cmd->common_cmd.dma_comp);
 	if (ret) {
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
@@ -602,7 +633,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 		ret = snap_dma_q_read(priv->dma_q, cmd->common_cmd.req_buf + offset,
 				cmd_aux->descs[i].len, cmd->common_cmd.req_mr->lkey,
 				cmd_aux->descs[i].addr,
-				priv->snap_attr.vattr.dma_mkey, &cmd->common_cmd.dma_comp);
+				priv->vattr->dma_mkey, &cmd->common_cmd.dma_comp);
 		if (ret) {
 			cmd->common_cmd.state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
@@ -625,7 +656,7 @@ static bool fs_virtq_read_req_from_host(struct fs_virtq_cmd *cmd)
 static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 				enum virtq_cmd_sm_op_status status)
 {
-	struct fs_virtq_dev *fs_dev = &cmd->vq_priv->fs_dev;
+	struct fs_virtq_dev *fs_dev = (struct fs_virtq_dev *)(&cmd->vq_priv->virtq_dev);
 	int ret;
 	uint32_t r_descs, w_descs;
 
@@ -674,7 +705,7 @@ static bool fs_virtq_handle_req(struct fs_virtq_cmd *cmd,
 	 * Start handle the VRING_DESC_F_WRITE (writable) descriptors first.
 	 * Writable, meaning the descriptor's data was 'filled' by fs device.
 	 */
-	if (snap_likely(cmd->vq_priv->vq_ctx.common_ctx.idx > 0))
+	if (snap_likely(cmd->vq_priv->vq_ctx->idx > 0))
 		cmd->common_cmd.state = VIRTQ_CMD_STATE_IN_DATA_DONE;
 	else {
 		/* hiprio queue - do nothing, send tunneling completion only */
@@ -724,7 +755,7 @@ static bool sm_handle_in_iov_done(struct fs_virtq_cmd *cmd,
 					       cmd_aux->descs[i].len,
 					       cmd->common_cmd.req_mr->lkey,
 					       cmd_aux->descs[i].addr,
-					       cmd->vq_priv->snap_attr.vattr.dma_mkey,
+					       cmd->vq_priv->vattr->dma_mkey,
 					       &(cmd->common_cmd.dma_comp));
 			if (ret) {
 				set_cmd_error(cmd, -ret);
@@ -781,7 +812,7 @@ static inline bool sm_write_status(struct fs_virtq_cmd *cmd,
 		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, cmd->common_cmd.ftr,
 					sizeof(struct virtio_fs_outftr),
 					cmd_aux->descs[cmd->pos_f_write].addr,
-					cmd->vq_priv->snap_attr.vattr.dma_mkey);
+					cmd->vq_priv->vattr->dma_mkey);
 		if (snap_unlikely(ret)) {
 			/* TODO: at some point we will have to do pending queue */
 			ERR_ON_CMD_FS(cmd, "failed to send status, err=%d\n", ret);
@@ -906,7 +937,7 @@ static int fs_virtq_cmd_progress(struct fs_virtq_cmd *cmd,
 		case VIRTQ_CMD_STATE_FATAL_ERR:
 			if (snap_unlikely(cmd->common_cmd.use_dmem))
 				fs_virtq_rel_req_dbuf(cmd);
-			cmd->vq_priv->vq_ctx.common_ctx.fatal_err = -1;
+			cmd->vq_priv->vq_ctx->fatal_err = -1;
 			/*
 			 * TODO: propagate fatal error to the controller.
 			 * At the moment attempt to resume/state copy
@@ -947,8 +978,8 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 
 	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
 
-	cmd_idx = priv->ctrl_available_index % priv->snap_attr.vattr.size;
-	cmd = &priv->cmd_arr[cmd_idx];
+	cmd_idx = priv->ctrl_available_index % priv->vattr->size;
+	cmd = &to_fs_cmd_arr(priv->cmd_arr)[cmd_idx];
 	cmd->common_cmd.num_desc = split_hdr->num_desc;
 	cmd->common_cmd.descr_head_idx = split_hdr->descr_head_idx;
 	cmd->common_cmd.total_seg_len = 0;
@@ -993,7 +1024,7 @@ static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
 	 * for hiprio queue, the fuse format of requests is different.
 	 * There are no writable desciptors !
 	 */
-	if (cmd->vq_priv->vq_ctx.common_ctx.idx > 0) {
+	if (cmd->vq_priv->vq_ctx->idx > 0) {
 		if (cmd->pos_f_write == cmd->common_cmd.num_desc) {
 			ERR_ON_CMD_FS(cmd, "No writable desciptor found !\n");
 			return false;
@@ -1045,34 +1076,46 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 				     struct virtq_create_attr *attr)
 {
 	struct snap_dma_q_create_attr rdma_qp_create_attr = {};
-	struct snap_virtio_fs_queue_attr qattr = {};
+	struct snap_virtio_common_queue_attr qattr = {};
 	struct fs_virtq_ctx *vq_ctx;
 	struct fs_virtq_priv *vq_priv;
+	struct snap_virtio_common_queue_attr *snap_attr;
 	int num_descs = attr->seg_max;
+	struct snap_virtio_fs_queue *fs_q;
+
+	vq_ctx = calloc(1, sizeof(struct fs_virtq_ctx));
+	if (!vq_ctx)
+		goto err;
 
 	vq_priv = calloc(1, sizeof(struct fs_virtq_priv));
 	if (!vq_priv)
-		goto err;
+		goto release_ctx;
 
-	vq_ctx = &vq_priv->vq_ctx;
+	snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
+	if (!snap_attr)
+		goto release_priv;
+
+	vq_priv->vq_ctx = &vq_ctx->common_ctx;
 	vq_ctx->common_ctx.priv = vq_priv;
-	vq_priv->fs_dev.ops = fs_dev_ops;
-	vq_priv->fs_dev.ctx = fs_dev;
+	vq_priv->vattr = &snap_attr->vattr;
+
+	vq_priv->virtq_dev.ops = fs_dev_ops;
+	vq_priv->virtq_dev.ctx = fs_dev;
 	vq_priv->pd = attr->pd;
 	vq_ctx->common_ctx.idx = attr->idx;
 	vq_ctx->common_ctx.fatal_err = 0;
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
-	vq_priv->snap_attr.vattr.size = attr->queue_size;
+	vq_priv->vattr->size = attr->queue_size;
 	vq_priv->swq_state = SW_VIRTQ_RUNNING;
-	vq_priv->vfsq = vfsq;
+	vq_priv->vbq = &vfsq->common;
 
-	vq_priv->cmd_arr = alloc_fs_virtq_cmd_arr(attr->size_max,
-							attr->seg_max, vq_priv);
+	vq_priv->cmd_arr = (struct virtq_cmd *)alloc_fs_virtq_cmd_arr(attr->size_max,
+								      attr->seg_max, vq_priv);
 	if (!vq_priv->cmd_arr) {
 		snap_error("failed allocating cmd list for queue %d\n",
 			   attr->idx);
-		goto release_priv;
+		goto release_snap_attr;
 	}
 	vq_priv->cmd_cntr = 0;
 	vq_priv->ctrl_available_index = attr->hw_available_index;
@@ -1093,43 +1136,42 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 		goto dealloc_cmd_arr;
 	}
 
-	vq_priv->snap_attr.vattr.type = SNAP_VIRTQ_SPLIT_MODE;
-	vq_priv->snap_attr.vattr.ev_mode = (attr->msix_vector == VIRTIO_MSI_NO_VECTOR) ?
+	vq_priv->vattr = &snap_attr->vattr;
+	vq_priv->vattr->type = SNAP_VIRTQ_SPLIT_MODE;
+	vq_priv->vattr->ev_mode = (attr->msix_vector == VIRTIO_MSI_NO_VECTOR) ?
 					    SNAP_VIRTQ_NO_MSIX_MODE :
 					    SNAP_VIRTQ_MSIX_MODE;
-	vq_priv->snap_attr.vattr.virtio_version_1_0 = attr->virtio_version_1_0;
-	vq_priv->snap_attr.vattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
-	vq_priv->snap_attr.vattr.idx = attr->idx;
-	vq_priv->snap_attr.vattr.desc = attr->desc;
-	vq_priv->snap_attr.vattr.driver = attr->driver;
-	vq_priv->snap_attr.vattr.device = attr->device;
-	vq_priv->snap_attr.vattr.full_emulation = true;
-	vq_priv->snap_attr.vattr.max_tunnel_desc = snap_min(attr->max_tunnel_desc,
+	vq_priv->vattr->virtio_version_1_0 = attr->virtio_version_1_0;
+	vq_priv->vattr->offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
+	vq_priv->vattr->idx = attr->idx;
+	vq_priv->vattr->desc = attr->desc;
+	vq_priv->vattr->driver = attr->driver;
+	vq_priv->vattr->device = attr->device;
+	vq_priv->vattr->full_emulation = true;
+	vq_priv->vattr->max_tunnel_desc = snap_min(attr->max_tunnel_desc,
 							    attr->seg_max);
-	vq_priv->snap_attr.vattr.event_qpn_or_msix = attr->msix_vector;
-	vq_priv->snap_attr.vattr.pd = attr->pd;
-	vq_priv->snap_attr.hw_available_index = attr->hw_available_index;
-	vq_priv->snap_attr.hw_used_index = attr->hw_used_index;
-	vq_priv->snap_attr.qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
-	if (!vq_priv->snap_attr.qp) {
+	vq_priv->vattr->event_qpn_or_msix = attr->msix_vector;
+	vq_priv->vattr->pd = attr->pd;
+	snap_attr->hw_available_index = attr->hw_available_index;
+	snap_attr->hw_used_index = attr->hw_used_index;
+	snap_attr->qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
+	if (!snap_attr->qp) {
 		snap_error("no fw qp exist when trying to create virtq\n");
 		goto release_rdma_qp;
 	}
-	vq_priv->snap_vfsq = snap_virtio_fs_create_queue(snap_dev,
-							 &vq_priv->snap_attr);
-	if (!vq_priv->snap_vfsq) {
+	fs_q = snap_virtio_fs_create_queue(snap_dev, snap_attr);
+	if (!fs_q) {
 		snap_error("failed creating VIRTQ fw element\n");
 		goto release_rdma_qp;
 	}
-	if (snap_virtio_fs_query_queue(vq_priv->snap_vfsq,
-					&vq_priv->snap_attr)) {
+	vq_priv->snap_vbq = &fs_q->virtq;
+
+	if (snap_virtio_fs_query_queue(fs_q, snap_attr)) {
 		snap_error("failed query created snap virtio fs queue\n");
 		goto destroy_virtio_fs_queue;
 	}
 	qattr.vattr.state = SNAP_VIRTQ_STATE_RDY;
-	if (snap_virtio_fs_modify_queue(vq_priv->snap_vfsq,
-					SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
-					&qattr)) {
+	if (snap_virtio_fs_modify_queue(fs_q, SNAP_VIRTIO_FS_QUEUE_MOD_STATE, &qattr)) {
 		snap_error("failed to change virtq to READY state\n");
 		goto destroy_virtio_fs_queue;
 	}
@@ -1140,13 +1182,17 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	return vq_ctx;
 
 destroy_virtio_fs_queue:
-	snap_virtio_fs_destroy_queue(vq_priv->snap_vfsq);
+	snap_virtio_fs_destroy_queue(fs_q);
 release_rdma_qp:
 	snap_dma_q_destroy(vq_priv->dma_q);
 dealloc_cmd_arr:
 	free_fs_virtq_cmd_arr(vq_priv);
+release_snap_attr:
+	free(snap_attr);
 release_priv:
 	free(vq_priv);
+release_ctx:
+	free(vq_ctx);
 err:
 	snap_error("failed creating fs_virtq %d\n", attr->idx);
 	return NULL;
@@ -1171,7 +1217,7 @@ void fs_virtq_destroy(struct fs_virtq_ctx *q)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
 
-	if (snap_virtio_fs_destroy_queue(vq_priv->snap_vfsq))
+	if (snap_virtio_fs_destroy_queue(to_fs_queue(vq_priv->snap_vbq)))
 		snap_error("queue %d: error destroying fs_virtq\n", q->common_ctx.idx);
 
 	snap_dma_q_destroy(vq_priv->dma_q);
@@ -1183,16 +1229,16 @@ int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 			   struct snap_virtio_queue_debugstat *q_debugstat)
 {
 	struct fs_virtq_priv *vq_priv = q->common_ctx.priv;
-	struct snap_virtio_fs_queue_attr virtq_attr = {};
+	struct snap_virtio_common_queue_attr virtq_attr = {};
 	struct snap_virtio_queue_counters_attr vqc_attr = {};
 	struct vring_avail vra;
 	struct vring_used vru;
-	uint64_t drv_addr = vq_priv->snap_attr.vattr.driver;
-	uint64_t dev_addr = vq_priv->snap_attr.vattr.device;
+	uint64_t drv_addr = vq_priv->vattr->driver;
+	uint64_t dev_addr = vq_priv->vattr->device;
 	int ret;
 
 	ret = snap_virtio_get_vring_indexes_from_host(vq_priv->pd, drv_addr, dev_addr,
-						      vq_priv->snap_attr.vattr.dma_mkey,
+						      vq_priv->vattr->dma_mkey,
 						      &vra, &vru
 						     );
 	if (ret) {
@@ -1201,13 +1247,13 @@ int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 		return ret;
 	}
 
-	ret = snap_virtio_fs_query_queue(vq_priv->snap_vfsq, &virtq_attr);
+	ret = snap_virtio_fs_query_queue(to_fs_queue(vq_priv->snap_vbq), &virtq_attr);
 	if (ret) {
 		snap_error("failed query queue %d debugstat\n", q->common_ctx.idx);
 		return ret;
 	}
 
-	ret = snap_virtio_query_queue_counters(vq_priv->snap_vfsq->virtq.ctrs_obj, &vqc_attr);
+	ret = snap_virtio_query_queue_counters(to_fs_queue(vq_priv->snap_vbq)->virtq.ctrs_obj, &vqc_attr);
 	if (ret) {
 		snap_error("failed query virtio_q_counters %d debugstat\n", q->common_ctx.idx);
 		return ret;
@@ -1225,12 +1271,12 @@ int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 }
 
 int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
-			       struct snap_virtio_fs_queue_attr *attr)
+			       struct snap_virtio_common_queue_attr *attr)
 {
 	int ret;
 	struct fs_virtq_priv *vq_priv = q->common_ctx.priv;
 
-	ret = snap_virtio_fs_query_queue(vq_priv->snap_vfsq, attr);
+	ret = snap_virtio_fs_query_queue(to_fs_queue(vq_priv->snap_vbq), attr);
 	if (ret) {
 		snap_error("failed query queue %d (update)\n", q->common_ctx.idx);
 		return ret;
@@ -1252,7 +1298,7 @@ int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
 static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
 {
 	struct fs_virtq_priv *priv = q->common_ctx.priv;
-	struct snap_virtio_fs_queue_attr qattr = {};
+	struct snap_virtio_common_queue_attr qattr = {};
 
 	/* TODO: add option to ignore commands in the fs device layer */
 	if (priv->cmd_cntr != 0)
@@ -1262,7 +1308,7 @@ static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
 
 	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
-	if (snap_virtio_fs_modify_queue(priv->snap_vfsq, SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
+	if (snap_virtio_fs_modify_queue(to_fs_queue(priv->snap_vbq), SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
 					&qattr)) {
 		snap_error("queue %d: failed to move to the SUSPENDED state\n",
 			   q->common_ctx.idx);
@@ -1279,8 +1325,10 @@ static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
  */
 static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 {
-	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-	struct fs_virtq_cmd *cmd = &vq_priv->cmd_arr[cmd_idx];
+	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+
+	//struct virtq_cmd *cmd = fs_virtq_get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
+	struct fs_virtq_cmd *cmd = &to_fs_cmd_arr(vq_priv->cmd_arr)[cmd_idx];
 
 	while (cmd->common_cmd.state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
 	       cmd->common_cmd.cmd_available_index == cmd->vq_priv->ctrl_used_index) {
@@ -1289,8 +1337,9 @@ static void fs_virq_progress_unordered(struct fs_virtq_priv *vq_priv)
 
 		fs_virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
 
-		cmd_idx = vq_priv->ctrl_used_index % vq_priv->snap_attr.vattr.size;
-		cmd = &vq_priv->cmd_arr[cmd_idx];
+		cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
+		//cmd = fs_virtq_get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
+		 cmd = &to_fs_cmd_arr(vq_priv->cmd_arr)[cmd_idx];
 	}
 }
 
@@ -1352,7 +1401,7 @@ int fs_virtq_suspend(struct fs_virtq_ctx *q)
 	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n",
 		  q->common_ctx.idx, priv->cmd_cntr);
 
-	if (priv->vq_ctx.common_ctx.fatal_err)
+	if (priv->vq_ctx->fatal_err)
 		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n",
 			  q->common_ctx.idx);
 
@@ -1415,10 +1464,10 @@ int fs_virtq_get_state(struct fs_virtq_ctx *q,
 		       struct snap_virtio_ctrl_queue_state *state)
 {
 	struct fs_virtq_priv *priv = q->common_ctx.priv;
-	struct snap_virtio_fs_queue_attr attr = {};
+	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
-	ret = snap_virtio_fs_query_queue(priv->snap_vfsq, &attr);
+	ret = snap_virtio_fs_query_queue(to_fs_queue(priv->snap_vbq), &attr);
 	if (ret < 0) {
 		snap_error("failed to query fs queue %d\n", q->common_ctx.idx);
 		return ret;
@@ -1445,6 +1494,6 @@ int fs_set_dma_mkey(struct fs_virtq_ctx *ctx, uint32_t mkey)
 {
 	struct fs_virtq_priv *vpriv = ctx->common_ctx.priv;
 
-	vpriv->snap_attr.vattr.dma_mkey = mkey;
+	vpriv->vattr->dma_mkey = mkey;
 	return 0;
 }

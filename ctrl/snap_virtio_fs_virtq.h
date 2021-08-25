@@ -36,7 +36,7 @@ int fs_virtq_progress(struct fs_virtq_ctx *q);
 int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 			   struct snap_virtio_queue_debugstat *q_debugstat);
 int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
-			       struct snap_virtio_fs_queue_attr *attr);
+			       struct snap_virtio_common_queue_attr *attr);
 int fs_virtq_suspend(struct fs_virtq_ctx *q);
 bool fs_virtq_is_suspended(struct fs_virtq_ctx *q);
 int fs_virtq_get_state(struct fs_virtq_ctx *q,
