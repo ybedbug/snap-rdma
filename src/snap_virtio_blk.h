@@ -65,12 +65,6 @@ struct snap_virtio_blk_device {
 	struct snap_virtio_blk_queue		*virtqs;
 };
 
-enum {
-	SNAP_HW_Q_PROVIDER = 0,
-	SNAP_SW_Q_PROVIDER = 1,
-	SNAP_DPA_Q_PROVIDER = 2,
-};
-
 int snap_virtio_blk_init_device(struct snap_device *sdev);
 int snap_virtio_blk_teardown_device(struct snap_device *sdev);
 int snap_virtio_blk_query_device(struct snap_device *sdev,
@@ -85,15 +79,9 @@ int snap_virtio_blk_query_queue(struct snap_virtio_blk_queue *vbq,
 		struct snap_virtio_common_queue_attr *attr);
 int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr);
-
-static inline struct snap_virtio_common_queue_attr*
-to_blk_queue_attr(struct snap_virtio_queue_attr *vattr)
-{
-	return container_of(vattr, struct snap_virtio_common_queue_attr,
-			    vattr);
-}
-
+struct virtq_q_ops *get_hw_queue_ops(void);
 static inline struct snap_virtio_blk_queue*
+
 to_blk_queue(struct snap_virtio_queue *virtq)
 {
 	return container_of(virtq, struct snap_virtio_blk_queue, virtq);

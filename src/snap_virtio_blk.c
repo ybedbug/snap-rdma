@@ -14,9 +14,7 @@
 #include "snap_internal.h"
 #include "snap_env.h"
 #include "mlx5_ifc.h"
-
-#define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
-SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
+#include "snap_sw_virtio_blk.h"
 
 /**
  * snap_virtio_blk_query_device() - Query an Virtio block snap device
@@ -369,6 +367,7 @@ snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
 		vbq->virtq.virtq->consume_event = snap_consume_virtio_blk_queue_event;
 	}
 	vbq->virtq.idx = attr->vattr.idx;
+	attr->q_provider = SNAP_HW_Q_PROVIDER;
 
 	return &vbq->virtq;
 
@@ -393,7 +392,6 @@ out:
 static int snap_virtio_blk_destroy_hw_queue(struct snap_virtio_queue *vq)
 {
 	int mkey_ret, q_ret;
-
 
 	vq->virtq->consume_event = NULL;
 
@@ -454,28 +452,9 @@ static struct virtq_q_ops snap_virtq_blk_hw_ops = {
 	.modify = snap_virtio_blk_modify_hw_queue,
 };
 
-static struct virtq_q_ops *snap_virtio_blk_queue_provider(void)
+struct virtq_q_ops *get_hw_queue_ops(void)
 {
-	int q_provider = snap_env_getenv(SNAP_QUEUE_PROVIDER);
-	struct virtq_q_ops *queue_provider_ops;
-
-	switch (q_provider) {
-	case SNAP_HW_Q_PROVIDER:
-		queue_provider_ops = &snap_virtq_blk_hw_ops;
-		break;
-	case SNAP_SW_Q_PROVIDER:
-		queue_provider_ops = NULL;
-		break;
-	case SNAP_DPA_Q_PROVIDER:
-		queue_provider_ops = NULL;
-		break;
-	default:
-		snap_error("Invalid Queue provider received %d\n", q_provider);
-		queue_provider_ops = NULL;
-		break;
-	}
-
-	return queue_provider_ops;
+	return &snap_virtq_blk_hw_ops;
 }
 
 /**
@@ -508,7 +487,7 @@ snap_virtio_blk_create_queue(struct snap_device *sdev,
 	struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_virtio_blk_queue *vbq;
-	struct virtq_q_ops *q_ops = snap_virtio_blk_queue_provider();
+	struct virtq_q_ops *q_ops = snap_virtio_queue_provider();
 
 	if (!q_ops)
 		return NULL;

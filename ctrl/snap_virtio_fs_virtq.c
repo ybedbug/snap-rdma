@@ -895,7 +895,8 @@ static const struct virtq_impl_ops fs_impl_ops = {
 	.progress_suspend	= fs_progress_suspend,
 	.mem_pool_release	= NULL,
 	.seg_dmem		= fs_seg_dmem,
-	.seg_dmem_release	= NULL
+	.seg_dmem_release	= NULL,
+	.send_comp = virtq_tunnel_send_comp,
 };
 
 //sm array states must be according to the order of virtq_cmd_sm_state
@@ -943,7 +944,6 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	struct snap_virtio_common_queue_attr qattr = {};
 	struct fs_virtq_ctx *vq_ctx;
 	struct virtq_priv *vq_priv;
-	struct snap_virtio_common_queue_attr *snap_attr;
 	int num_descs = attr->seg_max;
 	// The size will be used for RDMA send 'inline'
 	int tx_elem_size = snap_max(sizeof(struct virtq_split_tunnel_comp),
@@ -963,13 +963,8 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	if (!vq_ctx)
 		goto err;
 
-	snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
-	if (!snap_attr)
+	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr, &ctx_attr))
 		goto release_ctx;
-
-	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr,
-			    &snap_attr->vattr, &ctx_attr))
-		goto release_snap_attr;
 
 	vq_priv = vq_ctx->common_ctx.priv;
 	vq_priv->custom_sm = &fs_sm;
@@ -987,21 +982,13 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 		goto release_priv;
 	}
 
-	snap_attr->hw_available_index = attr->hw_available_index;
-	snap_attr->hw_used_index = attr->hw_used_index;
-	snap_attr->qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
-	if (!snap_attr->qp) {
-		snap_error("no fw qp exist when trying to create virtq\n");
-		goto dealloc_cmd_arr;
-	}
-	fs_q = to_fs_queue(snap_virtio_fs_create_queue(snap_dev, snap_attr));
+	fs_q = to_fs_queue(snap_virtio_fs_create_queue(snap_dev, to_common_queue_attr(vq_priv->vattr)));
 	if (!fs_q) {
 		snap_error("failed creating VIRTQ fw element\n");
 		goto dealloc_cmd_arr;
 	}
 	vq_priv->snap_vbq = &fs_q->virtq;
-//	vq_priv->snap_vbq->q_ops
-	if (snap_virtio_fs_query_queue(vq_priv->snap_vbq, snap_attr)) {
+	if (snap_virtio_fs_query_queue(vq_priv->snap_vbq, to_common_queue_attr(vq_priv->vattr))) {
 		snap_error("failed query created snap virtio fs queue\n");
 		goto destroy_virtio_fs_queue;
 	}
@@ -1022,8 +1009,6 @@ dealloc_cmd_arr:
 	free_fs_virtq_cmd_arr(vq_priv);
 release_priv:
 	virtq_ctx_destroy(vq_priv);
-release_snap_attr:
-	free(snap_attr);
 release_ctx:
 	free(vq_ctx);
 err:

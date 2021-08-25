@@ -108,17 +108,6 @@ struct virtq_start_attr {
 	int pg_id;
 };
 
-/**
- * struct virtq_split_tunnel_req_hdr - header of command received from FW
- *
- * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
- */
-struct virtq_split_tunnel_req_hdr {
-	uint16_t descr_head_idx;
-	uint16_t num_desc;
-	uint32_t rsvd1;
-	uint32_t rsvd2;
-};
 
 /**
  * struct virtq_split_tunnel_comp - header of completion sent to FW
@@ -298,6 +287,7 @@ struct virtq_impl_ops {
 	void (*mem_pool_release)(struct virtq_cmd *cmd);
 	int (*seg_dmem)(struct virtq_cmd *cmd);
 	bool (*seg_dmem_release)(struct virtq_cmd *cmd);
+	int (*send_comp)(struct virtq_cmd *cmd, struct snap_dma_q *q);
 };
 
 /**
@@ -358,12 +348,9 @@ struct virtq_ctx_init_attr {
 	uint16_t max_tunnel_desc;
 	snap_dma_rx_cb_t cb;
 };
-
 bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 		    struct virtq_create_attr *attr,
-		    struct snap_virtio_queue_attr *vattr,
-		    struct virtq_ctx_init_attr *ctxt_attr
-		   );
+		    struct virtq_ctx_init_attr *ctxt_attr);
 void virtq_ctx_destroy(struct virtq_priv *vq_priv);
 int virtq_cmd_progress(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
@@ -388,5 +375,7 @@ struct virtq_cmd *
 virtq_rx_cb_common_set(struct virtq_priv *priv, void *data);
 bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 			     uint32_t data_len, uint32_t imm_data);
+int virtq_tunnel_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
+int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
 #endif
 

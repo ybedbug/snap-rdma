@@ -128,6 +128,7 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 			   cmd->common_cmd.vq_priv->vq_ctx->idx);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
+
 	virtq_cmd_progress(vcmd, op_status);
 }
 
@@ -1113,7 +1114,7 @@ static int blk_progress_suspend(struct snap_virtio_queue *snap_vbq,
 					    qattr);
 }
 
-static const struct virtq_impl_ops blk_impl_ops = {
+static struct virtq_impl_ops blk_impl_ops = {
 	.get_descs	   = blk_virtq_get_descs,
 	.error_status  = blk_virtq_error_status,
 	.clear_status  = blk_virtq_clear_status,
@@ -1124,7 +1125,8 @@ static const struct virtq_impl_ops blk_impl_ops = {
 	.progress_suspend = blk_progress_suspend,
 	.mem_pool_release = virtq_rel_req_mempool_buf,
 	.seg_dmem = blk_seg_dmem,
-	.seg_dmem_release = virtq_rel_req_desc
+	.seg_dmem_release = virtq_rel_req_desc,
+	.send_comp = virtq_tunnel_send_comp,
 };
 
 //sm array states must be according to the order of virtq_cmd_sm_state
@@ -1170,7 +1172,6 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 {
 	struct snap_virtio_common_queue_attr qattr = {};
 	struct blk_virtq_ctx *vq_ctx;
-	struct snap_virtio_common_queue_attr *snap_attr;
 	struct virtq_priv *vq_priv;
 	struct snap_virtio_blk_queue *snap_vbq;
 	int num_descs = VIRTIO_NUM_DESC(attr->seg_max);
@@ -1190,13 +1191,9 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	vq_ctx = calloc(1, sizeof(struct blk_virtq_ctx));
 	if (!vq_ctx)
 		goto err;
-
-	snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
-	if (!snap_attr)
-		goto release_ctx;
 	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr,
-			    &snap_attr->vattr, &ctx_attr))
-		goto release_snap_attr;
+		    &ctx_attr))
+		goto release_ctx;
 
 	vq_priv = vq_ctx->common_ctx.priv;
 	vq_priv->custom_sm = &blk_sm;
@@ -1212,22 +1209,14 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 			   attr->idx);
 		goto release_priv;
 	}
-
-	snap_attr->hw_available_index = attr->hw_available_index;
-	snap_attr->hw_used_index = attr->hw_used_index;
-	snap_attr->qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
-	if (!snap_attr->qp) {
-		snap_error("no fw qp exist when trying to create virtq\n");
-		goto dealloc_cmd_arr;
-	}
-	snap_vbq = snap_virtio_blk_create_queue(snap_dev, snap_attr);
+	snap_vbq = snap_virtio_blk_create_queue(snap_dev, to_common_queue_attr(vq_priv->vattr));
 	if (!snap_vbq) {
 		snap_error("failed creating VIRTQ fw element\n");
 		goto dealloc_cmd_arr;
 	}
 	vq_priv->snap_vbq = &snap_vbq->virtq;
 
-	if (snap_virtio_blk_query_queue(snap_vbq, snap_attr)) {
+	if (snap_virtio_blk_query_queue(snap_vbq, to_common_queue_attr(vq_priv->vattr))) {
 		snap_error("failed query created snap virtio blk queue\n");
 		goto destroy_virtio_blk_queue;
 	}
@@ -1238,6 +1227,8 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		snap_error("failed to change virtq to READY state\n");
 		goto destroy_virtio_blk_queue;
 	}
+	if (to_common_queue_attr(vq_priv->vattr)->q_provider == SNAP_SW_Q_PROVIDER)
+		blk_impl_ops.send_comp = virtq_sw_send_comp;
 	snap_debug("created VIRTQ %d succesfully in_order %d\n", attr->idx,
 		   attr->force_in_order);
 	return vq_ctx;
@@ -1248,8 +1239,6 @@ dealloc_cmd_arr:
 	free_blk_virtq_cmd_arr(vq_priv);
 release_priv:
 	virtq_ctx_destroy(vq_priv);
-release_snap_attr:
-	free(snap_attr);
 release_ctx:
 	free(vq_ctx);
 err:

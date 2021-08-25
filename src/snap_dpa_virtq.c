@@ -221,13 +221,13 @@ static int virtq_blk_dpa_destroy(struct snap_virtio_queue *vbq)
 	return -1;
 }
 
-static int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
+static int virtq_blk_dpa_query(struct snap_virtio_queue *vq,
 		struct snap_virtio_common_queue_attr *attr)
 {
 	return -1;
 }
 
-static int virtq_blk_dpa_modify(struct snap_virtio_queue *vbq,
+static int virtq_blk_dpa_modify(struct snap_virtio_queue *vq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	return -1;

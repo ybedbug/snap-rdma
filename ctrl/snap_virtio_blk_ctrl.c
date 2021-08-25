@@ -848,8 +848,9 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+	struct virtq_common_ctx *q = &to_blk_ctx(vbq->q_impl)->common_ctx;
 
-	virtq_progress(&to_blk_ctx(vbq->q_impl)->common_ctx, vq->thread_id);
+	virtq_progress(q, vq->thread_id);
 }
 
 static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)

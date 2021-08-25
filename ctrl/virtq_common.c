@@ -61,7 +61,7 @@ static void virtq_vattr_from_attr(struct virtq_create_attr *attr,
 
  * @attr:	Configuration attributes
  *
- * Creates the snap queues, and RDMA queues. For RDMA queues
+ * Creates the snap queues, virtio attributes and RDMA queues. For RDMA queues
  * creates hw and sw qps, hw qps will be given to VIRTIO_BLK_Q.
  * Completion is sent inline, hence tx elem size is completion size
  * the rx queue size should match the number of possible descriptors
@@ -69,58 +69,63 @@ static void virtq_vattr_from_attr(struct virtq_create_attr *attr,
  *
  * Context: Calling function should attach the virtqueue to a polling group
  *
- * Return: false on failure, true on success
+ * Return: true if successful, false otherwise
  */
 bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 		    struct virtq_create_attr *attr,
-		    struct snap_virtio_queue_attr *vattr,
 		    struct virtq_ctx_init_attr *ctxt_attr)
 {
 	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
 
 	if (!vq_priv)
 		goto err;
+	struct snap_virtio_common_queue_attr *snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
 
+	if (!snap_attr)
+		goto release_priv;
 	vq_priv->vq_ctx = vq_ctx;
 	vq_ctx->priv = vq_priv;
-	vq_priv->vattr = vattr;
 	vq_priv->virtq_dev.ctx = ctxt_attr->bdev;
 	vq_priv->pd = attr->pd;
 	vq_ctx->idx = attr->idx;
 	vq_ctx->fatal_err = 0;
 	vq_priv->seg_max = attr->seg_max;
 	vq_priv->size_max = attr->size_max;
-	vq_priv->vattr->size = attr->queue_size;
 	vq_priv->swq_state = SW_VIRTQ_RUNNING;
 	vq_priv->vbq = ctxt_attr->vq;
 	vq_priv->cmd_cntr = 0;
 	vq_priv->ctrl_available_index = attr->hw_available_index;
 	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 	vq_priv->force_in_order = attr->force_in_order;
-
 	vq_priv->dma_q = virtq_rdma_qp_init(attr, vq_priv,
 					    ctxt_attr->tx_elem_size,
 					    ctxt_attr->rx_elem_size,
 					    ctxt_attr->cb);
 	if (!vq_priv->dma_q) {
 		snap_error("failed creating rdma qp loop\n");
-		goto release_priv;
+		goto destroy_attr;
 	}
+	snap_virtio_common_queue_config(snap_attr,
+			attr->hw_available_index, attr->hw_used_index, vq_priv->dma_q);
+	virtq_vattr_from_attr(attr, &snap_attr->vattr, ctxt_attr->max_tunnel_desc);
+	vq_priv->vattr = &snap_attr->vattr;
+	vq_priv->vattr->size = attr->queue_size;
 
-	virtq_vattr_from_attr(attr, vattr, ctxt_attr->max_tunnel_desc);
+	return true;
 
-	return vq_ctx;
-
+destroy_attr:
+	free(snap_attr);
 release_priv:
 	free(vq_priv);
 err:
 	snap_error("failed creating virtq %d\n", attr->idx);
-	return NULL;
+	return false;
 }
 
 void virtq_ctx_destroy(struct virtq_priv *vq_priv)
 {
 	snap_dma_q_destroy(vq_priv->dma_q);
+	free(to_common_queue_attr(vq_priv->vattr));
 	free(vq_priv);
 }
 
@@ -321,6 +326,48 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	return true;
 }
 
+int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
+{
+	struct snap_virtio_common_queue_attr *cmn_queue = to_common_queue_attr(cmd->vq_priv->vattr);
+	uint64_t used_idx_addr, used_elem_addr;
+	struct vring_used_elem elem;
+	int ret;
+
+	elem.id = cmd->descr_head_idx;
+	elem.len = cmd->total_in_len;
+	used_elem_addr = cmd->vq_priv->vattr->device +
+			offsetof(struct vring_used, ring[cmn_queue->hw_used_index % cmd->vq_priv->vattr->size]);
+	ret = snap_dma_q_write_short(q, &elem, sizeof(elem),
+			used_elem_addr,
+			cmd->vq_priv->vattr->dma_mkey);
+	if (snap_unlikely(ret))
+		return ret;
+
+	used_idx_addr = cmd->vq_priv->vattr->device + offsetof(struct vring_used, idx);
+	cmn_queue->hw_used_index = cmn_queue->hw_used_index + 1;
+	ret = snap_dma_q_write_short(q, &cmn_queue->hw_used_index, sizeof(uint16_t),
+						   used_idx_addr,
+					       cmd->vq_priv->vattr->dma_mkey);
+
+	return ret;
+}
+
+int virtq_tunnel_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
+{
+	struct virtq_split_tunnel_comp tunnel_comp;
+	int ret;
+
+	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
+	tunnel_comp.len = cmd->total_in_len;
+	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
+		       tunnel_comp.descr_head_idx, tunnel_comp.len,
+		       sizeof(struct virtq_split_tunnel_comp));
+	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
+					 &tunnel_comp,
+					 sizeof(struct virtq_split_tunnel_comp));
+
+	return ret;
+}
 /**
  * sm_send_completion() - send command completion to FW
  * @cmd: Command being processed
@@ -334,7 +381,6 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 				     enum virtq_cmd_sm_op_status status)
 {
 	int ret;
-	struct virtq_split_tunnel_comp tunnel_comp;
 	bool unordered = false;
 
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
@@ -363,18 +409,11 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 		return false;
 	}
 
-	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
-	tunnel_comp.len = cmd->total_in_len;
-	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
-		       tunnel_comp.descr_head_idx, tunnel_comp.len,
-		       sizeof(struct virtq_split_tunnel_comp));
 	virtq_mark_dirty_mem(cmd, 0, 0, true);
-	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
-					 &tunnel_comp,
-					 sizeof(struct virtq_split_tunnel_comp));
+	ret = cmd->vq_priv->ops->send_comp(cmd, cmd->vq_priv->dma_q);
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to second completion\n");
+		ERR_ON_CMD(cmd, "failed to send completion\n");
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
 		cmd->state = VIRTQ_CMD_STATE_RELEASE;
@@ -490,6 +529,10 @@ int virtq_progress(struct virtq_common_ctx *q, int thread_id)
 	priv->thread_id = thread_id;
 	snap_dma_q_progress(priv->dma_q);
 
+#ifdef VIRTIO_QUEUE_PROGRESS_ENABLED
+	if (priv->snap_vbq->q_ops->progress)
+		priv->snap_vbq->q_ops->progress(priv->snap_vbq);
+#endif
 	if (snap_unlikely(priv->force_in_order))
 		virtq_progress_unordered(priv);
 

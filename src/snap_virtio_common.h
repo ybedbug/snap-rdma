@@ -39,7 +39,7 @@
 #include <pthread.h>
 #include <linux/types.h>
 #include <linux/virtio_ring.h>
-
+#include "snap_dma.h"
 #include "snap.h"
 
 #define SNAP_VIRTIO_UMEM_ALIGN 4096
@@ -166,11 +166,13 @@ struct snap_virtio_umem {
 
 struct snap_virtio_common_queue_attr {
 	uint64_t			modifiable_fields;//mask of snap_virtio_queue_modify
-	struct ibv_qp			*qp;
+	struct ibv_qp		*qp;
 	uint16_t			hw_available_index;
 	uint16_t			hw_used_index;
 
 	struct snap_virtio_queue_attr   vattr;
+	int					q_provider;
+	struct snap_dma_q	*dma_q;
 };
 
 struct virtq_q_ops {
@@ -181,6 +183,7 @@ struct virtq_q_ops {
 			struct snap_virtio_common_queue_attr *attr);
 	int (*modify)(struct snap_virtio_queue *vq,
 			uint64_t mask, struct snap_virtio_common_queue_attr *attr);
+	int (*progress)(struct snap_virtio_queue *vq);
 };
 
 struct snap_virtio_queue {
@@ -226,6 +229,31 @@ struct snap_virtio_device_attr {
 	uint16_t			queue_select;
 };
 
+/**
+ * struct virtq_split_tunnel_req_hdr - header of command received from FW
+ *
+ * Struct uses 2 rsvd so it will be aligned to 4B (and not 8B)
+ */
+struct virtq_split_tunnel_req_hdr {
+	uint16_t descr_head_idx;
+	uint16_t num_desc;
+	uint32_t rsvd1;
+	uint32_t rsvd2;
+};
+
+enum {
+	SNAP_HW_Q_PROVIDER = 0,
+	SNAP_SW_Q_PROVIDER = 1,
+	SNAP_DPA_Q_PROVIDER = 2,
+};
+
+static inline struct snap_virtio_common_queue_attr*
+to_common_queue_attr(struct snap_virtio_queue_attr *vattr)
+{
+	return container_of(vattr, struct snap_virtio_common_queue_attr,
+			    vattr);
+}
+
 void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 	void *q_configuration);
 void snap_virtio_get_device_attr(struct snap_device *sdev,
@@ -260,4 +288,7 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 					    struct vring_used *vru);
 int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
 				struct snap_virtio_queue_counters_attr *attr);
+int snap_virtio_common_queue_config(struct snap_virtio_common_queue_attr *common_attr,
+		uint16_t hw_available_index, uint16_t hw_used_index, struct snap_dma_q *dma_q);
+struct virtq_q_ops *snap_virtio_queue_provider(void);
 #endif

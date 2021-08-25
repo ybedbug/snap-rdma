@@ -16,6 +16,11 @@
 #include "snap_virtio_common.h"
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
+#include "snap_env.h"
+#include "snap_sw_virtio_blk.h"
+
+#define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
 
 void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 		void *q_configuration)
@@ -689,7 +694,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr;
 		int vhca_id;
 
-		attr = to_blk_queue_attr(vattr);
+		attr = to_common_queue_attr(vattr);
 		in = in_blk;
 		inlen = sizeof(in_blk);
 		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
@@ -1028,7 +1033,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	if (out == out_blk) {
 		struct snap_virtio_common_queue_attr *attr;
 
-		attr = to_blk_queue_attr(vattr);
+		attr = to_common_queue_attr(vattr);
 
 		vattr->size = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_size);
 		vattr->idx = DEVX_GET(virtio_blk_q, virtq_out, virtqc.queue_index);
@@ -1290,3 +1295,41 @@ err:
 	return -EINVAL;
 }
 
+int snap_virtio_common_queue_config(struct snap_virtio_common_queue_attr *common_attr,
+		uint16_t hw_available_index, uint16_t hw_used_index, struct snap_dma_q *dma_q)
+{
+	common_attr->hw_available_index = hw_available_index;
+	common_attr->hw_used_index = hw_used_index;
+	common_attr->qp = snap_dma_q_get_fw_qp(dma_q);
+	if (!common_attr->qp) {
+		snap_error("no fw qp exist when trying to create virtq\n");
+		return -1;
+	}
+	common_attr->dma_q = dma_q;
+	return 0;
+
+}
+
+struct virtq_q_ops *snap_virtio_queue_provider(void)
+{
+	struct virtq_q_ops *queue_provider_ops;
+	int q_provider = snap_env_getenv(SNAP_QUEUE_PROVIDER);
+
+	switch (q_provider) {
+	case SNAP_HW_Q_PROVIDER:
+		queue_provider_ops = get_hw_queue_ops();
+		break;
+	case SNAP_SW_Q_PROVIDER:
+		queue_provider_ops = get_sw_queue_ops();
+		break;
+	case SNAP_DPA_Q_PROVIDER:
+		queue_provider_ops = NULL;
+		break;
+	default:
+		snap_error("Invalid Queue provider received %d\n", q_provider);
+		queue_provider_ops = NULL;
+		break;
+	}
+
+	return queue_provider_ops;
+}
