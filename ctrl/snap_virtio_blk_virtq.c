@@ -10,14 +10,12 @@
  * provided with the software product.
  */
 
-#include <linux/virtio_ring.h>
-#include <linux/virtio_blk.h>
-#include <linux/virtio_pci.h>
 #include "snap_channel.h"
 #include "snap_virtio_blk_virtq.h"
 #include "snap_dma.h"
 #include "snap_env.h"
 #include "snap_virtio_blk_ctrl.h"
+#include "virtio_blk_ext.h"
 
 #define NUM_HDR_FTR_DESCS 2
 

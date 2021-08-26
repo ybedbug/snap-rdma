@@ -13,6 +13,7 @@ libsnap_virtio_blk_ctrl_ladir = $(includedir)/
 libsnap_virtio_blk_ctrl_la_HEADERS = snap_virtio_blk_ctrl.h \
 				     snap_virtio_common_ctrl.h \
 				     snap_virtio_blk_virtq.h \
+				     virtio_blk_ext.h
 				     $(top_srcdir)/blk/snap_blk_ops.h \
 				     snap_poll_groups.h
 libsnap_virtio_blk_ctrl_la_SOURCES = snap_virtio_blk_ctrl.c \
