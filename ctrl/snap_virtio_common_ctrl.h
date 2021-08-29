@@ -104,6 +104,7 @@ struct snap_virtio_ctrl_attr {
 	bool suspended;
 	bool recover;
 	bool vf_dynamic_msix_supported;
+	bool force_recover;
 };
 
 struct snap_virtio_ctrl_queue {

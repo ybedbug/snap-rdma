@@ -152,6 +152,11 @@ struct snap_relaxed_ordering_caps {
 	bool relaxed_ordering_read_umr;
 };
 
+enum snap_pci_hotunplug_state {
+	snap_pci_no_hotunplug			= 0,
+	snap_pci_needs_controller_hotunplug	= 1,
+};
+
 struct snap_pci {
 	struct snap_context		*sctx;
 	enum snap_pci_type		type;
@@ -169,6 +174,7 @@ struct snap_pci {
 	struct mlx5_snap_pci		mpci;
 
 	bool hotplugged;
+	enum snap_pci_hotunplug_state	pci_hotunplug_state;
 };
 
 struct snap_device {

@@ -3028,6 +3028,75 @@ snap_create_device_emulation(struct snap_device *sdev,
 	}
 }
 
+static int snap_check_emulation_function_hotunplug_state(struct snap_context *sctx, struct ibv_device *ibv_dev)
+{
+	struct snap_pci **pfs;
+	int num_pfs, i;
+	struct snap_virtio_blk_device_attr *attr;
+	struct snap_device_attr sdev_attr = {};
+	struct snap_device *sdev;
+
+	pfs = calloc(sctx->virtio_blk_pfs.max_pfs, sizeof(*pfs));
+	if (!pfs)
+		return -EINVAL;
+
+	attr = calloc(1, sizeof(*attr));
+	if (!attr) {
+		free(pfs);
+		return -EINVAL;
+	}
+
+	sdev = calloc(1, sizeof(*sdev));
+	if (!sdev) {
+		free(pfs);
+		free(attr);
+		return -EINVAL;
+	}
+
+	num_pfs = snap_get_pf_list(sctx, SNAP_VIRTIO_BLK, pfs);
+	for (i = 0; i < num_pfs; i++) {
+		if (!pfs[i]->hotplugged)
+			continue;
+
+		sdev->sctx = sctx;
+		sdev->pci = pfs[i];
+		sdev->mdev.device_emulation = snap_create_device_emulation(sdev, &sdev_attr);
+		if (!sdev->mdev.device_emulation) {
+			snap_error("Failed to create device emulation\n");
+			goto err;
+		}
+
+		snap_virtio_blk_query_device(sdev, attr);
+		/*
+		 * In virtio_blk if state is POWER OFF we know the driver unplugged this function
+		 * and we can unplug it. If the state is PREPARE the driver has not finished unplugging
+		 * this function and we need to create a controller to check if the driver is unprobed
+		 * and we can safely unplug this function. The check happens in virtio_blk_ctrl_progress()
+		 */
+		if (attr->vattr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF)
+			snap_hotunplug_pf(pfs[i]);
+		else if (attr->vattr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
+			pfs[i]->pci_hotunplug_state = snap_pci_needs_controller_hotunplug;
+
+		snap_debug("hotplugged virtio_blk function pf id =%d bdf=%02x:%02x.%d  with state %d.\n",
+			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
+			  pfs[i]->pci_bdf.bdf.function, attr->vattr.pci_hotplug_state);
+
+		snap_destroy_device_emulation(sdev);
+	}
+
+	free(pfs);
+	free(attr);
+	free(sdev);
+	return 0;
+
+err:
+	free(pfs);
+	free(attr);
+	free(sdev);
+	return -EINVAL;
+}
+
 /**
  * snap_get_pf_list() - Get an array of snap pci devices for a given context.
  * @sctx:       snap context
@@ -3552,6 +3621,11 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 
 	TAILQ_INIT(&sctx->hotplug_device_list);
 
+	rc = snap_check_emulation_function_hotunplug_state(sctx, ibdev);
+	if (rc) {
+		errno = EINVAL;
+		goto out_free_mutex;
+	}
 	return sctx;
 
 out_free_mutex:

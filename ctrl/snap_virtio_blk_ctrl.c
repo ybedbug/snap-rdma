@@ -1006,6 +1006,7 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 		if (ret < 0)
 			goto close_ctrl;
 
+		ret |= attr->common.force_recover;
 		attr->common.recover = ret;
 	}
 
