@@ -26,7 +26,7 @@
 #define SNAP_PCI_ENUMERATE_TIME_WAIT 50000
 #define SNAP_PCI_ENUMERATE_MAX_RETRIES 100
 #define SNAP_UNINITIALIZED_VHCA_ID -1
-#define SNAP_NVME_MAX_QUEUE_DEPTH_LEGACY 2048
+#define SNAP_NVME_MAX_QUEUE_DEPTH_LEGACY 1024
 
 static int snap_copy_roce_address(struct snap_device *sdev,
 		struct ibv_context *context, int idx);
