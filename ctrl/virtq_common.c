@@ -20,12 +20,13 @@
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
 static struct snap_dma_q *virtq_rdma_qp_init(struct virtq_create_attr *attr,
-		struct virtq_priv *vq_priv, int rx_elem_size, snap_dma_rx_cb_t cb)
+		struct virtq_priv *vq_priv, int tx_elem_size, int rx_elem_size,
+		snap_dma_rx_cb_t cb)
 {
 	struct snap_dma_q_create_attr rdma_qp_create_attr = { };
 
 	rdma_qp_create_attr.tx_qsize = attr->queue_size;
-	rdma_qp_create_attr.tx_elem_size = sizeof(struct virtq_split_tunnel_comp);
+	rdma_qp_create_attr.tx_elem_size = tx_elem_size;
 	rdma_qp_create_attr.rx_qsize = attr->queue_size;
 	rdma_qp_create_attr.rx_elem_size = rx_elem_size;
 	rdma_qp_create_attr.uctx = vq_priv;
@@ -71,9 +72,9 @@ static void virtq_vattr_from_attr(struct virtq_create_attr *attr,
  * Return: false on failure, true on success
  */
 bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
-		struct virtq_create_attr *attr, struct snap_virtio_queue_attr *vattr,
-		struct snap_virtio_ctrl_queue *vq, void *bdev, int rx_elem_size,
-		uint16_t max_tunnel_desc, snap_dma_rx_cb_t cb)
+		    struct virtq_create_attr *attr,
+		    struct snap_virtio_queue_attr *vattr,
+		    struct virtq_ctx_init_attr *ctxt_attr)
 {
 	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
 
@@ -83,7 +84,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	vq_priv->vq_ctx = vq_ctx;
 	vq_ctx->priv = vq_priv;
 	vq_priv->vattr = vattr;
-	vq_priv->virtq_dev.ctx = bdev;
+	vq_priv->virtq_dev.ctx = ctxt_attr->bdev;
 	vq_priv->pd = attr->pd;
 	vq_ctx->idx = attr->idx;
 	vq_ctx->fatal_err = 0;
@@ -91,19 +92,22 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	vq_priv->size_max = attr->size_max;
 	vq_priv->vattr->size = attr->queue_size;
 	vq_priv->swq_state = SW_VIRTQ_RUNNING;
-	vq_priv->vbq = vq;
+	vq_priv->vbq = ctxt_attr->vq;
 	vq_priv->cmd_cntr = 0;
 	vq_priv->ctrl_available_index = attr->hw_available_index;
 	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 	vq_priv->force_in_order = attr->force_in_order;
 
-	vq_priv->dma_q = virtq_rdma_qp_init(attr, vq_priv, rx_elem_size, cb);
+	vq_priv->dma_q = virtq_rdma_qp_init(attr, vq_priv,
+					    ctxt_attr->tx_elem_size,
+					    ctxt_attr->rx_elem_size,
+					    ctxt_attr->cb);
 	if (!vq_priv->dma_q) {
 		snap_error("failed creating rdma qp loop\n");
 		goto release_priv;
 	}
 
-	virtq_vattr_from_attr(attr, vattr, max_tunnel_desc);
+	virtq_vattr_from_attr(attr, vattr, ctxt_attr->max_tunnel_desc);
 
 	return vq_ctx;
 
@@ -152,16 +156,6 @@ bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
 					   VIRTQ_CMD_STATE_IDLE);
 	return false;
 }
-
-/**
- * enum virtq_fetch_desc_status - status of descriptors fetch process
- * @VIRTQ_FETCH_DESC_DONE:	All descriptors were fetched
- * @VIRTQ_FETCH_DESC_ERR:	Error while trying to fetch a descriptor
- * @VIRTQ_FETCH_DESC_READ:	An Asynchronous read for desc was called
- */
-enum virtq_fetch_desc_status {
-	VIRTQ_FETCH_DESC_DONE, VIRTQ_FETCH_DESC_ERR, VIRTQ_FETCH_DESC_READ,
-};
 
 /**
  * fetch_next_desc() - Fetches command descriptors from host memory

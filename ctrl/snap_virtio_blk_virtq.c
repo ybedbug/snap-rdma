@@ -1195,6 +1195,16 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	int num_descs = VIRTIO_NUM_DESC(attr->seg_max);
 	int rx_elem_size = sizeof(struct virtq_split_tunnel_req_hdr) +
 				   num_descs * sizeof(struct vring_desc);
+	// The size will be used for RDMA send 'inline'
+	int tx_elem_size = snap_max(sizeof(struct virtq_split_tunnel_comp),
+				sizeof(struct virtio_blk_outftr));
+	struct virtq_ctx_init_attr ctx_attr = { .vq = &vbq->common,
+						.bdev = bdev,
+						.tx_elem_size = tx_elem_size,
+						.rx_elem_size = rx_elem_size,
+						.max_tunnel_desc = attr->seg_max + NUM_HDR_FTR_DESCS,
+						.cb = blk_virtq_rx_cb
+					      };
 
 	vq_ctx = calloc(1, sizeof(struct blk_virtq_ctx));
 	if (!vq_ctx)
@@ -1204,9 +1214,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	if (!snap_attr)
 		goto release_ctx;
 	if (!virtq_ctx_init(&vq_ctx->common_ctx, attr,
-			     &snap_attr->vattr, &vbq->common,
-			     bdev, rx_elem_size,
-			     attr->seg_max + NUM_HDR_FTR_DESCS, blk_virtq_rx_cb))
+			    &snap_attr->vattr, &ctx_attr))
 		goto release_snap_attr;
 
 	vq_priv = vq_ctx->common_ctx.priv;

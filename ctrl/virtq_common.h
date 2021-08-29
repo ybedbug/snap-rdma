@@ -44,24 +44,14 @@
 	snap_error("queue:%d cmd_idx:%d err: " fmt, \
 		   (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, ## __VA_ARGS__)
 
-//scaffolding until fs uses common cmd also
-#define ERR_ON_CMD_FS(cmd, fmt, ...) \
-	snap_error("queue:%d cmd_idx:%d err: " fmt, \
-		   (cmd)->common_cmd.vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, ## __VA_ARGS__)
-
 /* uncomment to enable fast path debugging */
 // #define VIRTQ_DEBUG_DATA
 #ifdef VIRTQ_DEBUG_DATA
 #define virtq_log_data(cmd, fmt, ...) \
 	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, \
 	       ## __VA_ARGS__)
-//scaffolding until fs uses common cmd also
-#define virtq_log_data_fs(cmd, fmt, ...) \
-	printf("queue:%d cmd_idx:%d " fmt, (cmd)->common_cmd.vq_priv->vq_ctx->idx, (cmd)->common_cmd.idx, \
-	       ## __VA_ARGS__)
 #else
 #define virtq_log_data(cmd, fmt, ...)
-#define virtq_log_data_fs(cmd, fmt, ...)
 #endif
 
 /**
@@ -347,12 +337,32 @@ enum virtq_cmd_sm_state {
 	VIRTQ_CMD_NUM_OF_STATES,
 };
 
+/**
+ * enum virtq_fetch_desc_status - status of descriptors fetch process
+ * @VIRTQ_FETCH_DESC_DONE:	All descriptors were fetched
+ * @VIRTQ_FETCH_DESC_ERR:	Error while trying to fetch a descriptor
+ * @VIRTQ_FETCH_DESC_READ:	An Asynchronous read for desc was called
+ */
+enum virtq_fetch_desc_status {
+	VIRTQ_FETCH_DESC_DONE,
+	VIRTQ_FETCH_DESC_ERR,
+	VIRTQ_FETCH_DESC_READ,
+};
+
+struct virtq_ctx_init_attr {
+	struct snap_virtio_ctrl_queue *vq;
+	void *bdev;
+	int tx_elem_size;
+	int rx_elem_size;
+	uint16_t max_tunnel_desc;
+	snap_dma_rx_cb_t cb;
+};
+
 bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
-					struct virtq_create_attr *attr,
-					struct snap_virtio_queue_attr *vattr,
-					struct snap_virtio_ctrl_queue *vq,
-					void *bdev,
-					int rx_elem_size, uint16_t max_tunnel_desc, snap_dma_rx_cb_t cb);
+		    struct virtq_create_attr *attr,
+		    struct snap_virtio_queue_attr *vattr,
+		    struct virtq_ctx_init_attr *ctxt_attr
+		   );
 void virtq_ctx_destroy(struct virtq_priv *vq_priv);
 int virtq_cmd_progress(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
 bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status);
