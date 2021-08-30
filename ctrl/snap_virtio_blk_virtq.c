@@ -602,6 +602,7 @@ static int blk_seg_dmem(struct virtq_cmd *cmd)
 
 static void blk_virtq_proc_desc(struct virtq_cmd *cmd)
 {
+	int i;
 	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
 
 	cmd->num_desc = virtq_blk_process_desc(descs, cmd->num_desc,
@@ -610,8 +611,11 @@ static void blk_virtq_proc_desc(struct virtq_cmd *cmd)
 	if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
 		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return;
 	}
 
+	for (i = 1; i < cmd->num_desc - 1; i++)
+		cmd->total_seg_len += descs[i].len;
 }
 
 static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)

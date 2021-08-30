@@ -213,9 +213,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 bool virtq_sm_fetch_cmd_descs(struct virtq_cmd *cmd,
 			       enum virtq_cmd_sm_op_status status)
 {
-	size_t i;
 	enum virtq_fetch_desc_status ret;
-	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
@@ -231,9 +229,6 @@ bool virtq_sm_fetch_cmd_descs(struct virtq_cmd *cmd,
 		cmd->vq_priv->ops->descs_processing(cmd);
 		if (cmd->state == VIRTQ_CMD_STATE_FATAL_ERR)
 			return true;
-
-		for (i = 1; i < cmd->num_desc - 1; i++)
-			cmd->total_seg_len += descs[i].len;
 
 		cmd->state = VIRTQ_CMD_STATE_READ_HEADER;
 
