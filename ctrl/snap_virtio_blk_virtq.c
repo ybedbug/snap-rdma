@@ -171,6 +171,15 @@ struct snap_cross_mkey *blk_virtq_get_cross_mkey(void *ctx, struct ibv_pd *pd)
 	struct blk_virtq_cmd *cmd = ctx;
 	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->common_cmd.vq_priv->vbq->ctrl);
 
+	/*
+	 * We assume 1-1 relationshop between ctrl->cross_mkey and PD,
+	 * so in case PD differs, we need to update cross_mkey as well.
+	 */
+	if (snap_unlikely(ctrl->cross_mkey && pd != ctrl->cross_mkey->pd)) {
+		snap_destroy_cross_mkey(ctrl->cross_mkey);
+		ctrl->cross_mkey = NULL;
+	}
+
 	if (snap_likely(ctrl->cross_mkey))
 		return ctrl->cross_mkey;
 

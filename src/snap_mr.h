@@ -21,6 +21,7 @@ struct snap_device;
 struct snap_cross_mkey {
 	struct mlx5dv_devx_obj *devx_obj;
 	uint32_t mkey;
+	struct ibv_pd *pd;
 };
 
 struct mlx5_klm {

@@ -149,6 +149,7 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 		goto out_err;
 
 	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;
+	cmkey->pd = pd;
 
 	return cmkey;
 
