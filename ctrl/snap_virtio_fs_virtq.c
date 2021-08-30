@@ -730,108 +730,22 @@ static bool sm_handle_out_iov_done(struct virtq_cmd *cmd,
 }
 
 /**
- * sm_write_status() - Write command status to host memory upon finish
+ * fs_virtq_sm_write_status() - Write command status to host memory upon finish
  * @cmd:	command which requested the write
  * @status:	callback status, expected 0 for no errors
  *
  * Return: True if state machine is moved synchronously to the new state
  * (error cases) or false if the state transition will be done asynchronously.
  */
-static inline bool sm_write_status(struct virtq_cmd *cmd,
-				   enum virtq_cmd_sm_op_status status)
+static inline bool fs_virtq_sm_write_status(struct virtq_cmd *cmd,
+					    enum virtq_cmd_sm_op_status status)
 {
 	struct fs_virtq_cmd *fs_cmd = to_fs_virtq_cmd(cmd);
 
-	if (snap_likely(fs_cmd->pos_f_write > 0)) {
-
-		int ret;
-		struct fs_virtq_cmd_aux *cmd_aux = to_fs_cmd_aux(cmd->aux);
-
-		if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
-			set_cmd_error(cmd, EIO);
-
-		virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx va %p len %lu\n",
-			       cmd_aux->descs[fs_cmd->pos_f_write].addr,
-			       fs_cmd->iov[fs_cmd->pos_f_write].iov_base,
-			       sizeof(struct virtio_fs_outftr));
-		fs_virtq_mark_dirty_mem(cmd, cmd_aux->descs[fs_cmd->pos_f_write].addr,
-					sizeof(struct virtio_fs_outftr), false);
-
-		// tx_inline is 60 bytes, struct fuse_out_header is 16 bytes
-		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, cmd->ftr,
-					sizeof(struct virtio_fs_outftr),
-					cmd_aux->descs[fs_cmd->pos_f_write].addr,
-					cmd->vq_priv->vattr->dma_mkey);
-		if (snap_unlikely(ret)) {
-			/* TODO: at some point we will have to do pending queue */
-			ERR_ON_CMD(cmd, "failed to send status, err=%d\n", ret);
-			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-			return true;
-		}
-
-		cmd->total_in_len += sizeof(struct virtio_fs_outftr);
-	}
+	if (snap_likely(fs_cmd->pos_f_write > 0))
+		return virtq_sm_write_status(cmd, status);
 
 	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
-	return true;
-}
-
-/**
- * sm_send_completion() - send command completion to FW
- * @cmd: Command being processed
- * @status: Status of callback
- *
- * Return:
- * True if state machine is moved synchronously to the new state
- * (error cases) or false if the state transition will be done asynchronously.
- */
-static inline bool sm_send_completion(struct virtq_cmd *cmd,
-				     enum virtq_cmd_sm_op_status status)
-{
-	int ret;
-	struct virtq_split_tunnel_comp tunnel_comp;
-
-	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
-		snap_error("failed to write the request status field\n");
-
-		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
-		 * handle case when cmd with VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
-		 */
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-
-	/* check order of completed command, if the command unordered - wait for
-	 * other completions
-	 */
-	if (snap_unlikely(cmd->vq_priv->force_in_order)) {
-		if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-			virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
-				       cmd->idx, cmd->cmd_available_index,
-				       cmd->vq_priv->ctrl_used_index);
-			cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
-			return false;
-		}
-	}
-
-	tunnel_comp.descr_head_idx = cmd->descr_head_idx;
-	tunnel_comp.len = cmd->total_in_len;
-	virtq_log_data(cmd, "SEND_COMP: descr_head_idx %d len %d send_size %lu\n",
-		       tunnel_comp.descr_head_idx, tunnel_comp.len,
-		       sizeof(struct virtq_split_tunnel_comp));
-	fs_virtq_mark_dirty_mem(cmd, 0, 0, true);
-	ret = snap_dma_q_send_completion(cmd->vq_priv->dma_q,
-					 &tunnel_comp,
-					 sizeof(struct virtq_split_tunnel_comp));
-	if (snap_unlikely(ret)) {
-		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to second completion\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-	} else {
-		cmd->state = VIRTQ_CMD_STATE_RELEASE;
-		++cmd->vq_priv->ctrl_used_index;
-	}
-
 	return true;
 }
 
@@ -1027,9 +941,9 @@ static struct virtq_sm_state fs_sm_arr[] = {
 /*VIRTQ_CMD_STATE_HANDLE_REQ		*/	{fs_virtq_handle_req},
 /*VIRTQ_CMD_STATE_OUT_DATA_DONE		*/	{sm_handle_out_iov_done},
 /*VIRTQ_CMD_STATE_IN_DATA_DONE		*/	{sm_handle_in_iov_done},
-/*VIRTQ_CMD_STATE_WRITE_STATUS		*/	{sm_write_status},
-/*VIRTQ_CMD_STATE_SEND_COMP		*/	{sm_send_completion},
-/*VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP	*/	{sm_send_completion},
+/*VIRTQ_CMD_STATE_WRITE_STATUS		*/	{fs_virtq_sm_write_status},
+/*VIRTQ_CMD_STATE_SEND_COMP		*/	{virtq_sm_send_completion},
+/*VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP	*/	{virtq_sm_send_completion},
 /*VIRTQ_CMD_STATE_RELEASE		*/	{virtq_sm_release},
 /*VIRTQ_CMD_STATE_FATAL_ERR		*/	{virtq_sm_fatal_error},
 };
