@@ -450,7 +450,11 @@ static bool sm_fetch_cmd_descs(struct virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
-		cmd->state = VIRTQ_CMD_STATE_READ_DATA;
+		cmd->vq_priv->ops->descs_processing(cmd);
+		if (cmd->state == VIRTQ_CMD_STATE_FATAL_ERR)
+			return true;
+
+		cmd->state = VIRTQ_CMD_STATE_READ_HEADER;
 		return true;
 	} else {
 		return false;
@@ -500,6 +504,72 @@ err:
 	return -1;
 }
 
+/**
+ * fs_virtq_sm_read_header() - Read header from host
+ * @cmd: Command being processed
+ *
+ * Return: True if state machine is moved synchronously to the new state
+ * (error or no data to fetch) or false if the state transition will be
+ * done asynchronously.
+ */
+static bool fs_virtq_sm_read_header(struct virtq_cmd *cmd,
+				    enum virtq_cmd_sm_op_status status)
+{
+	int ret;
+	struct virtq_priv *priv = cmd->vq_priv;
+	struct fs_virtq_cmd_aux *fs_aux = to_fs_cmd_aux(cmd->aux);
+
+	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
+			fs_aux->descs[0].addr, fs_aux->descs[0].len);
+
+	cmd->state = VIRTQ_CMD_STATE_PARSE_HEADER;
+
+	cmd->dma_comp.count = 1;
+	ret = snap_dma_q_read(priv->dma_q, &fs_aux->header,
+		fs_aux->descs[0].len, cmd->aux_mr->lkey,
+		fs_aux->descs[0].addr, priv->vattr->dma_mkey,
+		&cmd->dma_comp);
+
+	if (ret) {
+		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * fs_virtq_sm_parse_header() - Parse received header
+ * @cmd: Command being processed
+ *
+ * Return: True if state machine is moved synchronously to the new state
+ * (error or no data to fetch) or false if the state transition will be
+ * done asynchronously.
+ */
+static bool fs_virtq_sm_parse_header(struct virtq_cmd *cmd,
+				     enum virtq_cmd_sm_op_status status)
+{
+
+	if (status != VIRTQ_CMD_SM_OP_OK) {
+		ERR_ON_CMD(cmd, "failed to get header data, returning failure\n");
+		set_cmd_error(cmd, EINVAL);
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+		return true;
+	}
+
+	cmd->state = VIRTQ_CMD_STATE_READ_DATA;
+	if (snap_unlikely(cmd->vq_priv->use_mem_pool)) {
+		// TODO
+	} else {
+		if (snap_unlikely(cmd->total_seg_len > cmd->req_size)) {
+			if (virtq_alloc_req_dbuf(to_fs_virtq_cmd(cmd), cmd->total_seg_len))
+				return true;
+		}
+	}
+
+	return true;
+}
+
 __attribute__((unused)) static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd);
 
 
@@ -515,13 +585,12 @@ __attribute__((unused)) static bool fs_virtq_check_fs_req_format(const struct fs
 static size_t fs_virtq_process_desc(struct vring_desc *descs, size_t num_desc,
 				    uint32_t *num_merges, int merge_descs)
 {
-	// TODO + add base check of fuse format
-	// like FS_VIRTQ_CHECK_FS_REQ_FORMAT
+	// TODO - merge descriptors
 	return num_desc;
 }
 
 /**
- * fs_virtq_read_req_from_host() - Read request from host
+ * fs_virtq_sm_read_data() - Read request from host
  * @cmd: Command being processed
  *
  * RDMA READ the command request data from host memory.
@@ -538,8 +607,8 @@ static size_t fs_virtq_process_desc(struct vring_desc *descs, size_t num_desc,
  * (error or no data to fetch) or false if the state transition will be
  * done asynchronously.
  */
-static bool fs_virtq_read_req_from_host(struct virtq_cmd *cmd,
-					enum virtq_cmd_sm_op_status status)
+static bool fs_virtq_sm_read_data(struct virtq_cmd *cmd,
+				  enum virtq_cmd_sm_op_status status)
 {
 	struct virtq_priv *priv = cmd->vq_priv;
 	uint32_t offset, num_desc;
@@ -547,53 +616,23 @@ static bool fs_virtq_read_req_from_host(struct virtq_cmd *cmd,
 	struct fs_virtq_cmd_aux *cmd_aux = to_fs_cmd_aux(cmd->aux);
 	struct fs_virtq_cmd *fs_cmd = to_fs_virtq_cmd(cmd);
 
-	cmd->dma_comp.count = 1;
-	for (i = 1; i < cmd->num_desc; i++) {
-		snap_debug("\t desc[%d] --> pa 0x%llx len %d fl 0x%x F_WR %d\n", i,
-			   cmd_aux->descs[i].addr,
-			   cmd_aux->descs[i].len,
-			   cmd_aux->descs[i].flags,
-			   (cmd_aux->descs[i].flags & VRING_DESC_F_WRITE) ? 1 : 0);
+	cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
 
-		cmd->total_seg_len += cmd_aux->descs[i].len;
-		if ((cmd_aux->descs[i].flags & VRING_DESC_F_WRITE) == 0) {
+	// Calculate number of descriptors we want to read
+	cmd->dma_comp.count = 0;
+	num_desc = fs_cmd->pos_f_write > 0 ? fs_cmd->pos_f_write : cmd->num_desc;
+	for (i = 1; i < num_desc; ++i) {
+		if ((cmd_aux->descs[i].flags & VRING_DESC_F_WRITE) == 0)
 			++cmd->dma_comp.count;
-		} else {
-			if (snap_unlikely(!fs_cmd->pos_f_write))
-				fs_cmd->pos_f_write = i;
-		}
-	}
-
-	if (snap_likely(fs_cmd->pos_f_write > 0))
-		cmd->total_seg_len -= sizeof(struct virtio_fs_outftr);
-
-	if (!FS_VIRTQ_CHECK_FS_REQ_FORMAT(fs_cmd)) {
-		set_cmd_error(cmd, EINVAL);
-		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-		return true;
-	}
-
-	if (snap_unlikely(cmd->total_seg_len > cmd->req_size)) {
-		if (virtq_alloc_req_dbuf(fs_cmd, cmd->total_seg_len))
-			return true;
 	}
 
 	offset = 0;
 	cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
-	num_desc = fs_cmd->pos_f_write > 0 ? fs_cmd->pos_f_write : cmd->num_desc;
 
-	virtq_log_data(cmd, "READ_HEADER: pa 0x%llx len %u\n",
-		       cmd_aux->descs[0].addr,
-		       cmd_aux->descs[0].len);
-	ret = snap_dma_q_read(priv->dma_q, &cmd_aux->header,
-			      cmd_aux->descs[0].len,
-			      cmd->mr->lkey, cmd_aux->descs[0].addr,
-			      priv->vattr->dma_mkey,
-			      &cmd->dma_comp);
-	if (ret) {
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
+	// If we have nothing to read - move synchronously to
+	// VIRTQ_CMD_STATE_HANDLE_REQ
+	if (!cmd->dma_comp.count)
 		return true;
-	}
 
 	for (i = 1; i < num_desc; ++i) {
 		virtq_log_data(cmd, "READ_DATA: pa 0x%llx va %p len %u\n",
@@ -983,7 +1022,30 @@ static void fs_virtq_release_cmd(struct virtq_cmd *cmd)
 
 static void fs_virtq_proc_desc(struct virtq_cmd *cmd)
 {
+	int i;
+	struct fs_virtq_cmd *fs_cmd = to_fs_virtq_cmd(cmd);
+	struct fs_virtq_cmd_aux *cmd_aux = to_fs_cmd_aux(cmd->aux);
 	struct vring_desc *descs = fs_virtq_get_descs(cmd);
+
+	for (i = 1; i < cmd->num_desc; i++) {
+		snap_debug("\t desc[%d] --> pa 0x%llx len %d fl 0x%x F_WR %d\n", i,
+			cmd_aux->descs[i].addr,
+			cmd_aux->descs[i].len,
+			cmd_aux->descs[i].flags,
+			(cmd_aux->descs[i].flags & VRING_DESC_F_WRITE) ? 1 : 0);
+
+		cmd->total_seg_len += cmd_aux->descs[i].len;
+		if (cmd_aux->descs[i].flags & VRING_DESC_F_WRITE) {
+			if (snap_unlikely(!fs_cmd->pos_f_write))
+				fs_cmd->pos_f_write = i;
+		}
+	}
+
+	if (!FS_VIRTQ_CHECK_FS_REQ_FORMAT(fs_cmd)) {
+		set_cmd_error(cmd, EINVAL);
+		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
+		return;
+	}
 
 	cmd->num_desc = fs_virtq_process_desc(descs, cmd->num_desc,
 					      &cmd->num_merges,
@@ -1024,9 +1086,9 @@ static const struct virtq_impl_ops fs_impl_ops = {
 static struct virtq_sm_state fs_sm_arr[] = {
 /*VIRTQ_CMD_STATE_IDLE			*/	{virtq_sm_idle},
 /*VIRTQ_CMD_STATE_FETCH_CMD_DESCS	*/	{sm_fetch_cmd_descs},
-/*VIRTQ_CMD_STATE_READ_HEADER		*/	{NULL},
-/*VIRTQ_CMD_STATE_PARSE_HEADER		*/	{NULL},
-/*VIRTQ_CMD_STATE_READ_DATA		*/	{fs_virtq_read_req_from_host},
+/*VIRTQ_CMD_STATE_READ_HEADER		*/	{fs_virtq_sm_read_header},
+/*VIRTQ_CMD_STATE_PARSE_HEADER		*/	{fs_virtq_sm_parse_header},
+/*VIRTQ_CMD_STATE_READ_DATA		*/	{fs_virtq_sm_read_data},
 /*VIRTQ_CMD_STATE_HANDLE_REQ		*/	{fs_virtq_handle_req},
 /*VIRTQ_CMD_STATE_OUT_DATA_DONE		*/	{sm_handle_out_iov_done},
 /*VIRTQ_CMD_STATE_IN_DATA_DONE		*/	{sm_handle_in_iov_done},
