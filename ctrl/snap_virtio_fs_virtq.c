@@ -301,44 +301,6 @@ static void free_fs_virtq_cmd_arr(struct virtq_priv *vq_priv)
 	free(vq_priv->cmd_arr);
 }
 
-/**
- * fetch_next_desc() - Fetches command descriptors from host memory
- * @cmd: command descriptors belongs to
- *
- * Function checks if there are descriptors that were not sent in the
- * tunnled command, and if so it reads them from host memory one by one.
- * Reading from host memory is done asynchronous
- *
- * Return: virtq_fetch_desc_status
- */
-static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
-{
-	uint64_t srcaddr;
-	uint16_t in_ring_desc_addr;
-	int ret;
-
-	if (cmd->num_desc == 0)
-		in_ring_desc_addr = cmd->descr_head_idx %
-				    cmd->vq_priv->vattr->size;
-	else if (to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
-		in_ring_desc_addr = to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc - 1].next;
-	else
-		return VIRTQ_FETCH_DESC_DONE;
-
-	srcaddr = cmd->vq_priv->vattr->desc +
-		in_ring_desc_addr * sizeof(struct vring_desc);
-	cmd->dma_comp.count = 1;
-	virtq_log_data(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
-	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &to_fs_cmd_aux(cmd->aux)->descs[cmd->num_desc],
-			sizeof(struct vring_desc), cmd->mr->lkey,
-			srcaddr, cmd->vq_priv->vattr->dma_mkey,
-			&(cmd->dma_comp));
-	if (ret)
-		return VIRTQ_FETCH_DESC_ERR;
-	++cmd->num_desc;
-	return VIRTQ_FETCH_DESC_READ;
-}
-
 static void fs_dev_io_comp_cb(enum snap_fs_dev_op_status status, void *done_arg)
 {
 	struct fs_virtq_cmd *cmd = done_arg;
@@ -420,45 +382,6 @@ static int set_iovecs(struct fs_virtq_cmd *cmd)
 	}
 
 	return 0;
-}
-
-/**
- * sm_fetch_cmd_descs() - Fetch all of commands descs
- * @cmd: Command being processed
- * @status: Callback status
- *
- * Function collects all of the commands descriptors. Descriptors can be
- * either in the tunnel command itself, or in host memory.
- *
- * Return: True if state machine is moved to a new state synchronously (error
- * or all descs were fetched), false if the state transition will be done
- * asynchronously.
- */
-static bool sm_fetch_cmd_descs(struct virtq_cmd *cmd,
-			       enum virtq_cmd_sm_op_status status)
-{
-	enum virtq_fetch_desc_status ret;
-
-	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-	ret = fetch_next_desc(cmd);
-	if (ret == VIRTQ_FETCH_DESC_ERR) {
-		ERR_ON_CMD(cmd, "failed to RDMA READ desc from host\n");
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	} else if (ret == VIRTQ_FETCH_DESC_DONE) {
-		cmd->vq_priv->ops->descs_processing(cmd);
-		if (cmd->state == VIRTQ_CMD_STATE_FATAL_ERR)
-			return true;
-
-		cmd->state = VIRTQ_CMD_STATE_READ_HEADER;
-		return true;
-	} else {
-		return false;
-	}
 }
 
 static int virtq_alloc_req_dbuf(struct fs_virtq_cmd *cmd, size_t len)
@@ -571,6 +494,18 @@ static bool fs_virtq_sm_parse_header(struct virtq_cmd *cmd,
 }
 
 __attribute__((unused)) static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd);
+
+static int fs_seg_dmem(struct virtq_cmd *cmd)
+{
+	/* Note: there is no seg_max configuration parameter for fs.
+	 * Currently, the number of num_desc which used upon
+	 * instantiation of the fs is equal to queue's size.
+	 *
+	 * TODO - tune the value of the num_desc
+	 */
+
+	return 0;
+}
 
 
 /**
@@ -1078,14 +1013,14 @@ static const struct virtq_impl_ops fs_impl_ops = {
 	.get_avail_cmd		= fs_virtq_get_avail_cmd,
 	.progress_suspend	= fs_progress_suspend,
 	.mem_pool_release	= NULL,
-	.seg_dmem		= NULL,
+	.seg_dmem		= fs_seg_dmem,
 	.seg_dmem_release	= NULL
 };
 
 //sm array states must be according to the order of virtq_cmd_sm_state
 static struct virtq_sm_state fs_sm_arr[] = {
 /*VIRTQ_CMD_STATE_IDLE			*/	{virtq_sm_idle},
-/*VIRTQ_CMD_STATE_FETCH_CMD_DESCS	*/	{sm_fetch_cmd_descs},
+/*VIRTQ_CMD_STATE_FETCH_CMD_DESCS	*/	{virtq_sm_fetch_cmd_descs},
 /*VIRTQ_CMD_STATE_READ_HEADER		*/	{fs_virtq_sm_read_header},
 /*VIRTQ_CMD_STATE_PARSE_HEADER		*/	{fs_virtq_sm_parse_header},
 /*VIRTQ_CMD_STATE_READ_DATA		*/	{fs_virtq_sm_read_data},
