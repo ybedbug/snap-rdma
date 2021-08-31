@@ -19,8 +19,10 @@ AM_CFLAGS = $(BASE_CFLAGS) \
 AM_LDFLAGS = -fPIE -fpie -flto -pie -static -nostartfiles \
 	     -T flexio_linker.ld -L$(FLEXIO_DIR)/libflexio-dev/lib
 
-noinst_PROGRAMS += dpa_hello
+noinst_PROGRAMS += dpa_hello dpa_virtq_split
 
 dpa_hello_SOURCES = dpa.h dpa_start.c dpa_hello.c
+
+dpa_virtq_split_SOURCES = dpa.h dpa_start.c dpa_virtq_split.c
 
 endif
