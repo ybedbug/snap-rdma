@@ -31,6 +31,7 @@ AS_IF([test "x$flexio_app" == xyes], [
 		AC_SUBST(FLEXIO_LDFLAGS,  ["$flexio_libs -lflexio -libverbs -lmlx5"])
 		AC_SUBST(FLEXIO_DIR,      ["$with_flexio"])
 		AC_SUBST(FLEXIO_CFLAGS,   ["$flexio_incl"])
+		AC_DEFINE([HAVE_FLEXIO], 1, [FLEX IO SDK support/DPA])
 
 		AC_CHECK_PROG([DPA_CC], [$with_dpa_cc], [$with_dpa_cc], [no])
 		AS_IF([test "x$DPA_CC" == xno], [
