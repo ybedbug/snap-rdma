@@ -210,24 +210,24 @@ int virtq_blk_dpa_modify(struct snap_virtio_blk_queue *vbq,
 
 #else
 
-static struct snap_virtio_blk_queue *virtq_blk_dpa_create(struct snap_device *sdev,
+static struct snap_virtio_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr)
 {
 	return NULL;
 }
 
-static int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq)
+static int virtq_blk_dpa_destroy(struct snap_virtio_queue *vbq)
 {
 	return -1;
 }
 
-static int virtq_blk_dpa_query(struct snap_virtio_blk_queue *vbq,
+static int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
 		struct snap_virtio_common_queue_attr *attr)
 {
 	return -1;
 }
 
-static int virtq_blk_dpa_modify(struct snap_virtio_blk_queue *vbq,
+static int virtq_blk_dpa_modify(struct snap_virtio_queue *vbq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	return -1;
@@ -235,7 +235,7 @@ static int virtq_blk_dpa_modify(struct snap_virtio_blk_queue *vbq,
 
 #endif
 
-struct blk_virtq_q_ops snap_virtq_blk_dpa_ops = {
+struct virtq_q_ops snap_virtq_blk_dpa_ops = {
 	.create = virtq_blk_dpa_create,
 	.destroy = virtq_blk_dpa_destroy,
 	.query = virtq_blk_dpa_query,

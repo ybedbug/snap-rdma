@@ -133,7 +133,7 @@ static int snap_create_destroy_virtq_helper(struct snap_context *sctx,
 				fflush(stdout);
 				for (j = 0; j < num_queues; j++) {
 					struct snap_virtio_common_queue_attr fs_attr = {};
-					struct snap_virtio_fs_queue *vfsq;
+					struct snap_virtio_queue *vfsq;
 					struct ibv_qp *qp = NULL;
 
 					fs_attr.vattr.type = q_type;

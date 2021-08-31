@@ -268,6 +268,13 @@ int snap_virtio_fs_teardown_device(struct snap_device *sdev)
 	return ret;
 }
 
+static struct virtq_q_ops snap_virtq_fs_hw_ops = {
+	.create = snap_virtio_fs_create_queue,
+	.destroy = snap_virtio_fs_destroy_queue,
+	.query = snap_virtio_fs_query_queue,
+	.modify = snap_virtio_fs_modify_queue,
+};
+
 /**
  * snap_virtio_fs_query_queue() - Query a Virtio fs queue object
  * @vfsq:       snap Virtio fs queue
@@ -277,10 +284,10 @@ int snap_virtio_fs_teardown_device(struct snap_device *sdev)
  *
  * Return: 0 on success, and attr is filled with the query result.
  */
-int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
+int snap_virtio_fs_query_queue(struct snap_virtio_queue *vq,
 			       struct snap_virtio_common_queue_attr *attr)
 {
-	return snap_virtio_query_queue(&vfsq->virtq, &attr->vattr);
+	return snap_virtio_query_queue(vq, &attr->vattr);
 }
 
 /**
@@ -293,7 +300,7 @@ int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
  * Return: Returns snap_virtio_fs_queue in case of success, NULL otherwise and
  * errno will be set to indicate the failure reason.
  */
-struct snap_virtio_fs_queue*
+struct snap_virtio_queue*
 snap_virtio_fs_create_queue(struct snap_device *sdev,
 	struct snap_virtio_common_queue_attr *attr)
 {
@@ -350,7 +357,8 @@ snap_virtio_fs_create_queue(struct snap_device *sdev,
 
 	vfsq->virtq.idx = attr->vattr.idx;
 
-	return vfsq;
+	vfsq->virtq.q_ops = &snap_virtq_fs_hw_ops;
+	return &vfsq->virtq;
 
 destroy_queue:
 	snap_devx_obj_destroy(vfsq->virtq.virtq);
@@ -370,15 +378,15 @@ out:
  *
  * Return: Returns 0 on success.
  */
-int snap_virtio_fs_destroy_queue(struct snap_virtio_fs_queue *vfsq)
+int snap_virtio_fs_destroy_queue(struct snap_virtio_queue *vq)
 {
 	int mkey_ret, q_ret;
 
-	vfsq->virtq.virtq->consume_event = NULL;
+	vq->virtq->consume_event = NULL;
 
-	mkey_ret = snap_destroy_cross_mkey(vfsq->virtq.snap_cross_mkey);
-	q_ret = snap_devx_obj_destroy(vfsq->virtq.virtq);
-	snap_virtio_teardown_virtq_umem(&vfsq->virtq);
+	mkey_ret = snap_destroy_cross_mkey(vq->snap_cross_mkey);
+	q_ret = snap_devx_obj_destroy(vq->virtq);
+	snap_virtio_teardown_virtq_umem(vq);
 
 	if (mkey_ret)
 		return mkey_ret;
@@ -392,7 +400,7 @@ snap_virtio_fs_get_modifiable_virtq_fields(struct snap_virtio_fs_queue *vfsq)
 	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
-	ret = snap_virtio_fs_query_queue(vfsq, &attr);
+	ret = snap_virtio_fs_query_queue(&vfsq->virtq, &attr);
 	if (ret)
 		return ret;
 
@@ -412,16 +420,16 @@ snap_virtio_fs_get_modifiable_virtq_fields(struct snap_virtio_fs_queue *vfsq)
  *
  * Return: 0 on success.
  */
-int snap_virtio_fs_modify_queue(struct snap_virtio_fs_queue *vfsq,
+int snap_virtio_fs_modify_queue(struct snap_virtio_queue *vq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	int ret;
 
-	if (!vfsq->virtq.mod_allowed_mask) {
-		ret = snap_virtio_fs_get_modifiable_virtq_fields(vfsq);
+	if (!vq->mod_allowed_mask) {
+		ret = snap_virtio_fs_get_modifiable_virtq_fields(to_fs_queue(vq));
 		if (ret)
 			return ret;
 	}
 
-	return snap_virtio_modify_queue(&vfsq->virtq, mask, &attr->vattr);
+	return snap_virtio_modify_queue(vq, mask, &attr->vattr);
 }

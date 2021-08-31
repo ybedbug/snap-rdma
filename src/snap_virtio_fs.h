@@ -70,13 +70,13 @@ int snap_virtio_fs_query_device(struct snap_device *sdev,
 	struct snap_virtio_fs_device_attr *attr);
 int snap_virtio_fs_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_virtio_fs_device_attr *attr);
-struct snap_virtio_fs_queue*
+struct snap_virtio_queue*
 snap_virtio_fs_create_queue(struct snap_device *sdev,
 	struct snap_virtio_common_queue_attr *attr);
-int snap_virtio_fs_destroy_queue(struct snap_virtio_fs_queue *vfsq);
-int snap_virtio_fs_query_queue(struct snap_virtio_fs_queue *vfsq,
+int snap_virtio_fs_destroy_queue(struct snap_virtio_queue *vfsq);
+int snap_virtio_fs_query_queue(struct snap_virtio_queue *vfsq,
 		struct snap_virtio_common_queue_attr *attr);
-int snap_virtio_fs_modify_queue(struct snap_virtio_fs_queue *vfsq,
+int snap_virtio_fs_modify_queue(struct snap_virtio_queue *vfsq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr);
 
 static inline struct snap_virtio_common_queue_attr*

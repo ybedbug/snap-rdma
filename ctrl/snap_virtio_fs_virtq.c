@@ -879,7 +879,7 @@ static int fs_progress_suspend(struct snap_virtio_queue *snap_vbq,
 			       struct snap_virtio_common_queue_attr *qattr)
 {
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
-	return snap_virtio_fs_modify_queue(to_fs_queue(snap_vbq),
+	return snap_virtio_fs_modify_queue(snap_vbq,
 					   SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
 					   qattr);
 }
@@ -994,19 +994,19 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 		snap_error("no fw qp exist when trying to create virtq\n");
 		goto dealloc_cmd_arr;
 	}
-	fs_q = snap_virtio_fs_create_queue(snap_dev, snap_attr);
+	fs_q = to_fs_queue(snap_virtio_fs_create_queue(snap_dev, snap_attr));
 	if (!fs_q) {
 		snap_error("failed creating VIRTQ fw element\n");
 		goto dealloc_cmd_arr;
 	}
 	vq_priv->snap_vbq = &fs_q->virtq;
-
-	if (snap_virtio_fs_query_queue(fs_q, snap_attr)) {
+//	vq_priv->snap_vbq->q_ops
+	if (snap_virtio_fs_query_queue(vq_priv->snap_vbq, snap_attr)) {
 		snap_error("failed query created snap virtio fs queue\n");
 		goto destroy_virtio_fs_queue;
 	}
 	qattr.vattr.state = SNAP_VIRTQ_STATE_RDY;
-	if (snap_virtio_fs_modify_queue(fs_q, SNAP_VIRTIO_FS_QUEUE_MOD_STATE, &qattr)) {
+	if (snap_virtio_fs_modify_queue(vq_priv->snap_vbq, SNAP_VIRTIO_FS_QUEUE_MOD_STATE, &qattr)) {
 		snap_error("failed to change virtq to READY state\n");
 		goto destroy_virtio_fs_queue;
 	}
@@ -1017,7 +1017,7 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	return vq_ctx;
 
 destroy_virtio_fs_queue:
-	snap_virtio_fs_destroy_queue(fs_q);
+	snap_virtio_fs_destroy_queue(vq_priv->snap_vbq);
 dealloc_cmd_arr:
 	free_fs_virtq_cmd_arr(vq_priv);
 release_priv:
@@ -1050,7 +1050,7 @@ void fs_virtq_destroy(struct fs_virtq_ctx *q)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
 			  q->common_ctx.idx, vq_priv->cmd_cntr);
 
-	if (snap_virtio_fs_destroy_queue(to_fs_queue(vq_priv->snap_vbq)))
+	if (snap_virtio_fs_destroy_queue(vq_priv->snap_vbq))
 		snap_error("queue %d: error destroying fs_virtq\n", q->common_ctx.idx);
 
 	snap_dma_q_destroy(vq_priv->dma_q);
@@ -1080,7 +1080,7 @@ int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 		return ret;
 	}
 
-	ret = snap_virtio_fs_query_queue(to_fs_queue(vq_priv->snap_vbq), &virtq_attr);
+	ret = snap_virtio_fs_query_queue(vq_priv->snap_vbq, &virtq_attr);
 	if (ret) {
 		snap_error("failed query queue %d debugstat\n", q->common_ctx.idx);
 		return ret;
@@ -1109,7 +1109,7 @@ int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
 	int ret;
 	struct virtq_priv *vq_priv = q->common_ctx.priv;
 
-	ret = snap_virtio_fs_query_queue(to_fs_queue(vq_priv->snap_vbq), attr);
+	ret = snap_virtio_fs_query_queue(vq_priv->snap_vbq, attr);
 	if (ret) {
 		snap_error("failed query queue %d (update)\n", q->common_ctx.idx);
 		return ret;
@@ -1141,7 +1141,7 @@ static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
 
 	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
-	if (snap_virtio_fs_modify_queue(to_fs_queue(priv->snap_vbq), SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
+	if (snap_virtio_fs_modify_queue(priv->snap_vbq, SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
 					&qattr)) {
 		snap_error("queue %d: failed to move to the SUSPENDED state\n",
 			   q->common_ctx.idx);
@@ -1298,7 +1298,7 @@ int fs_virtq_get_state(struct fs_virtq_ctx *q,
 	struct snap_virtio_common_queue_attr attr = {};
 	int ret;
 
-	ret = snap_virtio_fs_query_queue(to_fs_queue(priv->snap_vbq), &attr);
+	ret = snap_virtio_fs_query_queue(priv->snap_vbq, &attr);
 	if (ret < 0) {
 		snap_error("failed to query fs queue %d\n", q->common_ctx.idx);
 		return ret;

@@ -108,10 +108,10 @@ TEST_F(SnapDpaTest, create_thread) {
 
 extern "C" {
 #include "snap_virtio_common.h"
-struct snap_virtio_blk_queue *virtq_blk_dpa_create(struct snap_device *sdev,
+struct snap_virtio_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr);
-int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq);
-int virtq_blk_dpa_query(struct snap_virtio_blk_queue *vbq,
+int virtq_blk_dpa_destroy(struct snap_virtio_queue *vbq);
+int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
 		struct snap_virtio_common_queue_attr *attr);
 
 #include <linux/virtio_ring.h>
