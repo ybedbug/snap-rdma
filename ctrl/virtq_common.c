@@ -576,3 +576,76 @@ bool virtq_is_suspended(struct virtq_common_ctx *q)
 
 	return priv->swq_state == SW_VIRTQ_SUSPENDED;
 }
+
+/**
+ * virtq_rx_cb_common_set() - common setter for new command received from host
+ * @vq_priv:	virtqueue command belongs to, private context
+ * @data:	pointer to data sent for the command - should be
+ *
+ * Return: pointer to virtq_cmd command
+ */
+struct virtq_cmd *
+virtq_rx_cb_common_set(struct virtq_priv *vq_priv, void *data)
+{
+	int cmd_idx;
+	struct virtq_cmd *cmd;
+	struct virtq_split_tunnel_req_hdr *split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
+
+	if (vq_priv->force_in_order)
+		cmd_idx = vq_priv->ctrl_available_index % vq_priv->vattr->size;
+	else
+		cmd_idx = split_hdr->descr_head_idx % vq_priv->vattr->size;
+	cmd = vq_priv->ops->get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
+	cmd->num_desc = split_hdr->num_desc;
+	cmd->descr_head_idx = split_hdr->descr_head_idx;
+	cmd->total_seg_len = 0;
+	cmd->total_in_len = 0;
+	cmd->vq_priv->ops->clear_status(cmd);
+	cmd->use_dmem = false;
+	cmd->use_seg_dmem = false;
+	cmd->req_buf = cmd->buf;
+	cmd->req_mr = cmd->mr;
+	cmd->cmd_available_index = vq_priv->ctrl_available_index;
+	return cmd;
+}
+
+/**
+ * virtq_rx_cb_common_proc() - common processing api for new command received from host
+ * @cmd:	virtqueue command received from virtq_rx_cb_common_set
+ * @data:	pointer to data sent for the command - should be
+ *		command header and optional descriptor list
+ * @data_len:	length of data
+ * @imm_data:	immediate data
+ *
+ * Return: True when command sent to sm for processing, False if command was dropped.
+ */
+bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
+			     uint32_t data_len, uint32_t imm_data)
+{
+	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
+	struct virtq_split_tunnel_req_hdr *split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
+
+	/* If new commands are not dropped there is a risk of never
+	 * completing the flush
+	 **/
+	if (snap_unlikely(cmd->vq_priv->swq_state == SW_VIRTQ_FLUSHING)) {
+		virtq_log_data(cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
+			       cmd->num_desc, data_len);
+		return false;
+	}
+
+	if (split_hdr->num_desc) {
+		void *tunn_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
+		struct vring_desc *aux_descs = cmd->vq_priv->ops->get_descs(cmd);
+		int len = sizeof(struct vring_desc) * split_hdr->num_desc;
+
+		memcpy(aux_descs, tunn_descs, len);
+	}
+
+	++cmd->vq_priv->cmd_cntr;
+	++cmd->vq_priv->ctrl_available_index;
+	cmd->state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
+	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->num_desc, data_len);
+	virtq_cmd_progress(cmd, status);
+	return true;
+}

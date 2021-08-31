@@ -100,6 +100,11 @@ static void blk_virtq_error_status(struct virtq_cmd *cmd)
 	to_blk_cmd_ftr(cmd->ftr)->status = VIRTIO_BLK_S_IOERR;
 }
 
+static void blk_virtq_clear_status(struct virtq_cmd *cmd)
+{
+	to_blk_cmd_ftr(cmd->ftr)->status = VIRTIO_BLK_S_OK;
+}
+
 static void blk_virtq_status_data(struct virtq_cmd *cmd, struct virtq_status_data *sd)
 {
 	sd->us_status = to_blk_cmd_ftr(cmd->ftr);
@@ -1088,51 +1093,11 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
 			    uint32_t data_len, uint32_t imm_data)
 {
 	struct virtq_priv *priv = (struct virtq_priv *)q->uctx;
-	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
-	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
-	int cmd_idx, len;
-	struct blk_virtq_cmd *cmd;
-	struct virtq_split_tunnel_req_hdr *split_hdr;
+	struct virtq_cmd *cmd = virtq_rx_cb_common_set(priv, data);
+	struct blk_virtq_cmd *blk_cmd = to_blk_virtq_cmd(cmd);
 
-	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
-
-	if (priv->force_in_order)
-		cmd_idx = priv->ctrl_available_index % priv->vattr->size;
-	else
-		cmd_idx = split_hdr->descr_head_idx % priv->vattr->size;
-	cmd = &to_blk_cmd_arr(priv->cmd_arr)[cmd_idx];
-	cmd->common_cmd.num_desc = split_hdr->num_desc;
-	cmd->common_cmd.descr_head_idx = split_hdr->descr_head_idx;
-	cmd->common_cmd.total_seg_len = 0;
-	cmd->common_cmd.total_in_len = 0;
-	to_blk_cmd_ftr(cmd->common_cmd.ftr)->status = VIRTIO_BLK_S_OK;
-	cmd->common_cmd.use_dmem = false;
-	cmd->common_cmd.use_seg_dmem = false;
-	cmd->common_cmd.req_buf = cmd->common_cmd.buf;
-	cmd->common_cmd.req_mr = cmd->common_cmd.mr;
-	cmd->dma_pool_ctx.thread_id = priv->thread_id;
-	cmd->common_cmd.cmd_available_index = priv->ctrl_available_index;
-
-	/* If new commands are not dropped there is a risk of never
-	 * completing the flush
-	 **/
-	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
-		virtq_log_data(&cmd->common_cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
-			       cmd->common_cmd.num_desc, data_len);
-		return;
-	}
-
-	if (split_hdr->num_desc) {
-		len = sizeof(struct vring_desc) * split_hdr->num_desc;
-		memcpy(to_blk_cmd_aux(cmd->common_cmd.aux)->descs, descs, len);
-	}
-
-	priv->cmd_cntr++;
-	priv->ctrl_available_index++;
-	cmd->common_cmd.state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
-	virtq_log_data(&cmd->common_cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->common_cmd.num_desc,
-		       data_len);
-	virtq_cmd_progress(&cmd->common_cmd, status);
+	blk_cmd->dma_pool_ctx.thread_id = priv->thread_id;
+	virtq_rx_cb_common_proc(cmd, data, data_len, imm_data);
 }
 
 static struct virtq_cmd *blk_virtq_get_avail_cmd(struct virtq_cmd *cmd_arr, uint16_t idx)
@@ -1153,6 +1118,7 @@ static int blk_progress_suspend(struct snap_virtio_queue *snap_vbq,
 static const struct virtq_impl_ops blk_impl_ops = {
 	.get_descs	   = blk_virtq_get_descs,
 	.error_status  = blk_virtq_error_status,
+	.clear_status  = blk_virtq_clear_status,
 	.status_data   = blk_virtq_status_data,
 	.release_cmd   = blk_virtq_release_cmd,
 	.descs_processing = blk_virtq_proc_desc,

@@ -288,6 +288,7 @@ struct virtq_state_machine {
 struct virtq_impl_ops {
 	struct vring_desc* (*get_descs)(struct virtq_cmd *cmd);
 	void (*error_status)(struct virtq_cmd *cmd);
+	void (*clear_status)(struct virtq_cmd *cmd);
 	void (*status_data)(struct virtq_cmd *cmd, struct virtq_status_data *sd);
 	void (*release_cmd)(struct virtq_cmd *cmd);
 	void (*descs_processing)(struct virtq_cmd *cmd);
@@ -383,5 +384,9 @@ void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr);
 int virtq_suspend(struct virtq_common_ctx *q);
 bool virtq_is_suspended(struct virtq_common_ctx *q);
 void virtq_destroy(struct virtq_common_ctx *q);
+struct virtq_cmd *
+virtq_rx_cb_common_set(struct virtq_priv *priv, void *data);
+bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
+			     uint32_t data_len, uint32_t imm_data);
 #endif
 

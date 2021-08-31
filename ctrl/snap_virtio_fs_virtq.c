@@ -764,50 +764,11 @@ static void fs_virtq_rx_cb(struct snap_dma_q *q, void *data,
 			   uint32_t data_len, uint32_t imm_data)
 {
 	struct virtq_priv *priv = (struct virtq_priv *)q->uctx;
-	void *descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
-	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
-	int cmd_idx, len;
-	struct fs_virtq_cmd *cmd;
-	struct virtq_split_tunnel_req_hdr *split_hdr;
+	struct virtq_cmd *cmd = virtq_rx_cb_common_set(priv, data);
+	struct fs_virtq_cmd *fs_cmd = to_fs_virtq_cmd(cmd);
 
-	split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
-
-	cmd_idx = priv->ctrl_available_index % priv->vattr->size;
-	cmd = &to_fs_cmd_arr(priv->cmd_arr)[cmd_idx];
-	cmd->common_cmd.num_desc = split_hdr->num_desc;
-	cmd->common_cmd.descr_head_idx = split_hdr->descr_head_idx;
-	cmd->common_cmd.total_seg_len = 0;
-	cmd->common_cmd.total_in_len = 0;
-	to_fs_cmd_ftr(cmd->common_cmd.ftr)->out_header.error = 0;
-	cmd->common_cmd.use_dmem = false;
-	cmd->common_cmd.req_buf = cmd->common_cmd.buf;
-	cmd->common_cmd.req_mr = cmd->common_cmd.mr;
-	cmd->pos_f_write = 0;
-
-	if (snap_unlikely(cmd->common_cmd.vq_priv->force_in_order))
-		cmd->common_cmd.cmd_available_index = priv->ctrl_available_index;
-
-	/* If new commands are not dropped there is a risk of never
-	 * completing the flush
-	 **/
-	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING)) {
-		virtq_log_data(&cmd->common_cmd, "DROP_CMD: %ld inline descs, rxlen %d\n",
-			       cmd->common_cmd.num_desc, data_len);
-		return;
-	}
-
-	if (split_hdr->num_desc) {
-		len = sizeof(struct vring_desc) * split_hdr->num_desc;
-		memcpy(to_fs_cmd_aux(cmd->common_cmd.aux)->descs, descs, len);
-	}
-
-	++priv->cmd_cntr;
-	++priv->ctrl_available_index;
-	cmd->common_cmd.state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
-	virtq_log_data(&cmd->common_cmd, "NEW_CMD: %lu inline descs, descr_head_idx %d, va %p (%d), rxlen %u\n",
-		       cmd->common_cmd.num_desc, cmd->common_cmd.descr_head_idx,
-		       cmd->common_cmd.req_buf, cmd->common_cmd.req_size, data_len);
-	virtq_cmd_progress(&cmd->common_cmd, status);
+	fs_cmd->pos_f_write = 0;
+	virtq_rx_cb_common_proc(cmd, data, data_len, imm_data);
 }
 
 static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
@@ -855,6 +816,11 @@ static void fs_virtq_error_status(struct virtq_cmd *cmd)
 {
 	// TODO
 	to_fs_cmd_ftr(cmd->ftr)->out_header.error = -EIO;
+}
+
+static void fs_virtq_clear_status(struct virtq_cmd *cmd)
+{
+	to_fs_cmd_ftr(cmd->ftr)->out_header.error = 0;
 }
 
 static void fs_virtq_status_data(struct virtq_cmd *cmd, struct virtq_status_data *sd)
@@ -921,6 +887,7 @@ static int fs_progress_suspend(struct snap_virtio_queue *snap_vbq,
 static const struct virtq_impl_ops fs_impl_ops = {
 	.get_descs		= fs_virtq_get_descs,
 	.error_status		= fs_virtq_error_status,
+	.clear_status		= fs_virtq_clear_status,
 	.status_data		= fs_virtq_status_data,
 	.release_cmd		= fs_virtq_release_cmd,
 	.descs_processing	= fs_virtq_proc_desc,
