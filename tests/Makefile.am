@@ -154,7 +154,7 @@ gtest_snap_dpa_SOURCES = \
 			 tests_common.cc \
 			 test_snap_dpa.cc
 
-gtest_snap_dpa_CXXFLAGS = $(FLEXIO_CFLAGS) $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS)
+gtest_snap_dpa_CXXFLAGS = $(FLEXIO_CFLAGS) $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS) -fpermissive
 gtest_snap_dpa_LDFLAGS = $(FLEXIO_LDFLAGS) $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
 gtest_snap_dpa_LDADD = $(top_builddir)/src/libsnap.la
 endif

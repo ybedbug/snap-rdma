@@ -105,3 +105,29 @@ TEST_F(SnapDpaTest, create_thread) {
 	snap_dpa_process_destroy(dpa_ctx);
 	snap_close(ctx);
 }
+
+extern "C" {
+#include "snap_virtio_common.h"
+struct snap_virtio_blk_queue *virtq_blk_dpa_create(struct snap_device *sdev,
+		struct snap_virtio_common_queue_attr *attr);
+int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq);
+};
+
+TEST_F(SnapDpaTest, dpa_virtq) {
+	struct snap_context *ctx;
+	struct snap_virtio_blk_queue *vq;
+	struct snap_device sdev;
+	struct snap_virtio_common_queue_attr vattr;
+
+	ctx = snap_open(get_ib_ctx()->device);
+	ASSERT_TRUE(ctx);
+	/* hack to allow working on simx */
+	sdev.sctx = ctx;
+
+	vq = virtq_blk_dpa_create(&sdev, &vattr);
+	ASSERT_TRUE(vq);
+	printf("VQ is running\n"); getchar();
+	virtq_blk_dpa_destroy(vq);
+
+	snap_close(ctx);
+}
