@@ -249,3 +249,30 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 	snap_dpa_thread_destroy_force(thr);
 }
 
+/**
+ * snap_dpa_thread_mbox_acquire() - get thread mailbox
+ * @thr: DPA thread
+ *
+ * Get DPA thread mailbox address in the MT safe way. The mailbox must be
+ * released with the snap_dpa_thread_mbox_release()
+ *
+ * Return:
+ * DPA thread mailbox address
+ */
+void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr)
+{
+	pthread_mutex_lock(&thr->cmd_lock);
+	return thr->cmd_mbox;
+}
+
+/**
+ * snap_dpa_thread_mbox_release() - release thread mailbox
+ * @thr: DPA thread
+ *
+ * The function releases mailbox lock acquired by calling
+ * snap_dpa_thread_mbox_acquire()
+ */
+void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
+{
+	pthread_mutex_unlock(&thr->cmd_lock);
+}

@@ -56,4 +56,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		struct snap_dpa_thread_attr *attr);
 void snap_dpa_thread_destroy(struct snap_dpa_thread *thr);
 
+void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
+void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);
+
 #endif
