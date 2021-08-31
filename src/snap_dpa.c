@@ -286,6 +286,8 @@ void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
  * The application is a reference counted 'singleton'. That is it only started
  * once. Subsequent calls to the function will increase reference count
  *
+ * The function is MT safe
+ *
  * Return:
  * 0 on success, error code on failure
  */
@@ -293,8 +295,12 @@ int snap_dpa_app_start(struct snap_dpa_app *app, struct snap_dpa_app_attr *attr)
 {
 	int i;
 
-	if (app->refcount++ > 0)
+	pthread_mutex_lock(&app->lock);
+
+	if (app->refcount++ > 0) {
+		pthread_mutex_unlock(&app->lock);
 		return 0;
+	}
 
 	memset(app, 0, sizeof(*app));
 	app->dctx = snap_dpa_process_create(attr->sctx, attr->name);
@@ -307,9 +313,11 @@ int snap_dpa_app_start(struct snap_dpa_app *app, struct snap_dpa_app_attr *attr)
 			goto out;
 	}
 
+	pthread_mutex_unlock(&app->lock);
 	return 0;
 
 out:
+	pthread_mutex_unlock(&app->lock);
 	snap_dpa_app_stop(app);
 	return -1;
 }
@@ -319,19 +327,28 @@ out:
  *
  * The function descreases application reference count. If the count reaches
  * zero the application will be stopped: all DPA resources will be released.
+ *
+ * The function is MT safe
  */
 void snap_dpa_app_stop(struct snap_dpa_app *app)
 {
 	int i;
 
-	if (app->refcount == 0)
-		return;
+	pthread_mutex_lock(&app->lock);
 
-	if (--app->refcount > 0)
+	if (app->refcount == 0) {
+		pthread_mutex_unlock(&app->lock);
 		return;
+	}
+
+	if (--app->refcount > 0) {
+		pthread_mutex_unlock(&app->lock);
+		return;
+	}
 
 	if (app->refcount < 0) {
 		snap_error("invalid refcount %d\n", app->refcount);
+		pthread_mutex_unlock(&app->lock);
 		return;
 	}
 
@@ -346,4 +363,6 @@ void snap_dpa_app_stop(struct snap_dpa_app *app)
 		snap_dpa_process_destroy(app->dctx);
 		app->dctx = NULL;
 	}
+
+	pthread_mutex_unlock(&app->lock);
 }

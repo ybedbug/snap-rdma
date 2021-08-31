@@ -72,9 +72,11 @@ struct snap_dpa_app {
 	struct snap_dpa_thread *dpa_workers[N_DPA_APP_WORKERS];
 	int refcount;
 	int n_workers;
+	pthread_mutex_t lock;
 };
 
-#define SNAP_DPA_APP_INIT_ATTR { .refcount = 0 }
+#define SNAP_DPA_APP_INIT_ATTR { .refcount = 0, \
+	.lock = PTHREAD_MUTEX_INITIALIZER }
 
 /**
  * struct snap_dpa_app_attr - snap DPA application attributes
