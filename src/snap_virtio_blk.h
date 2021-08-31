@@ -43,7 +43,6 @@ enum snap_virtio_blk_queue_modify {
 
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
-	struct blk_virtq_q_ops		*q_ops;
 	struct snap_virtio_blk_device	*vbdev;
 };
 
@@ -64,16 +63,6 @@ struct snap_virtio_blk_device_attr {
 struct snap_virtio_blk_device {
 	uint32_t				num_queues;
 	struct snap_virtio_blk_queue		*virtqs;
-};
-
-struct blk_virtq_q_ops {
-	struct snap_virtio_blk_queue *(*create)(struct snap_device *sdev,
-			struct snap_virtio_common_queue_attr *attr);
-	int (*destroy)(struct snap_virtio_blk_queue *vbq);
-	int (*query)(struct snap_virtio_blk_queue *vbq,
-			struct snap_virtio_common_queue_attr *attr);
-	int (*modify)(struct snap_virtio_blk_queue *vbq,
-			uint64_t mask, struct snap_virtio_common_queue_attr *attr);
 };
 
 enum {

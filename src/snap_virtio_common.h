@@ -164,6 +164,25 @@ struct snap_virtio_umem {
 	struct mlx5dv_devx_umem *devx_umem;
 };
 
+struct snap_virtio_common_queue_attr {
+	uint64_t			modifiable_fields;//mask of snap_virtio_queue_modify
+	struct ibv_qp			*qp;
+	uint16_t			hw_available_index;
+	uint16_t			hw_used_index;
+
+	struct snap_virtio_queue_attr   vattr;
+};
+
+struct virtq_q_ops {
+	struct snap_virtio_queue *(*create)(struct snap_device *sdev,
+			struct snap_virtio_common_queue_attr *attr);
+	int (*destroy)(struct snap_virtio_queue *vq);
+	int (*query)(struct snap_virtio_queue *vq,
+			struct snap_virtio_common_queue_attr *attr);
+	int (*modify)(struct snap_virtio_queue *vq,
+			uint64_t mask, struct snap_virtio_common_queue_attr *attr);
+};
+
 struct snap_virtio_queue {
 	uint32_t				idx;
 	struct mlx5_snap_devx_obj		*virtq;
@@ -172,15 +191,7 @@ struct snap_virtio_queue {
 	struct mlx5_snap_devx_obj		*ctrs_obj;
 
 	struct snap_cross_mkey			*snap_cross_mkey;
-};
-
-struct snap_virtio_common_queue_attr {
-	uint64_t			modifiable_fields;//mask of snap_virtio_queue_modify
-	struct ibv_qp			*qp;
-	uint16_t			hw_available_index;
-	uint16_t			hw_used_index;
-
-	struct snap_virtio_queue_attr   vattr;
+	struct virtq_q_ops		*q_ops;
 };
 
 enum snap_virtio_dev_modify {
