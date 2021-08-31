@@ -18,7 +18,7 @@
 #include "snap_dpa.h"
 
 /**
- * snap_dpa_app_create() - create DPA application process
+ * snap_dpa_process_create() - create DPA application process
  * @ctx:         snap context
  * @app_name:    application name
  *
@@ -26,16 +26,12 @@
  * initialization steps.
  *
  * Application image is loaded from the path given by LIBSNAP_DPA_DIR
- * or from the current working directory
- *
- * Code common to the virtio/nvme dpa queue implementation will go here
- *
- * TODO: singleton management code
+ * or from the current working directory.
  *
  * Return:
  * dpa conxtext on sucess or NULL on failure
  */
-struct snap_dpa_ctx *snap_dpa_app_create(struct snap_context *ctx, const char *app_name)
+struct snap_dpa_ctx *snap_dpa_process_create(struct snap_context *ctx, const char *app_name)
 {
 	char *file_name;
 	flexio_status st;
@@ -46,9 +42,6 @@ struct snap_dpa_ctx *snap_dpa_app_create(struct snap_context *ctx, const char *a
 	uint64_t entry_point, sym_size;
 	struct snap_dpa_ctx *dpa_ctx;
 
-	/* TODO: go over the list of apps, if one is already created
-	 * use it
-	 */
 	if (getenv("LIBSNAP_DPA_DIR"))
 		len = asprintf(&file_name, "%s/%s", getenv("LIBSNAP_DPA_DIR"),
 			       app_name);
@@ -104,16 +97,16 @@ free_dpa_ctx:
 }
 
 /**
- * snap_dpa_app_destroy() - destroy snap DPA application
- * @app:  DPA application context
+ * snap_dpa_process_destroy() - destroy snap DPA process
+ * @ctx:  DPA context
  *
  * The function destroys DPA process and performs common cleanup tasks
  */
-void snap_dpa_app_destroy(struct snap_dpa_ctx *app)
+void snap_dpa_process_destroy(struct snap_dpa_ctx *ctx)
 {
-	ibv_dealloc_pd(app->pd);
-	flexio_process_destroy(app->dpa_proc);
-	free(app);
+	ibv_dealloc_pd(ctx->pd);
+	flexio_process_destroy(ctx->dpa_proc);
+	free(ctx);
 }
 
 static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr);
@@ -196,7 +189,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_tcb;
 	}
 
-	/* wait for report back from the thread*/
+	/* wait for report back from the thread */
 	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {

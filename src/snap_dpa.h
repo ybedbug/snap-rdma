@@ -25,8 +25,8 @@ struct snap_dpa_ctx {
 	uint64_t               entry_point;
 };
 
-struct snap_dpa_ctx *snap_dpa_app_create(struct snap_context *ctx, const char *app_name);
-void snap_dpa_app_destroy(struct snap_dpa_ctx *app);
+struct snap_dpa_ctx *snap_dpa_process_create(struct snap_context *ctx, const char *app_name);
+void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
 
 enum {
 	SNAP_DPA_THREAD_ATTR_POLLING = 0x1
