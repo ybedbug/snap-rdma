@@ -262,7 +262,7 @@ int snap_dma_q_arm(struct snap_dma_q *q);
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
 int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 			int klm_entries, struct snap_indirect_mkey *klm_mkey,
-			struct snap_dma_completion *comp);
+			struct snap_dma_completion *comp, int *n_bb);
 
 /**
  * snap_dma_q_ctx - get queue context

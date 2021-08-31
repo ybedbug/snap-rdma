@@ -641,7 +641,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 #define MTT_ENTRIES  5
 	struct snap_indirect_mkey *klm_mkey;
 	struct mlx5_devx_mkey_attr mkey_attr = {};
-	int i, j, n, ret;
+	int i, j, n, ret, n_bb;
 	char *lbuf[MTT_ENTRIES], *rbuf;
 	struct ibv_mr *lmr[MTT_ENTRIES], *rmr;
 	struct mlx5_klm *klm_mtt;
@@ -692,7 +692,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		comp.func = post_umr_completion;
 		comp.count = 1;
 		g_umr_wqe_comp = 0;
-		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, &comp);
+		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, &comp, &n_bb);
 		ASSERT_EQ(ret, 0);
 
 		n = 0;
@@ -705,7 +705,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		ASSERT_EQ(1, g_umr_wqe_comp);
 		ASSERT_EQ(0, g_last_comp_status);
 	} else {
-		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, NULL);
+		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, NULL, &n_bb);
 		ASSERT_EQ(ret, 0);
 	}
 
