@@ -1802,6 +1802,17 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_START_ADDR);
 }
 
+static inline void
+snap_set_ctrl_seg(struct mlx5_wqe_ctrl_seg *ctrl, uint16_t pi,
+			 uint8_t opcode, uint8_t opmod, uint32_t qp_num,
+			 uint8_t fm_ce_se, uint8_t ds,
+			 uint8_t signature, uint32_t imm)
+{
+	*(uint32_t *)((void *)ctrl + 8) = 0;
+	mlx5dv_set_ctrl_seg(ctrl, pi, opcode, opmod, qp_num,
+			fm_ce_se, ds, signature, imm);
+}
+
 int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 			int klm_entries, struct snap_indirect_mkey *klm_mkey,
 			struct snap_dma_completion *comp, int *n_bb)
@@ -1863,8 +1874,7 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	 * build genenal ctrl segment
 	 **/
 	gen_ctrl = ctrl;
-	*(uint32_t *)((void *)gen_ctrl + 8) = 0;
-	mlx5dv_set_ctrl_seg(gen_ctrl, dv_qp->pi, MLX5_OPCODE_UMR, 0,
+	snap_set_ctrl_seg(gen_ctrl, dv_qp->pi, MLX5_OPCODE_UMR, 0,
 				q->sw_qp.qp->qp_num, fm_ce_se,
 				round_up(wqe_size, 16), 0, htobe32(klm_mkey->mkey));
 
@@ -1938,7 +1948,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 		fm_ce_se |= MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0, q->sw_qp.qp->qp_num,
+	snap_set_ctrl_seg(ctrl, dv_qp->pi, op, 0, q->sw_qp.qp->qp_num,
 			    fm_ce_se, 3, 0, 0);
 
 	rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
@@ -2132,7 +2142,7 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 	fm_ce_se |= snap_dv_get_cq_update(dv_qp, flush_comp);
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-	mlx5dv_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
+	snap_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
 			    q->sw_qp.qp->qp_num, fm_ce_se,
 			    round_up(wqe_size, 16), 0, 0);
 
@@ -2448,12 +2458,13 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 		fm_ce_se |= MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
 
 	ctrl = snap_dv_get_wqe_bb(dv_qp);
-	mlx5dv_set_ctrl_seg((struct mlx5_wqe_ctrl_seg *)ctrl, dv_qp->pi,
+	snap_set_ctrl_seg((struct mlx5_wqe_ctrl_seg *)ctrl, dv_qp->pi,
 			    MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
 			    q->sw_qp.qp->qp_num, fm_ce_se,
 			    4, 0, 0);
 
 	gga_wqe = (struct mlx5_dma_wqe *)ctrl;
+	gga_wqe->gga_ctrl2 = 0;
 	gga_wqe->opaque_lkey = htobe32(dv_qp->opaque_mr->lkey);
 	gga_wqe->opaque_vaddr = htobe64((uint64_t)&dv_qp->opaque_buf[comp_idx]);
 
