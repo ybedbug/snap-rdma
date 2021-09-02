@@ -817,7 +817,7 @@ snap_virtio_fs_ctrl_open(struct snap_context *sctx,
 		 * the device (refer to 2.1 Device Status Field)
 		 */
 
-		ret = snap_virtio_ctrl_can_recover(&ctrl->common);
+		ret = snap_virtio_ctrl_should_recover(&ctrl->common);
 		if (ret < 0)
 			goto close_ctrl;
 

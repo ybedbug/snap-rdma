@@ -1718,7 +1718,7 @@ free_buf:
 }
 
 /**
- * snap_virtio_ctrl_can_recover() - check the virtio status fields
+ * snap_virtio_ctrl_should_recover() - check if controller should recover
  * @ctrl:	controller instance
  *
  * Query the status fields of the virtio bar (reset/enable/status).
@@ -1728,7 +1728,7 @@ free_buf:
  * Return: -errno in case of error, otherwise if recovery
  * mode should be applied.
  */
-int snap_virtio_ctrl_can_recover(struct snap_virtio_ctrl *ctrl)
+int snap_virtio_ctrl_should_recover(struct snap_virtio_ctrl *ctrl)
 {
 	int rc;
 	struct snap_virtio_device_attr vattr;
