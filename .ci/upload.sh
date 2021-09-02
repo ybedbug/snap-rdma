@@ -27,7 +27,18 @@ upload_deb() {
 
 upload_rpm() {
 
-    releasever=$(rpm --eval "%{rhel}")
+    if [ -e /etc/os-release ]; then
+        source /etc/os-release
+        if [ $ID = "euleros" ]; then
+            CUSTOM_DIST="euleros"
+        fi
+    fi
+
+    if [ ! -z $CUSTOM_DIST ]; then
+        releasever=$CUSTOM_DIST
+    else
+        releasever=$(rpm --eval "%{rhel}")
+    fi
 
     shopt -s nullglob
 
@@ -111,7 +122,7 @@ if [[ -f /etc/debian_version ]]; then
 
     upload_deb
 
-elif [[ -f /etc/redhat-release ]]; then
+elif [[ -f /etc/redhat-release ]] || [[ -f /etc/euleros-release ]]; then
 
     repo_name="${repo_name}-yum"
     arch=$(uname -m)

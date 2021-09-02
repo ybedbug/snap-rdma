@@ -1,0 +1,61 @@
+FROM harbor.mellanox.com/hpcx/aarch64/euleros2.0sp8/core
+ARG _UID=6213
+ARG _GID=11429
+ARG _LOGIN=swx-jenkins
+ARG _HOME=/var/home/$_LOGIN
+ENV LANG=en_US.utf-8
+ARG MOFED_VER=5.4-1.0.3.0
+USER root
+
+RUN yum install -y \
+    atk \
+    autoconf \
+    automake \
+    cairo \
+    ethtool \
+    gcc-gfortran \
+    gcc-c++ \
+    gdb \
+    git \
+    gtk2 \
+    libmnl \
+    libnl3 \
+    libtool \
+    lsof \
+    make \
+    numactl-libs \
+    libuuid-devel \
+    pciutils \
+    perl \
+    rpm-build \
+    sudo \
+    tcl \
+    tcsh \
+    tk \
+    glibc-langpack-en \
+    environment-modules \
+    libusbx fuse-libs \
+    chrpath flex graphviz tcl bison tk swig \
+    python3-pip \
+    numactl-devel openssl-devel libaio-devel libaio \
+    wget
+
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN mkdir -p $_HOME
+RUN groupadd -f -g "$_GID" "$_LOGIN"
+RUN useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN"
+RUN chown $_LOGIN $_HOME
+
+RUN set -eux; \
+   cd /etc/yum.repos.d && \
+   wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/euleros2.0sp8/mellanox_mlnx_ofed.repo
+
+RUN yum install -y mlnx-ofed-basic-user-only.noarch
+
+RUN yum clean all
+
+ENV MODULEPATH /hpc/local/etc/modulefiles
+SHELL ["/bin/bash"] 
+
+USER "${_LOGIN}"
+ENTRYPOINT [ "/bin/bash", "--login", "--rcfile", "/etc/bashrc", "-c" ]

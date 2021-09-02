@@ -10,6 +10,9 @@
 %if "%{?_branch:1}" == ""
         %define _branch "master"
 %endif
+%if "%{?euleros}" == "2"
+        %define dist .eulerosv2
+%endif
 
 Name:	mlnx-libsnap
 Version:        %{scm_version}
