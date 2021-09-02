@@ -17,4 +17,8 @@
 #include <linux/virtio_config.h>
 #include <linux/virtio_ring.h>
 
+#ifndef VIRTIO_CONFIG_S_NEEDS_RESET
+#define VIRTIO_CONFIG_S_NEEDS_RESET 0x40
+#endif
+
 #endif
