@@ -71,6 +71,7 @@
 #define SNAP_DMA_Q_TX_MOD_COUNT 16
 
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_IOV_SUPP, 0);
 
 /* GGA specific */
 
@@ -928,11 +929,17 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
-static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd)
+static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
+		struct snap_dma_q_create_attr *attr)
 {
 	int i, ret;
 	struct snap_relaxed_ordering_caps caps;
 	struct mlx5_devx_mkey_attr mkey_attr = {};
+
+	q->iov_supported = false;
+
+	if (!attr->iov_enable)
+		return 0;
 
 	/*
 	 * io_ctx only required when post UMR WQE involved, and
@@ -977,6 +984,8 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd)
 		TAILQ_INSERT_TAIL(&q->free_io_ctx, &q->io_ctx[i], entry);
 	}
 
+	q->iov_supported = true;
+
 	return 0;
 
 destroy_klm_mkeys:
@@ -1005,6 +1014,7 @@ static void snap_destroy_io_ctx(struct snap_dma_q *q)
 
 	free(q->io_ctx);
 	q->io_ctx = NULL;
+	q->iov_supported = false;
 }
 
 /**
@@ -1056,7 +1066,7 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_fw_qp;
 
-	rc = snap_create_io_ctx(q, pd);
+	rc = snap_create_io_ctx(q, pd, attr);
 	if (rc)
 		goto free_fw_qp;
 

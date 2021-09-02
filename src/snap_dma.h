@@ -20,7 +20,8 @@
 
 #include "snap_mr.h"
 
-#define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
+#define SNAP_DMA_Q_OPMODE     "SNAP_DMA_Q_OPMODE"
+#define SNAP_DMA_Q_IOV_SUPP   "SNAP_DMA_Q_IOV_SUPP"
 
 #define SNAP_DMA_Q_MAX_IOV_CNT		128
 
@@ -195,6 +196,7 @@ struct snap_dma_q {
 	/* public: */
 	/** @uctx:  user supplied context */
 	void                  *uctx;
+	bool                  iov_supported;
 };
 
 enum {
@@ -224,6 +226,7 @@ enum {
  *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_OPMODE
  *                environment variable: 0 - autoselect, 1 - verbs, 2 - dv, 3 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
+ * @iov_enable:   enable/disable this dma queue to use readv/writev API
  * @comp_channel: receive and DMA completion channel. See
  *                man ibv_create_comp_channel
  * @comp_vector:  completion vector
@@ -237,6 +240,7 @@ struct snap_dma_q_create_attr {
 	int   rx_elem_size;
 	void  *uctx;
 	int   mode;
+	bool  iov_enable;
 	snap_dma_rx_cb_t rx_cb;
 
 	struct ibv_comp_channel *comp_channel;
