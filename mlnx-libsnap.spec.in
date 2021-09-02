@@ -52,7 +52,7 @@ install -m 755 ./rpc/snap_rpc.py ${RPM_BUILD_ROOT}%{_sbindir}
 %{_libdir}/*
 %{_sbindir}/*
 
-%doc README.md AUTHORS COPYING NEWS
+%doc README.md
 
 %changelog
 * Fri Feb 02 2021 Andrii Holovchenko <andriih@nvidia.com> [1.1.0]
