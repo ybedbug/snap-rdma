@@ -111,6 +111,10 @@ extern "C" {
 struct snap_virtio_blk_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr);
 int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq);
+int virtq_blk_dpa_query(struct snap_virtio_blk_queue *vbq,
+		struct snap_virtio_common_queue_attr *attr);
+
+#include <linux/virtio_ring.h>
 };
 
 TEST_F(SnapDpaTest, dpa_virtq) {
@@ -127,6 +131,46 @@ TEST_F(SnapDpaTest, dpa_virtq) {
 	vq = virtq_blk_dpa_create(&sdev, &vattr);
 	ASSERT_TRUE(vq);
 	printf("VQ is running\n"); getchar();
+	virtq_blk_dpa_destroy(vq);
+
+	snap_close(ctx);
+}
+
+/* Basic test for the DPA window copy machine */
+TEST_F(SnapDpaTest, dpa_virtq_copy_avail) {
+	struct snap_context *ctx;
+	struct snap_virtio_blk_queue *vq;
+	struct snap_device sdev;
+	struct snap_virtio_common_queue_attr attr = {0};
+	struct vring_avail *avail;
+	char page[4096];
+
+	/* TODO:
+	 * make this test CX7 specific, use phys memory for
+	 * the virtio rings.
+	 */
+	ctx = snap_open(get_ib_ctx()->device);
+	ASSERT_TRUE(ctx);
+	/* hack to allow working on simx */
+	sdev.sctx = ctx;
+
+	/* create our dummy virtio device (only avail ring)
+	 * and virtq implementation
+	 * modify avail index, and wait till dpu reads it and
+	 * updates our hw_avail_index
+	 */
+	avail = (struct vring_avail *)page;
+	attr.vattr.idx = 0;
+	attr.vattr.device = (uintptr_t)avail;
+
+	vq = virtq_blk_dpa_create(&sdev, &attr);
+	ASSERT_TRUE(vq);
+	avail->idx = 42;
+	sleep(10);
+	//printf("VQ is running\n"); getchar();
+	virtq_blk_dpa_query(vq, &attr);
+	EXPECT_EQ(42, attr.hw_available_index);
+
 	virtq_blk_dpa_destroy(vq);
 
 	snap_close(ctx);
