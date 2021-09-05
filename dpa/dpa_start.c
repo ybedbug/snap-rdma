@@ -15,8 +15,8 @@
 extern int main();
 
 // hack to force creation of the data section
-void *mbox_base __attribute__((section (".data")));
-uint32_t mbox_lkey __attribute__((section (".data")));
+void *mbox_base __attribute__((section (".data"))); // per thread
+uint32_t mbox_lkey __attribute__((section (".data"))); // per thread
 
 static void dpa_mbox_config(struct snap_dpa_tcb *tcb)
 {

@@ -18,22 +18,60 @@
  * - multiple threads, per thread storage
  */
 static int n_virtqs; //per thread
+
+/* TODO: optimize field alignment */
 struct dpa_virtq {
-	uint16_t dpu_avail_idx;
-	uint32_t avail_mkey_host;
-	uint32_t avail_mkey_dpu;
-	uint64_t avail_ring;
-	uint64_t avail_dest_dpu; // for copy avail transfer
-	uint32_t num;
+	// ro section
+	uint16_t idx;
+	uint16_t size;
+	uint64_t desc;
+	uint64_t driver;
+	uint64_t device;
+
+	uint32_t dpu_avail_mkey;
+	// copy avail index there
+	uint64_t dpu_avail_ring_addr;
+
+	// a key that can be used to access host memory
+	uint32_t host_mkey;
+
+	//rw
+	uint16_t dpa_avail_idx;
 };
 
-static struct dpa_virtq virtqs[8]; // per thread
+#define DPA_VIRTQ_MAX 8
+static struct dpa_virtq virtqs[DPA_VIRTQ_MAX]; // per thread
 
-#define COMMAND_DELAY 100000
+/* currently set so that we have 1s polling interval on simx */
+#define COMMAND_DELAY 10000
 
 int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
+	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
+	struct dpa_virtq *vq;
+	uint16_t idx;
+
 	dpa_print_string("virtq create\n");
+	idx = vcmd->cmd_create.idx;
+	if (idx >= DPA_VIRTQ_MAX) {
+		dpa_print_string("invalid vq number\n");
+		return SNAP_DPA_RSP_ERR;
+	}
+
+	vq = &virtqs[idx];
+	/* TODO: check that it is free and other validations */
+
+	vq->idx = idx;
+	vq->size = vcmd->cmd_create.size;
+	vq->desc = vcmd->cmd_create.desc;
+	vq->driver = vcmd->cmd_create.driver;
+	vq->device = vcmd->cmd_create.device;
+	vq->dpu_avail_mkey = vcmd->cmd_create.dpu_avail_mkey;
+	vq->dpu_avail_ring_addr = vcmd->cmd_create.dpu_avail_ring_addr;
+	vq->host_mkey = vcmd->cmd_create.host_mkey;
+
+	vq->dpa_avail_idx = 0;
+
 	n_virtqs++;
 	return SNAP_DPA_RSP_OK;
 }
@@ -116,16 +154,34 @@ static inline int process_commands(int *done)
 static inline void virtq_progress()
 {
 	int i;
-	struct dpa_virtq __attribute__((unused)) *vq;
+	uint16_t host_avail_idx;
+	struct dpa_virtq *vq;
+	struct virtq_device_ring *avail_ring;
+
+	// hack to slow thing down on simx
+	static unsigned count;
+	if (count++ % COMMAND_DELAY)
+		return;
 
 	for (i = 0; i < n_virtqs; i++) {
-		/* load avail index */
 		vq = &virtqs[i];
-#if 0
-		if (dpa_avail == host_vail)
+
+		/* load avail index */
+		dpa_window_set_mkey(vq->host_mkey);
+		avail_ring = (void *)window_get_base() + vq->device;
+		host_avail_idx = avail_ring->idx;
+
+		if (vq->dpa_avail_idx == host_avail_idx)
 			continue;
-		/* load & copy to arm */
-#endif
+
+		dpa_print_string("==> New avail idx: ");dpa_print_hex(host_avail_idx);dpa_print_string("\n");
+
+		vq->dpa_avail_idx = host_avail_idx;
+
+		/* copy avail to dpu */
+		dpa_window_set_mkey(vq->dpu_avail_mkey);
+		avail_ring = (void *)window_get_base() + vq->dpu_avail_ring_addr;
+		avail_ring->idx = host_avail_idx;
 	}
 }
 

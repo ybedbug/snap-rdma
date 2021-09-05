@@ -22,6 +22,12 @@ enum {
 	DPA_VIRTQ_CMD_QUERY,
 };
 
+struct virtq_device_ring {
+	uint16_t flags;
+	uint16_t idx;
+	uint16_t ring[];
+};
+
 struct __attribute__((packed)) dpa_virtq_cmd_create {
 	uint16_t idx;
 	uint16_t size;
@@ -30,11 +36,22 @@ struct __attribute__((packed)) dpa_virtq_cmd_create {
 	uint64_t device;
 	uint16_t hw_avail_index;
 	uint16_t hw_used_index;
-// dpa specific
+	/* dpa specific: points to the vq staging buffer on DPU.
+	 * todo: evaluate if window is the best way to transfer avail index.
+	 * at the moment we want to load avail index to dpa and decide how
+	 * to handle descriptor reads based on the difference between it and
+	 * hw_avail_index.
+	 * If the difference is to big we want to transfer whole table to DPU
+	 * else dpa or dpu can walk descr chain
+	 *
+	 * Most probably we will go with the qp here
+	 */
 	uint32_t dpu_avail_mkey;
-	uint64_t dpu_avail_addr;
-//todo: cross gvmi mkey - move to tcb
-	uint32_t driver_mkey;
+	uint64_t dpu_avail_ring_addr;
+	/* todo: cross gvmi mkey - move to tcb. at the moment gtest will
+	 * register vq memory on snap pd and will pass its lkey.
+	 */
+	uint32_t host_mkey;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd {
