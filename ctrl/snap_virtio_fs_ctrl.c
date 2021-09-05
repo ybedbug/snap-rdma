@@ -246,12 +246,65 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_fs_ctrl_bar_ops = {
 };
 
 static bool
+snap_virtio_fs_ctrl_bar_is_setup_valid(const struct snap_virtio_fs_device_attr *bar,
+				       const struct snap_virtio_fs_registers *regs)
+{
+	bool ret = true;
+
+	/* virtio_common_pci_config registers */
+	if ((regs->device_features ^ bar->vattr.device_feature) &
+	    SNAP_VIRTIO_FS_MODIFIABLE_FTRS) {
+		snap_error("Cant modify device_features, host driver is up- conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
+			   regs->device_features, bar->vattr.device_feature);
+		ret = false;
+	}
+
+	if (regs->queue_size &&
+	    regs->queue_size != bar->vattr.max_queue_size) {
+		snap_error("Cant modify queue_size, host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
+			   regs->queue_size, bar->vattr.max_queue_size);
+		ret = false;
+	}
+
+	/* virtio_fs_config registers */
+	if (memcmp(regs->tag, bar->tag, sizeof(regs->tag))) {
+		/* 5.1.14 The tag is encoded in UTF-8 and padded with NUL bytes
+		 * if shorter than the available space. This field is not NUL-terminated
+		 * if the encoded bytes take up the entire field.
+		 *
+		 * TODO - query of the tag is not working on the latest fs-enabled FW.
+		 * If you want to check recovery - remark the 'ret = false;' below
+		 */
+
+		// Make the tags printable
+		uint8_t	conf_tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN + 1];
+		uint8_t	bar_tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN + 1];
+
+		memcpy(conf_tag, regs->tag, SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN);
+		conf_tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN] = 0;
+		memcpy(bar_tag, bar->tag, SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN);
+		bar_tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN] = 0;
+
+		snap_error("Cant modify tag, host driver is up - conf.tag: '%s' bar.tag: '%s'\n",
+			   conf_tag, bar_tag);
+		ret = false;
+	}
+
+	if (regs->num_request_queues &&
+	    (regs->num_request_queues + 1) != bar->vattr.max_queues) {
+		snap_error("Cant modify num_request_queues, host driver is up - conf.request_queues: %d bar.request_queues: %d\n",
+			   regs->num_request_queues + 1, bar->vattr.max_queues);
+		ret = false;
+	}
+
+	return ret;
+}
+
+static bool
 snap_virtio_fs_ctrl_bar_setup_valid(struct snap_virtio_fs_ctrl *ctrl,
 				    const struct snap_virtio_fs_device_attr *bar,
 				    const struct snap_virtio_fs_registers *regs)
 {
-	bool ret = true;
-
 	/*
 	 * Note: the virtiofs module creates num_request_queues + 1 queues
 	 * for more detail refer to ../fs/fuse/virtio_fs.c::virtio_fs_setup_vqs
@@ -267,32 +320,7 @@ snap_virtio_fs_ctrl_bar_setup_valid(struct snap_virtio_fs_ctrl *ctrl,
 	    snap_virtio_ctrl_is_suspended(&ctrl->common))
 		return true;
 
-	/* virtio_common_pci_config registers */
-	if ((regs->device_features ^ bar->vattr.device_feature) &
-	    SNAP_VIRTIO_FS_MODIFIABLE_FTRS) {
-		snap_error("Cant modify device_features, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->queue_size &&
-	    regs->queue_size != bar->vattr.max_queue_size) {
-		snap_error("Cant modify queue_size, host driver is up\n");
-		ret = false;
-	}
-
-	/* virtio_fs_config registers */
-	if (memcmp(regs->tag, bar->tag, sizeof(regs->tag))) {
-		snap_error("Cant modify tag, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->num_request_queues &&
-	    (regs->num_request_queues + 1) != bar->vattr.max_queues) {
-		snap_error("Cant modify num_request_queues, host driver is up\n");
-		ret = false;
-	}
-
-	return ret;
+	return snap_virtio_fs_ctrl_bar_is_setup_valid(bar, regs);
 }
 
 /**
@@ -667,7 +695,8 @@ static int snap_virtio_fs_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *vq
 	return fs_virtq_get_state(vfsq->q_impl, state);
 }
 
-static int snap_virtio_fs_ctrl_recover(struct snap_virtio_fs_ctrl *ctrl)
+static int snap_virtio_fs_ctrl_recover(struct snap_virtio_fs_ctrl *ctrl,
+				       struct snap_virtio_fs_ctrl_attr *attr)
 {
 	int ret;
 	struct snap_virtio_fs_device_attr fs_attr = {};
@@ -686,6 +715,12 @@ static int snap_virtio_fs_ctrl_recover(struct snap_virtio_fs_ctrl *ctrl)
 	ret = snap_virtio_fs_query_device(ctrl->common.sdev, &fs_attr);
 	if (ret) {
 		snap_error("Failed to query bar during recovery of controller\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	if (!snap_virtio_fs_ctrl_bar_is_setup_valid(&fs_attr, &attr->regs)) {
+		snap_error("The configured parameters don't fit bar data\n");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -812,7 +847,7 @@ snap_virtio_fs_ctrl_open(struct snap_context *sctx,
 		goto teardown_dev;
 
 	if (attr->common.recover) {
-		ret = snap_virtio_fs_ctrl_recover(ctrl);
+		ret = snap_virtio_fs_ctrl_recover(ctrl, attr);
 		if (ret)
 			goto teardown_dev;
 	}

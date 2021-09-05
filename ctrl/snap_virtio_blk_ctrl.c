@@ -399,11 +399,66 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 };
 
 static bool
+snap_virtio_blk_ctrl_bar_is_setup_valid(const struct snap_virtio_blk_device_attr *bar,
+					const struct snap_virtio_blk_registers *regs)
+{
+	bool ret = true;
+
+	/* virtio_common_pci_config registers */
+	if ((regs->device_features ^ bar->vattr.device_feature) &
+	    SNAP_VIRTIO_BLK_MODIFIABLE_FTRS) {
+		snap_error("Cant modify device_features, host driver is up - conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
+			   regs->device_features, bar->vattr.device_feature);
+		ret = false;
+	}
+
+	if (regs->max_queues &&
+	    regs->max_queues != bar->vattr.max_queues) {
+		snap_error("Cant modify max_queues, host driver is up - conf.queues: %d bar.queues: %d\n",
+			   regs->max_queues, bar->vattr.max_queues);
+		ret = false;
+	}
+
+	if (regs->queue_size &&
+	    regs->queue_size != bar->vattr.max_queue_size) {
+		snap_error("Cant modify queue_size host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
+			   regs->queue_size, bar->vattr.max_queue_size);
+		ret = false;
+	}
+
+	/* virtio_blk_config registers */
+	if (regs->capacity != bar->capacity) {
+		snap_error("Cant change capacity, host driver is up - conf.capacity: %ld bar.capacity: %ld\n",
+			   regs->capacity, bar->capacity);
+		ret = false;
+	}
+
+	if (regs->blk_size && regs->blk_size != bar->blk_size) {
+		snap_error("Cant modify blk_size, host driver is up - conf.blk_size: %d bar.blk_size: %d\n",
+			   regs->blk_size, bar->blk_size);
+		ret = false;
+	}
+
+	if (regs->size_max && regs->size_max != bar->size_max) {
+		snap_error("Cant modify size_max, host driver is up - conf.size_max: %d bar.size_max: %d\n",
+			   regs->size_max, bar->size_max);
+		ret = false;
+	}
+
+	if (regs->seg_max && regs->seg_max != bar->seg_max) {
+		snap_error("Cant modify seg_max, host driver is up - conf.seg_max: %d bar.seg_max: %d\n",
+			   regs->seg_max, bar->seg_max);
+		ret = false;
+	}
+
+	return ret;
+}
+
+static bool
 snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 				     const struct snap_virtio_blk_device_attr *bar,
 				     const struct snap_virtio_blk_registers *regs)
 {
-	bool ret = true;
 	struct snap_virtio_blk_registers regs_whitelist = {};
 
 	/* If only capacity is asked to be changed, allow it */
@@ -422,47 +477,7 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	    snap_virtio_ctrl_is_suspended(&ctrl->common))
 		return true;
 
-	/* virtio_common_pci_config registers */
-	if ((regs->device_features ^ bar->vattr.device_feature) &
-	    SNAP_VIRTIO_BLK_MODIFIABLE_FTRS) {
-		snap_error("Cant modify device_features, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->max_queues &&
-	    regs->max_queues != bar->vattr.max_queues) {
-		snap_error("Cant modify max_queues, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->queue_size &&
-	    regs->queue_size != bar->vattr.max_queue_size) {
-		snap_error("Cant modify queue_size, host driver is up\n");
-		ret = false;
-	}
-
-	/* virtio_blk_config registers */
-	if (regs->capacity < bar->capacity) {
-		snap_error("Cant reduce capacity, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->blk_size && regs->blk_size != bar->blk_size) {
-		snap_error("Cant modify blk_size, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->size_max && regs->size_max != bar->size_max) {
-		snap_error("Cant modify size_max, host driver is up\n");
-		ret = false;
-	}
-
-	if (regs->seg_max && regs->seg_max != bar->seg_max) {
-		snap_error("Cant modify seg_max, host driver is up\n");
-		ret = false;
-	}
-
-	return ret;
+	return snap_virtio_blk_ctrl_bar_is_setup_valid(bar, regs);
 }
 
 /**
@@ -887,12 +902,8 @@ static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
 		goto err;
 	}
 
-	if (!(blk_attr.capacity == attr->regs.capacity &&
-	    blk_attr.blk_size == attr->regs.blk_size)) {
-		snap_error("The configured parameters don't fit bar data: bar.capacity: %lu conf.capacity: %lu bar.blk_size: %d conf.blk_size: %d\n",
-			   blk_attr.capacity, attr->regs.capacity,
-			   blk_attr.blk_size, attr->regs.blk_size
-			   );
+	if (!snap_virtio_blk_ctrl_bar_is_setup_valid(&blk_attr, &attr->regs)) {
+		snap_error("The configured parameters don't fit bar data\n");
 		ret = -EINVAL;
 		goto err;
 	}
