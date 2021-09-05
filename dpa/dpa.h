@@ -56,7 +56,9 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
 static inline void *dpa_mbox()
 {
 	extern void *mbox_base;
+	extern uint32_t mbox_lkey;
 
+	dpa_window_set_mkey(mbox_lkey);
 	return mbox_base;
 }
 
