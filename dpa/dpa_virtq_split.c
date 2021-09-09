@@ -51,10 +51,10 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 	struct dpa_virtq *vq;
 	uint16_t idx;
 
-	dpa_print_string("virtq create\n");
 	idx = vcmd->cmd_create.idx;
+	dpa_print_one_arg("virtq create", idx);
 	if (idx >= DPA_VIRTQ_MAX) {
-		dpa_print_string("invalid vq number\n");
+		dpa_print_one_arg("invalid vq number", idx);
 		return SNAP_DPA_RSP_ERR;
 	}
 
@@ -110,7 +110,7 @@ static int do_command(int *done)
 	if (cmd->sn == last_sn)
 		return 0;
 
-	dpa_print_string("new command\n");
+	dpa_print_one_arg("new command", cmd->cmd);
 
 	last_sn = cmd->sn;
 	rsp_status = SNAP_DPA_RSP_OK;
@@ -174,7 +174,7 @@ static inline void virtq_progress()
 		if (vq->dpa_avail_idx == host_avail_idx)
 			continue;
 
-		dpa_print_string("==> New avail idx: ");dpa_print_hex(host_avail_idx);dpa_print_string("\n");
+		dpa_print_one_arg("==> New avail idx: ", host_avail_idx);
 
 		vq->dpa_avail_idx = host_avail_idx;
 

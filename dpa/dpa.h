@@ -30,6 +30,13 @@
 #define dpa_print_hex(num)
 #endif
 
+static inline void dpa_print_one_arg(char *msg, uint64_t arg)
+{
+	dpa_print_string(msg);
+	dpa_print_hex(arg);
+	dpa_print_string("\n");
+}
+
 /**
  * dpa_window_set_mkey() - set window memory key
  * @mkey:  memory key

@@ -33,8 +33,8 @@ int __snap_dpa_thread_start(uint64_t tcb_addr)
 	dpa_mbox_config(tcb);
 
 	dpa_print_string("==> Starting DPA thread\n");
-	dpa_print_string("TCB : "); dpa_print_hex(tcb_addr); dpa_print_string("\n");
-	dpa_print_string("Mailbox base: "); dpa_print_hex((uint64_t)mbox_base); dpa_print_string("\n");
+	dpa_print_one_arg("TCB : ", tcb_addr);
+	dpa_print_one_arg("Mailbox base: ", (uint64_t)mbox_base);
 
 	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
 	/* may be let main do it after init is done */
