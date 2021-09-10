@@ -884,6 +884,7 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 
 	q = snap_dma_q_create(pd, dma_q_attr);
 	ASSERT_TRUE(q);
+	ASSERT_TRUE(q->iov_supported);
 
 	mkey_attr.addr = 0;
 	mkey_attr.size = 0;
@@ -992,10 +993,12 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 
 TEST_F(SnapDmaTest, rdma_iov_rw_dv) {
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.iov_enable = true;
 	snap_dma_q_rw_iov(&m_dma_q_attr, m_pd, m_bsize);
 }
 
 TEST_F(SnapDmaTest, rdma_iov_rw_gga) {
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_GGA;
+	m_dma_q_attr.iov_enable = true;
 	snap_dma_q_rw_iov(&m_dma_q_attr, m_pd, m_bsize);
 }
