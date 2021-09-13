@@ -1031,12 +1031,6 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 	if (ret)
 		goto teardown_dev;
 
-	if (attr->common.recover) {
-		ret = snap_virtio_blk_ctrl_recover(ctrl, attr);
-		if (ret)
-			goto teardown_dev;
-	}
-
 	if (bdev_ops->is_zcopy && bdev_ops->is_zcopy(bdev)) {
 		ctrl->zcopy_ctx = snap_virtio_blk_get_zcopy_ctx(sctx);
 		if (!ctrl->zcopy_ctx) {
@@ -1045,6 +1039,12 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 			goto teardown_dev;
 		}
 		ctrl->idx = snap_virtio_blk_acquire_cntlid();
+	}
+
+	if (attr->common.recover) {
+		ret = snap_virtio_blk_ctrl_recover(ctrl, attr);
+		if (ret)
+			goto teardown_dev;
 	}
 
 	return ctrl;
