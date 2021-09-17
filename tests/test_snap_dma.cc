@@ -16,6 +16,7 @@ extern "C" {
 #include "snap.h"
 #include "snap_nvme.h"
 #include "snap_dma.h"
+#include "snap_umr.h"
 #include "host_uio.h"
 };
 
