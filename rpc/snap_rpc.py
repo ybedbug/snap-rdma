@@ -493,6 +493,8 @@ def main():
             params['version'] = args.version
         if args.mem:
             params['mem'] = args.mem
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -531,6 +533,8 @@ def main():
                    type=str, required=False)
     p.add_argument('--mem', help='Memory model', type=str,
                    required=False, choices=['static', 'pool'])
+    p.add_argument('--cntlid', help='NVMe Controller id.',
+                   default=-1, type=int, required=False)
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
