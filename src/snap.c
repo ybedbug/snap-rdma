@@ -3033,6 +3033,7 @@ static int snap_check_emulation_function_hotunplug_state(struct snap_context *sc
 	struct snap_pci **pfs;
 	int num_pfs, i;
 	struct snap_virtio_blk_device_attr *attr;
+	struct snap_nvme_device_attr nvme_attr = {};
 	struct snap_device_attr sdev_attr = {};
 	struct snap_device *sdev;
 
@@ -3081,6 +3082,44 @@ static int snap_check_emulation_function_hotunplug_state(struct snap_context *sc
 		snap_debug("hotplugged virtio_blk function pf id =%d bdf=%02x:%02x.%d  with state %d.\n",
 			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
 			  pfs[i]->pci_bdf.bdf.function, attr->vattr.pci_hotplug_state);
+
+		snap_destroy_device_emulation(sdev);
+	}
+
+	free(pfs);
+	pfs = calloc(sctx->nvme_pfs.max_pfs, sizeof(*pfs));
+	if (!pfs) {
+		free(attr);
+		free(sdev);
+		goto err;
+	}
+
+	num_pfs = snap_get_pf_list(sctx, SNAP_NVME, pfs);
+	for (i = 0; i < num_pfs; i++) {
+		if (!pfs[i]->hotplugged)
+			continue;
+
+		sdev->sctx = sctx;
+		sdev->pci = pfs[i];
+		sdev->mdev.device_emulation = snap_create_device_emulation(sdev, &sdev_attr);
+		if (!sdev->mdev.device_emulation) {
+			snap_error("Failed to create device emulation\n");
+			goto err;
+		}
+
+		snap_nvme_query_device(sdev, &nvme_attr);
+		/*
+		 * In nvme we rely on the driver to clean itself up (it will time out after 2 minutes).
+		 * If the state is POWER OFF or PREPARE we need to unplug the function.
+		 */
+		if (nvme_attr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF ||
+			nvme_attr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE) {
+			snap_hotunplug_pf(pfs[i]);
+		}
+
+		snap_debug("hotplugged nvme function pf id =%d bdf=%02x:%02x.%d  with state %d.\n",
+			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
+			  pfs[i]->pci_bdf.bdf.function, nvme_attr.pci_hotplug_state);
 
 		snap_destroy_device_emulation(sdev);
 	}
