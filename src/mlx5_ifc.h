@@ -35,6 +35,7 @@ enum {
 	MLX5_CMD_OP_INIT2RTR_QP = 0x503,
 	MLX5_CMD_OP_RTR2RTS_QP = 0x504,
 	MLX5_CMD_OP_RTS2RTS_QP = 0x505,
+	MLX5_CMD_OP_INIT2INIT_QP = 0x50E,
 	MLX5_CMD_OP_CREATE_TIR = 0x900,
 	MLX5_CMD_OP_QUERY_ESW_VPORT_CONTEXT = 0x752,
 	MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT = 0x754,
@@ -3225,6 +3226,20 @@ struct mlx5_ifc_qpc_bits {
 	u8	 dbr_umem_id[0x20];
 };
 
+struct mlx5_ifc_qpc_ext_bits {
+	u8	delay_drop_en[0x1];
+	u8	vl15[0x1];
+	u8	mmo[0x1];
+	u8	reserved_at_3[0xd];
+	u8	dci_stream_channel_id[0x10];
+
+	u8	qos_queue_group_id_requester[0x20];
+
+	u8	qos_queue_group_id_responder[0x20];
+
+	u8	reserved_at_80[0x5a0];
+};
+
 struct mlx5_ifc_rx_hash_field_select_bits {
 	u8	 l3_prot_type[0x1];
 	u8	 l4_prot_type[0x1];
@@ -3613,6 +3628,41 @@ struct mlx5_ifc_rst2init_qp_in_bits {
 	struct mlx5_ifc_qpc_bits qpc;
 
 	u8	 reserved_at_800[0x80];
+};
+
+struct mlx5_ifc_init2init_qp_in_bits {
+	u8	 opcode[0x10];
+	u8	 uid[0x10];
+
+	u8	 vhca_tunnel_id[0x10];
+	u8	 op_mod[0x10];
+
+	u8	 qpc_ext[0x1];
+	u8	 reserved_at_41[0x7];
+	u8	 qpn[0x18];
+
+	u8	 reserved_at_60[0x20];
+
+	u8	 opt_param_mask[0x20];
+
+	u8	 ece[0x20];
+
+	struct mlx5_ifc_qpc_bits qpc_data;
+
+	u8	 reserved_at_800[0x40];
+
+	u8	 opt_param_mask_95_32[0x40];
+
+	struct mlx5_ifc_qpc_ext_bits qpc_data_extension;
+};
+
+struct mlx5_ifc_init2init_qp_out_bits {
+	u8	 status[0x8];
+	u8	 reserved_at_8[0x18];
+
+	u8	 syndrome[0x20];
+
+	u8	 reserved_at_40[0x40];
 };
 
 struct mlx5_ifc_query_special_contexts_out_bits {

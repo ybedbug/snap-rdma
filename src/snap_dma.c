@@ -503,6 +503,31 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	return rc;
 }
 
+static int snap_modify_lb_qp_init2init(struct ibv_qp *qp)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init2init_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init2init_qp_out)] = {0};
+	void *qpc_ext;
+	int ret;
+
+	DEVX_SET(init2init_qp_in, in, opcode, MLX5_CMD_OP_INIT2INIT_QP);
+	DEVX_SET(init2init_qp_in, in, qpn, qp->qp_num);
+
+	DEVX_SET(rst2init_qp_in, in, opt_param_mask, 0);
+
+	/* Set mmo parameter in qpc_ext */
+	DEVX_SET(init2init_qp_in, in, qpc_ext, 1);
+	DEVX_SET64(init2init_qp_in, in, opt_param_mask_95_32, 1ULL << 3);
+	qpc_ext = DEVX_ADDR_OF(init2init_qp_in, in, qpc_data_extension);
+	DEVX_SET(qpc_ext, qpc_ext, mmo, 1);
+
+	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to init with errno = %d\n", ret);
+
+	return ret;
+}
+
 static int snap_modify_lb_qp_rst2init(struct ibv_qp *qp,
 				     struct ibv_qp_attr *qp_attr, int attr_mask)
 {
@@ -730,6 +755,13 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (rc) {
 		snap_error("failed to modify SW QP to INIT errno=%d\n", rc);
 		return rc;
+	} else if (q->sw_qp.mode == SNAP_DMA_Q_MODE_GGA) {
+		rc = snap_modify_lb_qp_init2init(q->sw_qp.qp);
+		if (rc) {
+			snap_error("failed to modify SW QP in INIT2INIT errno=%d\n",
+				   rc);
+			return rc;
+		}
 	}
 
 	rc = snap_modify_lb_qp_rst2init(q->fw_qp.qp, &attr, flags_mask);
