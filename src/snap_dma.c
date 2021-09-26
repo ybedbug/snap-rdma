@@ -503,7 +503,7 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	return rc;
 }
 
-static int snap_modify_lb_qp_to_init(struct ibv_qp *qp,
+static int snap_modify_lb_qp_rst2init(struct ibv_qp *qp,
 				     struct ibv_qp_attr *qp_attr, int attr_mask)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
@@ -536,7 +536,7 @@ static int snap_modify_lb_qp_to_init(struct ibv_qp *qp,
 	return ret;
 }
 
-static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
+static int snap_modify_lb_qp_init2rtr(struct ibv_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask,
 				    bool force_loopback, uint16_t udp_sport)
 {
@@ -622,7 +622,7 @@ static int snap_modify_lb_qp_to_rtr(struct ibv_qp *qp,
 	return ret;
 }
 
-static int snap_modify_lb_qp_to_rts(struct ibv_qp *qp,
+static int snap_modify_lb_qp_rtr2rts(struct ibv_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(rtr2rts_qp_in)] = {0};
@@ -726,13 +726,13 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		     IBV_QP_PORT |
 		     IBV_QP_ACCESS_FLAGS;
 
-	rc = snap_modify_lb_qp_to_init(q->sw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rst2init(q->sw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to INIT errno=%d\n", rc);
 		return rc;
 	}
 
-	rc = snap_modify_lb_qp_to_init(q->fw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rst2init(q->fw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to INIT errno=%d\n", rc);
 		return rc;
@@ -773,7 +773,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (roce_en && !force_loopback)
 		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid_entry->gid.raw,
 		       sizeof(fw_gid_entry->gid.raw));
-	rc = snap_modify_lb_qp_to_rtr(q->sw_qp.qp, &attr, flags_mask,
+	rc = snap_modify_lb_qp_init2rtr(q->sw_qp.qp, &attr, flags_mask,
 				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
@@ -792,7 +792,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid_entry->gid.raw,
 		       sizeof(sw_gid_entry->gid.raw));
 	attr.dest_qp_num = q->sw_qp.qp->qp_num;
-	rc = snap_modify_lb_qp_to_rtr(q->fw_qp.qp, &attr, flags_mask,
+	rc = snap_modify_lb_qp_init2rtr(q->fw_qp.qp, &attr, flags_mask,
 				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTR errno=%d\n", rc);
@@ -816,13 +816,13 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	/* once QPs were moved to RTR using devx, they must also move to RTS
 	 * using devx since kernel doesn't know QPs are on RTR state
 	 **/
-	rc = snap_modify_lb_qp_to_rts(q->sw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rtr2rts(q->sw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTS errno=%d\n", rc);
 		return rc;
 	}
 
-	rc = snap_modify_lb_qp_to_rts(q->fw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rtr2rts(q->fw_qp.qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTS errno=%d\n", rc);
 		return rc;
