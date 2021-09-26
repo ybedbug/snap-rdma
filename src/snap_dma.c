@@ -381,16 +381,16 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	struct ibv_qp_init_attr init_attr = {};
 	struct ibv_recv_wr rx_wr, *bad_wr;
 	struct ibv_sge rx_sge;
-	struct snap_compression_caps comp_caps = {0};
+	struct snap_mmo_caps mmo_caps = {{0}};
 	int i, rc;
 
 	switch (attr->mode) {
 	case SNAP_DMA_Q_MODE_AUTOSELECT:
-		rc = snap_query_compression_caps(pd->context, &comp_caps);
+		rc = snap_query_mmo_caps(pd->context, &mmo_caps);
 		if (rc)
 			return rc;
 
-		if (comp_caps.dma_mmo_supported) {
+		if (mmo_caps.dma.qp_support) {
 			attr->mode = SNAP_DMA_Q_MODE_GGA;
 			q->ops = &gga_ops;
 		} else {
