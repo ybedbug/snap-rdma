@@ -522,7 +522,7 @@ def main():
     p.add_argument('-t', '--mdts', help='Maximum Data Transfer Size',
                    default=-1, type=int, required=False)
     p.add_argument('-m', '--max_namespaces', help='Maximun number of namespace',
-                   default=1024, type=int, required=False)
+                   default=-1, type=int, required=False)
     p.add_argument('-q', '--quirks', help='Bitmask for enabling specific NVMe '
                    'driver quirks in order to work with non NVMe spec compliant drivers',
                    default=-1, type=int, required=False)
