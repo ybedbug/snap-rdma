@@ -114,12 +114,14 @@ def main():
                                        dest='called_rpc_name')
 
     def emulation_device_detach(args):
-        if args.pci_bdf is None and args.pci_index == -1:
-            raise JsonRpcSnapException("Either pci_bdf or pci_index must "
+        if args.pci_bdf is None and args.pci_index == -1 and args.vuid is None:
+            raise JsonRpcSnapException("Either pci_bdf, pci_index or vuid must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pci_index != -1:
-            raise JsonRpcSnapException("pci_bdf and pci_index cannot be "
-                                       "both configured")
+        if ((args.pci_bdf is not None and args.pci_index != -1) or
+           (args.pci_bdf is not None and args.vuid is not None) or
+           (args.vuid is not None and args.pci_index != -1)) :
+            raise JsonRpcSnapException("Only one of pci_bdf, pci_index and vuid can be "
+                                       "configured")
         params = {
             'emulation_manager': args.emu_manager,
             'device_type': args.type,
@@ -130,6 +132,8 @@ def main():
             params['pci_index'] = args.pci_index
         if args.force:
             params['force'] = args.force
+        if args.vuid:
+            params['vuid'] = args.vuid
 
         args.client.call('emulation_device_detach', params)
     p = subparsers.add_parser('emulation_device_detach',
@@ -145,6 +149,8 @@ def main():
                    default=-1, type=int, required=False)
     p.add_argument('--force', help='Force emulation device detach.',
                    required=False, action='store_true')
+    p.add_argument('--vuid', help='VUID for device to start emilation on.',
+                   type=str, required=False)
     p.set_defaults(func=emulation_device_detach)
 
     def emulation_device_attach(args):

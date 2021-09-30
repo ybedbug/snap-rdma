@@ -66,6 +66,7 @@ enum {
 	MLX5_CMD_OP_HOTPLUG_DEVICE = 0xb20,
 	MLX5_CMD_OP_HOTUNPLUG_DEVICE = 0xb21,
 	MLX5_CMD_OP_ALLOW_OTHER_VHCA_ACCESS = 0xb16,
+	MLX5_CMD_OP_QUERY_VUID = 0xb22,
 };
 
 enum mlx5_event {
@@ -1298,7 +1299,9 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 struct mlx5_ifc_cmd_hca_cap2_bits {
 	u8	reserved_at_0[0x80];
 
-	u8	reserved_at_10[0x20];
+	u8	reserved_at_10[0x12];
+	u8	query_vuid[0x1];
+	u8	reserved_at_11[0xd];
 
 	u8	reserved_at_14[0x20];
 
@@ -4277,6 +4280,35 @@ struct mlx5_ifc_hotunplug_device_output_bits {
 	u8	syndrome[0x20];
 
 	u8	reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_query_vuid_in_bits {
+	u8	opcode[0x10];
+	u8	uid[0x10];
+
+	u8	reserved_at_20[0x40];
+
+	u8	query_vfs_vuid[0x1];
+	u8	reserved_at_40[0xf];
+	u8	vhca_id[0x10];
+};
+
+struct mlx5_ifc_vuid_bits {
+	u8	vuid[0x400];
+};
+
+struct mlx5_ifc_query_vuid_out_bits {
+	u8	status[0x8];
+	u8	reserved_at_8[0x18];
+
+	u8	syndrome[0x20];
+
+	u8	reserved_at_40[0x1a0];
+
+	u8	reserved_at_41[0x10];
+	u8	num_of_entries[0x10];
+
+	struct mlx5_ifc_vuid_bits vuid[0];
 };
 
 enum {

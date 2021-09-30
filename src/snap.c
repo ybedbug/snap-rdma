@@ -185,6 +185,76 @@ snap_emulation_type_to_pf_type(enum snap_emulation_type type)
 	}
 }
 
+static bool snap_query_vuid_is_supported(struct ibv_context *context)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
+				      out, sizeof(out));
+	if (ret)
+		return false;
+
+	return DEVX_GET(query_hca_cap_out, out,
+	       capability.cmd_hca_cap2.query_vuid);
+}
+
+static void snap_query_vuid(struct snap_pci *pf)
+{
+	int ret, i, vuid_len;
+	int output_size;
+	uint8_t in[DEVX_ST_SZ_BYTES(query_vuid_in)] = {0};
+	uint8_t *out;
+	struct snap_pci *vf;
+
+	if (!snap_query_vuid_is_supported(pf->sctx->context))
+		return;
+
+	DEVX_SET(query_vuid_in, in, opcode, MLX5_CMD_OP_QUERY_VUID);
+	DEVX_SET(query_vuid_in, in, vhca_id, pf->mpci.vhca_id);
+	DEVX_SET(query_vuid_in, in, query_vfs_vuid, (pf->num_vfs > 0));
+
+	output_size = DEVX_ST_SZ_BYTES(query_vuid_out) +
+		DEVX_ST_SZ_BYTES(vuid) * (pf->num_vfs + 1);
+
+	out = calloc(1, output_size);
+	if (!out) {
+		snap_warn("Alloc memory for output structure failed\n");
+		return;
+	}
+
+	ret = mlx5dv_devx_general_cmd(pf->sctx->context, in, sizeof(in), out, output_size);
+	if (ret) {
+		free(out);
+		snap_warn("Query functions info failed, ret:%d\n", ret);
+		return;
+	}
+
+	// Check if number of vuid entries in output matches expected num of vfs and pf
+	if (pf->num_vfs + 1 != DEVX_GET(query_vuid_out, out, num_of_entries)) {
+		free(out);
+		snap_warn("Failed to set vuid.\n");
+		return;
+	}
+
+	vuid_len = DEVX_FLD_SZ_BYTES(vuid, vuid);
+	strncpy(pf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
+
+	if (pf->num_vfs > 0) {
+		for (i = 0; i < pf->num_vfs; i++) {
+			vf = &pf->vfs[i];
+			strncpy(vf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid[i + 1]),
+				vuid_len);
+		}
+	}
+
+	free(out);
+}
+
 static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 {
 	int i, j, ret;
@@ -235,7 +305,10 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 		ret = snap_alloc_pci_bar(vf);
 		if (ret)
 			goto free_vfs;
+
 	}
+
+	snap_query_vuid(pf);
 
 	free(out);
 	return 0;
@@ -350,6 +423,9 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 					emulated_info_out,
 					emulated_function_info[idx].hotplug_function) ? true : false;
 	pf->num_vfs = 0;
+
+	snap_query_vuid(pf);
+
 	return 0;
 }
 

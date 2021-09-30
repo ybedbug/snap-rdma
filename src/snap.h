@@ -61,7 +61,6 @@
 #define snap_warn  printf
 #define snap_info  printf
 
-
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
 	SNAP_NVME_PF		= 1 << 0,
@@ -175,6 +174,8 @@ struct snap_pci {
 
 	bool hotplugged;
 	enum snap_pci_hotunplug_state	pci_hotunplug_state;
+	char vuid[128];
+
 };
 
 struct snap_device {
