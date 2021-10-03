@@ -45,8 +45,6 @@ struct blk_virtq_cmd_aux {
  * @zcopy:			use ZCOPY
  * @iov:			command descriptors converted to the io vector
  * @iov_cnt:			number of io vectors in the command
- * @fake_iov:			fake io vector for zcopy usage
- * @fake_addr:			fake address for zcopy usage
  */
 struct blk_virtq_cmd {
 	struct virtq_cmd common_cmd;
@@ -54,9 +52,9 @@ struct blk_virtq_cmd {
 	bool zcopy;
 	struct iovec *iov;
 	int iov_cnt;
-	struct iovec *fake_iov;
-	void *fake_addr;
 	struct snap_blk_mempool_ctx dma_pool_ctx;
+	uint64_t offset_blocks;
+	uint64_t num_blocks;
 };
 
 static inline struct snap_bdev_ops *to_blk_bdev_ops(struct virtq_bdev *bdev)
@@ -146,86 +144,6 @@ to_blk_ctrl(struct snap_virtio_ctrl *vctrl)
 
 static void virtq_mem_ready(void *data, struct ibv_mr *mr, void *user);
 
-void *blk_virtq_get_cmd_addr(void *ctx, void *ptr, size_t len)
-{
-	struct blk_virtq_cmd *cmd = ctx;
-	void *addr = NULL;
-	int i;
-
-	for (i = 0; i < cmd->iov_cnt; i++) {
-		void *fake_iov_base = cmd->fake_iov[i].iov_base;
-		size_t iov_len = cmd->iov[i].iov_len;
-
-		if (ptr >= fake_iov_base && ptr < fake_iov_base + iov_len) {
-			size_t offset = ptr - fake_iov_base;
-			void *iov_base = cmd->iov[i].iov_base;
-
-			addr = iov_base + offset;
-			len -= snap_min(iov_len - offset, len);
-			break;
-		}
-	}
-
-	if (snap_unlikely(len)) {
-		snap_error("Couldn't translate all (left %lu bytes)\n", len);
-		return NULL;
-	}
-
-	return addr;
-}
-
-struct snap_cross_mkey *blk_virtq_get_cross_mkey(void *ctx, struct ibv_pd *pd)
-{
-	struct blk_virtq_cmd *cmd = ctx;
-	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->common_cmd.vq_priv->vbq->ctrl);
-
-	/*
-	 * We assume 1-1 relationshop between ctrl->cross_mkey and PD,
-	 * so in case PD differs, we need to update cross_mkey as well.
-	 */
-	if (snap_unlikely(ctrl->cross_mkey && pd != ctrl->cross_mkey->pd)) {
-		snap_destroy_cross_mkey(ctrl->cross_mkey);
-		ctrl->cross_mkey = NULL;
-	}
-
-	if (snap_likely(ctrl->cross_mkey))
-		return ctrl->cross_mkey;
-
-	ctrl->cross_mkey = snap_create_cross_mkey(pd, cmd->common_cmd.vq_priv->vbq->ctrl->sdev);
-	if (!ctrl->cross_mkey) {
-		snap_error("Failed to create cross gvmi mkey\n");
-		return NULL;
-	}
-	snap_info("Crossing mkey %p was created (key %u)\n",
-		  ctrl->cross_mkey, ctrl->cross_mkey->mkey);
-
-	return ctrl->cross_mkey;
-}
-
-static void blk_virtq_cmd_fill_addr(struct blk_virtq_cmd *cmd)
-{
-	struct snap_virtio_blk_ctrl *ctrl = to_blk_ctrl(cmd->common_cmd.vq_priv->vbq->ctrl);
-	int ctrlid = ctrl->idx;
-	int reqid = cmd->common_cmd.idx;
-	int qid = cmd->common_cmd.vq_priv->vbq->index;
-	void *fake_addr_table = ctrl->zcopy_ctx->fake_addr_table;
-	uintptr_t *request_table = ctrl->zcopy_ctx->request_table;
-	size_t max_num_ctrl_req = VIRTIO_BLK_CTRL_NUM_VIRTQ_MAX *
-				  VIRTIO_BLK_MAX_VIRTQ_SIZE;
-	size_t global_req_idx;
-
-	global_req_idx = ctrlid * max_num_ctrl_req +
-			qid * VIRTIO_BLK_MAX_VIRTQ_SIZE + reqid;
-
-	cmd->fake_addr = fake_addr_table +
-			 global_req_idx * VIRTIO_BLK_MAX_REQ_DATA;
-
-	request_table[global_req_idx] = (uintptr_t)cmd;
-
-	snap_debug("fake_addr %p ctrlid %d qid %d reqid %d req_idx %lu\n",
-		   cmd->fake_addr, ctrlid, qid, reqid, global_req_idx);
-}
-
 static int alloc_aux(struct virtq_cmd *cmd, uint32_t seg_max)
 {
 	const size_t descs_size = VIRTIO_NUM_DESC(seg_max) * sizeof(struct vring_desc);
@@ -286,21 +204,12 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 				   idx);
 			return -ENOMEM;
 		}
-
-		cmd->fake_iov = calloc(seg_max, sizeof(struct iovec));
-		if (!cmd->fake_iov) {
-			snap_error("failed to allocate fake iov for virtq %d\n",
-				   idx);
-			ret = -ENOMEM;
-			goto free_iov;
-		}
-		blk_virtq_cmd_fill_addr(cmd);
 	}
 
 	if (cmd->common_cmd.vq_priv->use_mem_pool) {
 		ret = alloc_aux(&cmd->common_cmd, seg_max);
 		if (ret)
-			goto free_fake_iov;
+			goto free_iov;
 
 		cmd->dma_pool_ctx.ctx = vq_priv->virtq_dev.ctx;
 		cmd->dma_pool_ctx.user = cmd;
@@ -311,7 +220,7 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		if (!cmd->common_cmd.buf) {
 			snap_error("failed to allocate memory for virtq %d\n", idx);
 			ret = -ENOMEM;
-			goto free_fake_iov;
+			goto free_iov;
 		}
 		cmd->common_cmd.mr = ibv_reg_mr(vq_priv->pd, cmd->common_cmd.buf, req_size + aux_size,
 						IBV_ACCESS_REMOTE_READ |
@@ -331,9 +240,6 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 
 free_cmd_buf:
 	to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
-free_fake_iov:
-	if (vq_priv->zcopy)
-		free(cmd->fake_iov);
 free_iov:
 	if (vq_priv->zcopy)
 		free(cmd->iov);
@@ -351,10 +257,8 @@ void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
 		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
 	}
 
-	if (cmd->common_cmd.vq_priv->zcopy) {
-		free(cmd->fake_iov);
+	if (cmd->common_cmd.vq_priv->zcopy)
 		free(cmd->iov);
-	}
 }
 
 /**
@@ -488,9 +392,13 @@ static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
 	cmd->iov_cnt = cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS;
 }
 
-static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
+static inline bool zcopy_prepare(struct blk_virtq_cmd *cmd)
 {
 	struct virtq_priv *priv = cmd->common_cmd.vq_priv;
+	struct snap_bdev_ops *ops = to_blk_bdev_ops(&priv->virtq_dev);
+	struct blk_virtq_cmd_aux *aux = to_blk_cmd_aux(cmd->common_cmd.aux);
+	uint64_t offset = aux->header.sector * BDEV_SECTOR_SIZE;
+	uint32_t block_size;
 
 	if (!priv->zcopy)
 		return false;
@@ -498,15 +406,24 @@ static inline bool zcopy_check(struct blk_virtq_cmd *cmd)
 	if (cmd->common_cmd.num_desc == NUM_HDR_FTR_DESCS)
 		return false;
 
-	if (!to_blk_bdev_ops(&priv->virtq_dev)->is_zcopy_aligned)
+	if (aux->header.type == VIRTIO_BLK_T_GET_ID)
 		return false;
 
-	if (to_blk_cmd_aux(cmd->common_cmd.aux)->header.type == VIRTIO_BLK_T_GET_ID)
+	if (!ops->zcopy_validate_params)
 		return false;
 
-	/* cannot use zcopy if the first data addr is not zcopy aligned */
-	return to_blk_bdev_ops(&priv->virtq_dev)->is_zcopy_aligned(priv->virtq_dev.ctx,
-						   (void *)to_blk_cmd_aux(cmd->common_cmd.aux)->descs[1].addr);
+	virtq_descs_to_iovec(cmd);
+
+	if (!ops->zcopy_validate_params(priv->virtq_dev.ctx,
+				cmd->iov, cmd->iov_cnt,
+				offset, cmd->common_cmd.total_seg_len))
+		return false;
+
+	block_size = ops->get_block_size(priv->virtq_dev.ctx);
+	cmd->offset_blocks = offset / block_size;
+	cmd->num_blocks = cmd->common_cmd.total_seg_len / block_size;
+
+	return true;
 }
 
 /**
@@ -738,10 +655,9 @@ static bool blk_virtq_sm_parse_header(struct virtq_cmd *cmd,
 		return true;
 	}
 
-	blk_cmd->zcopy = zcopy_check(blk_cmd);
+	blk_cmd->zcopy = zcopy_prepare(blk_cmd);
 
 	if (blk_cmd->zcopy) {
-		virtq_descs_to_iovec(blk_cmd);
 		cmd->state = VIRTQ_CMD_STATE_HANDLE_REQ;
 		return true;
 	}
@@ -852,23 +768,6 @@ static bool blk_virtq_sm_read_data(struct virtq_cmd *cmd,
 	return false;
 }
 
-static inline void virtq_fill_fake_iov(struct blk_virtq_cmd *cmd)
-{
-	int i;
-
-	/* The first iov_base is always the same */
-	cmd->fake_iov[0].iov_base = cmd->fake_addr;
-	cmd->fake_iov[0].iov_len = cmd->iov[0].iov_len;
-
-	for (i = 1; i < cmd->iov_cnt; i++) {
-		void *prev_iov_base = cmd->fake_iov[i - 1].iov_base;
-		size_t prev_iov_len = cmd->fake_iov[i - 1].iov_len;
-
-		cmd->fake_iov[i].iov_base = prev_iov_base + prev_iov_len;
-		cmd->fake_iov[i].iov_len = cmd->iov[i].iov_len;
-	}
-}
-
 /**
  * virtq_handle_req() - Handle received request from host
  * @cmd: Command being processed
@@ -904,10 +803,10 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_OUT_DATA_DONE;
 		offset = to_blk_cmd_aux(cmd->aux)->header.sector * BDEV_SECTOR_SIZE;
 		if (to_blk_virtq_cmd(cmd)->zcopy) {
-			virtq_fill_fake_iov(to_blk_virtq_cmd(cmd));
-			ret = to_blk_bdev_ops(bdev)->writev(bdev->ctx, to_blk_virtq_cmd(cmd)->fake_iov,
-						to_blk_virtq_cmd(cmd)->iov_cnt, offset,
-						cmd->total_seg_len,
+			ret = to_blk_bdev_ops(bdev)->writev_blocks(bdev->ctx, to_blk_virtq_cmd(cmd)->iov,
+						to_blk_virtq_cmd(cmd)->iov_cnt,
+						to_blk_virtq_cmd(cmd)->offset_blocks,
+						to_blk_virtq_cmd(cmd)->num_blocks,
 						&to_blk_virtq_cmd(cmd)->bdev_op_ctx,
 						cmd->vq_priv->pg_id);
 		} else {
@@ -921,12 +820,12 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 		cmd->io_cmd_stat = &(to_blk_virtq_ctx(cmd->vq_priv->vq_ctx)->io_stat.read);
 		offset = to_blk_cmd_aux(cmd->aux)->header.sector * BDEV_SECTOR_SIZE;
 		if (to_blk_virtq_cmd(cmd)->zcopy) {
-			virtq_fill_fake_iov(to_blk_virtq_cmd(cmd));
 			cmd->total_in_len += cmd->total_seg_len;
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-			ret = to_blk_bdev_ops(bdev)->readv(bdev->ctx, to_blk_virtq_cmd(cmd)->fake_iov,
-					       to_blk_virtq_cmd(cmd)->iov_cnt, offset,
-					       cmd->total_seg_len,
+			ret = to_blk_bdev_ops(bdev)->readv_blocks(bdev->ctx, to_blk_virtq_cmd(cmd)->iov,
+					       to_blk_virtq_cmd(cmd)->iov_cnt,
+					       to_blk_virtq_cmd(cmd)->offset_blocks,
+					       to_blk_virtq_cmd(cmd)->num_blocks,
 					       &to_blk_virtq_cmd(cmd)->bdev_op_ctx,
 					       cmd->vq_priv->pg_id);
 		} else {

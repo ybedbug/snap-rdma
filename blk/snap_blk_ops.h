@@ -71,17 +71,17 @@ struct snap_blk_mempool_ctx {
  * ToDo: add mechanism to tell which block operations are supported
  */
 struct snap_bdev_ops {
-	int (*readv)(void *ctx, struct iovec *iov, int iovcnt,
+	int (*readv_blocks)(void *ctx, struct iovec *iov, int iovcnt,
 		    uint64_t offset_blocks, uint64_t num_blocks,
 		    struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
-	int (*writev)(void *ctx, struct iovec *iov, int iovcnt,
+	int (*writev_blocks)(void *ctx, struct iovec *iov, int iovcnt,
 		     uint64_t offset_blocks, uint64_t num_blocks,
 		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
-	int (*read)(void *ctx, void *buf, uint64_t offset_blocks,
-			uint64_t num_blocks, struct snap_bdev_io_done_ctx *done_ctx,
+	int (*read)(void *ctx, void *buf, uint64_t offset,
+			uint64_t len, struct snap_bdev_io_done_ctx *done_ctx,
 			int thread_id);
-	int (*write)(void *ctx, void *buf, uint64_t offset_blocks,
-			uint64_t num_blocks, struct snap_bdev_io_done_ctx *done_ctx,
+	int (*write)(void *ctx, void *buf, uint64_t offset,
+			uint64_t len, struct snap_bdev_io_done_ctx *done_ctx,
 			int thread_id);
 	int (*flush)(void *ctx, uint64_t offset_blocks, uint64_t num_blocks,
 		     struct snap_bdev_io_done_ctx *done_ctx, int thread_id);
@@ -97,7 +97,8 @@ struct snap_bdev_ops {
 	uint32_t (*get_block_size)(void *ctx);
 	const char *(*get_bdev_name)(void *ctx);
 	bool (*is_zcopy)(void *ctx);
-	bool (*is_zcopy_aligned)(void *ctx, void *addr);
+	bool (*zcopy_validate_params)(void *ctx, struct iovec *iov,
+				size_t iov_cnt,	uint64_t offset, uint64_t len);
 	int (*dma_pool_malloc)(size_t size, struct snap_blk_mempool_ctx *mem_ctx);
 	void (*dma_pool_cancel)(struct snap_blk_mempool_ctx *mem_ctx);
 	void (*dma_pool_free)(struct snap_blk_mempool_ctx *ctx, void *buf);
