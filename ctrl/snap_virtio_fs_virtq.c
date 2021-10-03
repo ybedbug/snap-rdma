@@ -151,12 +151,14 @@ static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 {
 	enum virtq_cmd_sm_op_status op_status = VIRTQ_CMD_SM_OP_OK;
 	struct virtq_cmd *vcmd = container_of(self, struct virtq_cmd, dma_comp);
-	//struct fs_virtq_cmd *cmd = container_of(vcmd, struct fs_virtq_cmd, common_cmd);
 
 	if (status != IBV_WC_SUCCESS) {
-		ERR_ON_CMD(vcmd, "error in dma for queue\n");
+		snap_error("error in dma for queue: %d cmd %p descs %ld state %d\n",
+			   vcmd->vq_priv->vq_ctx->idx,
+			   vcmd, vcmd->num_desc, vcmd->state);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
+	--vcmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	virtq_cmd_progress(vcmd, op_status);
 }
 
@@ -311,6 +313,7 @@ static void fs_dev_io_comp_cb(enum snap_fs_dev_op_status status, void *done_arg)
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 
+	--cmd->common_cmd.vq_priv->cmd_cntrs.outstanding_in_bdev;
 	virtq_cmd_progress(&cmd->common_cmd, op_status);
 }
 
@@ -458,6 +461,7 @@ static bool fs_virtq_sm_read_header(struct virtq_cmd *cmd,
 		return true;
 	}
 
+	++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	return false;
 }
 
@@ -583,6 +587,8 @@ static bool fs_virtq_sm_read_data(struct virtq_cmd *cmd,
 		}
 		offset += cmd_aux->descs[i].len;
 	}
+
+	++priv->cmd_cntrs.outstanding_to_host;
 	return false;
 }
 
@@ -645,6 +651,8 @@ static bool fs_virtq_handle_req(struct virtq_cmd *cmd,
 		return true;
 	}
 
+	++cmd->vq_priv->cmd_cntrs.outstanding_in_bdev;
+
 	/* For request queues:
 	 * Start handle the VRING_DESC_F_WRITE (writable) descriptors first.
 	 * Writable, meaning the descriptor's data was 'filled' by fs device.
@@ -656,6 +664,8 @@ static bool fs_virtq_handle_req(struct virtq_cmd *cmd,
 		virtq_log_data(cmd, "hiprio - send completion\n");
 		cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
 	}
+
+	--cmd->vq_priv->cmd_cntrs.outstanding_in_bdev;
 
 	return true;
 }
@@ -709,6 +719,8 @@ static bool sm_handle_in_iov_done(struct virtq_cmd *cmd,
 			}
 			cmd->total_in_len += cmd_aux->descs[i].len;
 		}
+
+		++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 		return false;
 	}
 	return true;
@@ -1021,7 +1033,7 @@ err:
  * @q: queue to be destryoed
  *
  * Context: 1. Destroy should be called only when queue is in suspended state.
- *	    2. fs_virtq_progress() should not be called during destruction.
+ *	    2. virtq_progress() should not be called during destruction.
  *
  * Return: void
  */
@@ -1031,9 +1043,13 @@ void fs_virtq_destroy(struct fs_virtq_ctx *q)
 
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
-	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntrs.outstanding_total)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
-			  q->common_ctx.idx, vq_priv->cmd_cntr);
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.outstanding_total);
+
+	if (vq_priv->cmd_cntrs.fatal)
+		snap_warn("queue %d: destroying while %d commands completed with fatal error\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.fatal);
 
 	if (snap_virtio_fs_destroy_queue(vq_priv->snap_vbq))
 		snap_error("queue %d: error destroying fs_virtq\n", q->common_ctx.idx);
@@ -1113,153 +1129,6 @@ int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
 	return 0;
 }
 
-static int fs_virtq_progress_suspend(struct fs_virtq_ctx *q)
-{
-	struct virtq_priv *priv = q->common_ctx.priv;
-	struct snap_virtio_common_queue_attr qattr = {};
-
-	/* TODO: add option to ignore commands in the fs device layer */
-	if (priv->cmd_cntr != 0)
-		return 0;
-
-	snap_dma_q_flush(priv->dma_q);
-
-	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
-	/* TODO: check with FLR/reset. I see modify fail where it should not */
-	if (snap_virtio_fs_modify_queue(priv->snap_vbq, SNAP_VIRTIO_FS_QUEUE_MOD_STATE,
-					&qattr)) {
-		snap_error("queue %d: failed to move to the SUSPENDED state\n",
-			   q->common_ctx.idx);
-	}
-	/* at this point QP is in the error state and cannot be used anymore */
-	snap_info("queue %d: moving to the SUSPENDED state\n", q->common_ctx.idx);
-	priv->swq_state = SW_VIRTQ_SUSPENDED;
-	return 0;
-}
-
-/**
- * fs_virq_progress_unordered() - Check & complete unordered commands
- * @vq_priv:	queue to progress
- */
-static void fs_virq_progress_unordered(struct virtq_priv *vq_priv)
-{
-	uint16_t cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
-
-	struct virtq_cmd *cmd = fs_virtq_get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
-
-	while (cmd->state == VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP &&
-	       cmd->cmd_available_index == cmd->vq_priv->ctrl_used_index) {
-		virtq_log_data(cmd, "PEND_COMP: ino_num:%d state:%d\n",
-			       cmd->cmd_available_index, cmd->state);
-
-		virtq_cmd_progress(cmd, VIRTQ_CMD_SM_OP_OK);
-
-		cmd_idx = vq_priv->ctrl_used_index % vq_priv->vattr->size;
-		cmd = fs_virtq_get_avail_cmd(vq_priv->cmd_arr, cmd_idx);
-	}
-}
-
-/**
- * fs_virtq_progress() - Progress RDMA QPs,  Polls on QPs CQs
- * @q:	queue to progress
- *
- * Context: Not thread safe
- *
- * Return: error code on failure, 0 on success
- */
-int fs_virtq_progress(struct fs_virtq_ctx *q)
-{
-	struct virtq_priv *priv = q->common_ctx.priv;
-
-	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
-		return 0;
-
-	snap_dma_q_progress(priv->dma_q);
-
-	if (snap_unlikely(priv->force_in_order))
-		fs_virq_progress_unordered(priv);
-
-	/*
-	 * need to wait until all inflight requests
-	 * are finished before moving to the suspend state
-	 */
-	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING))
-		return fs_virtq_progress_suspend(q);
-
-	return 0;
-}
-
-/**
- * fs_virtq_suspend() - Request moving queue to suspend state
- * @q:	queue to move to suspend state
- *
- * When suspend is requested the queue stops receiving new commands
- * and moves to FLUSHING state. Once all commands already fetched are
- * finished, the queue moves to SUSPENDED state.
- *
- * Context: Function is not thread safe with regard to fs_virtq_progress
- * and fs_virtq_is_suspended. If called from a different thread than
- * thread calling progress/is_suspended then application must take care of
- * proper locking
- *
- * Return: 0 on success, else error code
- */
-int fs_virtq_suspend(struct fs_virtq_ctx *q)
-{
-	struct virtq_priv *priv = q->common_ctx.priv;
-
-	if (priv->swq_state != SW_VIRTQ_RUNNING) {
-		snap_debug("queue %d: suspend was already requested\n",
-			   q->common_ctx.idx);
-		return -EBUSY;
-	}
-
-	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n",
-		  q->common_ctx.idx, priv->cmd_cntr);
-
-	if (priv->vq_ctx->fatal_err)
-		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n",
-			  q->common_ctx.idx);
-
-	priv->swq_state = SW_VIRTQ_FLUSHING;
-	return 0;
-}
-
-/**
- * fs_virtq_is_suspended() - api for checking if queue in suspended state
- * @q:		queue to check
- *
- * Context: Function is not thread safe with regard to fs_virtq_progress
- * and fs_virtq_suspend. If called from a different thread than
- * thread calling progress/suspend then application must take care of
- * proper locking
- *
- * Return: True when queue suspended, and False for not suspended
- */
-bool fs_virtq_is_suspended(struct fs_virtq_ctx *q)
-{
-	struct virtq_priv *priv = q->common_ctx.priv;
-
-	return priv->swq_state == SW_VIRTQ_SUSPENDED;
-}
-
-/**
- * fs_virtq_start() - set virtq attributes used for operating
- * @q:		queue to start
- * @attr:	attrs used to start the quue
- *
- * Function set attributes queue needs in order to operate.
- *
- * Return: void
- */
-void fs_virtq_start(struct fs_virtq_ctx *q,
-		    struct virtq_start_attr *attr)
-{
-	struct virtq_priv *priv = q->common_ctx.priv;
-
-	priv->pg_id = attr->pg_id;
-}
-
 /**
  * fs_virtq_get_state() - get hw state of the queue
  * @q:      queue
@@ -1297,6 +1166,11 @@ int fs_virtq_get_state(struct fs_virtq_ctx *q,
 	state->hw_available_index = priv->ctrl_available_index;
 	state->hw_used_index = attr.hw_used_index;
 	return 0;
+}
+
+inline struct fs_virtq_ctx *to_fs_ctx(void *ctx)
+{
+	return (struct fs_virtq_ctx *)ctx;
 }
 
 struct snap_dma_q *fs_get_dma_q(struct fs_virtq_ctx *ctx)

@@ -30,18 +30,14 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 				     void *fs_dev, struct snap_device *snap_dev,
 				     struct virtq_create_attr *attr);
 void fs_virtq_destroy(struct fs_virtq_ctx *q);
-void fs_virtq_start(struct fs_virtq_ctx *q,
-		    struct virtq_start_attr *attr);
-int fs_virtq_progress(struct fs_virtq_ctx *q);
 int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
 			   struct snap_virtio_queue_debugstat *q_debugstat);
 int fs_virtq_query_error_state(struct fs_virtq_ctx *q,
 			       struct snap_virtio_common_queue_attr *attr);
-int fs_virtq_suspend(struct fs_virtq_ctx *q);
-bool fs_virtq_is_suspended(struct fs_virtq_ctx *q);
 int fs_virtq_get_state(struct fs_virtq_ctx *q,
 		       struct snap_virtio_ctrl_queue_state *state);
 
+struct fs_virtq_ctx *to_fs_ctx(void *ctx);
 /* debug */
 struct snap_dma_q *fs_get_dma_q(struct fs_virtq_ctx *ctx);
 int fs_set_dma_mkey(struct fs_virtq_ctx *ctx, uint32_t mkey);

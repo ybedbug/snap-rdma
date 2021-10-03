@@ -614,18 +614,19 @@ static void snap_virtio_fs_ctrl_queue_suspend(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_fs_ctrl_queue *vfsq = to_fs_ctrl_q(vq);
 
-	fs_virtq_suspend(vfsq->q_impl);
+	virtq_suspend(&to_fs_ctx(vfsq->q_impl)->common_ctx);
 }
 
 static bool snap_virtio_fs_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_fs_ctrl_queue *vfsq = to_fs_ctrl_q(vq);
 
-	if (!fs_virtq_is_suspended(vfsq->q_impl))
+	if (!virtq_is_suspended(&to_fs_ctx(vfsq->q_impl)->common_ctx))
 		return false;
 
 	snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
 	return true;
+
 }
 
 static int snap_virtio_fs_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
@@ -644,7 +645,7 @@ static int snap_virtio_fs_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	 * the state restore
 	 */
 	if (vfsq->q_impl) {
-		if (!fs_virtq_is_suspended(vfsq->q_impl))
+		if (!virtq_is_suspended(&to_fs_ctx(vfsq->q_impl)->common_ctx))
 			return -EINVAL;
 
 		/* save hw_used and hw_avail to allow resume */
@@ -674,8 +675,9 @@ static int snap_virtio_fs_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 static void snap_virtio_fs_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_fs_ctrl_queue *vfsq = to_fs_ctrl_q(vq);
+	struct virtq_common_ctx *q = &to_fs_ctx(vfsq->q_impl)->common_ctx;
 
-	fs_virtq_progress(vfsq->q_impl);
+	virtq_progress(q, vq->thread_id);
 }
 
 static void snap_virtio_fs_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
@@ -684,7 +686,7 @@ static void snap_virtio_fs_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 	struct virtq_start_attr attr = {};
 
 	attr.pg_id = vq->pg->id;
-	fs_virtq_start(vfsq->q_impl, &attr);
+	virtq_start(&to_fs_ctx(vfsq->q_impl)->common_ctx, &attr);
 }
 
 static int snap_virtio_fs_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *vq,
