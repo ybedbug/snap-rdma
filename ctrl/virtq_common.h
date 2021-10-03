@@ -219,7 +219,7 @@ struct virtq_bdev {
  * @vattr:			virtio queue attributes
  * @dma_q:			DMA queue
  * @cmd_arr:		array holding all virtq commands
- * @cmd_cntr:		active commands counter
+ * @cmd_ctrs:		active commands counters, virtq various statistics
  * @size_max:		maximum size of any single segment
  * @seg_max:		maximum number of segments in a request
  * @pg_id:			poll group id
@@ -243,7 +243,7 @@ struct virtq_priv {
 	struct snap_virtio_queue_attr *vattr;
 	struct snap_dma_q *dma_q;
 	struct virtq_cmd *cmd_arr;
-	int cmd_cntr;
+	struct snap_virtio_ctrl_queue_out_counter cmd_cntrs;
 	int seg_max;
 	int size_max;
 	int pg_id;
@@ -377,5 +377,22 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 			     uint32_t data_len, uint32_t imm_data);
 int virtq_tunnel_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
 int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
+
+static inline bool virtq_check_outstanding_progress_suspend(struct virtq_priv *vq_priv)
+{
+	if (snap_unlikely(vq_priv->cmd_cntrs.fatal)) {
+		if (vq_priv->cmd_cntrs.outstanding_in_bdev == 0 &&
+		    vq_priv->cmd_cntrs.outstanding_to_host == 0)
+			return true;
+	} else {
+		if (vq_priv->cmd_cntrs.outstanding_total == 0 &&
+		    vq_priv->cmd_cntrs.outstanding_in_bdev == 0 &&
+		    vq_priv->cmd_cntrs.outstanding_to_host == 0)
+			return true;
+	}
+
+	return false;
+}
+
 #endif
 

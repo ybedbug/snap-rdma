@@ -128,10 +128,25 @@ struct snap_virtio_ctrl_queue_counter {
 
 };
 
+/**
+ * struct virtq_cmd_ctrs - virtq commands counters
+ * @outstanding_total:		active commands - sent from host to DPU (new incoming commands)
+ * @outstanding_in_bdev:	active commands - sent to back-end device
+ * @outstanding_to_host:	active commands - sent to host (e.g. completions or fetch descriptors)
+ * @fatal:			fatal commands counter
+ */
+struct snap_virtio_ctrl_queue_out_counter {
+	uint32_t outstanding_total;
+	uint32_t outstanding_in_bdev;
+	uint32_t outstanding_to_host;
+	uint32_t fatal;
+};
+
 struct snap_virtio_ctrl_queue_stats {
 	struct snap_virtio_ctrl_queue_counter read;
 	struct snap_virtio_ctrl_queue_counter write;
 	struct snap_virtio_ctrl_queue_counter flush;
+	struct snap_virtio_ctrl_queue_out_counter outstanding;
 };
 
 struct snap_virtio_ctrl_queue_state;

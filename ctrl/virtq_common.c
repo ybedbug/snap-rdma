@@ -93,7 +93,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	vq_priv->size_max = attr->size_max;
 	vq_priv->swq_state = SW_VIRTQ_RUNNING;
 	vq_priv->vbq = ctxt_attr->vq;
-	vq_priv->cmd_cntr = 0;
+	memset(&vq_priv->cmd_cntrs, 0, sizeof(vq_priv->cmd_cntrs));
 	vq_priv->ctrl_available_index = attr->hw_available_index;
 	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 	vq_priv->force_in_order = attr->force_in_order;
@@ -179,9 +179,10 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 	int ret;
 	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
 
-	if (cmd->num_desc == 0)
+	if (cmd->num_desc == 0) {
 		in_ring_desc_addr = cmd->descr_head_idx % cmd->vq_priv->vattr->size;
-	else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
+		/* TODO add some indication about this case */
+	} else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
 		in_ring_desc_addr = descs[cmd->num_desc - 1].next;
 	else
 		return VIRTQ_FETCH_DESC_DONE;
@@ -199,7 +200,11 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 			&(cmd->dma_comp));
 	if (ret)
 		return VIRTQ_FETCH_DESC_ERR;
+	/* Note: the num_desc should be incremented in case the success completion only.
+	 * The completion result is tested in virtq_sm_fetch_cmd_descs
+	 */
 	cmd->num_desc++;
+	++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	return VIRTQ_FETCH_DESC_READ;
 }
 
@@ -221,7 +226,9 @@ bool virtq_sm_fetch_cmd_descs(struct virtq_cmd *cmd,
 	enum virtq_fetch_desc_status ret;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+		--cmd->num_desc;
+		ERR_ON_CMD(cmd, "failed to fetch commands descs - num_desc: %ld, dumping command without response\n",
+			   cmd->num_desc);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
@@ -432,7 +439,7 @@ static void virtq_rel_req_dbuf(struct virtq_cmd *cmd)
 	cmd->use_dmem = false;
 }
 
-bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+static bool virtq_common_release(struct virtq_cmd *cmd)
 {
 	bool repeat = false;
 
@@ -442,20 +449,24 @@ bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
 		cmd->vq_priv->ops->mem_pool_release(cmd);
 	if (snap_unlikely(cmd->use_seg_dmem))
 		repeat = cmd->vq_priv->ops->seg_dmem_release(cmd);
-	cmd->vq_priv->cmd_cntr--;
 
+	return repeat;
+}
+
+bool virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+{
+	bool repeat = false;
+
+	repeat = virtq_common_release(cmd);
+	--cmd->vq_priv->cmd_cntrs.outstanding_total;
 	return repeat;
 }
 
 bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
 {
-	if (snap_unlikely(cmd->use_dmem))
-		virtq_rel_req_dbuf(cmd);
-	if (cmd->vq_priv->use_mem_pool)
-		cmd->vq_priv->ops->mem_pool_release(cmd);
-	if (snap_unlikely(cmd->use_seg_dmem))
-		cmd->vq_priv->ops->seg_dmem_release(cmd);
+	virtq_common_release(cmd);
 	cmd->vq_priv->vq_ctx->fatal_err = -1;
+	++cmd->vq_priv->cmd_cntrs.fatal;
 	/*
 	 * TODO: propagate fatal error to the controller.
 	 * At the moment attempt to resume/state copy
@@ -466,14 +477,13 @@ bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status sta
 	return false;
 }
 
-
 static int virtq_progress_suspend(struct virtq_common_ctx *q)
 {
 	struct virtq_priv *priv = q->priv;
 	struct snap_virtio_common_queue_attr qattr = { };
 
 	/* TODO: add option to ignore commands in the bdev layer */
-	if (priv->cmd_cntr != 0)
+	if (!virtq_check_outstanding_progress_suspend(priv))
 		return 0;
 
 	snap_dma_q_flush(priv->dma_q);
@@ -592,8 +602,9 @@ int virtq_suspend(struct virtq_common_ctx *q)
 		return -EBUSY;
 	}
 
-	snap_info("queue %d: SUSPENDING %d command(s) outstanding\n", q->idx,
-			priv->cmd_cntr);
+	snap_info("queue %d: SUSPENDING command(s) - in %d bdev %d host %d fatal %d\n", q->idx,
+			priv->cmd_cntrs.outstanding_total, priv->cmd_cntrs.outstanding_in_bdev,
+			priv->cmd_cntrs.outstanding_to_host, priv->cmd_cntrs.fatal);
 
 	if (priv->vq_ctx->fatal_err)
 		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n", q->idx);
@@ -685,7 +696,7 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 		memcpy(aux_descs, tunn_descs, len);
 	}
 
-	++cmd->vq_priv->cmd_cntr;
+	++cmd->vq_priv->cmd_cntrs.outstanding_total;
 	++cmd->vq_priv->ctrl_available_index;
 	cmd->state = VIRTQ_CMD_STATE_FETCH_CMD_DESCS;
 	virtq_log_data(cmd, "NEW_CMD: %lu inline descs, rxlen %u\n", cmd->num_desc, data_len);

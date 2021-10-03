@@ -124,11 +124,13 @@ static void sm_dma_cb(struct snap_dma_completion *self, int status)
 	struct blk_virtq_cmd *cmd = container_of(vcmd, struct blk_virtq_cmd, common_cmd);
 
 	if (status != IBV_WC_SUCCESS) {
-		snap_error("error in dma for queue %d\n",
-			   cmd->common_cmd.vq_priv->vq_ctx->idx);
+		snap_error("error in dma for queue: %d cmd %p descs %ld state %d\n",
+			   cmd->common_cmd.vq_priv->vq_ctx->idx,
+			   cmd, vcmd->num_desc, vcmd->state);
 		op_status = VIRTQ_CMD_SM_OP_ERR;
 	}
 
+	--vcmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	virtq_cmd_progress(vcmd, op_status);
 }
 
@@ -464,6 +466,7 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 	} else
 		cmd->common_cmd.io_cmd_stat->success++;
 
+	--cmd->common_cmd.vq_priv->cmd_cntrs.outstanding_in_bdev;
 	virtq_cmd_progress(&cmd->common_cmd, op_status);
 }
 
@@ -612,8 +615,10 @@ static void blk_virtq_proc_desc(struct virtq_cmd *cmd)
 	cmd->num_desc = virtq_blk_process_desc(descs, cmd->num_desc,
 				&cmd->num_merges, cmd->vq_priv->merge_descs);
 
+
 	if (cmd->num_desc < NUM_HDR_FTR_DESCS) {
-		ERR_ON_CMD(cmd, "failed to fetch commands descs, dumping command without response\n");
+		ERR_ON_CMD(cmd, "failed to process descriptors - num_desc: %ld, dumping command without response\n",
+			   cmd->num_desc);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return;
 	}
@@ -693,6 +698,7 @@ static bool blk_virtq_sm_read_header(struct virtq_cmd *cmd,
 		return true;
 	}
 
+	++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	return false;
 }
 
@@ -837,6 +843,7 @@ static bool blk_virtq_sm_read_data(struct virtq_cmd *cmd,
 		offset += to_blk_cmd_aux(cmd->aux)->descs[i].len;
 	}
 
+	++priv->cmd_cntrs.outstanding_to_host;
 	return false;
 }
 
@@ -876,6 +883,7 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 	uint32_t blk_size;
 	const char *dev_name;
 	uint64_t offset;
+	uint32_t cmd_type = to_blk_cmd_aux(cmd->aux)->header.type;
 
 	if (status != VIRTQ_CMD_SM_OP_OK) {
 		ERR_ON_CMD(cmd, "failed to get request data, returning failure\n");
@@ -885,7 +893,7 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 	}
 
 	cmd->io_cmd_stat = NULL;
-	switch (to_blk_cmd_aux(cmd->aux)->header.type) {
+	switch (cmd_type) {
 	case VIRTIO_BLK_T_OUT:
 		cmd->io_cmd_stat = &(to_blk_virtq_ctx(cmd->vq_priv->vq_ctx)->io_stat.write);
 		cmd->state = VIRTQ_CMD_STATE_OUT_DATA_DONE;
@@ -988,9 +996,14 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 		to_blk_cmd_ftr(cmd->ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
-	} else {
-		return false;
 	}
+
+	if (snap_unlikely(cmd_type == VIRTIO_BLK_T_GET_ID))
+		++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
+	else
+		++cmd->vq_priv->cmd_cntrs.outstanding_in_bdev;
+
+	return false;
 }
 
 /**
@@ -1036,6 +1049,7 @@ static bool blk_virtq_sm_handle_in_iov_done(struct virtq_cmd *cmd,
 		offset += to_blk_cmd_aux(cmd->aux)->descs[i + 1].len;
 		cmd->total_in_len += to_blk_cmd_aux(cmd->aux)->descs[i + 1].len;
 	}
+	++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	return false;
 }
 
@@ -1261,9 +1275,13 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 
 	snap_debug("destroying queue %d\n", q->common_ctx.idx);
 
-	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntr)
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntrs.outstanding_total)
 		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
-			  q->common_ctx.idx, vq_priv->cmd_cntr);
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.outstanding_total);
+
+	if (vq_priv->cmd_cntrs.fatal)
+		snap_warn("queue %d: destroying while %d command(s) completed with fatal error\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.fatal);
 
 	if (snap_virtio_blk_destroy_queue(to_blk_queue(vq_priv->snap_vbq)))
 		snap_error("queue %d: error destroying blk_virtq\n", q->common_ctx.idx);
@@ -1384,8 +1402,10 @@ const struct snap_virtio_ctrl_queue_stats *
 blk_virtq_get_io_stats(struct blk_virtq_ctx *q)
 {
 	struct virtq_priv *priv = q->common_ctx.priv;
+	struct snap_virtio_ctrl_queue_stats *io_stat = &to_blk_virtq_ctx(priv->vq_ctx)->io_stat;
 
-	return &to_blk_virtq_ctx(priv->vq_ctx)->io_stat;
+	memcpy(&io_stat->outstanding, &priv->cmd_cntrs, sizeof(priv->cmd_cntrs));
+	return io_stat;
 }
 
 inline struct blk_virtq_ctx *to_blk_ctx(void *ctx)
