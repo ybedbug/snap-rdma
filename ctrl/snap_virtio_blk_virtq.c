@@ -436,8 +436,9 @@ static int virtq_alloc_desc_buf(struct virtq_cmd *cmd, size_t old_len, size_t le
 		free(new_aux);
 		goto err;
 	}
+
 	memcpy(new_aux->descs, to_blk_cmd_aux(cmd->aux)->descs, old_len * sizeof(struct vring_desc));
-	if (cmd->vq_priv->use_mem_pool) {
+	if (cmd->vq_priv->use_mem_pool || cmd->use_seg_dmem) {
 		//mem for aux was previously allocated with malloc
 		ibv_dereg_mr(cmd->aux_mr);
 		free(cmd->aux);
@@ -694,6 +695,7 @@ static bool blk_virtq_sm_read_header(struct virtq_cmd *cmd,
 		&cmd->dma_comp);
 
 	if (ret) {
+		ERR_ON_CMD(cmd, "failed to read header, ret %d\n", ret);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
@@ -837,6 +839,7 @@ static bool blk_virtq_sm_read_data(struct virtq_cmd *cmd,
 				to_blk_cmd_aux(cmd->aux)->descs[i].len, cmd->req_mr->lkey, to_blk_cmd_aux(cmd->aux)->descs[i].addr,
 				priv->vattr->dma_mkey, &cmd->dma_comp);
 		if (ret) {
+			ERR_ON_CMD(cmd, "failed to read data, ret %d\n", ret);
 			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			return true;
 		}
@@ -1078,6 +1081,8 @@ static bool virtq_rel_req_desc(struct virtq_cmd *cmd)
 	free(cmd->aux);
 	if (cmd->vq_priv->use_mem_pool) {
 		if (alloc_aux(cmd, cmd->vq_priv->seg_max)) {
+			ERR_ON_CMD(cmd, "failed to allocate memory for extra segments %d\n",
+				   cmd->vq_priv->seg_max);
 			cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 			//alloc fail, move to error state
 			repeat = true;

@@ -420,7 +420,7 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 	ret = cmd->vq_priv->ops->send_comp(cmd, cmd->vq_priv->dma_q);
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to send completion\n");
+		ERR_ON_CMD(cmd, "failed to send completion ret %d\n", ret);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
 		cmd->state = VIRTQ_CMD_STATE_RELEASE;
