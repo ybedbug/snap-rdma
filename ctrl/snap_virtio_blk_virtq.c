@@ -504,8 +504,7 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
 		descs[num_desc - 1].len = descs[num_desc - 1].len - footer_len;
 		descs[num_desc - 1].flags |= VRING_DESC_F_NEXT;
 		descs[num_desc - 1].next = num_desc;
-		descs[num_desc].addr = descs[num_desc - 1].addr
-				+ (descs[num_desc - 1].len - footer_len);
+		descs[num_desc].addr = descs[num_desc - 1].addr	+ descs[num_desc - 1].len;
 		descs[num_desc].len = footer_len;
 		descs[num_desc].flags = descs[num_desc - 1].flags;
 		num_desc++;
