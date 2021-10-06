@@ -829,7 +829,7 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 			return -EINVAL;
 		}
 
-		virtq_destroy(&to_blk_ctx(vbq->q_impl)->common_ctx);
+		blk_virtq_destroy(to_blk_ctx(vbq->q_impl));
 		dev_attr->q_attrs[index].hw_available_index = state.hw_available_index;
 		dev_attr->q_attrs[index].hw_used_index = state.hw_used_index;
 	}

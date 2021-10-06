@@ -572,12 +572,6 @@ void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr)
 	priv->pg_id = attr->pg_id;
 }
 
-void virtq_destroy(struct virtq_common_ctx *q)
-{
-	if (q)
-		free(q->priv);
-}
-
 /**
  * virtq_suspend() - Request moving queue to suspend state
  * @q:	queue to move to suspend state

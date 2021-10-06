@@ -370,7 +370,6 @@ int virtq_progress(struct virtq_common_ctx *q, int thread_id);
 void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr);
 int virtq_suspend(struct virtq_common_ctx *q);
 bool virtq_is_suspended(struct virtq_common_ctx *q);
-void virtq_destroy(struct virtq_common_ctx *q);
 struct virtq_cmd *
 virtq_rx_cb_common_set(struct virtq_priv *priv, void *data);
 bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
