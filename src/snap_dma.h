@@ -22,6 +22,7 @@
 
 #define SNAP_DMA_Q_OPMODE     "SNAP_DMA_Q_OPMODE"
 #define SNAP_DMA_Q_IOV_SUPP   "SNAP_DMA_Q_IOV_SUPP"
+#define SNAP_DMA_Q_DBMODE     "SNAP_DMA_Q_DBMODE"
 
 #define SNAP_DMA_Q_MAX_IOV_CNT		128
 
@@ -102,6 +103,12 @@ struct snap_dv_dma_completion {
 	struct snap_dma_completion *comp;
 };
 
+enum snap_db_ring_flag {
+	SNAP_DB_RING_BATCH = 0,
+	SNAP_DB_RING_IMM   = 1,
+	SNAP_DB_RING_API   = 2
+};
+
 struct snap_dv_qp {
 	struct mlx5dv_qp  qp;
 	uint16_t          pi;
@@ -113,6 +120,9 @@ struct snap_dv_qp {
 	struct ibv_mr              *opaque_mr;
 	/* true if tx db is in the non cacheable memory */
 	bool tx_db_nc;
+	enum snap_db_ring_flag db_flag;
+	bool tx_need_ring_db;
+	struct mlx5_wqe_ctrl_seg *ctrl;
 };
 
 struct snap_dv_cq {

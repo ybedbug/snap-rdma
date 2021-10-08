@@ -14,6 +14,7 @@
 #define SNAP_DMA_INTERNAL_H
 
 #include "snap_dma.h"
+#include "snap.h"
 
 /* memory barriers */
 
@@ -101,7 +102,6 @@ snap_set_ctrl_seg(struct mlx5_wqe_ctrl_seg *ctrl, uint16_t pi,
 
 static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
-	dv_qp->pi++;
 	/* 8.9.3.1  Posting a Work Request to Work Queue
 	 * 1. Write WQE to the WQE buffer sequentially to previously-posted
 	 * WQE (on WQEBB granularity)
@@ -153,5 +153,18 @@ static inline void snap_dv_set_comp(struct snap_dv_qp *dv_qp, uint16_t pi,
 
 	dv_qp->comps[pi].n_outstanding = dv_qp->n_outstanding + n_bb;
 	dv_qp->n_outstanding = 0;
+}
+
+static inline void snap_dv_wqe_submit(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
+{
+	if (dv_qp->db_flag == SNAP_DB_RING_BATCH) {
+		dv_qp->tx_need_ring_db = true;
+		dv_qp->ctrl = ctrl;
+		dv_qp->pi++;
+	} else if (dv_qp->db_flag == SNAP_DB_RING_IMM) {
+		snap_dv_ring_tx_db(dv_qp, ctrl);
+	} else {
+		snap_error("db ring mode:%d do not supported now", dv_qp->db_flag);
+	}
 }
 #endif /* SNAP_DMA_INTERNAL_H */

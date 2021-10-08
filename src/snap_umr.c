@@ -180,7 +180,8 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 
 	dv_qp->pi += (umr_wqe_n_bb - 1);
 
-	snap_dv_ring_tx_db(dv_qp, ctrl);
+	snap_dv_wqe_submit(dv_qp, ctrl);
+
 	snap_dv_set_comp(dv_qp, pi, comp, fm_ce_se, umr_wqe_n_bb);
 
 	klm_mkey->addr = klm_mtt[0].address;

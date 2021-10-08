@@ -27,6 +27,7 @@
 
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_IOV_SUPP, 0);
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_DBMODE, 0);
 
 /* GGA specific */
 
@@ -438,8 +439,10 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (rc)
 		return rc;
 
-	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA)
+	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA) {
 		q->tx_available = q->sw_qp.dv_qp.qp.sq.wqe_cnt;
+		q->sw_qp.dv_qp.db_flag = snap_env_getenv(SNAP_DMA_Q_DBMODE);
+	}
 
 	rc = snap_alloc_rx_wqes(&q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
 	if (rc)
@@ -1810,7 +1813,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	dseg = (struct mlx5_wqe_data_seg *)(rseg + 1);
 	mlx5dv_set_data_seg(dseg, len, lkey, (intptr_t)buf);
 
-	snap_dv_ring_tx_db(dv_qp, ctrl);
+	snap_dv_wqe_submit(dv_qp, ctrl);
 
 	/* it is better to start dma as soon as possible and do
 	 * bookkeeping later
@@ -2025,7 +2028,7 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 
 	dv_qp->pi += (*n_bb - 1);
 
-	snap_dv_ring_tx_db(dv_qp, ctrl);
+	snap_dv_wqe_submit(dv_qp, ctrl);
 
 	snap_dv_set_comp(dv_qp, pi, flush_comp, fm_ce_se, *n_bb);
 	return 0;
@@ -2200,6 +2203,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 {
 	struct mlx5_cqe64 *cqe;
 	struct snap_dma_completion *comp;
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	int n;
 
 	n = 0;
@@ -2218,6 +2222,11 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 			comp->func(comp, mlx5dv_get_cqe_opcode(cqe));
 
 	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
+
+	if (dv_qp->tx_need_ring_db) {
+		dv_qp->tx_need_ring_db = false;
+		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
+	}
 
 	return n;
 }
@@ -2315,6 +2324,12 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 	struct mlx5_cqe64 *cqe;
 	int n;
 	struct snap_dma_completion *dma_comp;
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+
+	if (dv_qp->tx_need_ring_db) {
+		dv_qp->tx_need_ring_db = false;
+		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
+	}
 
 	n = 0;
 	do {
@@ -2396,7 +2411,7 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 	mlx5dv_set_data_seg(&gga_wqe->gather, len, s_lkey, saddr);
 	mlx5dv_set_data_seg(&gga_wqe->scatter, len, d_lkey, daddr);
 
-	snap_dv_ring_tx_db(dv_qp, (struct mlx5_wqe_ctrl_seg *)ctrl);
+	snap_dv_wqe_submit(dv_qp, ctrl);
 
 	snap_dv_set_comp(dv_qp, comp_idx, comp, fm_ce_se, 1);
 	return 0;
