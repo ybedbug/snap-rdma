@@ -12,7 +12,8 @@
 
 #include "snap_virtio_blk_ctrl.h"
 #include "snap_virtio_blk_virtq.h"
-#include "virtio_blk_ext.h"
+#include <linux/virtio_blk.h>
+#include <linux/virtio_config.h>
 #include <sys/mman.h>
 
 
