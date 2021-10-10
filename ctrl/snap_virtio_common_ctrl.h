@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
-#include "virtio_blk_ext.h"
 #include "snap.h"
 #include "snap_virtio_common.h"
 #include "snap_poll_groups.h"
@@ -31,11 +30,26 @@ enum snap_virtio_ctrl_type {
 };
 
 /*
+ * Device status field according to virtio spec v1.1 (section 2.1)
+ *
+ * The virtio device state is discussed between device and driver
+ * over the `device_status` PCI bar register, in a "bitmask" mode;
+ * a.k.a multiple "statuses" can be configured simultaneously.
+ *
+ * Full description of statuses can be found on virtio spec ducomentation.
+ *
  * NOTE: RESET status is unique, as instead of raising a bit in register,
  *       driver *unsets* all bits on register.
- *       We set it as an additional state for convenience reasons.
  */
-#define VIRTIO_CONFIG_S_RESET 0
+enum snap_virtio_common_device_status {
+	SNAP_VIRTIO_DEVICE_S_RESET = 0,
+	SNAP_VIRTIO_DEVICE_S_ACKNOWLEDGE = 1 << 0,
+	SNAP_VIRTIO_DEVICE_S_DRIVER = 1 << 1,
+	SNAP_VIRTIO_DEVICE_S_DRIVER_OK = 1 << 2,
+	SNAP_VIRTIO_DEVICE_S_FEATURES_OK = 1 << 3,
+	SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET = 1 << 6,
+	SNAP_VIRTIO_DEVICE_S_FAILED = 1 << 7,
+};
 
 /**
  * enum snap_virtio_ctrl_state - Virtio controller internal state

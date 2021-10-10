@@ -39,7 +39,7 @@
  * for the device to use.
  */
 #define SNAP_VIRTIO_CTRL_LIVE_DETECTED(vctrl) \
-		!!(vctrl->bar_curr->status & VIRTIO_CONFIG_S_DRIVER_OK)
+		!!(vctrl->bar_curr->status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK)
 
 /**
  * snap_virtio_ctrl_critical_bar_change_detected
@@ -337,7 +337,7 @@ static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
 
 static int snap_virtio_ctrl_device_error(struct snap_virtio_ctrl *ctrl)
 {
-	ctrl->bar_curr->status |= VIRTIO_CONFIG_S_NEEDS_RESET;
+	ctrl->bar_curr->status |= SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET;
 	return snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_DEV_STATUS,
 					   ctrl->bar_curr);
 }
@@ -1750,10 +1750,10 @@ int snap_virtio_ctrl_should_recover(struct snap_virtio_ctrl *ctrl)
 	rc = ctrl->bar_ops->get_attr(ctrl, &vattr);
 	if (rc)
 		return rc < 0 ? rc : -rc;
-	if (vattr.reset || (vattr.status & VIRTIO_CONFIG_S_NEEDS_RESET))
+	if (vattr.reset || (vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET))
 		is_reset = 1;
 	if (vattr.enabled) {
-		if (!is_reset && (vattr.status & VIRTIO_CONFIG_S_DRIVER_OK))
+		if (!is_reset && (vattr.status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
 			is_recovery_needed = 1;
 	}
 	if (!is_recovery_needed) {
