@@ -151,7 +151,8 @@ static int alloc_aux(struct virtq_cmd *cmd, uint32_t seg_max)
 
 	cmd->aux = calloc(1, aux_size);
 	if (!cmd->aux) {
-		snap_error("failed to allocate aux memory for virtq %d\n", cmd->idx);
+		snap_error("failed to allocate aux memory (%ld bytes) for virtq %d cmd %d\n",
+			   aux_size, cmd->vq_priv->vq_ctx->idx, cmd->idx);
 		return -ENOMEM;
 	}
 
@@ -160,7 +161,8 @@ static int alloc_aux(struct virtq_cmd *cmd, uint32_t seg_max)
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
 	if (!cmd->aux_mr) {
-		snap_error("failed to register mr for virtq %d\n", cmd->idx);
+		snap_error("failed to register mr for virtq %d cmd %d\n",
+			   cmd->vq_priv->vq_ctx->idx, cmd->idx);
 		free(cmd->aux);
 		return -1;
 	}
@@ -187,8 +189,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->common_cmd.vq_priv->merge_descs = snap_env_getenv(VIRTIO_BLK_SNAP_MERGE_DESCS);
 	cmd->common_cmd.ftr = calloc(1, sizeof(struct virtio_blk_outftr));
 	if (!cmd->common_cmd.ftr) {
-		snap_error("failed to allocate footer for virtq %d\n",
-			   idx);
+		snap_error("failed to allocate footer for virtq %d cmd %d\n",
+			   vq_priv->vq_ctx->idx, idx);
 		return -ENOMEM;
 	}
 	if (vq_priv->zcopy) {
@@ -200,8 +202,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 
 		cmd->iov = calloc(seg_max, sizeof(struct iovec));
 		if (!cmd->iov) {
-			snap_error("failed to allocate iov for virtq %d\n",
-				   idx);
+			snap_error("failed to allocate iov for virtq %d cmd %d\n",
+				   vq_priv->vq_ctx->idx, idx);
 			return -ENOMEM;
 		}
 	}
@@ -218,7 +220,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 		cmd->common_cmd.req_size = req_size;
 		cmd->common_cmd.buf = to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_malloc(req_size + aux_size);
 		if (!cmd->common_cmd.buf) {
-			snap_error("failed to allocate memory for virtq %d\n", idx);
+			snap_error("failed to allocate memory for virtq %d cmd %d\n",
+				   vq_priv->vq_ctx->idx, idx);
 			ret = -ENOMEM;
 			goto free_iov;
 		}
@@ -227,7 +230,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 						IBV_ACCESS_REMOTE_WRITE |
 						IBV_ACCESS_LOCAL_WRITE);
 		if (!cmd->common_cmd.mr) {
-			snap_error("failed to register mr for virtq %d\n", idx);
+			snap_error("failed to register mr for virtq %d cmd %d\n",
+				   vq_priv->vq_ctx->idx, idx);
 			ret = -1;
 			goto free_cmd_buf;
 		}
@@ -338,7 +342,8 @@ static int virtq_alloc_desc_buf(struct virtq_cmd *cmd, size_t old_len, size_t le
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
 	if (!new_aux_mr) {
-		snap_error("failed to register mr for virtq %d\n", cmd->idx);
+		snap_error("failed to register mr for virtq %d cmd %d\n",
+			   cmd->vq_priv->vq_ctx->idx, cmd->idx);
 		free(new_aux);
 		goto err;
 	}

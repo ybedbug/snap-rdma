@@ -191,7 +191,8 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 	}
 	cmd->iov = calloc(iovcnt, sizeof(struct iovec));
 	if (!cmd->iov) {
-		snap_error("failed to allocate iov for virtq %d\n", idx);
+		snap_error("failed to allocate iov for virtq %d cmd %d\n",
+			   vq_priv->vq_ctx->idx, idx);
 		return -ENOMEM;
 	}
 
@@ -202,7 +203,8 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 
 		cmd->common_cmd.buf = to_fs_dev_ops(&vq_priv->virtq_dev)->dma_malloc(req_size + aux_size);
 		if (!cmd->common_cmd.buf) {
-			snap_error("failed to allocate memory for virtq %d\n", idx);
+			snap_error("failed to allocate memory for virtq %d cmd %d\n",
+				   vq_priv->vq_ctx->idx, idx);
 			ret = -ENOMEM;
 			goto free_iov;
 		}
@@ -212,7 +214,8 @@ static int init_fs_virtq_cmd(struct fs_virtq_cmd *cmd, int idx,
 						IBV_ACCESS_REMOTE_WRITE |
 						IBV_ACCESS_LOCAL_WRITE);
 		if (!cmd->common_cmd.mr) {
-			snap_error("failed to register mr for virtq %d\n", idx);
+			snap_error("failed to register mr for virtq %d cmd %d\n",
+				   vq_priv->vq_ctx->idx, idx);
 			ret = -1;
 			goto free_cmd_buf;
 		}
@@ -413,7 +416,8 @@ static int virtq_alloc_req_dbuf(struct fs_virtq_cmd *cmd, size_t len)
 	cmd->common_cmd.req_mr = ibv_reg_mr(cmd->common_cmd.vq_priv->pd, cmd->common_cmd.req_buf, len,
 				 mr_access);
 	if (!cmd->common_cmd.req_mr) {
-		snap_error("failed to register mr for commmand %d\n", cmd->common_cmd.idx);
+		snap_error("failed to register mr for virtq %d cmd %d\n",
+			   cmd->common_cmd.vq_priv->vq_ctx->idx, cmd->common_cmd.idx);
 		error = EINVAL;
 		goto free_buf;
 	}
