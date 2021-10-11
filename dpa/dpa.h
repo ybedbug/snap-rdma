@@ -60,13 +60,11 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
  * Return:
  * Mailbox address
  */
-static inline void *dpa_mbox()
+static inline void *dpa_mbox(struct snap_dpa_tcb *tcb)
 {
-	extern void *mbox_base;
-	extern uint32_t mbox_lkey;
 
-	dpa_window_set_mkey(mbox_lkey);
-	return mbox_base;
+	dpa_window_set_mkey(tcb->mbox_lkey);
+	return (void *)tcb->mbox_address;
 }
 
 #endif

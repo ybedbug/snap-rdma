@@ -14,9 +14,10 @@
 
 int main()
 {
+	struct snap_dpa_tcb *tcb= NULL;
 	dpa_print_string("hello, i am dummy dpa code\n");
-	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
+	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_STOP);
+	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
 	dpa_print_string("All done. Exiting\n");
 
 	return 0;

@@ -23,14 +23,6 @@ static struct snap_dpa_app dpa_virtq_app = SNAP_DPA_APP_INIT_ATTR;
 #define SNAP_DPA_VIRTQ_BBUF_SIZE  4096
 #define SNAP_DPA_VIRTQ_BBUF_ALIGN 4096
 
-struct snap_dpa_virtq {
-	struct snap_dpa_thread *dpa_worker;
-	struct ibv_mr *dpa_window_mr;
-	void *dpa_window;
-	/* hack to do window copy without xgvmi mkey */
-	struct ibv_mr *host_driver_mr;
-};
-
 _Static_assert(sizeof(struct snap_dpa_virtq) < sizeof(struct snap_virtio_queue),
 		"Ooops, struct snap_dpa_virtq is too big");
 

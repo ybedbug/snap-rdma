@@ -108,6 +108,8 @@ TEST_F(SnapDpaTest, create_thread) {
 
 extern "C" {
 #include "snap_virtio_common.h"
+#include "snap_dpa_common.h"
+#include "snap_dpa_virtq.h"
 struct snap_virtio_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr);
 int virtq_blk_dpa_destroy(struct snap_virtio_queue *vbq);
@@ -170,6 +172,67 @@ TEST_F(SnapDpaTest, dpa_virtq_copy_avail) {
 	//printf("VQ is running\n"); getchar();
 	virtq_blk_dpa_query(vq, &attr);
 	EXPECT_EQ(42, attr.hw_available_index);
+
+	virtq_blk_dpa_destroy(vq);
+
+	snap_close(ctx);
+}
+
+/* Basic test for the DPA window copy machine */
+TEST_F(SnapDpaTest, dpa_two_virtq_create) {
+	struct snap_context *ctx;
+	struct snap_virtio_queue *vq;
+	struct snap_dpa_virtq *dvq;
+	struct snap_device sdev;
+	struct snap_virtio_common_queue_attr attr = {0};
+	struct vring_avail *avail;
+	char page[4096];
+	void *mbox;
+	struct dpa_virtq_cmd *cmd;
+	struct snap_dpa_rsp *rsp;
+	/* TODO:
+	 * make this test CX7 specific, use phys memory for
+	 * the virtio rings.
+	 */
+	ctx = snap_open(get_ib_ctx()->device);
+	ASSERT_TRUE(ctx);
+	/* hack to allow working on simx */
+	sdev.sctx = ctx;
+
+	/* create our dummy virtio device (only avail ring)
+	 * and virtq implementation
+	 * modify avail index, and wait till dpu reads it and
+	 * updates our hw_avail_index
+	 */
+	avail = (struct vring_avail *)page;
+	attr.vattr.idx = 0;
+	attr.vattr.device = (uintptr_t)avail;
+
+	vq = virtq_blk_dpa_create(&sdev, &attr);
+	ASSERT_TRUE(vq);
+	virtq_blk_dpa_query(vq, &attr);
+	dvq = (snap_dpa_virtq *)vq;
+	mbox = snap_dpa_thread_mbox_acquire(dvq->dpa_worker);
+	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
+	/* convert vq_attr to the create command */
+	memset(&cmd->cmd_create, 0, sizeof(cmd->cmd_create));
+	/* at the momemnt pass only avail/used/descr addresses */
+	cmd->cmd_create.idx = 1;
+	cmd->cmd_create.size = attr.vattr.size;
+	cmd->cmd_create.desc = attr.vattr.desc;
+	cmd->cmd_create.driver = attr.vattr.driver;
+	cmd->cmd_create.device = attr.vattr.device;
+	cmd->cmd_create.dpu_avail_mkey = dvq->dpa_window_mr->lkey;
+	cmd->cmd_create.dpu_avail_ring_addr = (uint64_t)dvq->dpa_window;
+
+	cmd->cmd_create.host_mkey = dvq->host_driver_mr->lkey;
+	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_CREATE);
+	rsp = snap_dpa_rsp_wait(mbox);
+
+	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_DESTROY);
+	rsp = snap_dpa_rsp_wait(mbox);
+	snap_dpa_thread_mbox_release(dvq->dpa_worker);
+	EXPECT_EQ(rsp->status ,SNAP_DPA_RSP_OK);
 
 	virtq_blk_dpa_destroy(vq);
 

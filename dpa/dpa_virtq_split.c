@@ -39,13 +39,30 @@ struct dpa_virtq {
 	uint16_t dpa_avail_idx;
 };
 
+#define DPA_CACHE_LINE_BYTES 64
 #define DPA_VIRTQ_MAX 8
-static struct dpa_virtq virtqs[DPA_VIRTQ_MAX]; // per thread
+static struct dpa_virtq *virtqs[DPA_VIRTQ_MAX]; // per thread
 
 /* currently set so that we have 1s polling interval on simx */
 #define COMMAND_DELAY 10000
 
-int dpa_virtq_create(struct snap_dpa_cmd *cmd)
+void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size)
+{
+	void *data_add = (void *) tcb->data_address + tcb->data_used;
+	//size is rounded up to cache line (64 bytes)
+	if (size % DPA_CACHE_LINE_BYTES)
+		tcb->data_used += size + (DPA_CACHE_LINE_BYTES - (size % DPA_CACHE_LINE_BYTES));
+	else tcb->data_used += size;
+
+	return data_add;
+}
+
+void dpa_thread_free(struct snap_dpa_tcb *tcb, void *addr)
+{
+
+}
+
+int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq;
@@ -58,7 +75,8 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 		return SNAP_DPA_RSP_ERR;
 	}
 
-	vq = &virtqs[idx];
+	vq = (struct dpa_virtq *) dpa_thread_alloc(tcb, sizeof(struct dpa_virtq));
+	virtqs[idx] = vq;
 	/* TODO: check that it is free and other validations */
 
 	vq->idx = idx;
@@ -95,7 +113,7 @@ int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 	return SNAP_DPA_RSP_OK;
 }
 
-static int do_command(int *done)
+static int do_command(struct snap_dpa_tcb *tcb, int *done)
 {
 	static uint32_t last_sn; // per thread
 
@@ -105,7 +123,7 @@ static int do_command(int *done)
 	*done = 0;
 	dpa_print_string("command check\n");
 
-	cmd = snap_dpa_mbox_to_cmd(dpa_mbox());
+	cmd = snap_dpa_mbox_to_cmd(dpa_mbox(tcb));
 
 	if (cmd->sn == last_sn)
 		return 0;
@@ -120,7 +138,7 @@ static int do_command(int *done)
 			*done = 1;
 			break;
 		case DPA_VIRTQ_CMD_CREATE:
-			rsp_status = dpa_virtq_create(cmd);
+			rsp_status = dpa_virtq_create(tcb, cmd);
 			break;
 		case DPA_VIRTQ_CMD_DESTROY:
 			rsp_status = dpa_virtq_destroy(cmd);
@@ -135,11 +153,11 @@ static int do_command(int *done)
 			dpa_print_string("unsupported command\n");
 	}
 
-	snap_dpa_rsp_send(dpa_mbox(), rsp_status);
+	snap_dpa_rsp_send(dpa_mbox(tcb), rsp_status);
 	return 0;
 }
 
-static inline int process_commands(int *done)
+static inline int process_commands(struct snap_dpa_tcb *tcb, int *done)
 {
 	static unsigned count; //per thread
 
@@ -148,7 +166,7 @@ static inline int process_commands(int *done)
 		return 0;
 	}
 
-	return do_command(done);
+	return do_command(tcb, done);
 }
 
 static inline void virtq_progress()
@@ -164,13 +182,13 @@ static inline void virtq_progress()
 		return;
 
 	for (i = 0; i < n_virtqs; i++) {
-		vq = &virtqs[i];
+		vq = virtqs[i];
 
 		/* load avail index */
 		dpa_window_set_mkey(vq->host_mkey);
 		avail_ring = (void *)window_get_base() + vq->device;
 		host_avail_idx = avail_ring->idx;
-
+		dpa_print_one_arg("vq->dpa_avail_idx: ", vq->dpa_avail_idx);
 		if (vq->dpa_avail_idx == host_avail_idx)
 			continue;
 
@@ -185,14 +203,14 @@ static inline void virtq_progress()
 	}
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	int done;
 	int ret;
-
-	dpa_print_string("virtq_split starting\n");
+	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *) argv;
+	dpa_print_one_arg("virtq_split starting ",(uint64_t) tcb->mbox_address);
 	do {
-		ret = process_commands(&done);
+		ret = process_commands(tcb, &done);
 		virtq_progress();
 	} while (!done);
 

@@ -38,6 +38,13 @@
 struct snap_dpa_tcb {
 	uint64_t mbox_address;
 	uint32_t mbox_lkey;
+	uint64_t data_address;
+	uint64_t data_used;
+};
+
+struct snap_dpa_attr {
+	void *mbox_address;
+	uint32_t mbox_lkey;
 };
 
 enum {

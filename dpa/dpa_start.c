@@ -21,8 +21,7 @@ uint32_t mbox_lkey __attribute__((section (".data"))); // per thread
 static void dpa_mbox_config(struct snap_dpa_tcb *tcb)
 {
 	dpa_window_set_mkey(tcb->mbox_lkey);
-	mbox_base = (void *)window_get_base() + tcb->mbox_address;
-	mbox_lkey = tcb->mbox_lkey;
+	tcb->mbox_address = window_get_base() + tcb->mbox_address;
 }
 
 int __snap_dpa_thread_start(uint64_t tcb_addr)
@@ -34,13 +33,12 @@ int __snap_dpa_thread_start(uint64_t tcb_addr)
 
 	dpa_print_string("==> Starting DPA thread\n");
 	dpa_print_one_arg("TCB : ", tcb_addr);
-	dpa_print_one_arg("Mailbox base: ", (uint64_t)mbox_base);
+	dpa_print_one_arg("Mailbox base: ", (uint64_t)tcb->mbox_address);
 
-	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
+	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_START);
 	/* may be let main do it after init is done */
-	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
-
-	ret = main();
+	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+	ret = main(1, tcb);
 	dpa_print_string("==> DPA thread done\n");
 	return ret;
 }

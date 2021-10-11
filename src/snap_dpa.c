@@ -17,6 +17,35 @@
 
 #include "snap_dpa.h"
 
+struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
+{
+	struct flexio_memory *mem = (struct flexio_memory *) calloc(1, sizeof(struct flexio_memory));
+
+	if (!mem) {
+		snap_error("Failed to allocate flexio_memory\n");
+		return 0;
+	}
+	mem->size = size;
+	if (flexio_mem_alloc(dctx->dpa_proc, mem)) {
+		snap_error("Failed to allocate dpa memory\n");
+		free(mem);
+		return 0;
+	}
+
+	return mem;
+}
+
+void snap_dpa_mem_free(struct flexio_memory *mem)
+{
+	flexio_mem_free(mem);
+	free(mem);
+}
+
+void *snap_dpa_mem_addr(struct flexio_memory *mem)
+{
+	return (void *)mem->base_addr;
+}
+
 /**
  * snap_dpa_process_create() - create DPA application process
  * @ctx:         snap context
@@ -166,6 +195,11 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mr;
 	}
 
+	thr->mem = snap_dpa_mem_alloc(dctx, 4096);
+	if (!thr->mem)
+		goto free_window;
+
+	tcb.data_address = thr->mem->base_addr;
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
@@ -174,7 +208,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	st = flexio_copy_from_host(thr->dctx->dpa_proc, (uintptr_t)&tcb, sizeof(tcb), &dpa_tcb_addr);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to prepare DPA thread control block: %d\n", st);
-		goto free_window;
+		goto free_mem;
 	}
 
 	/*
@@ -204,6 +238,8 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 
 free_tcb:
 	flexio_memory_free(dpa_tcb_addr);
+free_mem:
+	snap_dpa_mem_free(thr->mem);
 free_window:
 	flexio_window_destroy(thr->cmd_window);
 free_mr:
@@ -225,6 +261,7 @@ static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
 	pthread_mutex_destroy(&thr->cmd_lock);
 	free(thr->cmd_mbox);
 	free(thr);
+	snap_dpa_mem_free(thr->mem);
 }
 
 /**
@@ -366,3 +403,4 @@ void snap_dpa_app_stop(struct snap_dpa_app *app)
 
 	pthread_mutex_unlock(&app->lock);
 }
+
