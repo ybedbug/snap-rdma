@@ -91,7 +91,7 @@
     git_branch:
       - main:
           conf_file: '.ci/job_matrix_dev.yaml'
-      - mlnx_libsnap_1_2_0:
+      - mlnx_libsnap_1_3_2:
           conf_file: '.ci/job_matrix.yaml'
     jjb_git: 'git@github.com:Mellanox/snap-rdma.git'
     jjb_owner: 'andriih@nvidia.com'
