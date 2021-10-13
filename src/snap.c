@@ -211,7 +211,7 @@ static void snap_query_vuid(struct snap_pci *pf)
 	uint8_t *out;
 	struct snap_pci *vf;
 
-	if (!snap_query_vuid_is_supported(pf->sctx->context))
+	if (!pf->sctx->vuid_supported)
 		return;
 
 	DEVX_SET(query_vuid_in, in, opcode, MLX5_CMD_OP_QUERY_VUID);
@@ -242,7 +242,8 @@ static void snap_query_vuid(struct snap_pci *pf)
 	}
 
 	vuid_len = DEVX_FLD_SZ_BYTES(vuid, vuid);
-	strncpy(pf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
+	if (!pf->num_vfs)
+		strncpy(pf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
 
 	if (pf->num_vfs > 0) {
 		for (i = 0; i < pf->num_vfs; i++) {
@@ -308,7 +309,8 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 
 	}
 
-	snap_query_vuid(pf);
+	if (num_vfs > 0)
+		snap_query_vuid(pf);
 
 	free(out);
 	return 0;
@@ -3713,6 +3715,8 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 		errno = EINVAL;
 		goto out_free;
 	}
+
+	sctx->vuid_supported = snap_query_vuid_is_supported(context);
 
 	rc = snap_alloc_functions(sctx);
 	if (rc) {

@@ -384,6 +384,8 @@ struct snap_context {
 
 	TAILQ_HEAD(, snap_device)		device_list;
 	TAILQ_HEAD(, snap_hotplug_device)	hotplug_device_list;
+
+	bool					vuid_supported;
 };
 
 #define SNAP_ALIGN_FLOOR(val, align) \
