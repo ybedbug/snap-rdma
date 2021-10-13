@@ -11,6 +11,9 @@ credentials:
 failFast: false
 kubernetes:
   cloud: swx-k8s-spray
+  arch_table:
+    aarch64:
+      nodeSelector: 'bluefield=true'
 
 volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}
