@@ -272,12 +272,7 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 	if (ret)
 		goto free_vfs_query;
 
-	pf->num_vfs = DEVX_GET(query_emulated_functions_info_out, out,
-			       num_emulated_functions);
-	if (pf->num_vfs == 0) {
-		ret = 0;
-		goto free_vfs_query;
-	}
+	pf->num_vfs = num_vfs;
 
 	pf->vfs = calloc(pf->num_vfs, sizeof(struct snap_pci));
 	if (!pf->vfs)
