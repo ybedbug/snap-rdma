@@ -18,8 +18,8 @@
 
 #include "snap_env.h"
 
-#define SNA_ENV_DUMP_FORMAT "%-27s : %-7s : %-3lld"
-#define SNA_ENV_MAX_ENTRIES_NUM 8
+#define SNAP_ENV_DUMP_FORMAT "%-27s : %-7s : %-3lld"
+#define SNAP_ENV_MAX_ENTRIES_NUM 32
 
 struct mlnx_snap_env {
 	const char *name;
@@ -29,7 +29,7 @@ struct mlnx_snap_env {
 };
 
 static int last_used_idx;
-static struct mlnx_snap_env env_arr[SNA_ENV_MAX_ENTRIES_NUM + 1] = {{0}};
+static struct mlnx_snap_env env_arr[SNAP_ENV_MAX_ENTRIES_NUM + 1] = {{0}};
 
 static void snap_env_set_val(struct mlnx_snap_env *env)
 {
@@ -85,7 +85,7 @@ static int snap_env_dump_one_entry(struct mlnx_snap_env *env,
 {
 	int written;
 
-	written = snprintf(buf, buf_size, SNA_ENV_DUMP_FORMAT, env->name,
+	written = snprintf(buf, buf_size, SNAP_ENV_DUMP_FORMAT, env->name,
 			   env->defined ? "set" : "not set", env->default_val);
 	return written;
 }
@@ -109,7 +109,7 @@ int snap_env_add(const char *env_name, int default_val)
 	if (env) // already added
 		return 0;
 
-	if (last_used_idx < SNA_ENV_MAX_ENTRIES_NUM) {
+	if (last_used_idx < SNAP_ENV_MAX_ENTRIES_NUM) {
 		env = &env_arr[last_used_idx++];
 		env->name = env_name;
 		env->default_val = default_val;
@@ -118,6 +118,9 @@ int snap_env_add(const char *env_name, int default_val)
 		return 0;
 	}
 
+	// Note: The logger might be not initialized at this point
+	printf("%s failed - increase the SNAP_ENV_MAX_ENTRIES_NUM (%d) value !\n",
+		__PRETTY_FUNCTION__, SNAP_ENV_MAX_ENTRIES_NUM);
 	return -EINVAL;
 }
 
