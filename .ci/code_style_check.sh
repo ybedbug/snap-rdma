@@ -7,9 +7,14 @@ DIRS_TO_CHECK="blk src ctrl rpc"
 
 code_style_check() {
 
-    if ! command -v checkpatch.pl &> /dev/null; then
-        echo "checkpatch.pl could not be found!"
-        exit 1
+    if test -f "./checkpatch.pl"; then
+    	CHECKPATCH_PL=./checkpatch.pl
+    else
+        if ! command -v checkpatch.pl &> /dev/null; then
+            echo "checkpatch.pl could not be found!"
+            exit 1
+        fi
+    	CHECKPATCH_PL=checkpatch.pl
     fi
 
     # Gather files to check with ext .c and .h
@@ -33,7 +38,7 @@ code_style_check() {
 
         out_log="$out_dir/${f##*/}.log"
 
-        HOME="${_home:-${HOME}}" checkpatch.pl \
+        HOME="${_home:-${HOME}}" $CHECKPATCH_PL \
             --mailback --no-tree --file --color=always \
             --summary-file --show-types $f | \
             tee -a $out_log || true

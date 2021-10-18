@@ -7,6 +7,9 @@ include_HEADERS = blk/snap_blk_dev.h  blk/snap_blk_ops.h  blk/snap_null_blk_dev.
 
 EXTRA_DIST = mlnx-libsnap.spec README.md autogen.sh debian rpc/snap_rpc.py
 
+style_check:
+	./code_style_check.sh
+
 if HAVE_GTEST
 #
 # Note: test target has a special meaning for the CI pipeline
