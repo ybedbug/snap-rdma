@@ -759,6 +759,15 @@ static void snap_nvme_teardown_sq_legacy_mode(struct snap_device *sdev,
 	}
 }
 
+static void generate_random_stream(unsigned int seed, uint8_t *buf, size_t len)
+{
+	int i;
+
+	srand(seed);
+	for (i = 0; i < len; i++)
+		buf[i] = (rand() % (UINT8_MAX - 1)) + 1;
+}
+
 /**
  * snap_nvme_create_sq_be() - Create a new NVMe snap SQ backend object
  * @sdev:       snap device
@@ -780,6 +789,7 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 	struct snap_nvme_sq_be *sq_be;
 	struct snap_alias_object *sq_alias = NULL;
 	uint32_t sq_obj_id;
+	uint8_t access_key[SNAP_ACCESS_KEY_LENGTH] = {0};
 
 	if (!attr->sq) {
 		snap_error("snap SQ must be provided\n");
@@ -816,9 +826,14 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 			   snap_get_dev_vhca_id(attr->qp->context),
 			   snap_get_dev_vhca_id(sdev->sctx->context));
 
+		/* Use original SQ obj_id as seed for random call */
+		generate_random_stream(attr->sq->sq->obj_id, access_key,
+				       SNAP_ACCESS_KEY_LENGTH);
+
 		if (snap_allow_other_vhca_access(sdev->sctx->context,
 						 MLX5_OBJ_TYPE_NVME_SQ,
-						 attr->sq->sq->obj_id, NULL)) {
+						 attr->sq->sq->obj_id,
+						 access_key)) {
 			snap_error("Failed to allow cross vhca access\n");
 			goto err;
 		}
@@ -826,7 +841,8 @@ snap_nvme_create_sq_be(struct snap_device *sdev,
 		sq_alias = snap_create_alias_object(attr->qp->context,
 						    MLX5_OBJ_TYPE_NVME_SQ,
 						    sdev->sctx->context,
-						    attr->sq->sq->obj_id, NULL);
+						    attr->sq->sq->obj_id,
+						    access_key);
 		if (!sq_alias) {
 			snap_error("Failed to create SQ alias\n");
 			goto err;

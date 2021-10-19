@@ -3911,7 +3911,8 @@ snap_create_alias_object(struct ibv_context *src_context,
 	DEVX_SET(alias_context, alias_in, object_id_to_be_accessed,
 		 dst_obj_id);
 	if (access_key)
-		memcpy(DEVX_ADDR_OF(alias_context, in, access_key), access_key,
+		memcpy(DEVX_ADDR_OF(alias_context, alias_in, access_key),
+		       access_key,
 		       DEVX_FLD_SZ_BYTES(alias_context, access_key));
 	alias->obj = mlx5dv_devx_obj_create(src_context, in, sizeof(in),
 					    out, sizeof(out));
