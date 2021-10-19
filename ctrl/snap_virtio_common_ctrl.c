@@ -421,7 +421,7 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		}
 
 		if (ctrl->bar_cbs.pre_flr) {
-			if (!ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
+			if (ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
 				return 0;
 		}
 		snap_close_device(ctrl->sdev);
