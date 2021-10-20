@@ -424,7 +424,9 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 			if (ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
 				return 0;
 		}
+
 		snap_close_device(ctrl->sdev);
+		ctrl->pending_flr = true;
 
 		/*
 		 * Per PCIe r4.0, sec 6.6.2, a device must complete a FLR
@@ -432,6 +434,8 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		 * only after FLR completes, so polling on this command.
 		 * Be more graceful and try to recover for 1 second.
 		 */
+
+		/* TODO: do this part asynchrounously */
 		for (i = 0; i < 100; i++) {
 			usleep(10000);
 			ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
@@ -439,14 +443,16 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 				if (i > 9)
 					snap_warn("FLR took more than 100ms");
 				ctrl->sdev->dd_data = dd_data;
+				ctrl->pending_flr = false;
 				if (ctrl->bar_cbs.post_flr)
 					ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 				break;
 			}
 		}
+
 		if (!ctrl->sdev) {
 			snap_error("virtio controller FLR failed\n");
-			ret = -ENODEV;
+			return -ENODEV;
 		}
 	} else {
 		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
@@ -812,6 +818,17 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 
 	snap_virtio_ctrl_progress_lock(ctrl);
 
+	/* TODO: do flr asynchrounously, in order not to block progress
+	 * when we have many VFs
+	 *
+	 * If flr was not finished we can only:
+	 * - finish flr, open snap device
+	 * - destroy the controller
+	 * Anything else is dangerous because snap device is not available
+	 */
+	if (ctrl->pending_flr)
+		goto out;
+
 	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING)
 		snap_virtio_ctrl_progress_suspend(ctrl);
 
@@ -820,8 +837,11 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 		goto out;
 
 	/* Handle device_status changes */
-	if (snap_virtio_ctrl_critical_bar_change_detected(ctrl))
+	if (snap_virtio_ctrl_critical_bar_change_detected(ctrl)) {
 		snap_virtio_ctrl_change_status(ctrl);
+		if (ctrl->pending_flr)
+			goto out;
+	}
 
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
 		snap_virtio_ctrl_change_num_vfs(ctrl);
@@ -976,7 +996,8 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 	free(ctrl->queues);
 	pthread_mutex_destroy(&ctrl->progress_lock);
 	snap_virtio_ctrl_bars_teardown(ctrl);
-	snap_close_device(ctrl->sdev);
+	if (!ctrl->pending_flr)
+		snap_close_device(ctrl->sdev);
 }
 
 /**

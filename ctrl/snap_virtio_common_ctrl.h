@@ -228,6 +228,8 @@ struct snap_virtio_ctrl {
 	bool pending_reset;
 	/* true if completion (commands handled by queues) should be sent in order */
 	bool force_in_order;
+	/* true if FLR was requested */
+	bool pending_flr;
 	struct snap_device_attr sdev_attr;
 	int lm_state;
 };

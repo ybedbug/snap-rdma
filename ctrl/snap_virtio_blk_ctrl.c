@@ -888,7 +888,8 @@ err:
 void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 {
 	snap_virtio_ctrl_stop(&ctrl->common);
-	snap_virtio_blk_teardown_device(ctrl->common.sdev);
+	if (!ctrl->common.pending_flr)
+		snap_virtio_blk_teardown_device(ctrl->common.sdev);
 	snap_virtio_ctrl_close(&ctrl->common);
 	free(ctrl);
 }
