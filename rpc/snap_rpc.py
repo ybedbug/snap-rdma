@@ -495,8 +495,6 @@ def main():
             params['quirks'] = args.quirks
         if args.rdma_device:
             params['rdma_device'] = args.rdma_device
-        if args.version:
-            params['version'] = args.version
         if args.mem:
             params['mem'] = args.mem
         if args.cntlid != -1:
@@ -534,8 +532,6 @@ def main():
                    default=-1, type=int, required=False)
     p.add_argument('-r', '--rdma_device', help='BlueField1 compatibility option. Should be '
                    'SF hca name. Usually "mlx5_2"',
-                   type=str, required=False)
-    p.add_argument('-vs', '--version', help='Host driver NVM Express specification version ',
                    type=str, required=False)
     p.add_argument('--mem', help='Memory model', type=str,
                    required=False, choices=['static', 'pool'])
