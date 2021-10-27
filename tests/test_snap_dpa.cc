@@ -119,7 +119,7 @@ int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
 
 TEST_F(SnapDpaTest, dpa_virtq) {
 	struct snap_context *ctx;
-	struct snap_virtio_blk_queue *vq;
+	struct snap_virtio_queue *vq;
 	struct snap_device sdev;
 	struct snap_virtio_common_queue_attr vattr;
 
@@ -139,7 +139,7 @@ TEST_F(SnapDpaTest, dpa_virtq) {
 /* Basic test for the DPA window copy machine */
 TEST_F(SnapDpaTest, dpa_virtq_copy_avail) {
 	struct snap_context *ctx;
-	struct snap_virtio_blk_queue *vq;
+	struct snap_virtio_queue *vq;
 	struct snap_device sdev;
 	struct snap_virtio_common_queue_attr attr = {0};
 	struct vring_avail *avail;

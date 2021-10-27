@@ -172,19 +172,19 @@ int snap_dpa_virtq_query(struct snap_dpa_virtq *vq,
 	return 0;
 }
 
-struct snap_virtio_blk_queue *virtq_blk_dpa_create(struct snap_device *sdev,
+struct snap_virtio_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 		struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_dpa_virtq *vq;
 	struct snap_dpa_virtq_attr dpa_attr = {};
 
-	dpa_attr.type_size = sizeof(struct snap_virtio_blk_queue);
+	dpa_attr.type_size = sizeof(struct snap_virtio_queue);
 	vq = snap_dpa_virtq_create(sdev, &dpa_attr, attr);
 
-	return (struct snap_virtio_blk_queue *)vq;
+	return (struct snap_virtio_queue *)vq;
 }
 
-int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq)
+int virtq_blk_dpa_destroy(struct snap_virtio_queue *vbq)
 {
 	struct snap_dpa_virtq *vq;
 
@@ -193,7 +193,7 @@ int virtq_blk_dpa_destroy(struct snap_virtio_blk_queue *vbq)
 	return 0;
 }
 
-int virtq_blk_dpa_query(struct snap_virtio_blk_queue *vbq,
+int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
 		struct snap_virtio_common_queue_attr *attr)
 {
 	struct snap_dpa_virtq *vq;
@@ -202,7 +202,7 @@ int virtq_blk_dpa_query(struct snap_virtio_blk_queue *vbq,
 	return snap_dpa_virtq_query(vq, attr);
 }
 
-int virtq_blk_dpa_modify(struct snap_virtio_blk_queue *vbq,
+int virtq_blk_dpa_modify(struct snap_virtio_queue *vbq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
 	return -1;

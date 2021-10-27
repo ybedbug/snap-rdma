@@ -61,7 +61,7 @@ struct __attribute__((packed)) dpa_virtq_cmd {
 	};
 };
 
-extern struct blk_virtq_q_ops snap_virtq_blk_dpa_ops;
+extern struct virtq_q_ops snap_virtq_blk_dpa_ops;
 
 #endif
 
