@@ -194,7 +194,10 @@ struct virtq_cmd {
 	bool use_dmem;
 	struct snap_virtio_ctrl_queue_counter *io_cmd_stat;
 	uint16_t cmd_available_index;
+	uint16_t indirect_pos;
+	uint16_t indirect_len;
 	bool use_seg_dmem;
+	bool is_indirect;
 };
 
 /**

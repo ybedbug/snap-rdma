@@ -176,26 +176,62 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 {
 	uint64_t srcaddr;
 	uint16_t in_ring_desc_addr;
+	size_t len;
 	int ret;
 	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
 
+	if (snap_unlikely(cmd->is_indirect)) {
+		/*IN_ORDER is not support now, so we need to sort indirect table*/
+		struct vring_desc *descs_tmp = malloc(cmd->indirect_len);
+		struct vring_desc *descs_indrect = &descs[cmd->indirect_pos];
+		uint16_t indirect_num = cmd->indirect_len/sizeof(struct vring_desc);
+		int i = 0, j = 0;
+
+		if (snap_unlikely(!descs_tmp)) {
+			ERR_ON_CMD(cmd, "failed to malloc data for cmd\n");
+			return VIRTQ_FETCH_DESC_ERR;
+		}
+		for (; i < indirect_num; i++) {
+			memcpy(&descs_tmp[i], &descs_indrect[j], sizeof(struct vring_desc));
+			if (descs_indrect[j].flags & VRING_DESC_F_NEXT)
+				j = descs_indrect[j].next;
+			else
+				break;
+		}
+		cmd->num_desc += i+1;
+		memcpy(descs_indrect, descs_tmp, cmd->indirect_len);
+		free(descs_tmp);
+		return VIRTQ_FETCH_DESC_DONE;
+	}
+
 	if (cmd->num_desc == 0) {
 		in_ring_desc_addr = cmd->descr_head_idx % cmd->vq_priv->vattr->size;
+		srcaddr = cmd->vq_priv->vattr->desc +
+			  in_ring_desc_addr * sizeof(struct vring_desc);
+		len = sizeof(struct vring_desc);
 		/* TODO add some indication about this case */
-	} else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT)
+	} else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_NEXT) {
 		in_ring_desc_addr = descs[cmd->num_desc - 1].next;
-	else
+		srcaddr = cmd->vq_priv->vattr->desc +
+		  in_ring_desc_addr * sizeof(struct vring_desc);
+		len = sizeof(struct vring_desc);
+	} else if (descs[cmd->num_desc - 1].flags & VRING_DESC_F_INDIRECT) {
+		srcaddr = descs[cmd->num_desc - 1].addr;
+		len = descs[cmd->num_desc - 1].len;
+		cmd->num_desc--;
+		cmd->is_indirect = true;
+		cmd->indirect_pos = cmd->num_desc;
+		cmd->indirect_len = len;
+	} else
 		return VIRTQ_FETCH_DESC_DONE;
 
 	if (cmd->vq_priv->ops->seg_dmem(cmd))
 		return VIRTQ_FETCH_DESC_ERR;
 
-	srcaddr = cmd->vq_priv->vattr->desc +
-		  in_ring_desc_addr * sizeof(struct vring_desc);
 	cmd->dma_comp.count = 1;
 	virtq_log_data(cmd, "READ_DESC: pa 0x%lx len %lu\n", srcaddr, sizeof(struct vring_desc));
 	ret = snap_dma_q_read(cmd->vq_priv->dma_q, &cmd->vq_priv->ops->get_descs(cmd)[cmd->num_desc],
-			sizeof(struct vring_desc), cmd->aux_mr->lkey, srcaddr,
+			len, cmd->aux_mr->lkey, srcaddr,
 			cmd->vq_priv->vattr->dma_mkey,
 			&(cmd->dma_comp));
 	if (ret)
@@ -203,7 +239,8 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 	/* Note: the num_desc should be incremented in case the success completion only.
 	 * The completion result is tested in virtq_sm_fetch_cmd_descs
 	 */
-	cmd->num_desc++;
+	if (!cmd->is_indirect)
+		cmd->num_desc++;
 	++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
 	return VIRTQ_FETCH_DESC_READ;
 }
@@ -654,6 +691,7 @@ virtq_rx_cb_common_set(struct virtq_priv *vq_priv, void *data)
 	cmd->req_buf = cmd->buf;
 	cmd->req_mr = cmd->mr;
 	cmd->cmd_available_index = vq_priv->ctrl_available_index;
+	cmd->is_indirect = false;
 	return cmd;
 }
 
