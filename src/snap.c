@@ -146,12 +146,13 @@ static void snap_free_virtual_functions(struct snap_pci *pf)
 {
 	int i;
 
-	if (pf->num_vfs == 0)
+	if ((pf->vfs == NULL) || (pf->num_vfs == 0))
 		return;
 
 	for (i = 0; i < pf->num_vfs ; i++)
 		snap_free_pci_bar(&pf->vfs[i]);
 	free(pf->vfs);
+	pf->vfs = NULL;
 }
 
 static enum snap_pci_type snap_pf_to_vf_type(enum snap_pci_type pf_type)
