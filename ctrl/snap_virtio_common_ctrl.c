@@ -444,11 +444,12 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 					snap_warn("FLR took more than 100ms");
 				ctrl->sdev->dd_data = dd_data;
 				ctrl->pending_flr = false;
-				if (ctrl->bar_cbs.post_flr)
-					ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 				break;
 			}
 		}
+
+		if (ctrl->bar_cbs.post_flr)
+			ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 
 		if (!ctrl->sdev) {
 			snap_error("virtio controller FLR failed\n");
