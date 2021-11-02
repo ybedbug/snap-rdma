@@ -204,20 +204,65 @@ static bool snap_query_vuid_is_supported(struct ibv_context *context)
 	       capability.cmd_hca_cap2.query_vuid);
 }
 
-static void snap_query_vuid(struct snap_pci *pf)
+static int snap_query_vuid(struct snap_pci *pci, uint8_t *out, int outlen, bool query_vfs)
 {
-	int ret, i, vuid_len;
-	int output_size;
+	int ret, num_entries;
 	uint8_t in[DEVX_ST_SZ_BYTES(query_vuid_in)] = {0};
-	uint8_t *out;
-	struct snap_pci *vf;
 
-	if (!pf->sctx->vuid_supported)
-		return;
+	if (!pci->sctx->vuid_supported)
+		return -1;
 
 	DEVX_SET(query_vuid_in, in, opcode, MLX5_CMD_OP_QUERY_VUID);
-	DEVX_SET(query_vuid_in, in, vhca_id, pf->mpci.vhca_id);
-	DEVX_SET(query_vuid_in, in, query_vfs_vuid, (pf->num_vfs > 0));
+	DEVX_SET(query_vuid_in, in, vhca_id, pci->mpci.vhca_id);
+	DEVX_SET(query_vuid_in, in, query_vfs_vuid, query_vfs);
+
+	ret = mlx5dv_devx_general_cmd(pci->sctx->context, in, sizeof(in), out, outlen);
+	if (ret) {
+		snap_warn("Query functions info failed, ret:%d\n", ret);
+		return ret;
+	}
+
+	// Check if number of vuid entries in output matches expected num of vfs and pf
+	num_entries =  DEVX_GET(query_vuid_out, out, num_of_entries);
+	if ((query_vfs && pci->num_vfs + 1 != num_entries) || (!query_vfs && num_entries != 1)) {
+		snap_warn("Failed to set vuid.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static void snap_query_pci_vuid(struct snap_pci *pci)
+{
+	int output_size, vuid_len;
+	uint8_t *out;
+
+	output_size = DEVX_ST_SZ_BYTES(query_vuid_out) +
+		DEVX_ST_SZ_BYTES(vuid);
+
+	out = calloc(1, output_size);
+	if (!out) {
+		snap_warn("Alloc memory for output structure failed\n");
+		return;
+	}
+
+	// query vuid for pci without vfs
+	if (snap_query_vuid(pci, out, output_size, false))
+		goto free_out;
+
+	vuid_len = DEVX_FLD_SZ_BYTES(vuid, vuid) - 1;
+	strncpy(pci->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
+	pci->vuid[vuid_len] = '\0';
+
+free_out:
+	free(out);
+}
+
+static void snap_query_vfs_vuid(struct snap_pci *pf)
+{
+	int output_size, i, vuid_len;
+	uint8_t *out;
+	struct snap_pci *vf;
 
 	output_size = DEVX_ST_SZ_BYTES(query_vuid_out) +
 		DEVX_ST_SZ_BYTES(vuid) * (pf->num_vfs + 1);
@@ -228,32 +273,24 @@ static void snap_query_vuid(struct snap_pci *pf)
 		return;
 	}
 
-	ret = mlx5dv_devx_general_cmd(pf->sctx->context, in, sizeof(in), out, output_size);
-	if (ret) {
-		free(out);
-		snap_warn("Query functions info failed, ret:%d\n", ret);
-		return;
+	if (snap_query_vuid(pf, out, output_size, (pf->num_vfs > 0)))
+		goto free_out;
+
+	vuid_len = DEVX_FLD_SZ_BYTES(vuid, vuid) - 1;
+
+	// set vuid for PF
+	strncpy(pf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
+	pf->vuid[vuid_len] = '\0';
+
+	// set vuid for VFs
+	for (i = 0; i < pf->num_vfs; i++) {
+		vf = &pf->vfs[i];
+		strncpy(vf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid[i + 1]),
+			vuid_len);
+		vf->vuid[vuid_len] = '\0';
 	}
 
-	// Check if number of vuid entries in output matches expected num of vfs and pf
-	if (pf->num_vfs + 1 != DEVX_GET(query_vuid_out, out, num_of_entries)) {
-		free(out);
-		snap_warn("Failed to set vuid.\n");
-		return;
-	}
-
-	vuid_len = DEVX_FLD_SZ_BYTES(vuid, vuid);
-	if (!pf->num_vfs)
-		strncpy(pf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid), vuid_len);
-
-	if (pf->num_vfs > 0) {
-		for (i = 0; i < pf->num_vfs; i++) {
-			vf = &pf->vfs[i];
-			strncpy(vf->vuid, (char *)DEVX_ADDR_OF(query_vuid_out, out, vuid[i + 1]),
-				vuid_len);
-		}
-	}
-
+free_out:
 	free(out);
 }
 
@@ -311,7 +348,7 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 	}
 
 	if (num_vfs > 0)
-		snap_query_vuid(pf);
+		snap_query_vfs_vuid(pf);
 
 	free(out);
 	return 0;
@@ -427,7 +464,7 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 					emulated_function_info[idx].hotplug_function) ? true : false;
 	pf->num_vfs = 0;
 
-	snap_query_vuid(pf);
+	snap_query_pci_vuid(pf);
 
 	return 0;
 }
