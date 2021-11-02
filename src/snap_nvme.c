@@ -1238,3 +1238,65 @@ int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc)
 	free(ctrlc);
 	return ret;
 }
+
+/**
+ * snap_nvme_pci_functions_cleanup() - Remove remaining hot-unplugged nvme functions
+ * @sctx:       snap_context for nvme pfs
+ *
+ * Go over nvme pfs and check their hotunplug state.
+ * Complete hot-unplug for any pf with state POWER_OFF or HOTUNPLUG_PREPARE.
+ *
+ * Return: void.
+ */
+void snap_nvme_pci_functions_cleanup(struct snap_context *sctx)
+{
+	struct snap_pci **pfs;
+	int num_pfs, i;
+	struct snap_nvme_device_attr nvme_attr = {};
+	struct snap_device_attr sdev_attr = {};
+	struct snap_device *sdev;
+
+	if (sctx->nvme_pfs.max_pfs <= 0)
+		return;
+
+	pfs = calloc(sctx->nvme_pfs.max_pfs, sizeof(*pfs));
+	if (!pfs)
+		return;
+
+	sdev = calloc(1, sizeof(*sdev));
+	if (!sdev) {
+		free(pfs);
+		return;
+	}
+
+	num_pfs = snap_get_pf_list(sctx, SNAP_NVME, pfs);
+	for (i = 0; i < num_pfs; i++) {
+		if (!pfs[i]->hotplugged)
+			continue;
+		sdev->sctx = sctx;
+		sdev->pci = pfs[i];
+		sdev->mdev.device_emulation = snap_emulation_device_create(sdev, &sdev_attr);
+		if (!sdev->mdev.device_emulation) {
+			snap_error("Failed to create device emulation\n");
+			goto err;
+		}
+
+		snap_nvme_query_device(sdev, &nvme_attr);
+		snap_emulation_device_destroy(sdev);
+		/*
+		 * In nvme we rely on the driver to clean itself up (it will time out after 2 minutes).
+		 * If the state is POWER OFF or PREPARE we need to unplug the function.
+		 */
+		if (nvme_attr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF ||
+			nvme_attr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
+			snap_hotunplug_pf(pfs[i]);
+
+		snap_debug("hotplug nvme function pf id =%d bdf=%02x:%02x.%d with state %d.\n",
+			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
+			  pfs[i]->pci_bdf.bdf.function, nvme_attr.pci_hotplug_state);
+	}
+
+err:
+	free(pfs);
+	free(sdev);
+}

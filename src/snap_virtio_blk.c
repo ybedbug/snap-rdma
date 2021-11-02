@@ -533,3 +533,69 @@ int snap_virtio_blk_modify_queue(struct snap_virtio_blk_queue *vbq,
 {
 	return vbq->virtq.q_ops->modify(&vbq->virtq, mask, attr);
 }
+
+/**
+ * snap_virtio_blk_pci_functions_cleanup() - Remove remaining hot-unplugged virtio_blk functions
+ * @sctx:       snap_context for virtio_blk pfs
+ *
+ * Go over virtio_blk pfs and check their hotunplug state.
+ * Complete hot-unplug for any pf with state POWER_OFF or HOTUNPLUG_PREPARE.
+ *
+ * Return: void.
+ */
+void snap_virtio_blk_pci_functions_cleanup(struct snap_context *sctx)
+{
+	struct snap_pci **pfs;
+	int num_pfs, i;
+	struct snap_virtio_blk_device_attr attr = {};
+	struct snap_device_attr sdev_attr = {};
+	struct snap_device *sdev;
+
+	if (sctx->virtio_blk_pfs.max_pfs <= 0)
+		return;
+
+	pfs = calloc(sctx->virtio_blk_pfs.max_pfs, sizeof(*pfs));
+	if (!pfs)
+		return;
+
+	sdev = calloc(1, sizeof(*sdev));
+	if (!sdev) {
+		free(pfs);
+		return;
+	}
+
+	num_pfs = snap_get_pf_list(sctx, SNAP_VIRTIO_BLK, pfs);
+	for (i = 0; i < num_pfs; i++) {
+		if (!pfs[i]->hotplugged)
+			continue;
+
+		sdev->sctx = sctx;
+		sdev->pci = pfs[i];
+		sdev->mdev.device_emulation = snap_emulation_device_create(sdev, &sdev_attr);
+		if (!sdev->mdev.device_emulation) {
+			snap_error("Failed to create device emulation\n");
+			goto err;
+		}
+
+		snap_virtio_blk_query_device(sdev, &attr);
+		snap_emulation_device_destroy(sdev);
+		/*
+		 * In virtio_blk if state is POWER OFF we know the driver unplugged this function
+		 * and we can unplug it. If the state is PREPARE the driver has not finished unplugging
+		 * this function and we need to create a controller to check if the driver is unprobed
+		 * and we can safely unplug this function. The check happens in virtio_blk_ctrl_progress()
+		 */
+		if (attr.vattr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF)
+			snap_hotunplug_pf(pfs[i]);
+		else if (attr.vattr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
+			pfs[i]->pci_hotunplug_state = snap_pci_needs_controller_hotunplug;
+
+		snap_debug("hotplug virtio_blk function pf id =%d bdf=%02x:%02x.%d with state %d.\n",
+			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
+			  pfs[i]->pci_bdf.bdf.function, attr.vattr.pci_hotplug_state);
+	}
+
+err:
+	free(pfs);
+	free(sdev);
+}

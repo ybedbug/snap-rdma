@@ -154,4 +154,5 @@ static inline void eth_random_addr(uint8_t *addr)
 	addr[0] |= 0x02;        /* set local assignment bit (IEEE802) */
 }
 
+void snap_virtio_net_pci_functions_cleanup(struct snap_context *sctx);
 #endif

@@ -388,6 +388,13 @@ struct snap_context {
 	bool					vuid_supported;
 };
 
+enum  mlx5_emulation_hotplug_state {
+	MLX5_EMULATION_HOTPLUG_STATE_HOTPLUG = 1,
+	MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE = 2,
+	MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF = 3,
+	MLX5_EMULATION_HOTPLUG_STATE_POWER_ON = 4,
+};
+
 #define SNAP_ALIGN_FLOOR(val, align) \
 	(typeof(val))((val) & (~((typeof(val))((align) - 1))))
 

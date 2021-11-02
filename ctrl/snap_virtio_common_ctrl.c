@@ -856,7 +856,7 @@ int snap_virtio_ctrl_hotunplug(struct snap_virtio_ctrl *ctrl)
 	struct snap_virtio_device_attr *attr = ctrl->bar_curr;
 	uint64_t mask = SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
 
-	attr->pci_hotplug_state = SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE;
+	attr->pci_hotplug_state = MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE;
 	return snap_virtio_ctrl_bar_modify(ctrl, mask, attr);
 }
 

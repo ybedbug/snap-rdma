@@ -98,4 +98,5 @@ to_fs_device_attr(struct snap_virtio_device_attr *vattr)
 	return container_of(vattr, struct snap_virtio_fs_device_attr, vattr);
 }
 
+void snap_virtio_fs_pci_functions_cleanup(struct snap_context *sctx);
 #endif

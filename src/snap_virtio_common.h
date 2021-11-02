@@ -202,13 +202,6 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE = 1 << 10,
 };
 
-enum snap_virtio_pci_hotplug_state {
-	SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTPLUG		= 1,
-	SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE	= 2,
-	SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF		= 3,
-	SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_ON		= 4,
-};
-
 struct snap_virtio_device_attr {
 	uint64_t			device_feature;
 	uint64_t			driver_feature;

@@ -207,4 +207,5 @@ snap_nvme_create_ctrl_counters(struct snap_context *sctx);
 int snap_nvme_query_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc);
 int snap_nvme_destroy_ctrl_counters(struct snap_nvme_ctrl_counters *ctrlc);
 
+void snap_nvme_pci_functions_cleanup(struct snap_context *sctx);
 #endif

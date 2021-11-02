@@ -89,4 +89,7 @@ void snap_destroy_alias_object(struct snap_alias_object *obj);
 
 int snap_query_mmo_caps(struct ibv_context *context,
 				struct snap_mmo_caps *caps);
+struct mlx5_snap_devx_obj *snap_emulation_device_create(struct snap_device *sdev,
+				struct snap_device_attr *attr);
+void snap_emulation_device_destroy(struct snap_device *sdev);
 #endif

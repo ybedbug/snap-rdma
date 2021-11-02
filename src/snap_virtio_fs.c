@@ -433,3 +433,65 @@ int snap_virtio_fs_modify_queue(struct snap_virtio_queue *vq,
 
 	return snap_virtio_modify_queue(vq, mask, &attr->vattr);
 }
+
+/**
+ * snap_virtio_fs_pci_functions_cleanup() - Remove remaining hot-unplugged virtio_fs functions
+ * @sctx:       snap_context for virtio_fs pfs
+ *
+ * Go over virtio_fs pfs and check their hotunplug state.
+ * Complete hot-unplug for any pf with state POWER_OFF or HOTUNPLUG_PREPARE.
+ *
+ * Return: void.
+ */
+void snap_virtio_fs_pci_functions_cleanup(struct snap_context *sctx)
+{
+	struct snap_pci **pfs;
+	int num_pfs, i;
+	struct snap_virtio_fs_device_attr attr = {};
+	struct snap_device_attr sdev_attr = {};
+	struct snap_device *sdev;
+
+	if (sctx->virtio_fs_pfs.max_pfs <= 0)
+		return;
+
+	pfs = calloc(sctx->virtio_fs_pfs.max_pfs, sizeof(*pfs));
+	if (!pfs)
+		return;
+
+	sdev = calloc(1, sizeof(*sdev));
+	if (!sdev) {
+		free(pfs);
+		return;
+	}
+
+	num_pfs = snap_get_pf_list(sctx, SNAP_VIRTIO_FS, pfs);
+	for (i = 0; i < num_pfs; i++) {
+		if (!pfs[i]->hotplugged)
+			continue;
+		sdev->sctx = sctx;
+		sdev->pci = pfs[i];
+		sdev->mdev.device_emulation = snap_emulation_device_create(sdev, &sdev_attr);
+		if (!sdev->mdev.device_emulation) {
+			snap_error("Failed to create device emulation\n");
+			goto err;
+		}
+
+		snap_virtio_fs_query_device(sdev, &attr);
+		snap_emulation_device_destroy(sdev);
+		/*
+		 * We rely on the driver to clean itself up.
+		 * If the state is POWER OFF or PREPARE we need to unplug the function.
+		 */
+		if (attr.vattr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF ||
+			attr.vattr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
+			snap_hotunplug_pf(pfs[i]);
+
+		snap_debug("hotplug virtio fs function pf id =%d bdf=%02x:%02x.%d with state %d.\n",
+			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
+			  pfs[i]->pci_bdf.bdf.function, attr.vattr.pci_hotplug_state);
+	}
+
+err:
+	free(pfs);
+	free(sdev);
+}

@@ -2891,7 +2891,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	return ret;
 }
 
-static void snap_destroy_device_emulation(struct snap_device *sdev)
+void snap_emulation_device_destroy(struct snap_device *sdev)
 {
 	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation->obj);
 	free(sdev->mdev.device_emulation);
@@ -3084,8 +3084,8 @@ out_err:
 	return NULL;
 }
 
-static struct mlx5_snap_devx_obj*
-snap_create_device_emulation(struct snap_device *sdev,
+struct mlx5_snap_devx_obj*
+snap_emulation_device_create(struct snap_device *sdev,
 			     struct snap_device_attr *attr)
 {
 	if (!sdev->pci->plugged)
@@ -3107,114 +3107,6 @@ snap_create_device_emulation(struct snap_device *sdev,
 	default:
 		return NULL;
 	}
-}
-
-static int snap_check_emulation_function_hotunplug_state(struct snap_context *sctx, struct ibv_device *ibv_dev)
-{
-	struct snap_pci **pfs;
-	int num_pfs, i;
-	struct snap_virtio_blk_device_attr *attr;
-	struct snap_nvme_device_attr nvme_attr = {};
-	struct snap_device_attr sdev_attr = {};
-	struct snap_device *sdev;
-
-	pfs = calloc(sctx->virtio_blk_pfs.max_pfs, sizeof(*pfs));
-	if (!pfs)
-		return -EINVAL;
-
-	attr = calloc(1, sizeof(*attr));
-	if (!attr) {
-		free(pfs);
-		return -EINVAL;
-	}
-
-	sdev = calloc(1, sizeof(*sdev));
-	if (!sdev) {
-		free(pfs);
-		free(attr);
-		return -EINVAL;
-	}
-
-	num_pfs = snap_get_pf_list(sctx, SNAP_VIRTIO_BLK, pfs);
-	for (i = 0; i < num_pfs; i++) {
-		if (!pfs[i]->hotplugged)
-			continue;
-
-		sdev->sctx = sctx;
-		sdev->pci = pfs[i];
-		sdev->mdev.device_emulation = snap_create_device_emulation(sdev, &sdev_attr);
-		if (!sdev->mdev.device_emulation) {
-			snap_error("Failed to create device emulation\n");
-			goto err;
-		}
-
-		snap_virtio_blk_query_device(sdev, attr);
-		/*
-		 * In virtio_blk if state is POWER OFF we know the driver unplugged this function
-		 * and we can unplug it. If the state is PREPARE the driver has not finished unplugging
-		 * this function and we need to create a controller to check if the driver is unprobed
-		 * and we can safely unplug this function. The check happens in virtio_blk_ctrl_progress()
-		 */
-		if (attr->vattr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF)
-			snap_hotunplug_pf(pfs[i]);
-		else if (attr->vattr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
-			pfs[i]->pci_hotunplug_state = snap_pci_needs_controller_hotunplug;
-
-		snap_debug("hotplugged virtio_blk function pf id =%d bdf=%02x:%02x.%d  with state %d.\n",
-			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
-			  pfs[i]->pci_bdf.bdf.function, attr->vattr.pci_hotplug_state);
-
-		snap_destroy_device_emulation(sdev);
-	}
-
-	free(pfs);
-	pfs = calloc(sctx->nvme_pfs.max_pfs, sizeof(*pfs));
-	if (!pfs) {
-		free(attr);
-		free(sdev);
-		goto err;
-	}
-
-	num_pfs = snap_get_pf_list(sctx, SNAP_NVME, pfs);
-	for (i = 0; i < num_pfs; i++) {
-		if (!pfs[i]->hotplugged)
-			continue;
-
-		sdev->sctx = sctx;
-		sdev->pci = pfs[i];
-		sdev->mdev.device_emulation = snap_create_device_emulation(sdev, &sdev_attr);
-		if (!sdev->mdev.device_emulation) {
-			snap_error("Failed to create device emulation\n");
-			goto err;
-		}
-
-		snap_nvme_query_device(sdev, &nvme_attr);
-		/*
-		 * In nvme we rely on the driver to clean itself up (it will time out after 2 minutes).
-		 * If the state is POWER OFF or PREPARE we need to unplug the function.
-		 */
-		if (nvme_attr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_POWER_OFF ||
-			nvme_attr.pci_hotplug_state == SNAP_VIRTIO_PCI_HOTPLUG_STATE_HOTUNPLUG_PREPARE) {
-			snap_hotunplug_pf(pfs[i]);
-		}
-
-		snap_debug("hotplugged nvme function pf id =%d bdf=%02x:%02x.%d  with state %d.\n",
-			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
-			  pfs[i]->pci_bdf.bdf.function, nvme_attr.pci_hotplug_state);
-
-		snap_destroy_device_emulation(sdev);
-	}
-
-	free(pfs);
-	free(attr);
-	free(sdev);
-	return 0;
-
-err:
-	free(pfs);
-	free(attr);
-	free(sdev);
-	return -EINVAL;
 }
 
 /**
@@ -3581,7 +3473,7 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		sdev->pci = &pfs->pfs[attr->pf_id].vfs[attr->vf_id];
 	} else
 		sdev->pci = &pfs->pfs[attr->pf_id];
-	sdev->mdev.device_emulation = snap_create_device_emulation(sdev, attr);
+	sdev->mdev.device_emulation = snap_emulation_device_create(sdev, attr);
 	if (!sdev->mdev.device_emulation) {
 		errno = EINVAL;
 		goto out_free_mutex;
@@ -3620,7 +3512,7 @@ out_free_tunnel:
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
 out_free_device_emulation:
-	snap_destroy_device_emulation(sdev);
+	snap_emulation_device_destroy(sdev);
 out_free_mutex:
 	pthread_mutex_destroy(&sdev->mdev.rdma_lock);
 out_free:
@@ -3647,7 +3539,7 @@ void snap_close_device(struct snap_device *sdev)
 		snap_destroy_event_channel(sdev->mdev.channel);
 	if (sdev->mdev.vtunnel)
 		snap_destroy_vhca_tunnel(sdev);
-	snap_destroy_device_emulation(sdev);
+	snap_emulation_device_destroy(sdev);
 	pthread_mutex_destroy(&sdev->mdev.rdma_lock);
 	free(sdev);
 }
@@ -3736,12 +3628,6 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	}
 
 	TAILQ_INIT(&sctx->hotplug_device_list);
-
-	rc = snap_check_emulation_function_hotunplug_state(sctx, ibdev);
-	if (rc) {
-		errno = EINVAL;
-		goto out_free_mutex;
-	}
 	return sctx;
 
 out_free_mutex:
