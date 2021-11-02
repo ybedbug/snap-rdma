@@ -3289,25 +3289,18 @@ out:
 	return i;
 }
 
-static int snap_hotplug_device(struct snap_context *sctx,
-		struct snap_hotplug_attr *attr, struct snap_pci *pf)
+static int snap_hotplug_device(struct ibv_context *context,
+		struct snap_hotplug_attr *attr, int *vhca_id)
 {
 	int ret = 0;
 	uint8_t in[DEVX_ST_SZ_BYTES(hotplug_device_input)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(hotplug_device_output)] = {0};
-	struct ibv_context *context = sctx->context;
 	uint8_t *device_in;
 
-	if (!(sctx->hotplug.supported_types & attr->type)) {
-		ret = -ENOTSUP;
-		goto out_err;
-	}
+	DEVX_SET(hotplug_device_input, in, opcode, MLX5_CMD_OP_HOTPLUG_DEVICE);
 
-	DEVX_SET(hotplug_device_input, in, opcode,
-		MLX5_CMD_OP_HOTPLUG_DEVICE);
-
-	device_in = in + (DEVX_ST_SZ_BYTES(hotplug_device_input)
-						- DEVX_ST_SZ_BYTES(device));
+	device_in = in + (DEVX_ST_SZ_BYTES(hotplug_device_input) -
+						DEVX_ST_SZ_BYTES(device));
 	switch (attr->type) {
 	case SNAP_NVME:
 		snap_set_nvme_hotplug_device(attr, device_in);
@@ -3341,25 +3334,24 @@ static int snap_hotplug_device(struct snap_context *sctx,
 	if (ret)
 		goto out_err;
 
-	pf->mpci.vhca_id = DEVX_GET(hotplug_device_output, out, hotplug_device_object.vhca_id);
+	*vhca_id = DEVX_GET(hotplug_device_output, out, hotplug_device_object.vhca_id);
 
 out_err:
 	return ret;
 }
 
-static int snap_hotunplug_device(struct snap_pci *pf)
+static int snap_hotunplug_device(struct ibv_context *context, int vhca_id)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(hotunplug_device_input)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(hotunplug_device_output)] = {0};
-	struct ibv_context *context = pf->sctx->context;
 	uint8_t *device_in;
 
 	DEVX_SET(hotunplug_device_input, in, opcode,
-		MLX5_CMD_OP_HOTUNPLUG_DEVICE);
+		 MLX5_CMD_OP_HOTUNPLUG_DEVICE);
 
-	device_in = in + (DEVX_ST_SZ_BYTES(hotunplug_device_input)
-						- DEVX_ST_SZ_BYTES(device));
-	DEVX_SET(device, device_in, vhca_id, pf->mpci.vhca_id);
+	device_in = in + (DEVX_ST_SZ_BYTES(hotunplug_device_input) -
+						DEVX_ST_SZ_BYTES(device));
+	DEVX_SET(device, device_in, vhca_id, vhca_id);
 
 	// 0 is returned or the value of errno on a failure
 	return mlx5dv_devx_general_cmd(context, in, sizeof(in), out, sizeof(out));
@@ -3383,7 +3375,7 @@ int snap_hotunplug_pf(struct snap_pci *pf)
 	if (!pf->hotplugged)
 		return ret;
 
-	ret = snap_hotunplug_device(pf);
+	ret = snap_hotunplug_device(pf->sctx->context, pf->mpci.vhca_id);
 	if (!ret) {
 		snap_free_virtual_functions(pf);
 
@@ -3439,7 +3431,12 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		goto out_err;
 	}
 
-	ret = snap_hotplug_device(sctx, attr, pf);
+	if (!(sctx->hotplug.supported_types & attr->type)) {
+		errno = ENOTSUP;
+		goto out_err;
+	}
+
+	ret = snap_hotplug_device(sctx->context, attr, &pf->mpci.vhca_id);
 	if (ret) {
 		errno = EINVAL;
 		goto out_err;
@@ -3482,7 +3479,7 @@ free_cmd:
 out_hotunplug:
 	pf->hotplugged = false;
 	pf->plugged = false;
-	snap_hotunplug_device(pf);
+	snap_hotunplug_device(pf->sctx->context, pf->mpci.vhca_id);
 out_err:
 	return NULL;
 }
