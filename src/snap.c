@@ -3369,24 +3369,21 @@ static int snap_hotunplug_device(struct ibv_context *context, int vhca_id)
  */
 int snap_hotunplug_pf(struct snap_pci *pf)
 {
-	int ret = 0;
+	int ret;
 
-	if (!pf->plugged)
-		return ret;
-
-	if (!pf->hotplugged)
-		return ret;
+	if (!pf->plugged || !pf->hotplugged)
+		return 0;
 
 	ret = snap_hotunplug_device(pf->sctx->context, pf->mpci.vhca_id);
-	if (!ret) {
-		snap_free_virtual_functions(pf);
+	if (ret)
+		return ret;
 
-		pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
-		pf->hotplugged = false;
-		pf->plugged = false;
-	}
+	snap_free_virtual_functions(pf);
 
-	return ret;
+	pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+	pf->hotplugged = false;
+	pf->plugged = false;
+	return 0;
 }
 
 /**
