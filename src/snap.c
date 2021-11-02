@@ -2678,7 +2678,7 @@ out_err:
 	return NULL;
 }
 
-static void snap_set_nvme_hotplug_device(struct snap_hotplug_attr *attr,
+static void snap_set_nvme_hotplug_device(const struct snap_hotplug_attr *attr,
 		uint8_t *device_in)
 {
 	DEVX_SET(device, device_in, device_type,
@@ -2689,7 +2689,7 @@ static void snap_set_nvme_hotplug_device(struct snap_hotplug_attr *attr,
 		 htobe32(attr->regs.nvme.vs.raw));
 }
 
-static void snap_set_virtio_net_hotplug_device(struct snap_hotplug_attr *attr,
+static void snap_set_virtio_net_hotplug_device(const struct snap_hotplug_attr *attr,
 		uint8_t *device_in)
 {
 	DEVX_SET(device, device_in, device_type,
@@ -2714,8 +2714,9 @@ static void snap_set_virtio_net_hotplug_device(struct snap_hotplug_attr *attr,
 		 attr->regs.virtio_net.mtu);
 }
 
-static void snap_set_virtio_blk_hotplug_device(struct snap_hotplug_attr *attr,
-		uint8_t *device_in)
+static void
+snap_set_virtio_blk_hotplug_device(const struct snap_hotplug_attr *attr,
+				   uint8_t *device_in)
 {
 	DEVX_SET(device, device_in, device_type,
 		 MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_BLK);
@@ -2788,8 +2789,9 @@ static void snap_set_virtio_blk_hotplug_device(struct snap_hotplug_attr *attr,
 		 attr->regs.virtio_blk.write_zeroes_may_unmap);
 }
 
-static void snap_set_virtio_fs_hotplug_device(struct snap_hotplug_attr *attr,
-		uint8_t *device_in)
+static void
+snap_set_virtio_fs_hotplug_device(const struct snap_hotplug_attr *attr,
+				  uint8_t *device_in)
 {
 	uint8_t *fs_config;
 
@@ -3290,7 +3292,7 @@ out:
 }
 
 static int snap_hotplug_device(struct ibv_context *context,
-		struct snap_hotplug_attr *attr, int *vhca_id)
+		const struct snap_hotplug_attr *attr, int *vhca_id)
 {
 	int ret = 0;
 	uint8_t in[DEVX_ST_SZ_BYTES(hotplug_device_input)] = {0};
