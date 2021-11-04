@@ -42,8 +42,6 @@
 #include "snap_dma.h"
 #include "snap.h"
 
-#define SNAP_VIRTIO_UMEM_ALIGN 4096
-
 enum snap_virtq_type {
 	SNAP_VIRTQ_SPLIT_MODE	= 1 << 0,
 	SNAP_VIRTQ_PACKED_MODE	= 1 << 1,
@@ -156,12 +154,6 @@ struct snap_virtio_ctrl_debugstat {
 	uint32_t				internal_error;
 	size_t					num_queues;
 	struct snap_virtio_queue_debugstat	*queues;
-};
-
-struct snap_virtio_umem {
-	void			*buf;
-	int			size;
-	struct mlx5dv_devx_umem *devx_umem;
 };
 
 struct snap_virtio_common_queue_attr {

@@ -18,6 +18,14 @@
 /* do a forward declaration to avoid include snap.h */
 struct snap_device;
 
+#define SNAP_VIRTIO_UMEM_ALIGN 4096
+
+struct snap_virtio_umem {
+	void *buf;
+	int  size;
+	struct mlx5dv_devx_umem *devx_umem;
+};
+
 struct snap_cross_mkey {
 	struct mlx5dv_devx_obj *devx_obj;
 	uint32_t mkey;
@@ -57,5 +65,8 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 			  struct mlx5_devx_mkey_attr *attr);
 int
 snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
+
+int snap_umem_init(struct ibv_context *context, struct snap_virtio_umem *umem);
+void snap_umem_reset(struct snap_virtio_umem *umem);
 
 #endif

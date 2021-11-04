@@ -9,14 +9,17 @@
  * This software product is governed by the End User License Agreement
  * provided with the software product.
  */
+#include <stdint.h>
+
+#include "mlx5_ifc.h"
+#include "snap_env.h"
+#include "snap_mr.h"
+#include "snap_dma.h"
 
 #include "snap_virtio_net.h"
 #include "snap_virtio_blk.h"
 #include "snap_virtio_fs.h"
 #include "snap_virtio_common.h"
-#include "snap_dma.h"
-#include "mlx5_ifc.h"
-#include "snap_env.h"
 #include "snap_sw_virtio_blk.h"
 
 #define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
@@ -1122,46 +1125,6 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	return 0;
 }
 
-static int snap_umem_init(struct ibv_context *context,
-		struct snap_virtio_umem *umem)
-{
-	int ret;
-
-	if (!umem->size)
-		return 0;
-
-	ret = posix_memalign((void **)&umem->buf, SNAP_VIRTIO_UMEM_ALIGN,
-			     umem->size);
-	if (ret)
-		return ret;
-
-	umem->devx_umem = mlx5dv_devx_umem_reg(context, umem->buf,
-					       umem->size,
-					       IBV_ACCESS_LOCAL_WRITE);
-	if (!umem->devx_umem) {
-		ret = -errno;
-		goto out_free;
-	}
-
-	return ret;
-
-out_free:
-	free(umem->buf);
-	umem->buf = NULL;
-	return ret;
-}
-
-static void snap_umem_free(struct snap_virtio_umem *umem)
-{
-	if (!umem->size)
-		return;
-
-	mlx5dv_devx_umem_dereg(umem->devx_umem);
-	free(umem->buf);
-
-	memset(umem, 0, sizeof(*umem));
-}
-
 int snap_virtio_init_virtq_umem(struct ibv_context *context,
 		struct snap_virtio_caps *virtio,
 		struct snap_virtio_queue *virtq,
@@ -1190,18 +1153,18 @@ int snap_virtio_init_virtq_umem(struct ibv_context *context,
 	return 0;
 
 out_free_buf_2:
-	snap_umem_free(&virtq->umem[1]);
+	snap_umem_reset(&virtq->umem[1]);
 out_free_buf_1:
-	snap_umem_free(&virtq->umem[0]);
+	snap_umem_reset(&virtq->umem[0]);
 out_free_buf_0:
 	return -ENOMEM;
 }
 
 void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
 {
-	snap_umem_free(&virtq->umem[2]);
-	snap_umem_free(&virtq->umem[1]);
-	snap_umem_free(&virtq->umem[0]);
+	snap_umem_reset(&virtq->umem[2]);
+	snap_umem_reset(&virtq->umem[1]);
+	snap_umem_reset(&virtq->umem[0]);
 }
 
 
