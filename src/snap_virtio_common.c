@@ -658,7 +658,7 @@ int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
 
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
-	struct snap_virtio_queue_attr *vattr, struct snap_virtio_umem *umem)
+	struct snap_virtio_queue_attr *vattr, struct snap_umem *umem)
 {
 	uint8_t in_blk[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		       DEVX_ST_SZ_BYTES(virtio_blk_q)] = {0};
@@ -1162,9 +1162,10 @@ out_free_buf_0:
 
 void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
 {
-	snap_umem_reset(&virtq->umem[2]);
-	snap_umem_reset(&virtq->umem[1]);
-	snap_umem_reset(&virtq->umem[0]);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(virtq->umem); i++)
+		snap_umem_reset(&virtq->umem[i]);
 }
 
 

@@ -181,7 +181,7 @@ struct virtq_q_ops {
 struct snap_virtio_queue {
 	uint32_t				idx;
 	struct mlx5_snap_devx_obj		*virtq;
-	struct snap_virtio_umem			umem[3];
+	struct snap_umem			umem[3];
 	uint64_t				mod_allowed_mask;
 	struct mlx5_snap_devx_obj		*ctrs_obj;
 
@@ -264,7 +264,7 @@ struct mlx5_snap_devx_obj*
 snap_virtio_create_queue_counters(struct snap_device *sdev);
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
-	struct snap_virtio_queue_attr *attr, struct snap_virtio_umem *umem);
+	struct snap_virtio_queue_attr *attr, struct snap_umem *umem);
 int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	struct snap_virtio_queue_attr *vattr);
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,

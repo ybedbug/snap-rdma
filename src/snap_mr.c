@@ -303,20 +303,18 @@ int snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey)
 	return ret;
 }
 
-int snap_umem_init(struct ibv_context *context, struct snap_virtio_umem *umem)
+int snap_umem_init(struct ibv_context *context, struct snap_umem *umem)
 {
 	int ret;
 
 	if (!umem->size)
 		return 0;
 
-	ret = posix_memalign((void **)&umem->buf, SNAP_VIRTIO_UMEM_ALIGN,
-			     umem->size);
+	ret = posix_memalign(&umem->buf, SNAP_VIRTIO_UMEM_ALIGN, umem->size);
 	if (ret)
 		return ret;
 
-	umem->devx_umem = mlx5dv_devx_umem_reg(context, umem->buf,
-					       umem->size,
+	umem->devx_umem = mlx5dv_devx_umem_reg(context, umem->buf, umem->size,
 					       IBV_ACCESS_LOCAL_WRITE);
 	if (!umem->devx_umem) {
 		ret = -errno;
@@ -331,7 +329,7 @@ out_free:
 	return ret;
 }
 
-void snap_umem_reset(struct snap_virtio_umem *umem)
+void snap_umem_reset(struct snap_umem *umem)
 {
 	if (!umem->size)
 		return;

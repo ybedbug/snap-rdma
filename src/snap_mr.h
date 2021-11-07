@@ -20,9 +20,9 @@ struct snap_device;
 
 #define SNAP_VIRTIO_UMEM_ALIGN 4096
 
-struct snap_virtio_umem {
+struct snap_umem {
 	void *buf;
-	int  size;
+	int size;
 	struct mlx5dv_devx_umem *devx_umem;
 };
 
@@ -66,7 +66,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 int
 snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
 
-int snap_umem_init(struct ibv_context *context, struct snap_virtio_umem *umem);
-void snap_umem_reset(struct snap_virtio_umem *umem);
+int snap_umem_init(struct ibv_context *context, struct snap_umem *umem);
+void snap_umem_reset(struct snap_umem *umem);
 
 #endif
