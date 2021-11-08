@@ -119,34 +119,6 @@ static inline void set_cmd_error(struct virtq_cmd *cmd, int error)
 	to_fs_cmd_ftr(cmd->ftr)->out_header.error = -error;
 }
 
-static inline void fs_virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
-					   uint32_t len, bool is_completion)
-{
-	struct snap_virtio_ctrl_queue *vq = cmd->vq_priv->vbq;
-	int rc;
-
-	if (snap_likely(!vq->log_writes_to_host))
-		return;
-
-	if (is_completion) {
-		/* spec 2.6 Split Virtqueues
-		 * mark all of the device area as dirty, in the worst case
-		 * it will cost an extra page or two. Device area size is
-		 * calculated according to the spec.
-		 **/
-		pa = cmd->vq_priv->vattr->device;
-		len = 6 + 8 * cmd->vq_priv->vattr->size;
-	}
-	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
-	if (!vq->ctrl->lm_channel) {
-		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel is not present\n");
-		return;
-	}
-	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
-	if (rc)
-		ERR_ON_CMD(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
-}
-
 static void fs_sm_dma_cb(struct snap_dma_completion *self, int status)
 {
 	enum virtq_cmd_sm_op_status op_status = VIRTQ_CMD_SM_OP_OK;
@@ -707,8 +679,8 @@ static bool sm_handle_in_iov_done(struct virtq_cmd *cmd,
 			virtq_log_data(cmd, "WRITE_DATA: pa 0x%llx va %p len %u\n",
 				       cmd_aux->descs[i].addr, fs_cmd->iov[i].iov_base,
 				       cmd_aux->descs[i].len);
-			fs_virtq_mark_dirty_mem(cmd, cmd_aux->descs[i].addr,
-						cmd_aux->descs[i].len, false);
+			virtq_mark_dirty_mem(cmd, cmd_aux->descs[i].addr,
+					     cmd_aux->descs[i].len, false);
 			ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 					       fs_cmd->iov[i].iov_base,
 					       cmd_aux->descs[i].len,
@@ -1058,9 +1030,8 @@ void fs_virtq_destroy(struct fs_virtq_ctx *q)
 	if (snap_virtio_fs_destroy_queue(vq_priv->snap_vbq))
 		snap_error("queue %d: error destroying fs_virtq\n", q->common_ctx.idx);
 
-	snap_dma_q_destroy(vq_priv->dma_q);
 	free_fs_virtq_cmd_arr(vq_priv);
-	free(vq_priv);
+	virtq_ctx_destroy(vq_priv);
 }
 
 int fs_virtq_get_debugstat(struct fs_virtq_ctx *q,
