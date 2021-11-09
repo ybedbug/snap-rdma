@@ -3,7 +3,8 @@ ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libsnap.la
 
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
-		 snap_dpa.h snap_dpa_common.h snap_dpa_virtq.h snap_dma_internal.h snap_sw_virtio_blk.h
+		 snap_dpa.h snap_dpa_common.h snap_dpa_virtq.h snap_dma_internal.h \
+		 snap_sw_virtio_blk.h
 
 #snap lib
 libsnap_ladir = $(includedir)/
@@ -19,7 +20,8 @@ libsnap_la_HEADERS = snap.h \
 		     snap_dma.h \
 		     snap_umr.h \
 		     snap_env.h \
-		     snap_sw_virtio_blk.h
+		     snap_sw_virtio_blk.h \
+		     snap_qp.h
 
 libsnap_la_SOURCES = snap.c \
 		     snap_mr.c \
@@ -34,7 +36,8 @@ libsnap_la_SOURCES = snap.c \
 		     snap_channel.c \
 		     snap_env.c \
 		     snap_dpa_virtq.c \
-		     snap_sw_virtio_blk.c
+		     snap_sw_virtio_blk.c \
+		     snap_qp.c
 
 libsnap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS)
 libsnap_la_LIBADD = $(IBVERBS_LIBS) -lpthread
