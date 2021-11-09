@@ -122,16 +122,16 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	fm_ce_se |= snap_dv_get_cq_update(dv_qp, comp);
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
 
-	pi = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
-	to_end = (dv_qp->qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
+	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
+	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
 
 	/* sizeof(gen_ctrl) + sizeof(umr_ctrl) == MLX5_SEND_WQE_BB,
 	 * so do not need to worry about wqe buffer warp around.
 	 * build genenal ctrl segment
 	 **/
 	gen_ctrl = ctrl;
-	snap_set_ctrl_seg(gen_ctrl, dv_qp->pi, MLX5_OPCODE_UMR, 0,
-				q->sw_qp.qp->qp_num, fm_ce_se,
+	snap_set_ctrl_seg(gen_ctrl, dv_qp->hw_qp.sq.pi, MLX5_OPCODE_UMR, 0,
+				dv_qp->hw_qp.qp_num, fm_ce_se,
 				round_up(wqe_size, 16), 0, htobe32(klm_mkey->mkey));
 
 	/* build umr ctrl segment */
@@ -141,8 +141,8 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	/* build mkey context segment */
 	to_end -= MLX5_SEND_WQE_BB;
 	if (to_end == 0) { /* wqe buffer wap around */
-		mkey = (struct mlx5_wqe_mkey_context_seg *)(dv_qp->qp.sq.buf);
-		to_end = dv_qp->qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
+		mkey = (struct mlx5_wqe_mkey_context_seg *)(dv_qp->hw_qp.sq.addr);
+		to_end = dv_qp->hw_qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
 	} else {
 		mkey = (struct mlx5_wqe_mkey_context_seg *)(umr_ctrl + 1);
 	}
@@ -151,8 +151,8 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	/* build inline mtt entires */
 	to_end -= MLX5_SEND_WQE_BB;
 	if (to_end == 0) { /* wqe buffer wap around */
-		klm = (union mlx5_wqe_umr_inline_seg *) (dv_qp->qp.sq.buf);
-		to_end = dv_qp->qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
+		klm = (union mlx5_wqe_umr_inline_seg *) (dv_qp->hw_qp.sq.addr);
+		to_end = dv_qp->hw_qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
 	} else {
 		klm = (union mlx5_wqe_umr_inline_seg *)(mkey + 1);
 	}
@@ -162,8 +162,8 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 		/* sizeof(*klm) * 4 == MLX5_SEND_WQE_BB */
 		to_end -= sizeof(union mlx5_wqe_umr_inline_seg);
 		if (to_end == 0) { /* wqe buffer wap around */
-			klm = (union mlx5_wqe_umr_inline_seg *) (dv_qp->qp.sq.buf);
-			to_end = dv_qp->qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
+			klm = (union mlx5_wqe_umr_inline_seg *) (dv_qp->hw_qp.sq.addr);
+			to_end = dv_qp->hw_qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
 		} else {
 			klm = klm + 1;
 		}
@@ -178,7 +178,7 @@ int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 		klm = klm + 1;
 	}
 
-	dv_qp->pi += (umr_wqe_n_bb - 1);
+	dv_qp->hw_qp.sq.pi += (umr_wqe_n_bb - 1);
 
 	snap_dv_wqe_submit(dv_qp, ctrl);
 

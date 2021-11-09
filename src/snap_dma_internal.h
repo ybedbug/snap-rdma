@@ -85,7 +85,7 @@ static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dm
 
 static inline void *snap_dv_get_wqe_bb(struct snap_dv_qp *dv_qp)
 {
-	return dv_qp->qp.sq.buf + (dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1)) *
+	return (void *)dv_qp->hw_qp.sq.addr + (dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1)) *
 	       MLX5_SEND_WQE_BB;
 }
 
@@ -113,7 +113,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	/* 2. Update Doorbell Record associated with that queue by writing
 	 *    the sq_wqebb_counter or wqe_counter for send and RQ respectively
 	 **/
-	dv_qp->qp.dbrec[MLX5_SND_DBR] = htobe32(dv_qp->pi);
+	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_SND_DBR] = htobe32(dv_qp->hw_qp.sq.pi);
 
 	/* Make sure that doorbell record is written before ringing the doorbell
 	 **/
@@ -122,7 +122,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	/* 3. For send request ring DoorBell by writing to the Doorbell
 	 *    Register field in the UAR associated with that queue
 	 */
-	*(uint64_t *)(dv_qp->qp.bf.reg) = *(uint64_t *)ctrl;
+	*(uint64_t *)(dv_qp->hw_qp.sq.bf_addr) = *(uint64_t *)ctrl;
 
 	/* If UAR is mapped as WC (write combined) we need another fence to
 	 * force write. Otherwise it may take a long time.
@@ -130,7 +130,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	 * here.
 	 */
 #if !defined(__aarch64__)
-	if (!dv_qp->tx_db_nc)
+	if (!dv_qp->hw_qp.sq.tx_db_nc)
 		snap_memory_bus_store_fence();
 #endif
 }
@@ -138,7 +138,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)
 {
 	snap_memory_cpu_store_fence();
-	dv_qp->qp.dbrec[MLX5_RCV_DBR] = htobe32(dv_qp->ci);
+	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_RCV_DBR] = htobe32(dv_qp->hw_qp.rq.ci);
 	snap_memory_bus_store_fence();
 }
 
@@ -157,7 +157,7 @@ static inline void snap_dv_set_comp(struct snap_dv_qp *dv_qp, uint16_t pi,
 
 static inline void snap_dv_wqe_submit(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
-	dv_qp->pi++;
+	dv_qp->hw_qp.sq.pi++;
 	if (dv_qp->db_flag == SNAP_DB_RING_BATCH) {
 		dv_qp->tx_need_ring_db = true;
 		dv_qp->ctrl = ctrl;

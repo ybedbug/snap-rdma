@@ -14,6 +14,7 @@
 
 extern "C" {
 #include "snap.h"
+#include "snap_env.h"
 #include "snap_nvme.h"
 #include "snap_dma.h"
 #include "snap_umr.h"
@@ -32,7 +33,7 @@ int SnapDmaTest::snap_dma_q_fw_send_imm(struct snap_dma_q *q, uint32_t imm)
 int SnapDmaTest::snap_dma_q_fw_send(struct snap_dma_q *q, void *src_buf,
 		size_t len, uint32_t lkey)
 {
-	struct ibv_qp *qp = q->fw_qp.qp;
+	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->fw_qp.qp);
 	struct ibv_send_wr *bad_wr;
 	struct ibv_send_wr send_wr = {};
 	struct ibv_sge send_sgl = {};
@@ -112,6 +113,7 @@ void SnapDmaTest::SetUp()
 	m_dma_q_attr.tx_elem_size = 16;
 	m_dma_q_attr.rx_elem_size = 64;
 	m_dma_q_attr.rx_cb = dma_rx_cb;
+	m_dma_q_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
 
 	m_pd = NULL;
 	dev_list = ibv_get_device_list(&n_dev);
@@ -163,7 +165,7 @@ struct snap_dma_q *SnapDmaTest::create_queue()
 
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
 	if (q) {
-		EXPECT_TRUE(q->fw_qp.qp->qp_num == snap_dma_q_get_fw_qp(q)->qp_num);
+		EXPECT_TRUE(snap_qp_get_qpnum(q->fw_qp.qp) == snap_dma_q_get_fw_qp(q)->qp_num);
 	}
 	return q;
 }
@@ -175,16 +177,18 @@ TEST_F(SnapDmaTest, ibv_create_ah_test) {
 	struct ibv_ah *ah;
 	struct snap_dma_q *q;
 	union ibv_gid gid;
+	struct ibv_qp *qp;
 
 	q = create_queue();
 	ASSERT_TRUE(q);
+	qp = snap_qp_to_verbs_qp(q->fw_qp.qp);
 
-	if (!ibv_query_gid(q->fw_qp.qp->context, 1, 0, &gid)) {
+	if (!ibv_query_gid(qp->context, 1, 0, &gid)) {
 		attr_mask = IBV_QP_AV;
-		ret = ibv_query_qp(q->fw_qp.qp, &attr, attr_mask, &init_attr);
+		ret = ibv_query_qp(qp, &attr, attr_mask, &init_attr);
 		ASSERT_TRUE(!ret);
 
-		ah = ibv_create_ah(q->fw_qp.qp->pd, &attr.ah_attr);
+		ah = ibv_create_ah(qp->pd, &attr.ah_attr);
 		ASSERT_TRUE(ah);
 
 		ibv_destroy_ah(ah);
@@ -239,6 +243,8 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 	comp.count = 1;
 
 	if (!poll_mode) {
+		if (q->no_events)
+			return;
 		ASSERT_EQ(0, snap_dma_q_arm(q));
 	}
 
@@ -268,7 +274,7 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 		ASSERT_EQ(1, poll(&pfd, 1, 1000));
 
 		ASSERT_EQ(0, ibv_get_cq_event(m_comp_channel, &cq, &cq_context));
-		ASSERT_TRUE(cq == q->sw_qp.tx_cq);
+		ASSERT_TRUE(cq == snap_cq_to_verbs_cq(q->sw_qp.tx_cq));
 		snap_dma_q_progress(q);
 		ibv_ack_cq_events(cq, 1);
 	} else {
@@ -362,7 +368,7 @@ TEST_F(SnapDmaTest, send_completion) {
 	rx_wr.sg_list = &rx_sge;
 	rx_wr.num_sge = 1;
 
-	rc = ibv_post_recv(q->fw_qp.qp, &rx_wr, &bad_wr);
+	rc = ibv_post_recv(snap_qp_to_verbs_qp(q->fw_qp.qp), &rx_wr, &bad_wr);
 	ASSERT_EQ(0, rc);
 
 	memset(m_rbuf, 0, sizeof(cqe));
@@ -377,7 +383,7 @@ TEST_F(SnapDmaTest, send_completion) {
 	}
 	/* check that send was actually received */
 	struct ibv_wc wc;
-	rc = ibv_poll_cq(q->fw_qp.rx_cq, 1, &wc);
+	rc = ibv_poll_cq(snap_cq_to_verbs_cq(q->fw_qp.rx_cq), 1, &wc);
 
 	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
 	ASSERT_EQ(1, rc);
@@ -405,7 +411,7 @@ TEST_F(SnapDmaTest, flush) {
 	rx_wr.next = NULL;
 	rx_wr.sg_list = &rx_sge;
 	rx_wr.num_sge = 1;
-	rc = ibv_post_recv(q->fw_qp.qp, &rx_wr, &bad_wr);
+	rc = ibv_post_recv(snap_qp_to_verbs_qp(q->fw_qp.qp), &rx_wr, &bad_wr);
 	ASSERT_EQ(0, rc);
 
 	rc = snap_dma_q_flush(q);
@@ -568,6 +574,7 @@ TEST_F(SnapDmaTest, error_checks) {
 	ASSERT_TRUE(q);
 	rc = snap_dma_q_send_completion(q, data, sizeof(data));
 	ASSERT_NE(0, rc);
+	snap_dma_q_destroy(q);
 }
 
 /* Test only works on CX6 DX because it assumes that our local
@@ -885,7 +892,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_wait_complete) {
 TEST_F(SnapDmaTest, post_umr_wqe_warp_around_no_wait_complete) {
 	struct snap_dma_q *q;
 	struct snap_dv_qp *dv_qp;
-	int i;
+	unsigned i;
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
@@ -896,7 +903,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_no_wait_complete) {
 	 * Because the UMR WQE used below need consume 4 WQE BB, so it will warp around.
 	 */
 	dv_qp = &q->sw_qp.dv_qp;
-	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
+	for (i = 0; i < dv_qp->hw_qp.sq.wqe_cnt - 3; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
 
 	post_umr_wqe(q, m_pd, m_bsize, false);
@@ -907,7 +914,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_no_wait_complete) {
 TEST_F(SnapDmaTest, post_umr_wqe_warp_around_wait_complete) {
 	struct snap_dma_q *q;
 	struct snap_dv_qp *dv_qp;
-	int i;
+	unsigned i;
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
@@ -918,7 +925,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_wait_complete) {
 	 * Because the UMR WQE used below need consume 4 WQE BB, so it will warp around.
 	 */
 	dv_qp = &q->sw_qp.dv_qp;
-	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt - 3; i++)
+	for (i = 0; i < dv_qp->hw_qp.sq.wqe_cnt - 3; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
 
 	post_umr_wqe(q, m_pd, m_bsize, true);
@@ -929,7 +936,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_warp_around_wait_complete) {
 TEST_F(SnapDmaTest, post_umr_wqe_reuse_wait_complete) {
 	struct snap_dma_q *q;
 	struct snap_dv_qp *dv_qp;
-	int i;
+	unsigned i;
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
@@ -940,7 +947,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_reuse_wait_complete) {
 	 * then post umr wqe to let it reuse the WQE BBs which hold dirty data.
 	 */
 	dv_qp = &q->sw_qp.dv_qp;
-	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt; i++)
+	for (i = 0; i < dv_qp->hw_qp.sq.wqe_cnt; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
 
 	post_umr_wqe(q, m_pd, m_bsize, true);
@@ -962,7 +969,7 @@ TEST_F(SnapDmaTest, post_umr_wqe_reuse_no_wait_complete) {
 	 * then post umr wqe to let it reuse the WQE BBs which hold dirty data.
 	 */
 	dv_qp = &q->sw_qp.dv_qp;
-	for (i = 0; i < (int)dv_qp->qp.sq.wqe_cnt; i++)
+	for (i = 0; i < (int)dv_qp->hw_qp.sq.wqe_cnt; i++)
 		dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
 
 	post_umr_wqe(q, m_pd, m_bsize, false);

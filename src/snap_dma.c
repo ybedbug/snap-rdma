@@ -23,7 +23,6 @@
 
 #define SNAP_DMA_Q_RX_CQE_SIZE  128
 #define SNAP_DMA_Q_TX_CQE_SIZE  64
-#define SNAP_MLX5_RECV_WQE_BB   16
 
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_IOV_SUPP, 0);
@@ -67,7 +66,6 @@ struct snap_roce_caps {
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 				     size_t len, uint32_t lkey);
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp);
-static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq);
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
 				    int op, uint64_t raddr, uint32_t rkey,
 				    struct snap_dma_completion *flush_comp, int *n_bb);
@@ -188,9 +186,9 @@ static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 		free(qp->dv_qp.opaque_buf);
 	}
 
-	ibv_destroy_qp(qp->qp);
-	ibv_destroy_cq(qp->rx_cq);
-	ibv_destroy_cq(qp->tx_cq);
+	snap_qp_destroy(qp->qp);
+	snap_cq_destroy(qp->rx_cq);
+	snap_cq_destroy(qp->tx_cq);
 }
 
 static void snap_free_rx_wqes(struct snap_dma_ibv_qp *qp)
@@ -199,10 +197,9 @@ static void snap_free_rx_wqes(struct snap_dma_ibv_qp *qp)
 	free(qp->rx_buf);
 }
 
-static int snap_alloc_rx_wqes(struct snap_dma_ibv_qp *qp, int rx_qsize,
+static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, int rx_qsize,
 		int rx_elem_size)
 {
-	struct ibv_pd *pd = qp->qp->pd;
 	int rc;
 
 	rc = posix_memalign((void **)&qp->rx_buf, SNAP_DMA_RX_BUF_ALIGN,
@@ -220,112 +217,75 @@ static int snap_alloc_rx_wqes(struct snap_dma_ibv_qp *qp, int rx_qsize,
 	return 0;
 }
 
-static bool uar_memory_is_nc(struct snap_dv_qp *dv_qp)
-{
-	/*
-	 * Verify that the memory is indeed NC. It relies on a fact (hack) that
-	 * rdma-core is going to allocate NC uar if blue flame is disabled.
-	 * This is a short term solution.
-	 *
-	 * The right solution is to allocate uars exlicitely with the
-	 * mlx5dv_devx_alloc_uar()
-	 */
-	return dv_qp->qp.bf.size == 0;
-}
-
 static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		struct ibv_comp_channel *comp_channel, int comp_vector,
-		struct ibv_qp_init_attr *attr, struct snap_dma_ibv_qp *qp,
+		struct snap_qp_attr *attr, struct snap_dma_ibv_qp *qp,
 		int mode)
 {
-	struct ibv_cq_init_attr_ex cq_attr = {
-		.cqe = attr->cap.max_recv_wr,
+	struct snap_cq_attr cq_attr = {
 		.cq_context = cq_context,
-		.channel = comp_channel,
+		.comp_channel = comp_channel,
 		.comp_vector = comp_vector,
-		.wc_flags = IBV_WC_STANDARD_FLAGS,
-		.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS,
-		.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
-	};
-	struct mlx5dv_cq_init_attr cq_ex_attr = {
-		.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
+		.cqe_cnt = attr->sq_size,
 		.cqe_size = SNAP_DMA_Q_TX_CQE_SIZE
 	};
-	struct ibv_context *ibv_ctx = pd->context;
-	struct mlx5dv_obj dv_obj;
 	int rc;
 
 	qp->mode = mode;
 
+	/* TODO: add attribute to choose how snap_qp/cq are created */
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
-		qp->tx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_send_wr, cq_context,
-				comp_channel, comp_vector);
+		cq_attr.cq_type = SNAP_OBJ_VERBS;
 	else
-		qp->tx_cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(ibv_ctx, &cq_attr, &cq_ex_attr));
+		/* SNAP_OBJ_DEVX is also supported - enable manually */
+		cq_attr.cq_type = SNAP_OBJ_DV;
+
+	qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
 	if (!qp->tx_cq)
 		return -EINVAL;
 
-	if (mode == SNAP_DMA_Q_MODE_VERBS)
-		qp->rx_cq = ibv_create_cq(ibv_ctx, attr->cap.max_recv_wr, cq_context,
-					  comp_channel, comp_vector);
-	else {
-		/* Enable scatter to cqe on the receive side.
-		 * NOTE: it seems that scatter is enabled by default in the
-		 * rdma-core lib. We only have to make sure that cqe size is
-		 * 128 bytes to use it.
-		 **/
-		cq_ex_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
-		qp->rx_cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(ibv_ctx, &cq_attr, &cq_ex_attr));
-	}
+	cq_attr.cqe_cnt = attr->rq_size;
+	/* Use 128 bytes cqes in order to allow scatter to cqe on receive
+	 * This is relevant for NVMe sqe and for virtio queues when number of
+	 * tunneled descr is less then three.
+	 */
+	cq_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
+	qp->rx_cq = snap_cq_create(pd->context, &cq_attr);
 	if (!qp->rx_cq)
 		goto free_tx_cq;
 
-	attr->qp_type = IBV_QPT_RC;
-	attr->send_cq = qp->tx_cq;
-	attr->recv_cq = qp->rx_cq;
+	attr->qp_type = cq_attr.cq_type;
+	attr->sq_cq = qp->tx_cq;
+	attr->rq_cq = qp->rx_cq;
 
-	qp->qp = ibv_create_qp(pd, attr);
+	qp->qp = snap_qp_create(pd, attr);
 	if (!qp->qp)
 		goto free_rx_cq;
-
-	snap_debug("created qp 0x%x tx %d rx %d tx_inline %d on pd %p\n",
-		   qp->qp->qp_num, attr->cap.max_send_wr,
-		   attr->cap.max_recv_wr, attr->cap.max_inline_data, pd);
 
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		return 0;
 
-	dv_obj.qp.in = qp->qp;
-	dv_obj.qp.out = &qp->dv_qp.qp;
-	qp->dv_qp.pi = 0;
-	qp->dv_qp.ci = 0;
-	rc = mlx5dv_init_obj(&dv_obj, MLX5DV_OBJ_QP);
+	rc = snap_qp_to_hw_qp(qp->qp, &qp->dv_qp.hw_qp);
 	if (rc)
-		goto free_rx_cq;
+		goto free_comps;
 
 	rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
-			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+			    qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 	if (rc)
 		goto free_rx_cq;
 
 	memset(qp->dv_qp.comps, 0,
-	       qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+	       qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 
-	rc = snap_dv_cq_init(qp->tx_cq, &qp->dv_tx_cq);
+	rc = snap_cq_to_hw_cq(qp->tx_cq, &qp->dv_tx_cq);
 	if (rc)
 		goto free_comps;
 
-	rc = snap_dv_cq_init(qp->rx_cq, &qp->dv_rx_cq);
+	rc = snap_cq_to_hw_cq(qp->rx_cq, &qp->dv_rx_cq);
 	if (rc)
 		goto free_comps;
 
-	snap_debug("sq wqe_count = %d stride = %d, rq wqe_count = %d, stride = %d, bf.reg = %p, bf.size = %d\n",
-		   qp->dv_qp.qp.sq.wqe_cnt, qp->dv_qp.qp.sq.stride,
-		   qp->dv_qp.qp.rq.wqe_cnt, qp->dv_qp.qp.rq.stride,
-		   qp->dv_qp.qp.bf.reg, qp->dv_qp.qp.bf.size);
-
-	qp->dv_qp.tx_db_nc = uar_memory_is_nc(&qp->dv_qp);
-	if (!qp->dv_qp.tx_db_nc) {
+	if (!qp->dv_qp.hw_qp.sq.tx_db_nc) {
 #if defined(__aarch64__)
 		snap_error("DB record must be in the non-cacheable memory on BF\n");
 		goto free_comps;
@@ -335,21 +295,17 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 #endif
 	}
 
-	if (qp->dv_qp.qp.sq.stride != MLX5_SEND_WQE_BB ||
-	    qp->dv_qp.qp.rq.stride != SNAP_MLX5_RECV_WQE_BB)
-		goto free_comps;
-
 	if (mode == SNAP_DMA_Q_MODE_DV)
 		return 0;
 
 	rc = posix_memalign((void **)&qp->dv_qp.opaque_buf,
 			    sizeof(struct mlx5_dma_opaque),
-			    qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque));
+			    qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque));
 	if (rc)
 		goto free_comps;
 
 	qp->dv_qp.opaque_mr = ibv_reg_mr(pd, qp->dv_qp.opaque_buf,
-					 qp->dv_qp.qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque),
+					 qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque),
 					 IBV_ACCESS_LOCAL_WRITE);
 	if (!qp->dv_qp.opaque_mr)
 		goto free_opaque;
@@ -364,9 +320,9 @@ free_opaque:
 free_comps:
 	free(qp->dv_qp.comps);
 free_rx_cq:
-	ibv_destroy_cq(qp->rx_cq);
+	snap_cq_destroy(qp->rx_cq);
 free_tx_cq:
-	ibv_destroy_cq(qp->tx_cq);
+	snap_cq_destroy(qp->tx_cq);
 	return -EINVAL;
 }
 
@@ -379,7 +335,7 @@ static void snap_destroy_sw_qp(struct snap_dma_q *q)
 static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr)
 {
-	struct ibv_qp_init_attr init_attr = {};
+	struct snap_qp_attr qp_init_attr = {};
 	struct ibv_recv_wr rx_wr, *bad_wr;
 	struct ibv_sge rx_sge;
 	struct snap_mmo_caps mmo_caps = {{0}};
@@ -413,6 +369,10 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		return -EINVAL;
 	}
 	snap_debug("Opening dma_q of type %d\n", attr->mode);
+	/*
+	 * TODO: disable event mode if OBJ_DEVX are used to create qp and cq
+	 * q->no_events = true;
+	 */
 
 	/* make sure that the completion is requested at least once */
 	if (attr->mode != SNAP_DMA_Q_MODE_VERBS &&
@@ -425,26 +385,26 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	q->rx_elem_size = attr->rx_elem_size;
 	q->tx_elem_size = attr->tx_elem_size;
 
-	init_attr.cap.max_send_wr = attr->tx_qsize;
+	qp_init_attr.sq_size = attr->tx_qsize;
 	/* Need more space in rx queue in order to avoid memcpy() on rx data */
-	init_attr.cap.max_recv_wr = 2 * attr->rx_qsize;
+	qp_init_attr.rq_size = 2 * attr->rx_qsize;
 	/* we must be able to send CQEs inline */
-	init_attr.cap.max_inline_data = attr->tx_elem_size;
+	qp_init_attr.sq_max_inline_size = attr->tx_elem_size;
 
-	init_attr.cap.max_send_sge = 1;
-	init_attr.cap.max_recv_sge = 1;
+	qp_init_attr.sq_max_sge = 1;
+	qp_init_attr.sq_max_sge = 1;
 
 	rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,
-			attr->comp_vector, &init_attr, &q->sw_qp, attr->mode);
+			attr->comp_vector, &qp_init_attr, &q->sw_qp, attr->mode);
 	if (rc)
 		return rc;
 
 	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA) {
-		q->tx_available = q->sw_qp.dv_qp.qp.sq.wqe_cnt;
+		q->tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 		q->sw_qp.dv_qp.db_flag = snap_env_getenv(SNAP_DMA_Q_DBMODE);
 	}
 
-	rc = snap_alloc_rx_wqes(&q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
+	rc = snap_alloc_rx_wqes(pd, &q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
 	if (rc)
 		goto free_qp;
 
@@ -460,7 +420,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 			rx_wr.sg_list = &rx_sge;
 			rx_wr.num_sge = 1;
 
-			rc = ibv_post_recv(q->sw_qp.qp, &rx_wr, &bad_wr);
+			rc = ibv_post_recv(snap_qp_to_verbs_qp(q->sw_qp.qp), &rx_wr, &bad_wr);
 			if (rc)
 				goto free_rx_resources;
 		} else {
@@ -489,24 +449,23 @@ static void snap_destroy_fw_qp(struct snap_dma_q *q)
 static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 			     struct snap_dma_q_create_attr *attr)
 {
-	struct ibv_qp_init_attr init_attr = {};
+	struct snap_qp_attr qp_init_attr = {};
 	int rc;
 
 	/* cannot create empty cq or a qp without one */
-	init_attr.cap.max_send_wr = snap_max(attr->tx_qsize / 4,
-					     SNAP_DMA_FW_QP_MIN_SEND_WR);
-	init_attr.cap.max_recv_wr = 1;
+	qp_init_attr.sq_size = snap_max(attr->tx_qsize / 4, SNAP_DMA_FW_QP_MIN_SEND_WR);
+	qp_init_attr.rq_size = 1;
 	/* give one sge so that we can post which is useful for testing */
-	init_attr.cap.max_send_sge = 1;
+	qp_init_attr.sq_max_sge = 1;
 
 	/* the qp 'resources' are going to be replaced by the fw. We do not
 	 * need use DV or GGA here
 	 **/
-	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS);
+	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &qp_init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS);
 	return rc;
 }
 
-static int snap_modify_lb_qp_init2init(struct ibv_qp *qp)
+static int snap_modify_lb_qp_init2init(struct snap_qp *qp)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(init2init_qp_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(init2init_qp_out)] = {0};
@@ -514,7 +473,7 @@ static int snap_modify_lb_qp_init2init(struct ibv_qp *qp)
 	int ret;
 
 	DEVX_SET(init2init_qp_in, in, opcode, MLX5_CMD_OP_INIT2INIT_QP);
-	DEVX_SET(init2init_qp_in, in, qpn, qp->qp_num);
+	DEVX_SET(init2init_qp_in, in, qpn, snap_qp_get_qpnum(qp));
 
 	DEVX_SET(rst2init_qp_in, in, opt_param_mask, 0);
 
@@ -524,14 +483,14 @@ static int snap_modify_lb_qp_init2init(struct ibv_qp *qp)
 	qpc_ext = DEVX_ADDR_OF(init2init_qp_in, in, qpc_data_extension);
 	DEVX_SET(qpc_ext, qpc_ext, mmo, 1);
 
-	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
 		snap_error("failed to modify qp to init with errno = %d\n", ret);
 
 	return ret;
 }
 
-static int snap_modify_lb_qp_rst2init(struct ibv_qp *qp,
+static int snap_modify_lb_qp_rst2init(struct snap_qp *qp,
 				     struct ibv_qp_attr *qp_attr, int attr_mask)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
@@ -540,7 +499,7 @@ static int snap_modify_lb_qp_rst2init(struct ibv_qp *qp,
 	int ret;
 
 	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
-	DEVX_SET(rst2init_qp_in, in, qpn, qp->qp_num);
+	DEVX_SET(rst2init_qp_in, in, qpn, snap_qp_get_qpnum(qp));
 	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
 
 	if (attr_mask & IBV_QP_PKEY_INDEX)
@@ -558,13 +517,13 @@ static int snap_modify_lb_qp_rst2init(struct ibv_qp *qp,
 			DEVX_SET(qpc, qpc, rwe, 1);
 	}
 
-	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
 		snap_error("failed to modify qp to init with errno = %d\n", ret);
 	return ret;
 }
 
-static int snap_modify_lb_qp_init2rtr(struct ibv_qp *qp,
+static int snap_modify_lb_qp_init2rtr(struct snap_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask,
 				    bool force_loopback, uint16_t udp_sport)
 {
@@ -576,7 +535,7 @@ static int snap_modify_lb_qp_init2rtr(struct ibv_qp *qp,
 	int ret;
 
 	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
-	DEVX_SET(init2rtr_qp_in, in, qpn, qp->qp_num);
+	DEVX_SET(init2rtr_qp_in, in, qpn, snap_qp_get_qpnum(qp));
 
 	/* 30 is the maximum value for Infiniband QPs*/
 	DEVX_SET(qpc, qpc, log_msg_max, 30);
@@ -644,13 +603,13 @@ static int snap_modify_lb_qp_init2rtr(struct ibv_qp *qp,
 		}
 	}
 
-	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
 		snap_error("failed to modify qp to rtr with errno = %d\n", ret);
 	return ret;
 }
 
-static int snap_modify_lb_qp_rtr2rts(struct ibv_qp *qp,
+static int snap_modify_lb_qp_rtr2rts(struct snap_qp *qp,
 				    struct ibv_qp_attr *qp_attr, int attr_mask)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(rtr2rts_qp_in)] = {0};
@@ -659,7 +618,7 @@ static int snap_modify_lb_qp_rtr2rts(struct ibv_qp *qp,
 	int ret;
 
 	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
-	DEVX_SET(rtr2rts_qp_in, in, qpn, qp->qp_num);
+	DEVX_SET(rtr2rts_qp_in, in, qpn, snap_qp_get_qpnum(qp));
 
 	if (attr_mask & IBV_QP_TIMEOUT)
 		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
@@ -674,7 +633,7 @@ static int snap_modify_lb_qp_rtr2rts(struct ibv_qp *qp,
 		DEVX_SET(qpc, qpc, log_sra_max,
 			 snap_u32log2(qp_attr->max_rd_atomic));
 
-	ret = mlx5dv_devx_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
 	if (ret)
 		snap_error("failed to modify qp to rts with errno = %d\n", ret);
 	return ret;
@@ -788,7 +747,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		attr.ah_attr.is_global = 1;
 	}
 
-	attr.dest_qp_num = q->fw_qp.qp->qp_num;
+	attr.dest_qp_num = snap_qp_get_qpnum(q->fw_qp.qp);
 	flags_mask = IBV_QP_STATE              |
 		     IBV_QP_AV                 |
 		     IBV_QP_PATH_MTU           |
@@ -800,7 +759,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (sw_gid_entry && sw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
 		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
 		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
-				q->sw_qp.qp->qp_num, q->fw_qp.qp->qp_num);
+				snap_qp_get_qpnum(q->sw_qp.qp),
+				snap_qp_get_qpnum(q->fw_qp.qp));
 	} else {
 		udp_sport = 0;
 	}
@@ -818,7 +778,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (fw_gid_entry && fw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
 		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
 		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
-				q->fw_qp.qp->qp_num, q->sw_qp.qp->qp_num);
+				snap_qp_get_qpnum(q->sw_qp.qp),
+				snap_qp_get_qpnum(q->fw_qp.qp));
 	} else {
 		udp_sport = 0;
 	}
@@ -826,7 +787,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (roce_en && !force_loopback)
 		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid_entry->gid.raw,
 		       sizeof(sw_gid_entry->gid.raw));
-	attr.dest_qp_num = q->sw_qp.qp->qp_num;
+	attr.dest_qp_num = snap_qp_get_qpnum(q->sw_qp.qp);
 	rc = snap_modify_lb_qp_init2rtr(q->fw_qp.qp, &attr, flags_mask,
 				      force_loopback, udp_sport);
 	if (rc) {
@@ -866,7 +827,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	return 0;
 }
 
-static int snap_connect_loop_qp(struct snap_dma_q *q)
+static int snap_connect_loop_qp(struct snap_dma_q *q, struct ibv_pd *pd)
 {
 	struct ibv_gid_entry sw_gid_entry, fw_gid_entry;
 	int rc;
@@ -876,7 +837,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 	bool force_loopback = false;
 	struct snap_roce_caps roce_caps = {0};
 
-	rc = check_port(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
+	rc = check_port(pd->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
 			&ib_en, &lid, &mtu);
 	if (rc)
 		return rc;
@@ -886,7 +847,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL,
 					     NULL, &roce_caps);
 
-	rc = fill_roce_caps(q->sw_qp.qp->context, &roce_caps);
+	rc = fill_roce_caps(pd->context, &roce_caps);
 	if (rc)
 		return rc;
 
@@ -900,10 +861,10 @@ static int snap_connect_loop_qp(struct snap_dma_q *q)
 		 * If force loopback is unsupported try to acquire GIDs and
 		 * open a non-fl QP
 		 */
-		rc = ibv_query_gid_ex(q->sw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+		rc = ibv_query_gid_ex(pd->context, SNAP_DMA_QP_PORT_NUM,
 				   SNAP_DMA_QP_GID_INDEX, &sw_gid_entry, 0);
 		if (!rc)
-			rc = ibv_query_gid_ex(q->fw_qp.qp->context, SNAP_DMA_QP_PORT_NUM,
+			rc = ibv_query_gid_ex(pd->context, SNAP_DMA_QP_PORT_NUM,
 					   SNAP_DMA_QP_GID_INDEX, &fw_gid_entry, 0);
 		if (rc) {
 			snap_error("Failed to get gid[%d] for loop QP\n",
@@ -1052,7 +1013,7 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_sw_qp;
 
-	rc = snap_connect_loop_qp(q);
+	rc = snap_connect_loop_qp(q, pd);
 	if (rc)
 		goto free_fw_qp;
 
@@ -1204,7 +1165,7 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
 		tx_available = q->tx_qsize;
 	else
-		tx_available = q->sw_qp.dv_qp.qp.sq.wqe_cnt;
+		tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 
 	while (q->tx_available < tx_available)
 		n += q->ops->progress_tx(q);
@@ -1465,7 +1426,7 @@ int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
  */
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
 {
-	return q->fw_qp.qp;
+	return snap_qp_to_verbs_qp(q->fw_qp.qp);
 }
 
 /* Verbs implementation */
@@ -1474,7 +1435,7 @@ static inline int do_verbs_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
 		struct snap_dma_completion *comp)
 {
-	struct ibv_qp *qp = q->sw_qp.qp;
+	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->sw_qp.qp);
 	struct ibv_send_wr rdma_wr, *bad_wr;
 	struct ibv_sge sge;
 	int rc;
@@ -1547,7 +1508,7 @@ static inline int verbs_dma_q_readv(struct snap_dma_q *q, void *dst_buf,
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
 					      size_t len, int *n_bb)
 {
-	struct ibv_qp *qp = q->sw_qp.qp;
+	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->sw_qp.qp);
 	struct ibv_send_wr send_wr, *bad_wr;
 	struct ibv_sge sge;
 	int rc;
@@ -1581,7 +1542,7 @@ static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
 	struct ibv_sge rx_sge[SNAP_DMA_MAX_RX_COMPLETIONS + 1];
 
-	n = ibv_poll_cq(q->sw_qp.rx_cq, SNAP_DMA_MAX_RX_COMPLETIONS, wcs);
+	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), SNAP_DMA_MAX_RX_COMPLETIONS, wcs);
 	if (n == 0)
 		return 0;
 
@@ -1614,7 +1575,7 @@ static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 	}
 
 	rx_wr[i - 1].next = NULL;
-	rc = ibv_post_recv(q->sw_qp.qp, rx_wr, &bad_wr);
+	rc = ibv_post_recv(snap_qp_to_verbs_qp(q->sw_qp.qp), rx_wr, &bad_wr);
 	if (snap_unlikely(rc))
 		snap_error("dma queue %p: failed to post recv: errno=%d\n",
 				q, rc);
@@ -1627,7 +1588,7 @@ static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 	struct snap_dma_completion *comp;
 	int i, n;
 
-	n = ibv_poll_cq(q->sw_qp.tx_cq, SNAP_DMA_MAX_TX_COMPLETIONS, wcs);
+	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.tx_cq), SNAP_DMA_MAX_TX_COMPLETIONS, wcs);
 	if (n == 0)
 		return 0;
 
@@ -1666,7 +1627,7 @@ static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
 	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
 	struct ibv_sge rx_sge[SNAP_DMA_MAX_RX_COMPLETIONS + 1];
 
-	n = ibv_poll_cq(q->sw_qp.rx_cq, max_completions, wcs);
+	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), max_completions, wcs);
 	if (n == 0)
 		return 0;
 
@@ -1701,7 +1662,7 @@ static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
 	}
 
 	rx_wr[i - 1].next = NULL;
-	rc = ibv_post_recv(q->sw_qp.qp, rx_wr, &bad_wr);
+	rc = ibv_post_recv(snap_qp_to_verbs_qp(q->sw_qp.qp), rx_wr, &bad_wr);
 	if (snap_unlikely(rc))
 		snap_error("dma queue %p: failed to post recv: errno=%d\n",
 				q, rc);
@@ -1714,7 +1675,7 @@ static inline int verbs_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_comp
 	int i, n;
 	struct snap_dma_completion *dma_comp;
 
-	n = ibv_poll_cq(q->sw_qp.tx_cq, max_completions, wcs);
+	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.tx_cq), max_completions, wcs);
 	if (n == 0)
 		return 0;
 
@@ -1745,11 +1706,11 @@ static int verbs_dma_q_arm(struct snap_dma_q *q)
 {
 	int rc;
 
-	rc = ibv_req_notify_cq(q->sw_qp.tx_cq, 0);
+	rc = ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.tx_cq), 0);
 	if (rc)
 		return rc;
 
-	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
+	return ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), 0);
 }
 
 static struct snap_dma_q_ops verb_ops = {
@@ -1766,31 +1727,15 @@ static struct snap_dma_q_ops verb_ops = {
 	.arm = verbs_dma_q_arm
 };
 
-static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
-{
-	struct mlx5dv_obj dv_obj;
-	int rc;
-
-	dv_cq->ci = 0;
-	dv_obj.cq.in = cq;
-	dv_obj.cq.out = &dv_cq->cq;
-	rc = mlx5dv_init_obj(&dv_obj, MLX5DV_OBJ_CQ);
-
-	snap_debug("dv_cq: cqn = 0x%x, cqe_size = %d, cqe_count = %d comp_mask = 0x0%lx\n",
-		   dv_cq->cq.cqn, dv_cq->cq.cqe_size, dv_cq->cq.cqe_cnt,
-		   dv_cq->cq.comp_mask);
-	return rc;
-}
-
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 				     size_t len, uint32_t lkey)
 {
 	struct mlx5_wqe_data_seg *dseg;
 
-	dseg = (struct mlx5_wqe_data_seg *)(dv_qp->qp.rq.buf + (dv_qp->ci & (dv_qp->qp.rq.wqe_cnt - 1)) *
+	dseg = (struct mlx5_wqe_data_seg *)(dv_qp->hw_qp.rq.addr + (dv_qp->hw_qp.rq.ci & (dv_qp->hw_qp.rq.wqe_cnt - 1)) *
 					    SNAP_MLX5_RECV_WQE_BB);
 	mlx5dv_set_data_seg(dseg, len, lkey, (intptr_t)addr);
-	dv_qp->ci++;
+	dv_qp->hw_qp.rq.ci++;
 }
 
 static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
@@ -1809,7 +1754,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 		fm_ce_se |= MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-	snap_set_ctrl_seg(ctrl, dv_qp->pi, op, 0, q->sw_qp.qp->qp_num,
+	snap_set_ctrl_seg(ctrl, dv_qp->hw_qp.sq.pi, op, 0, dv_qp->hw_qp.qp_num,
 			    fm_ce_se, 3, 0, 0);
 
 	rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
@@ -1824,7 +1769,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	/* it is better to start dma as soon as possible and do
 	 * bookkeeping later
 	 **/
-	comp_idx = (dv_qp->pi - 1) & (dv_qp->qp.sq.wqe_cnt - 1);
+	comp_idx = (dv_qp->hw_qp.sq.pi - 1) & (dv_qp->hw_qp.sq.wqe_cnt - 1);
 	snap_dv_set_comp(dv_qp, comp_idx, comp, fm_ce_se, 1);
 	return 0;
 }
@@ -2003,8 +1948,8 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 	fm_ce_se |= snap_dv_get_cq_update(dv_qp, flush_comp);
 
 	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-	snap_set_ctrl_seg(ctrl, dv_qp->pi, op, 0,
-			    q->sw_qp.qp->qp_num, fm_ce_se,
+	snap_set_ctrl_seg(ctrl, dv_qp->hw_qp.sq.pi, op, 0,
+			    dv_qp->hw_qp.qp_num, fm_ce_se,
 			    round_up(wqe_size, 16), 0, 0);
 
 	if (op == MLX5_OPCODE_RDMA_WRITE) {
@@ -2019,20 +1964,20 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 	pdata = dseg + 1;
 
 	/* handle wrap around, where inline data needs several building blocks */
-	pi = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
-	to_end = (dv_qp->qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB -
+	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
+	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB -
 		 sizeof(*ctrl) - sizeof(*dseg);
 	if (op == MLX5_OPCODE_RDMA_WRITE)
 		to_end -= sizeof(*rseg);
 
 	if (snap_unlikely(len > to_end)) {
 		memcpy(pdata, src_buf, to_end);
-		memcpy(dv_qp->qp.sq.buf, src_buf + to_end, len - to_end);
+		memcpy((void *)dv_qp->hw_qp.sq.addr, src_buf + to_end, len - to_end);
 	} else {
 		memcpy(pdata, src_buf, len);
 	}
 
-	dv_qp->pi += (*n_bb - 1);
+	dv_qp->hw_qp.sq.pi += (*n_bb - 1);
 
 	snap_dv_wqe_submit(dv_qp, ctrl);
 
@@ -2053,7 +1998,7 @@ static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			dstaddr, rmkey, NULL, n_bb);
 }
 
-static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq, int cqe_size)
+static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_hw_cq *dv_cq, int cqe_size)
 {
 	struct mlx5_cqe64 *cqe;
 
@@ -2061,19 +2006,19 @@ static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_dv_cq *dv_cq, int c
 	 * down here so that branch and multiplication will be done at the
 	 * compile time during inlining
 	 **/
-	cqe = (struct mlx5_cqe64 *)(dv_cq->cq.buf + (dv_cq->ci & (dv_cq->cq.cqe_cnt - 1)) *
+	cqe = (struct mlx5_cqe64 *)(dv_cq->cq_addr + (dv_cq->ci & (dv_cq->cqe_cnt - 1)) *
 				    cqe_size);
 	return cqe_size == 64 ? cqe : cqe + 1;
 }
 
-static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_dv_cq *dv_cq, int cqe_size)
+static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_hw_cq *dv_cq, int cqe_size)
 {
 	struct mlx5_cqe64 *cqe;
 
 	cqe = snap_dv_get_cqe(dv_cq, cqe_size);
 
 	/* cqe is hw owned */
-	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cq.cqe_cnt))
+	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cqe_cnt))
 		return NULL;
 
 	/* and must have valid opcode */
@@ -2198,7 +2143,7 @@ static inline struct snap_dma_completion *dv_dma_q_get_comp(struct snap_dma_q *q
 	uint16_t comp_idx;
 	uint32_t sq_mask;
 
-	sq_mask = dv_qp->qp.sq.wqe_cnt - 1;
+	sq_mask = dv_qp->hw_qp.sq.wqe_cnt - 1;
 	comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
 	q->tx_available += dv_qp->comps[comp_idx].n_outstanding;
 
@@ -2242,7 +2187,7 @@ static inline void dv_dma_q_get_rx_comp(struct snap_dma_q *q, struct mlx5_cqe64 
 	/* optimize for NVMe where SQE is 64 bytes and will always
 	 * be scattered
 	 **/
-	rq_mask = q->sw_qp.dv_qp.qp.rq.wqe_cnt - 1;
+	rq_mask = q->sw_qp.dv_qp.hw_qp.rq.wqe_cnt - 1;
 	if (snap_likely(cqe->op_own & MLX5_INLINE_SCATTER_64)) {
 		__builtin_prefetch(cqe - 1);
 		rx_comp->data = cqe - 1;
@@ -2290,7 +2235,7 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 	if (n == 0)
 		return 0;
 
-	q->sw_qp.dv_qp.ci += n;
+	q->sw_qp.dv_qp.hw_qp.rq.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
 	return n;
 }
@@ -2319,7 +2264,7 @@ static inline int dv_dma_q_poll_rx(struct snap_dma_q *q,
 		n++;
 	} while (n < max_completions);
 
-	q->sw_qp.dv_qp.ci += n;
+	q->sw_qp.dv_qp.hw_qp.rq.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
 	return n;
 }
@@ -2404,16 +2349,16 @@ static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 	uint16_t comp_idx;
 	uint8_t fm_ce_se = 0;
 
-	comp_idx = dv_qp->pi & (dv_qp->qp.sq.wqe_cnt - 1);
+	comp_idx = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
 
 	fm_ce_se |= snap_dv_get_cq_update(dv_qp, comp);
 	if (use_fence)
 		fm_ce_se |= MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
 
 	ctrl = snap_dv_get_wqe_bb(dv_qp);
-	snap_set_ctrl_seg((struct mlx5_wqe_ctrl_seg *)ctrl, dv_qp->pi,
+	snap_set_ctrl_seg((struct mlx5_wqe_ctrl_seg *)ctrl, dv_qp->hw_qp.sq.pi,
 			    MLX5_OPCODE_MMO, MLX5_OPC_MOD_MMO_DMA,
-			    q->sw_qp.qp->qp_num, fm_ce_se,
+			    dv_qp->hw_qp.qp_num, fm_ce_se,
 			    4, 0, 0);
 
 	gga_wqe = (struct mlx5_dma_wqe *)ctrl;

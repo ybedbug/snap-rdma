@@ -19,6 +19,7 @@
 #include <sys/queue.h>
 
 #include "snap_mr.h"
+#include "snap_qp.h"
 
 #define SNAP_DMA_Q_OPMODE     "SNAP_DMA_Q_OPMODE"
 #define SNAP_DMA_Q_IOV_SUPP   "SNAP_DMA_Q_IOV_SUPP"
@@ -110,10 +111,8 @@ enum snap_db_ring_flag {
 };
 
 struct snap_dv_qp {
-	struct mlx5dv_qp  qp;
-	uint16_t          pi;
-	uint16_t          ci;
-	int               n_outstanding;
+	struct snap_hw_qp hw_qp;
+	int n_outstanding;
 	struct snap_dv_dma_completion *comps;
 	/* used to hold GGA data */
 	struct mlx5_dma_opaque     *opaque_buf;
@@ -125,23 +124,18 @@ struct snap_dv_qp {
 	struct mlx5_wqe_ctrl_seg *ctrl;
 };
 
-struct snap_dv_cq {
-	struct mlx5dv_cq cq;
-	uint16_t         ci;
-};
-
 struct snap_dma_ibv_qp {
-	struct ibv_qp  *qp;
-	struct ibv_cq  *tx_cq;
-	struct ibv_cq  *rx_cq;
+	/* used when working in devx mode */
+	struct snap_hw_cq dv_tx_cq;
+	struct snap_hw_cq dv_rx_cq;
+	struct snap_dv_qp dv_qp;
+
+	struct snap_qp *qp;
+	struct snap_cq *tx_cq;
+	struct snap_cq *rx_cq;
 	struct ibv_mr  *rx_mr;
 	char           *rx_buf;
 	int            mode;
-
-	/* used when working in devx mode */
-	struct snap_dv_qp  dv_qp;
-	struct snap_dv_cq  dv_tx_cq;
-	struct snap_dv_cq  dv_rx_cq;
 };
 
 struct snap_dma_q_ops {
@@ -216,6 +210,7 @@ struct snap_dma_q {
 	/** @uctx:  user supplied context */
 	void                  *uctx;
 	bool                  iov_supported;
+	bool                  no_events;
 };
 
 enum {
