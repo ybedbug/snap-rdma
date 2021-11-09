@@ -137,6 +137,7 @@ gtest_snap_rdma_CFLAGS = $(LOCAL_CFLAGS)
 gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  test_snap_dma.h \
 			  test_snap_dma.cc \
+			  test_snap_qp.cc \
 			  tests_common.h \
 			  tests_common.cc \
 			  test_sample_channel.cc \
