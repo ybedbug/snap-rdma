@@ -47,6 +47,10 @@
 #define snap_likely(x) __builtin_expect(!!(x), 1)
 #define snap_unlikely(x) __builtin_expect(!!(x), 0)
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(n) (sizeof(n) / sizeof(n[0]))
+#endif
+
 #ifndef SNAP_DEBUG
 #define SNAP_DEBUG 0
 #endif
