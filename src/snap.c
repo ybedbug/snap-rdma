@@ -263,8 +263,10 @@ static int snap_alloc_virtual_functions(struct snap_pci *pf, size_t num_vfs)
 	int output_size;
 	uint8_t *out;
 
-	if (num_vfs == 0)
+	if (num_vfs == 0) {
+		pf->num_vfs = num_vfs;
 		return 0;
+	}
 
 	output_size = DEVX_ST_SZ_BYTES(query_emulated_functions_info_out) +
 		      DEVX_ST_SZ_BYTES(emulated_function_info) * num_vfs;
