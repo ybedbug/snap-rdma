@@ -2201,28 +2201,28 @@ static inline struct snap_dma_completion *dv_dma_q_get_comp(struct snap_dma_q *q
 
 static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 {
-	struct mlx5_cqe64 *cqe;
-	struct snap_dma_completion *comp;
+	struct mlx5_cqe64 *cqe[SNAP_DMA_MAX_TX_COMPLETIONS];
+	struct snap_dma_completion *comp[SNAP_DMA_MAX_TX_COMPLETIONS];
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
-	int n;
+	int n, i;
 
 	n = 0;
 	do {
-		cqe = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
-		if (!cqe)
+		cqe[n] = snap_dv_poll_cq(&q->sw_qp.dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
+		if (!cqe[n])
 			break;
 
-		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe) != MLX5_CQE_REQ))
-			snap_dv_cqe_err(cqe);
+		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe[n]) != MLX5_CQE_REQ))
+			snap_dv_cqe_err(cqe[n]);
 
+		comp[n] = dv_dma_q_get_comp(q, cqe[n]);
 		n++;
-		comp = dv_dma_q_get_comp(q, cqe);
-
-		if (comp && --comp->count == 0)
-			comp->func(comp, mlx5dv_get_cqe_opcode(cqe));
-
 	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
 
+	for (i = 0; i < n; i++) {
+		if (comp[i] && --comp[i]->count == 0)
+			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
+	}
 	if (dv_qp->tx_need_ring_db) {
 		dv_qp->tx_need_ring_db = false;
 		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
@@ -2256,31 +2256,33 @@ static inline void dv_dma_q_get_rx_comp(struct snap_dma_q *q, struct mlx5_cqe64 
 
 static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 {
-	struct mlx5_cqe64 *cqe;
-	int n;
+	struct mlx5_cqe64 *cqe[SNAP_DMA_MAX_RX_COMPLETIONS];
+	int n, i;
 	int op;
-	struct snap_rx_completion rx_comp;
+	struct snap_rx_completion rx_comp[SNAP_DMA_MAX_RX_COMPLETIONS];
 
 	n = 0;
 	do {
-		cqe = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
-		if (!cqe)
+		cqe[n] = snap_dv_poll_cq(&q->sw_qp.dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
+		if (!cqe[n])
 			break;
 
-		op = mlx5dv_get_cqe_opcode(cqe);
+		op = mlx5dv_get_cqe_opcode(cqe[n]);
 		if (snap_unlikely(op != MLX5_CQE_RESP_SEND &&
 				  op != MLX5_CQE_RESP_SEND_IMM)) {
-			snap_dv_cqe_err(cqe);
+			snap_dv_cqe_err(cqe[n]);
 			return n;
 		}
 
-		snap_memory_cpu_load_fence();
 
+		dv_dma_q_get_rx_comp(q, cqe[n], &rx_comp[n]);
 		n++;
-		dv_dma_q_get_rx_comp(q, cqe, &rx_comp);
-		q->rx_cb(q, rx_comp.data, rx_comp.byte_len, rx_comp.imm_data);
-
 	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
+
+	snap_memory_cpu_load_fence();
+
+	for (i = 0; i < n; i++)
+		q->rx_cb(q, rx_comp[i].data, rx_comp[i].byte_len, rx_comp[i].imm_data);
 
 	if (n == 0)
 		return 0;

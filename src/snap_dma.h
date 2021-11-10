@@ -304,7 +304,7 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 }
 
 /* how many tx and rx completions to process during a signle progress call */
-#define SNAP_DMA_MAX_TX_COMPLETIONS  64
+#define SNAP_DMA_MAX_TX_COMPLETIONS  32
 #define SNAP_DMA_MAX_RX_COMPLETIONS  16
 
 /* align start of the receive buffer on 4k boundary */
