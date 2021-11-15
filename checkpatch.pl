@@ -4580,7 +4580,8 @@ sub process {
 		}
 
 # check for sizeof(foo)/sizeof(foo[0]) that could be ARRAY_SIZE(foo)
-		if ($line =~ m@\bsizeof\s*\(\s*($Lval)\s*\)@) {
+# allow ARRAY_SIZE macro definition
+		if ($line =~ m@\bsizeof\s*\(\s*($Lval)\s*\)@ && $line !~ m@\#define\s+ARRAY_SIZE@) {
 			my $array = $1;
 			if ($line =~ m@\b(sizeof\s*\(\s*\Q$array\E\s*\)\s*/\s*sizeof\s*\(\s*\Q$array\E\s*\[\s*0\s*\]\s*\))@) {
 				my $array_div = $1;
