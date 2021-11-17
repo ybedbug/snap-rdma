@@ -1852,7 +1852,7 @@ static void snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
 
 	TAILQ_INSERT_HEAD(&q->free_io_ctx, io_ctx, entry);
 
-	if (--orig_comp->count == 0)
+	if (orig_comp && --orig_comp->count == 0)
 		orig_comp->func(orig_comp, status);
 }
 
