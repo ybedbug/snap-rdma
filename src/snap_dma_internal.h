@@ -165,4 +165,12 @@ static inline void snap_dv_wqe_submit(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	}
 	snap_dv_ring_tx_db(dv_qp, ctrl);
 }
+
+static inline void snap_dv_tx_complete(struct snap_dv_qp *dv_qp)
+{
+	if (dv_qp->tx_need_ring_db) {
+		dv_qp->tx_need_ring_db = false;
+		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
+	}
+}
 #endif /* SNAP_DMA_INTERNAL_H */

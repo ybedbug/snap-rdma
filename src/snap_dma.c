@@ -1161,13 +1161,7 @@ int snap_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, 
  */
 int snap_dma_q_arm(struct snap_dma_q *q)
 {
-	int rc;
-
-	rc = ibv_req_notify_cq(q->sw_qp.tx_cq, 0);
-	if (rc)
-		return rc;
-
-	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
+	return q->ops->arm(q);
 }
 
 /**
@@ -1747,6 +1741,17 @@ static inline int verbs_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_comp
 	return n;
 }
 
+static int verbs_dma_q_arm(struct snap_dma_q *q)
+{
+	int rc;
+
+	rc = ibv_req_notify_cq(q->sw_qp.tx_cq, 0);
+	if (rc)
+		return rc;
+
+	return ibv_req_notify_cq(q->sw_qp.rx_cq, 0);
+}
+
 static struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
@@ -1758,6 +1763,7 @@ static struct snap_dma_q_ops verb_ops = {
 	.progress_rx     = verbs_dma_q_progress_rx,
 	.poll_rx     = verbs_dma_q_poll_rx,
 	.poll_tx     = verbs_dma_q_poll_tx,
+	.arm = verbs_dma_q_arm
 };
 
 static int snap_dv_cq_init(struct ibv_cq *cq, struct snap_dv_cq *dv_cq)
@@ -2223,11 +2229,8 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 		if (comp[i] && --comp[i]->count == 0)
 			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
 	}
-	if (dv_qp->tx_need_ring_db) {
-		dv_qp->tx_need_ring_db = false;
-		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
-	}
 
+	snap_dv_tx_complete(dv_qp);
 	return n;
 }
 
@@ -2328,10 +2331,7 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 	struct snap_dma_completion *dma_comp;
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 
-	if (dv_qp->tx_need_ring_db) {
-		dv_qp->tx_need_ring_db = false;
-		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
-	}
+	snap_dv_tx_complete(dv_qp);
 
 	n = 0;
 	do {
@@ -2352,6 +2352,16 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 	return n;
 }
 
+static int dv_dma_q_arm(struct snap_dma_q *q)
+{
+	/* ring doorbells, disable batch mode.
+	 * TODO: better interaction of batch and event modes
+	 */
+	snap_dv_tx_complete(&q->sw_qp.dv_qp);
+	q->sw_qp.dv_qp.db_flag = SNAP_DB_RING_IMM;
+	return verbs_dma_q_arm(q);
+}
+
 static struct snap_dma_q_ops dv_ops = {
 	.write           = dv_dma_q_write,
 	.writev          = dv_dma_q_writev,
@@ -2363,6 +2373,7 @@ static struct snap_dma_q_ops dv_ops = {
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,
 	.poll_tx         = dv_dma_q_poll_tx,
+	.arm             = dv_dma_q_arm
 };
 
 /* GGA */
@@ -2482,4 +2493,5 @@ static struct snap_dma_q_ops gga_ops = {
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,
 	.poll_tx         = dv_dma_q_poll_tx,
+	.arm             = dv_dma_q_arm
 };
