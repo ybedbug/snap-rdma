@@ -405,6 +405,24 @@ enum  mlx5_emulation_hotplug_state {
 #define SNAP_ALIGN_CEIL(val, align) \
 	SNAP_ALIGN_FLOOR(((val) + ((typeof(val)) (align) - 1)), align)
 
+#define SNAP_IS_POW2_OR_ZERO(_n) (!((_n) & ((_n) - 1)))
+
+#define SNAP_IS_POW2(_n) (((_n) > 0) && SNAP_IS_POW2_OR_ZERO(_n))
+
+#define SNAP_ROUNDUP_POW2(_n) \
+	({ \
+	 /* a hack to discard 'const' qualifier of _n */\
+	typeof((_n) + 0) pow2; \
+	/* weird indentation here to make style check happy */\
+	for \
+	 (pow2 = 1; pow2 < (_n); pow2 <<= 1); \
+	\
+	pow2; \
+	})
+
+#define SNAP_ROUNDUP_POW2_OR0(_n) \
+	(((_n) == 0) ? 0 : SNAP_ROUNDUP_POW2(_n))
+
 #define SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM   128
 
 void snap_close_device(struct snap_device *sdev);
