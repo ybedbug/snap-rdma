@@ -517,12 +517,23 @@ void SnapDmaTest::poll_tx(int mode)
 		ASSERT_EQ(0, rc);
 	}
 
-	sleep(1);
-	n = snap_dma_q_poll_tx(q, read_comp, tx_reqs);
-	for(i = 0; i < n; i++) {
-		read_comp[i]->func(read_comp[i], 0);
-		free(write_comp[i]);
+	int k = 0;
+	int retry = 1;
+again:
+	while ((n = snap_dma_q_poll_tx(q, read_comp, tx_reqs)) > 0) {
+		for(i = 0; i < n; i++, k++) {
+			read_comp[i]->func(read_comp[i], 0);
+			free(write_comp[k]);
+		}
 	}
+	/* if batching enabled the op will only go out at first poll, so
+	 * give additional time for things to complete
+	 */
+	if (retry-- && k == 0) {
+		sleep(1);
+		goto again;
+	}
+
 	ASSERT_EQ(tx_reqs, g_comp_count);
 	snap_dma_q_destroy(q);
 }
