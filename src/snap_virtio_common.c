@@ -576,23 +576,6 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 	return ret;
 }
 
-static int snap_virtio_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
-{
-	int ret = 0;
-	struct mlx5dv_pd pd_info;
-	struct mlx5dv_obj obj;
-
-	if (!pd)
-		return -EINVAL;
-	obj.pd.in = pd;
-	obj.pd.out = &pd_info;
-	ret = mlx5dv_init_obj(&obj, MLX5DV_OBJ_PD);
-	if (ret)
-		return ret;
-	*pd_id = pd_info.pdn;
-	return 0;
-}
-
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue_counters(struct snap_device *sdev)
 {
@@ -785,7 +768,7 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	DEVX_SET64(virtio_q, virtq_ctx, available_addr, vattr->driver);
 	DEVX_SET64(virtio_q, virtq_ctx, used_addr, vattr->device);
 
-	ret = snap_virtio_get_pd_id(vattr->pd, &pd_id);
+	ret = snap_get_pd_id(vattr->pd, &pd_id);
 	if (ret) {
 		errno = ret;
 		goto out;

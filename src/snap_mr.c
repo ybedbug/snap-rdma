@@ -16,7 +16,7 @@
 #include "mlx5_ifc.h"
 
 
-static int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
+int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 {
 	int ret = 0;
 	struct mlx5dv_pd pd_info;
