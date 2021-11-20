@@ -63,9 +63,6 @@ struct snap_json_rpc_client {
 	int sockfd;
 	bool connected;
 
-	/* lock to serialize the data transfers */
-	pthread_mutex_t lock;
-
 	bool rsp_ready;
 	size_t recv_buf_size;
 	size_t recv_offset;

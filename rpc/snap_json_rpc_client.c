@@ -189,7 +189,6 @@ snap_json_rpc_get_response(struct snap_json_rpc_client *client)
 {
 	struct snap_json_rpc_client_response *rsp;
 
-	pthread_mutex_lock(&client->lock);
 	if (!client->rsp_ready)
 		goto out_err;
 
@@ -206,14 +205,12 @@ snap_json_rpc_get_response(struct snap_json_rpc_client *client)
 	/* after consuming the response, we can rewind the offset */
 	client->recv_offset = 0;
 	client->rsp_ready = false;
-	pthread_mutex_unlock(&client->lock);
 
 	return rsp;
 
 out_free:
 	free(rsp);
 out_err:
-	pthread_mutex_unlock(&client->lock);
 	return NULL;
 }
 
@@ -229,7 +226,6 @@ int snap_json_rpc_wait_for_response(struct snap_json_rpc_client *client)
 {
 	int ret = 0;
 
-	pthread_mutex_lock(&client->lock);
 	while (ret == 0 || ret == -ENOTCONN)
 		ret = snap_json_rpc_client_poll(client);
 
@@ -237,7 +233,6 @@ int snap_json_rpc_wait_for_response(struct snap_json_rpc_client *client)
 	if (ret == 1)
 		ret = 0;
 
-	pthread_mutex_unlock(&client->lock);
 	return ret;
 }
 
@@ -261,7 +256,6 @@ int snap_json_rpc_client_send_req(struct snap_json_rpc_client *client,
 	int ret = 0;
 	void *json_start, *json_end;
 
-	pthread_mutex_lock(&client->lock);
 	if (!client->connected || client->send_buf) {
 		ret = -EAGAIN;
 		goto out;
@@ -300,7 +294,6 @@ int snap_json_rpc_client_send_req(struct snap_json_rpc_client *client,
 	client->send_offset = json_start - buf;
 	client->send_len = json_end - json_start + 1;
 out:
-	pthread_mutex_unlock(&client->lock);
 	return ret;
 }
 
@@ -323,20 +316,16 @@ struct snap_json_rpc_client *snap_json_rpc_client_open(const char *addr)
 		goto out_err;
 	}
 
-	ret = pthread_mutex_init(&client->lock, NULL);
-	if (ret)
-		goto out_free;
-
 	addr_un.sun_family = AF_UNIX;
 	ret = snprintf(addr_un.sun_path, sizeof(addr_un.sun_path), "%s", addr);
 	if (ret < 0 || (size_t)ret >= sizeof(addr_un.sun_path)) {
 		errno = -EINVAL;
-		goto out_free_mutex;
+		goto out_free;
 	}
 
 	client->sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (client->sockfd < 0)
-		goto out_free_mutex;
+		goto out_free;
 
 	flags = fcntl(client->sockfd, F_GETFL);
 	if (flags < 0 || fcntl(client->sockfd, F_SETFL,
@@ -354,8 +343,6 @@ struct snap_json_rpc_client *snap_json_rpc_client_open(const char *addr)
 
 out_free_socket:
 	close(client->sockfd);
-out_free_mutex:
-	pthread_mutex_destroy(&client->lock);
 out_free:
 	free(client);
 out_err:
@@ -375,6 +362,5 @@ void snap_json_rpc_client_close(struct snap_json_rpc_client *client)
 	if (client->send_buf)
 		free(client->send_buf);
 	close(client->sockfd);
-	pthread_mutex_destroy(&client->lock);
 	free(client);
 }
