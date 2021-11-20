@@ -13,6 +13,8 @@
 #ifndef SNAP_MR_H
 #define SNAP_MR_H
 
+#include <stdbool.h>
+#include <sys/queue.h>
 #include <infiniband/verbs.h>
 
 /* do a forward declaration to avoid include snap.h */
@@ -71,4 +73,15 @@ snap_destroy_indirect_mkey(struct snap_indirect_mkey *mkey);
 int snap_umem_init(struct ibv_context *context, struct snap_umem *umem);
 void snap_umem_reset(struct snap_umem *umem);
 
+struct snap_uar {
+	struct mlx5dv_devx_uar *uar;
+	struct ibv_context *context;
+	int refcnt;
+	bool nc; /* non cacheable */
+
+	LIST_ENTRY(snap_uar) entry;
+};
+
+struct snap_uar *snap_uar_get(struct ibv_context *ctx);
+void snap_uar_put(struct snap_uar *uar);
 #endif

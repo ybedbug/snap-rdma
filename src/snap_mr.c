@@ -10,11 +10,12 @@
  * provided with the software product.
  */
 
-#include "snap_mr.h"
+#include <limits.h>
 
+#include "config.h"
 #include "snap.h"
+#include "snap_mr.h"
 #include "mlx5_ifc.h"
-
 
 int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 {
@@ -338,4 +339,95 @@ void snap_umem_reset(struct snap_umem *umem)
 	free(umem->buf);
 
 	memset(umem, 0, sizeof(*umem));
+}
+
+static LIST_HEAD(snap_uar_list_head, snap_uar) snap_uar_list = LIST_HEAD_INITIALIZER(snap_uar_list);
+static pthread_mutex_t snap_uar_list_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static const char *snap_uar_name(struct snap_uar *uar)
+{
+	return ibv_get_device_name(uar->context->device);
+}
+
+static struct snap_uar *snap_uar_lookup(struct ibv_context *ctx)
+{
+	struct snap_uar *uar;
+
+	LIST_FOREACH(uar, &snap_uar_list, entry) {
+		if (uar->context == ctx)
+			return uar;
+	}
+	return NULL;
+}
+
+/* TODO: allow multiple ibv contexts, keep a list of (context, uar) */
+struct snap_uar *snap_uar_get(struct ibv_context *ctx)
+{
+	struct snap_uar *uar;
+
+	/* since DPU 64bit writes are atomic it is safe to use single
+	 * UAR per ibv context. (EliavB)
+	 */
+	pthread_mutex_lock(&snap_uar_list_lock);
+
+	uar = snap_uar_lookup(ctx);
+	if (!uar) {
+		uar = calloc(1, sizeof(*uar));
+		if (!uar)
+			goto uar_calloc_fail;
+	}
+
+	if (uar->refcnt > 0) {
+		uar->refcnt++;
+		if (uar->refcnt == 0) {
+			snap_error("%s: uar refcnt overflow\n", snap_uar_name(uar));
+			uar->refcnt = INT_MAX;
+			goto uar_ref_fail;
+		}
+		snap_debug("%s: uar ref: %d\n", snap_uar_name(uar), uar->refcnt);
+		pthread_mutex_unlock(&snap_uar_list_lock);
+		return uar;
+	}
+
+	/* we really want non cacheble uar in order to skip memory barrier
+	 * when ringing tx doorbells.
+	 * TODO: we may need to support blueflame
+	 */
+	uar->uar = mlx5dv_devx_alloc_uar(ctx, MLX5DV_UAR_ALLOC_TYPE_NC);
+	if (!uar->uar) {
+		uar->uar = mlx5dv_devx_alloc_uar(ctx, MLX5DV_UAR_ALLOC_TYPE_BF);
+		if (!uar->uar)
+			goto uar_devx_alloc_fail;
+		uar->nc = false;
+	} else
+		uar->nc = true;
+
+	uar->refcnt = 1;
+	uar->context = ctx;
+	LIST_INSERT_HEAD(&snap_uar_list, uar, entry);
+	snap_debug("%s: NEW UAR: ctx %p uar %p nc %d\n", snap_uar_name(uar), ctx,
+		   uar->uar, uar->nc);
+	pthread_mutex_unlock(&snap_uar_list_lock);
+	return uar;
+
+uar_devx_alloc_fail:
+	free(uar);
+uar_ref_fail:
+uar_calloc_fail:
+	pthread_mutex_unlock(&snap_uar_list_lock);
+	return NULL;
+}
+
+void snap_uar_put(struct snap_uar *uar)
+{
+	pthread_mutex_lock(&snap_uar_list_lock);
+	snap_debug("%s: FREE UAR ref: %d\n", snap_uar_name(uar), uar->refcnt);
+	if (--uar->refcnt > 0) {
+		pthread_mutex_unlock(&snap_uar_list_lock);
+		return;
+	}
+	LIST_REMOVE(uar, entry);
+	pthread_mutex_unlock(&snap_uar_list_lock);
+	mlx5dv_devx_free_uar(uar->uar);
+	free(uar);
 }
