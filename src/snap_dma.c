@@ -1140,37 +1140,7 @@ int snap_dma_q_arm(struct snap_dma_q *q)
  */
 int snap_dma_q_flush(struct snap_dma_q *q)
 {
-	int n, n_out, n_bb;
-	int tx_available;
-	struct snap_dma_completion comp;
-
-	n = 0;
-	/* in case we have tx moderation we need at least one
-	 * available to be able to send a flush command
-	 */
-	while (!qp_can_tx(q, 1))
-		n += q->ops->progress_tx(q);
-
-	/* only dv/gga have tx moderation at the moment, flush all outstanding
-	 * ops by issueing a zero length inline rdma write
-	 */
-	n_out = q->sw_qp.dv_qp.n_outstanding;
-	if (n_out) {
-		comp.count = 2;
-		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
-		q->tx_available -= n_bb;
-		n--;
-	}
-
-	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
-		tx_available = q->tx_qsize;
-	else
-		tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-
-	while (q->tx_available < tx_available)
-		n += q->ops->progress_tx(q);
-
-	return n_out + n;
+	return q->ops->flush(q);
 }
 
 /**
@@ -1713,6 +1683,17 @@ static int verbs_dma_q_arm(struct snap_dma_q *q)
 	return ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), 0);
 }
 
+static int verbs_dma_q_flush(struct snap_dma_q *q)
+{
+	int n;
+
+	n = 0;
+	while (q->tx_available < q->tx_qsize)
+		n += verbs_dma_q_progress_tx(q);
+
+	return n;
+}
+
 static struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
@@ -1724,7 +1705,8 @@ static struct snap_dma_q_ops verb_ops = {
 	.progress_rx     = verbs_dma_q_progress_rx,
 	.poll_rx     = verbs_dma_q_poll_rx,
 	.poll_tx     = verbs_dma_q_poll_tx,
-	.arm = verbs_dma_q_arm
+	.arm = verbs_dma_q_arm,
+	.flush = verbs_dma_q_flush
 };
 
 static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
@@ -2307,6 +2289,35 @@ static int dv_dma_q_arm(struct snap_dma_q *q)
 	return verbs_dma_q_arm(q);
 }
 
+static int dv_dma_q_flush(struct snap_dma_q *q)
+{
+	int n, n_out, n_bb;
+	int tx_available;
+	struct snap_dma_completion comp;
+
+	n = 0;
+	/* in case we have tx moderation we need at least one
+	 * available to be able to send a flush command
+	 */
+	while (!qp_can_tx(q, 1))
+		n += dv_dma_q_progress_tx(q);
+
+	/* flush all outstanding ops by issuing a zero length inline rdma write */
+	n_out = q->sw_qp.dv_qp.n_outstanding;
+	if (n_out) {
+		comp.count = 2;
+		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
+		q->tx_available -= n_bb;
+		n--;
+	}
+
+	tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+	while (q->tx_available < tx_available)
+		n += dv_dma_q_progress_tx(q);
+
+	return n_out + n;
+}
+
 static struct snap_dma_q_ops dv_ops = {
 	.write           = dv_dma_q_write,
 	.writev          = dv_dma_q_writev,
@@ -2318,7 +2329,8 @@ static struct snap_dma_q_ops dv_ops = {
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,
 	.poll_tx         = dv_dma_q_poll_tx,
-	.arm             = dv_dma_q_arm
+	.arm             = dv_dma_q_arm,
+	.flush           = dv_dma_q_flush,
 };
 
 /* GGA */
@@ -2438,5 +2450,6 @@ static struct snap_dma_q_ops gga_ops = {
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,
 	.poll_tx         = dv_dma_q_poll_tx,
-	.arm             = dv_dma_q_arm
+	.arm             = dv_dma_q_arm,
+	.flush           = dv_dma_q_flush,
 };
