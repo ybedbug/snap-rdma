@@ -57,6 +57,19 @@
 #define snap_memory_cpu_store_fence()  asm volatile("dmb ishst" ::: "memory")
 #define snap_memory_cpu_load_fence()   asm volatile("dmb ishld" ::: "memory")
 
+#elif defined(__DPA) || defined(__riscv)
+
+#define snap_riscv_fence(p, s) \
+	__asm__ __volatile__ ("fence " #p "," #s : : : "memory")
+
+#define snap_memory_bus_fence() snap_riscv_fence(iorw, iorw)
+#define snap_memory_bus_store_fence() snap_riscv_fence(ow, ow)
+#define snap_memory_bus_load_fence() snap_riscv_fence(ir, ir)
+
+#define snap_memory_cpu_fence() snap_riscv_fence(rw, rw)
+#define snap_memory_cpu_store_fence() snap_riscv_fence(w, w)
+#define snap_memory_cpu_load_fence() snap_riscv_fence(r, r)
+
 #else
 # error "Unsupported architecture"
 #endif
