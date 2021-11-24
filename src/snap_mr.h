@@ -15,7 +15,9 @@
 
 #include <stdbool.h>
 #include <sys/queue.h>
+#if !defined(__DPA)
 #include <infiniband/verbs.h>
+#endif
 
 /* do a forward declaration to avoid include snap.h */
 struct snap_device;

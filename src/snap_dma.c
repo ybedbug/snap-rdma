@@ -9,6 +9,7 @@
  * This software product is governed by the End User License Agreement
  * provided with the software product.
  */
+#include <stdint.h>
 
 #include "config.h"
 #include "snap_dma_internal.h"
@@ -83,6 +84,8 @@ int snap_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, 
  *
  * The function 'arms' dma queue to report send and receive events over its
  * completion channel.
+ *
+ * Not available on DPA
  *
  * Return:  0 or -errno on error
  */
@@ -358,9 +361,15 @@ int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
  * The function returns qp that can be used by the FW emulation objects
  * See snap_dma_q_create() for the detailed explanation
  *
+ * Not valid on the DPA
+ *
  * Return: fw qp
  */
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
 {
+#if !defined(__DPA)
 	return snap_qp_to_verbs_qp(q->fw_qp.qp);
+#else
+	return NULL;
+#endif
 }

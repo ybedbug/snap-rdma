@@ -10,7 +10,11 @@
  * provided with the software product.
  */
 
+#include <stdint.h>
+
+#if !defined(__DPA)
 #include <arpa/inet.h>
+#endif
 
 #include "snap_dma_internal.h"
 #include "snap_umr.h"
@@ -69,7 +73,8 @@ static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 			MLX5_OPCODE_RDMA_READ, 0, comp, false);
 }
 
-static void snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
+/* UMRs are not supported on the DPA yet */
+__attribute__((unused)) static void snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
 {
 	struct snap_dma_q_io_ctx *io_ctx;
 	struct snap_dma_q *q;
@@ -118,6 +123,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 				struct snap_dma_completion *comp,
 				size_t *len, int *n_bb)
 {
+#if !defined(__DPA)
 	int ret;
 	struct snap_dma_q_io_ctx *io_ctx;
 
@@ -150,7 +156,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 insert_back:
 	TAILQ_INSERT_TAIL(&q->free_io_ctx, io_ctx, entry);
 	errno = ret;
-
+#endif
 	return NULL;
 }
 
@@ -578,6 +584,7 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 
 static int dv_dma_q_arm(struct snap_dma_q *q)
 {
+#if !defined(__DPA)
 	int rc;
 
 	/* ring doorbells, disable batch mode.
@@ -591,6 +598,9 @@ static int dv_dma_q_arm(struct snap_dma_q *q)
 		return rc;
 
 	return ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), 0);
+#else
+	return -ENOTSUP;
+#endif
 }
 
 static int dv_dma_q_flush(struct snap_dma_q *q)
@@ -646,8 +656,8 @@ __attribute__((unused)) static void dump_gga_wqe(int op, uint32_t *wqe)
 
 	for (i = 0; i < 16; i += 4)
 		printf("%08X %08X %08X %08X\n",
-			ntohl(wqe[i]), ntohl(wqe[i + 1]),
-			ntohl(wqe[i + 2]), ntohl(wqe[i + 3]));
+			be32toh(wqe[i]), be32toh(wqe[i + 1]),
+			be32toh(wqe[i + 2]), be32toh(wqe[i + 3]));
 }
 
 static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,

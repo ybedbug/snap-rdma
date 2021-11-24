@@ -13,10 +13,14 @@
 #ifndef SNAP_DMA_H
 #define SNAP_DMA_H
 
+#if !defined(__DPA)
 #include <sys/uio.h>
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
 #include <sys/queue.h>
+#else
+#include "../dpa/snap_dma_compat.h"
+#endif
 
 #include "snap_mr.h"
 #include "snap_qp.h"

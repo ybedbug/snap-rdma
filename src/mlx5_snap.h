@@ -14,11 +14,13 @@
 #define MLX5_SNAP_H
 
 #include <stdlib.h>
+#include <pthread.h>
 
+#if !defined(__DPA)
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>
-#include <pthread.h>
 #include <linux/types.h>
+#endif
 
 #define SNAP_FT_ROOT_LEVEL 5
 #define SNAP_FT_LOG_SIZE 10

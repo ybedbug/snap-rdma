@@ -24,7 +24,9 @@
 #include <unistd.h>
 #include <sys/queue.h>
 
+#if !defined(__DPA)
 #include <infiniband/verbs.h>
+#endif
 
 #include "snap_mr.h"
 #include "mlx5_snap.h"
