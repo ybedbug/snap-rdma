@@ -113,6 +113,7 @@ enum snap_db_ring_flag {
 struct snap_dv_qp {
 	struct snap_hw_qp hw_qp;
 	int n_outstanding;
+	uint32_t opaque_lkey;
 	struct snap_dv_dma_completion *comps;
 	/* used to hold GGA data */
 	struct mlx5_dma_opaque     *opaque_buf;

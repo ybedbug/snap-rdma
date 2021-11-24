@@ -270,6 +270,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	if (!qp->dv_qp.opaque_mr)
 		goto free_opaque;
 
+	qp->dv_qp.opaque_lkey = htobe32(qp->dv_qp.opaque_mr->lkey);
 	return 0;
 
 free_opaque:
