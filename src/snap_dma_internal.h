@@ -61,7 +61,33 @@
 # error "Unsupported architecture"
 #endif
 
+#define SNAP_DMA_Q_RX_CQE_SIZE  128
+#define SNAP_DMA_Q_TX_CQE_SIZE  64
 #define SNAP_DMA_Q_TX_MOD_COUNT 16
+
+/* GGA specific */
+#define MLX5_OPCODE_MMO       0x2F
+#define MLX5_OPC_MOD_MMO_DMA  0x1
+
+struct mlx5_dma_opaque {
+	uint32_t syndrom;
+	uint32_t reserved;
+	uint32_t scattered_length;
+	uint32_t gathered_length;
+	uint8_t  reserved2[240];
+};
+
+struct mlx5_dma_wqe {
+	uint32_t opcode;
+	uint32_t sq_ds;
+	uint32_t flags;
+	uint32_t gga_ctrl1;  /* unused for dma */
+	uint32_t gga_ctrl2;  /* unused for dma */
+	uint32_t opaque_lkey;
+	uint64_t opaque_vaddr;
+	struct mlx5_wqe_data_seg gather;
+	struct mlx5_wqe_data_seg scatter;
+};
 
 static inline uint16_t round_up(uint16_t x, uint16_t d)
 {
@@ -174,5 +200,18 @@ static inline void snap_dv_tx_complete(struct snap_dv_qp *dv_qp)
 	}
 }
 
+static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
+				     size_t len, uint32_t lkey)
+{
+	struct mlx5_wqe_data_seg *dseg;
+
+	dseg = (struct mlx5_wqe_data_seg *)(dv_qp->hw_qp.rq.addr + (dv_qp->hw_qp.rq.ci & (dv_qp->hw_qp.rq.wqe_cnt - 1)) *
+					    SNAP_MLX5_RECV_WQE_BB);
+	mlx5dv_set_data_seg(dseg, len, lkey, (intptr_t)addr);
+	dv_qp->hw_qp.rq.ci++;
+}
+
 extern struct snap_dma_q_ops verb_ops;
+extern struct snap_dma_q_ops dv_ops;
+extern struct snap_dma_q_ops gga_ops;
 #endif /* SNAP_DMA_INTERNAL_H */

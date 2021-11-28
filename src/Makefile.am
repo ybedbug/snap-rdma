@@ -32,6 +32,7 @@ libsnap_la_SOURCES = snap.c \
 		     snap_virtio_common.c \
 		     snap_dma.c \
 		     snap_dma_verbs.c \
+		     snap_dma_dv.c \
 		     snap_umr.c \
 		     snap_rdma_channel.c \
 		     snap_channel.c \
