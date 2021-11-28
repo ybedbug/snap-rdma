@@ -324,67 +324,24 @@ snap_virtio_blk_create_hw_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_blk_device *vbdev;
 	struct snap_virtio_blk_queue *vbq;
-	struct snap_cross_mkey *snap_cross_mkey;
-	int ret;
 
 	vbdev = (struct snap_virtio_blk_device *)sdev->dd_data;
 
 	if (attr->vattr.idx >= vbdev->num_queues) {
 		errno = EINVAL;
-		goto out;
+		return NULL;
 	}
 
 	vbq = &vbdev->virtqs[attr->vattr.idx];
 
-	ret = snap_virtio_init_virtq_umem(sdev->sctx->context,
-					  &sdev->sctx->virtio_blk_caps,
-					  &vbq->virtq, attr->vattr.size);
-	if (ret) {
-		errno = ret;
-		goto out;
-	}
+	if (snap_virtio_create_hw_queue(sdev, &vbq->virtq,
+					&sdev->sctx->virtio_blk_caps,
+					&attr->vattr,
+					snap_consume_virtio_blk_queue_event))
+		return NULL;
 
-	if (sdev->sctx->virtio_blk_caps.virtio_q_counters && vbq->virtq.ctrs_obj)
-		attr->vattr.ctrs_obj_id = vbq->virtq.ctrs_obj->obj_id;
-
-	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
-	if (!snap_cross_mkey) {
-		snap_error("Failed to create snap MKey Entry for blk queue\n");
-		goto out_umem;
-	}
-	attr->vattr.dma_mkey = snap_cross_mkey->mkey;
-	vbq->virtq.snap_cross_mkey = snap_cross_mkey;
-
-	vbq->virtq.virtq = snap_virtio_create_queue(sdev, &attr->vattr,
-						    vbq->virtq.umem);
-	if (!vbq->virtq.virtq)
-		goto destroy_mkey;
-
-	if (sdev->mdev.channel) {
-		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
-
-		ret = mlx5dv_devx_subscribe_devx_event(sdev->mdev.channel,
-			vbq->virtq.virtq->obj,
-			sizeof(ev_type), &ev_type,
-			(uint64_t)vbq->virtq.virtq);
-		if (ret)
-			goto destroy_queue;
-
-		vbq->virtq.virtq->consume_event = snap_consume_virtio_blk_queue_event;
-	}
-	vbq->virtq.idx = attr->vattr.idx;
 	attr->q_provider = SNAP_HW_Q_PROVIDER;
-
 	return &vbq->virtq;
-
-destroy_queue:
-	snap_devx_obj_destroy(vbq->virtq.virtq);
-destroy_mkey:
-	snap_destroy_cross_mkey(vbq->virtq.snap_cross_mkey);
-out_umem:
-	snap_virtio_teardown_virtq_umem(&vbq->virtq);
-out:
-	return NULL;
 }
 
 /**
@@ -397,18 +354,7 @@ out:
  */
 static int snap_virtio_blk_destroy_hw_queue(struct snap_virtio_queue *vq)
 {
-	int mkey_ret, q_ret;
-
-	vq->virtq->consume_event = NULL;
-
-	mkey_ret = snap_destroy_cross_mkey(vq->snap_cross_mkey);
-	q_ret = snap_devx_obj_destroy(vq->virtq);
-	snap_virtio_teardown_virtq_umem(vq);
-
-	if (mkey_ret)
-		return mkey_ret;
-
-	return q_ret;
+	return snap_virtio_destroy_hw_queue(vq);
 }
 
 /**

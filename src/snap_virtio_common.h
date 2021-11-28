@@ -262,19 +262,19 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 
 struct mlx5_snap_devx_obj*
 snap_virtio_create_queue_counters(struct snap_device *sdev);
-struct mlx5_snap_devx_obj*
-snap_virtio_create_queue(struct snap_device *sdev,
-	struct snap_virtio_queue_attr *attr, struct snap_umem *umem);
 int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	struct snap_virtio_queue_attr *vattr);
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	struct snap_virtio_queue_attr *vattr);
 
-int snap_virtio_init_virtq_umem(struct ibv_context *context,
-				struct snap_virtio_caps *virtio,
-				struct snap_virtio_queue *virtq,
-				int depth);
-void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq);
+typedef int (*event_consumer_fn)(struct mlx5_snap_devx_obj *obj,
+				 struct snap_event *sevent);
+int snap_virtio_create_hw_queue(struct snap_device *sdev,
+				struct snap_virtio_queue *vq,
+				struct snap_virtio_caps *caps,
+				struct snap_virtio_queue_attr *vattr,
+				event_consumer_fn consume_fn);
+int snap_virtio_destroy_hw_queue(struct snap_virtio_queue *vq);
 
 int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr,
 					    uint64_t dev_addr, uint32_t dma_mkey,

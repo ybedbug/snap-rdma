@@ -313,8 +313,6 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_net_device *vndev;
 	struct snap_virtio_net_queue *vnq;
-	struct snap_cross_mkey *snap_cross_mkey;
-	int ret;
 
 	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
 
@@ -325,37 +323,14 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 
 	vnq = &vndev->virtqs[attr->vattr.idx];
 
-	ret = snap_virtio_init_virtq_umem(sdev->mdev.context,
-					  &sdev->sctx->virtio_net_caps,
-					  &vnq->virtq, attr->vattr.size);
-	if (ret) {
-		errno = ret;
-		goto out;
-	}
-
-	attr->vattr.ctrs_obj_id = vnq->virtq.ctrs_obj->obj_id;
-
-	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
-	if (!snap_cross_mkey) {
-		snap_error("Failed to create snap MKey Entry for net queue\n");
-		goto out_umem;
-	}
-	attr->vattr.dma_mkey = snap_cross_mkey->mkey;
-	vnq->virtq.snap_cross_mkey = snap_cross_mkey;
-
-	vnq->virtq.virtq = snap_virtio_create_queue(sdev, &attr->vattr,
-						    vnq->virtq.umem);
-	if (!vnq->virtq.virtq)
-		goto destroy_mkey;
-
-	vnq->virtq.idx = attr->vattr.idx;
+	if (snap_virtio_create_hw_queue(sdev, &vnq->virtq,
+					&sdev->sctx->virtio_net_caps,
+					&attr->vattr,
+					NULL))
+		return NULL;
 
 	return vnq;
 
-destroy_mkey:
-	snap_destroy_cross_mkey(vnq->virtq.snap_cross_mkey);
-out_umem:
-	snap_virtio_teardown_virtq_umem(&vnq->virtq);
 out:
 	return NULL;
 }
@@ -370,20 +345,7 @@ out:
  */
 int snap_virtio_net_destroy_queue(struct snap_virtio_net_queue *vnq)
 {
-	int mkey_ret, ret;
-
-	vnq->virtq.virtq->consume_event = NULL;
-
-	mkey_ret = snap_destroy_cross_mkey(vnq->virtq.snap_cross_mkey);
-	ret = snap_devx_obj_destroy(vnq->virtq.virtq);
-	snap_virtio_teardown_virtq_umem(&vnq->virtq);
-
-	vnq->virtq.virtq = NULL;
-
-	if (mkey_ret)
-		return mkey_ret;
-
-	return ret;
+	return snap_virtio_destroy_hw_queue(&vnq->virtq);
 }
 
 static int

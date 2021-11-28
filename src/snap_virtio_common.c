@@ -25,6 +25,12 @@
 #define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
 
+static int snap_virtio_init_virtq_umem(struct ibv_context *context,
+					struct snap_virtio_caps *virtio,
+					struct snap_virtio_queue *virtq,
+					int depth);
+static void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq);
+
 void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 		void *q_configuration)
 {
@@ -639,7 +645,7 @@ int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
 	return ret;
 }
 
-struct mlx5_snap_devx_obj*
+static struct mlx5_snap_devx_obj*
 snap_virtio_create_queue(struct snap_device *sdev,
 	struct snap_virtio_queue_attr *vattr, struct snap_umem *umem)
 {
@@ -835,6 +841,87 @@ snap_virtio_create_queue(struct snap_device *sdev,
 	return virtq;
 out:
 	return NULL;
+}
+
+static int snap_virtio_destroy_queue(struct snap_virtio_queue *vq)
+{
+	int ret;
+
+	ret = snap_devx_obj_destroy(vq->virtq);
+	vq->virtq = NULL;
+
+	return ret;
+}
+
+int snap_virtio_create_hw_queue(struct snap_device *sdev,
+				struct snap_virtio_queue *vq,
+				struct snap_virtio_caps *caps,
+				struct snap_virtio_queue_attr *vattr,
+				event_consumer_fn consume_fn)
+{
+	int ret;
+	struct snap_cross_mkey *snap_cross_mkey;
+
+	ret = snap_virtio_init_virtq_umem(sdev->sctx->context, caps, vq,
+					  vattr->size);
+	if (ret)
+		goto err;
+
+	if (caps->virtio_q_counters && vq->ctrs_obj)
+		vattr->ctrs_obj_id = vq->ctrs_obj->obj_id;
+
+	snap_cross_mkey = snap_create_cross_mkey(vattr->pd, sdev);
+	if (!snap_cross_mkey) {
+		snap_error("Failed to create snap MKey Entry for blk queue\n");
+		goto out_umem;
+	}
+	vattr->dma_mkey = snap_cross_mkey->mkey;
+	vq->snap_cross_mkey = snap_cross_mkey;
+
+	vq->virtq = snap_virtio_create_queue(sdev, vattr, vq->umem);
+	if (!vq->virtq)
+		goto destroy_mkey;
+
+	if (sdev->mdev.channel) {
+		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
+
+		ret = mlx5dv_devx_subscribe_devx_event(sdev->mdev.channel,
+			vq->virtq->obj,
+			sizeof(ev_type), &ev_type,
+			(uint64_t)vq->virtq);
+		if (ret)
+			goto destroy_queue;
+
+		vq->virtq->consume_event = consume_fn;
+	}
+	vq->idx = vattr->idx;
+
+	return 0;
+
+destroy_queue:
+	(void)snap_virtio_destroy_queue(vq);
+destroy_mkey:
+	(void)snap_destroy_cross_mkey(vq->snap_cross_mkey);
+	vq->snap_cross_mkey = NULL;
+out_umem:
+	snap_virtio_teardown_virtq_umem(vq);
+err:
+	errno = ret;
+	return ret;
+}
+
+int snap_virtio_destroy_hw_queue(struct snap_virtio_queue *vq)
+{
+	int mkey_ret, q_ret;
+
+	vq->virtq->consume_event = NULL;
+
+	q_ret = snap_virtio_destroy_queue(vq);
+	mkey_ret = snap_destroy_cross_mkey(vq->snap_cross_mkey);
+	vq->snap_cross_mkey = NULL;
+	snap_virtio_teardown_virtq_umem(vq);
+
+	return q_ret ? : mkey_ret;
 }
 
 static int snap_virtio_queue_state_to_mlx_state(enum snap_virtq_state state)
@@ -1108,10 +1195,10 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	return 0;
 }
 
-int snap_virtio_init_virtq_umem(struct ibv_context *context,
-		struct snap_virtio_caps *virtio,
-		struct snap_virtio_queue *virtq,
-		int depth)
+static int snap_virtio_init_virtq_umem(struct ibv_context *context,
+					struct snap_virtio_caps *virtio,
+					struct snap_virtio_queue *virtq,
+					int depth)
 {
 	int ret;
 
@@ -1143,7 +1230,7 @@ out_free_buf_0:
 	return -ENOMEM;
 }
 
-void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
+static void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
 {
 	int i;
 
