@@ -1,0 +1,22 @@
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+# they will be requested for review when someone opens a pull request.
+*       @alex-mikheev @shai-malin @nitzancarmi
+
+# Order is important; the last matching pattern takes the most
+# precedence. When someone opens a pull request that only
+# modifies specific files, only its specific owner will will be requested
+# for a review.
+
+/.ci/   @andrii-holovchenko @umanskymax
+
+*net*   @BodongWang
+
+*fs*   @rraikhman
+
+*blk*   @nitzancarmi @shai-malin
+*common* @nitzancarmi @shai-malin
+
+*dpa*       @alex-mikheev
+*channel*   @alex-mikheev
+*dma*       @alex-mikheev
