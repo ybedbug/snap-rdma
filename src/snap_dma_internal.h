@@ -173,4 +173,6 @@ static inline void snap_dv_tx_complete(struct snap_dv_qp *dv_qp)
 		snap_dv_ring_tx_db(dv_qp, dv_qp->ctrl);
 	}
 }
+
+extern struct snap_dma_q_ops verb_ops;
 #endif /* SNAP_DMA_INTERNAL_H */
