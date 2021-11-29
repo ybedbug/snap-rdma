@@ -653,7 +653,8 @@ static int ibv_query_gid_ex(struct ibv_context *context, uint32_t port_num,
 }
 #endif
 
-static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
+static int snap_activate_loop_2_qp(struct snap_dma_ibv_qp *qp1, struct snap_dma_ibv_qp *qp2,
+				enum ibv_mtu mtu,
 				 bool ib_en, uint16_t lid,
 				 bool roce_en, bool force_loopback,
 				 struct ibv_gid_entry *sw_gid_entry,
@@ -674,12 +675,12 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		     IBV_QP_PORT |
 		     IBV_QP_ACCESS_FLAGS;
 
-	rc = snap_modify_lb_qp_rst2init(q->sw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rst2init(qp1->qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to INIT errno=%d\n", rc);
 		return rc;
-	} else if (q->sw_qp.mode == SNAP_DMA_Q_MODE_GGA) {
-		rc = snap_modify_lb_qp_init2init(q->sw_qp.qp);
+	} else if (qp1->mode == SNAP_DMA_Q_MODE_GGA) {
+		rc = snap_modify_lb_qp_init2init(qp1->qp);
 		if (rc) {
 			snap_error("failed to modify SW QP in INIT2INIT errno=%d\n",
 				   rc);
@@ -687,7 +688,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		}
 	}
 
-	rc = snap_modify_lb_qp_rst2init(q->fw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rst2init(qp2->qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to INIT errno=%d\n", rc);
 		return rc;
@@ -708,7 +709,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 		attr.ah_attr.is_global = 1;
 	}
 
-	attr.dest_qp_num = snap_qp_get_qpnum(q->fw_qp.qp);
+	attr.dest_qp_num = snap_qp_get_qpnum(qp2->qp);
 	flags_mask = IBV_QP_STATE              |
 		     IBV_QP_AV                 |
 		     IBV_QP_PATH_MTU           |
@@ -720,8 +721,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (sw_gid_entry && sw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
 		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
 		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
-				snap_qp_get_qpnum(q->sw_qp.qp),
-				snap_qp_get_qpnum(q->fw_qp.qp));
+				snap_qp_get_qpnum(qp1->qp),
+				snap_qp_get_qpnum(qp2->qp));
 	} else {
 		udp_sport = 0;
 	}
@@ -729,7 +730,7 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (roce_en && !force_loopback)
 		memcpy(attr.ah_attr.grh.dgid.raw, fw_gid_entry->gid.raw,
 		       sizeof(fw_gid_entry->gid.raw));
-	rc = snap_modify_lb_qp_init2rtr(q->sw_qp.qp, &attr, flags_mask,
+	rc = snap_modify_lb_qp_init2rtr(qp1->qp, &attr, flags_mask,
 				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
@@ -739,8 +740,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (fw_gid_entry && fw_gid_entry->gid_type == IBV_GID_TYPE_ROCE_V2 &&
 		roce_caps->roce_version & MLX5_ROCE_VERSION_2_0) {
 		udp_sport = snap_get_udp_sport(roce_caps->r_roce_min_src_udp_port,
-				snap_qp_get_qpnum(q->sw_qp.qp),
-				snap_qp_get_qpnum(q->fw_qp.qp));
+				snap_qp_get_qpnum(qp1->qp),
+				snap_qp_get_qpnum(qp2->qp));
 	} else {
 		udp_sport = 0;
 	}
@@ -748,8 +749,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	if (roce_en && !force_loopback)
 		memcpy(attr.ah_attr.grh.dgid.raw, sw_gid_entry->gid.raw,
 		       sizeof(sw_gid_entry->gid.raw));
-	attr.dest_qp_num = snap_qp_get_qpnum(q->sw_qp.qp);
-	rc = snap_modify_lb_qp_init2rtr(q->fw_qp.qp, &attr, flags_mask,
+	attr.dest_qp_num = snap_qp_get_qpnum(qp1->qp);
+	rc = snap_modify_lb_qp_init2rtr(qp2->qp, &attr, flags_mask,
 				      force_loopback, udp_sport);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTR errno=%d\n", rc);
@@ -773,13 +774,13 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	/* once QPs were moved to RTR using devx, they must also move to RTS
 	 * using devx since kernel doesn't know QPs are on RTR state
 	 **/
-	rc = snap_modify_lb_qp_rtr2rts(q->sw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rtr2rts(qp1->qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify SW QP to RTS errno=%d\n", rc);
 		return rc;
 	}
 
-	rc = snap_modify_lb_qp_rtr2rts(q->fw_qp.qp, &attr, flags_mask);
+	rc = snap_modify_lb_qp_rtr2rts(qp2->qp, &attr, flags_mask);
 	if (rc) {
 		snap_error("failed to modify FW QP to RTS errno=%d\n", rc);
 		return rc;
@@ -788,7 +789,8 @@ static int snap_activate_loop_qp(struct snap_dma_q *q, enum ibv_mtu mtu,
 	return 0;
 }
 
-static int snap_connect_loop_qp(struct snap_dma_q *q, struct ibv_pd *pd)
+static int snap_dma_ep_connect_helper(struct snap_dma_ibv_qp *qp1,
+		struct snap_dma_ibv_qp *qp2, struct ibv_pd *pd)
 {
 	struct ibv_gid_entry sw_gid_entry, fw_gid_entry;
 	int rc;
@@ -805,7 +807,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q, struct ibv_pd *pd)
 
 	/* If IB is supported, can immediately advance to QP activation */
 	if (ib_en)
-		return snap_activate_loop_qp(q, mtu, ib_en, lid, 0, 0, NULL,
+		return snap_activate_loop_2_qp(qp1, qp2, mtu, ib_en, lid, 0, 0, NULL,
 					     NULL, &roce_caps);
 
 	rc = fill_roce_caps(pd->context, &roce_caps);
@@ -837,7 +839,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q, struct ibv_pd *pd)
 		return -ENOTSUP;
 	}
 
-	return snap_activate_loop_qp(q, mtu, ib_en, lid, roce_en,
+	return snap_activate_loop_2_qp(qp1, qp2, mtu, ib_en, lid, roce_en,
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
@@ -933,6 +935,68 @@ static void snap_destroy_io_ctx(struct snap_dma_q *q)
 }
 
 /**
+ * snap_dma_ep_connect() - Connect 2 Qps
+ * @q1:  first queue to connect
+ * @q2:  second queue to connect
+ *
+ * connect software qps of 2 seperate snap_dma_q's
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
+{
+	struct ibv_pd *pd;
+
+	if (!q1 || !q2)
+		return -1;
+
+	pd = snap_qp_get_pd(q1->sw_qp.qp);
+	if (!pd)
+		return -1;
+
+	return snap_dma_ep_connect_helper(&q1->sw_qp, &q2->sw_qp, pd);
+}
+
+/**
+ * snap_dma_ep_create() - Create sw only DMA queue
+ * @pd:    protection domain to create qp
+ * @attr:  dma queue creation attributes
+ *
+ * The function creates only a sw qp.
+ * The use is to create 2 seperate sw only snap_dma_q's and connect them
+ *
+ * Return: dma queue or NULL on error.
+ */
+struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
+		struct snap_dma_q_create_attr *attr)
+{
+	int rc;
+	struct snap_dma_q *q;
+
+	if (!pd)
+		return NULL;
+
+	if (!attr->rx_cb)
+		return NULL;
+
+	q = calloc(1, sizeof(*q));
+	if (!q)
+		return NULL;
+
+	rc = snap_create_sw_qp(q, pd, attr);
+	if (rc)
+		goto free_q;
+
+	q->uctx = attr->uctx;
+	q->rx_cb = attr->rx_cb;
+	return q;
+
+free_q:
+	free(q);
+	return NULL;
+}
+
+/**
  * snap_dma_q_create() - Create DMA queue
  * @pd:    protection domain to create qps
  * @attr:  dma queue creation attributes
@@ -959,25 +1023,15 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	struct snap_dma_q *q;
 	int rc;
 
-	if (!pd)
-		return NULL;
-
-	if (!attr->rx_cb)
-		return NULL;
-
-	q = calloc(1, sizeof(*q));
+	q = snap_dma_ep_create(pd, attr);
 	if (!q)
 		return NULL;
-
-	rc = snap_create_sw_qp(q, pd, attr);
-	if (rc)
-		goto free_q;
 
 	rc = snap_create_fw_qp(q, pd, attr);
 	if (rc)
 		goto free_sw_qp;
 
-	rc = snap_connect_loop_qp(q, pd);
+	rc = snap_dma_ep_connect_helper(&q->sw_qp, &q->fw_qp, pd);
 	if (rc)
 		goto free_fw_qp;
 
@@ -985,17 +1039,24 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_fw_qp;
 
-	q->uctx = attr->uctx;
-	q->rx_cb = attr->rx_cb;
 	return q;
 
 free_fw_qp:
 	snap_destroy_fw_qp(q);
 free_sw_qp:
-	snap_destroy_sw_qp(q);
-free_q:
-	free(q);
+	snap_dma_ep_destroy(q);
 	return NULL;
+}
+
+/**
+ * snap_dma_ep_destroy() - Destroy DMA ep queue
+ *
+ * @q: dma queue
+ */
+void snap_dma_ep_destroy(struct snap_dma_q *q)
+{
+	snap_destroy_sw_qp(q);
+	free(q);
 }
 
 /**
@@ -1006,8 +1067,6 @@ free_q:
 void snap_dma_q_destroy(struct snap_dma_q *q)
 {
 	snap_destroy_io_ctx(q);
-	snap_destroy_sw_qp(q);
 	snap_destroy_fw_qp(q);
-	free(q);
+	snap_dma_ep_destroy(q);
 }
-

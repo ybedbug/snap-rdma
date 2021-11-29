@@ -743,3 +743,20 @@ uint32_t snap_qp_get_qpnum(struct snap_qp *qp)
 
 	return 0xFFFFFFFF;
 }
+
+/**
+ * snap_qp_get_pd - get qp pd
+ * @qp: snap qp
+ *
+ * Return: pointer to the pd or NULL on error
+ */
+struct ibv_pd *snap_qp_get_pd(struct snap_qp *qp)
+{
+	if (qp->type == SNAP_OBJ_DEVX)
+		return qp->devx_qp.devx.pd;
+
+	if (qp->type == SNAP_OBJ_VERBS || qp->type == SNAP_OBJ_DV)
+		return qp->verbs_qp->pd;
+
+	return NULL;
+}

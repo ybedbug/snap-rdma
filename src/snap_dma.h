@@ -270,6 +270,7 @@ struct snap_dma_q_create_attr {
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr);
 void snap_dma_q_destroy(struct snap_dma_q *q);
+void snap_dma_ep_destroy(struct snap_dma_q *q);
 int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 		uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		struct snap_dma_completion *comp);
@@ -291,6 +292,9 @@ int snap_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, 
 int snap_dma_q_flush(struct snap_dma_q *q);
 int snap_dma_q_arm(struct snap_dma_q *q);
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
+struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
+	struct snap_dma_q_create_attr *attr);
+int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
 
 /**
  * snap_dma_q_ctx - get queue context

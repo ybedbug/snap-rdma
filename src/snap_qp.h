@@ -179,4 +179,5 @@ struct ibv_qp *snap_qp_to_verbs_qp(struct snap_qp *qp);
 int snap_qp_modify(struct snap_qp *qp, const void *in, size_t inlen,
 		void *out, size_t outlen);
 uint32_t snap_qp_get_qpnum(struct snap_qp *qp);
+struct ibv_pd *snap_qp_get_pd(struct snap_qp *qp);
 #endif
