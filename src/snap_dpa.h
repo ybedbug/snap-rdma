@@ -13,7 +13,9 @@
 #ifndef _SNAP_DPA_H
 #define _SNAP_DPA_H
 
+#if HAVE_FLEXIO
 #include <libflexio/flexio.h>
+#endif
 
 #include "snap.h"
 #include "snap_dpa_common.h"

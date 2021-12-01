@@ -12,11 +12,18 @@
 
 #define _GNU_SOURCE
 #include <stdio.h>
+
+#include "config.h"
+
+#if HAVE_FLEXIO
 #include <libflexio/flexio_elf.h>
 #include <libflexio/flexio.h>
+#endif
 
 #include "snap_dpa.h"
+#include "mlx5_ifc.h"
 
+#if HAVE_FLEXIO
 struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 {
 	struct flexio_memory *mem = (struct flexio_memory *) calloc(1, sizeof(struct flexio_memory));
@@ -403,4 +410,5 @@ void snap_dpa_app_stop(struct snap_dpa_app *app)
 
 	pthread_mutex_unlock(&app->lock);
 }
-
+#else
+#endif

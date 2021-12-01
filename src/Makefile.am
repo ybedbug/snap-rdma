@@ -42,13 +42,13 @@ libsnap_la_SOURCES = snap.c \
 		     snap_dpa_virtq.c \
 		     snap_sw_virtio_blk.c \
 		     snap_crypto.c \
-		     snap_qp.c
+		     snap_qp.c \
+		     snap_dpa.c
 
 libsnap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS)
 libsnap_la_LIBADD = $(IBVERBS_LIBS) -lpthread
 
 if HAVE_FLEXIO
-libsnap_la_SOURCES += snap_dpa.c
 libsnap_la_CFLAGS += $(FLEXIO_CFLAGS)
 libsnap_la_LDFLAGS = $(FLEXIO_LDFLAGS)
 endif
