@@ -45,7 +45,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	int ret;
 
 	struct snap_dpa_app_attr app_attr = {
-		.sctx = sdev->sctx,
+		.ctx = sdev->sctx->context,
 		.name = "dpa_virtq_split",
 		.n_workers = 1
 	};

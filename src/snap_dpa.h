@@ -21,7 +21,6 @@
 #include "snap_dpa_common.h"
 
 struct snap_dpa_ctx {
-	struct snap_context    *sctx;
 	struct flexio_process  *dpa_proc;
 	struct ibv_pd          *pd;
 	uint64_t               entry_point;
@@ -30,7 +29,7 @@ struct snap_dpa_ctx {
 struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size);
 void *snap_dpa_mem_addr(struct flexio_memory *mem);
 void snap_dpa_mem_free(struct flexio_memory *mem);
-struct snap_dpa_ctx *snap_dpa_process_create(struct snap_context *ctx, const char *app_name);
+struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name);
 void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
 
 enum {
@@ -86,12 +85,12 @@ struct snap_dpa_app {
 
 /**
  * struct snap_dpa_app_attr - snap DPA application attributes
- * @sctx: snap context
+ * @ctx:  ibv context
  * @name: name of the file that contains application code
  * @n_workers: number of DPA worker threads to create
  */
 struct snap_dpa_app_attr {
-	struct snap_context *sctx;
+	struct ibv_context *ctx;
 	const char *name;
 	int n_workers;
 };

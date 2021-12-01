@@ -67,7 +67,7 @@ void *snap_dpa_mem_addr(struct flexio_memory *mem)
  * Return:
  * dpa conxtext on sucess or NULL on failure
  */
-struct snap_dpa_ctx *snap_dpa_process_create(struct snap_context *ctx, const char *app_name)
+struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
 {
 	char *file_name;
 	flexio_status st;
@@ -109,14 +109,14 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct snap_context *ctx, const cha
 		return NULL;
 	}
 
-	dpa_ctx->pd = ibv_alloc_pd(ctx->context);
+	dpa_ctx->pd = ibv_alloc_pd(ctx);
 	if (!dpa_ctx->pd) {
 		errno = -ENOMEM;
 		snap_error("%s: Failed to allocate pd for DPA context\n", app_name);
 		goto free_dpa_ctx;
 	}
 
-	st = flexio_process_create(ctx->context, app_buf, app_size, &dpa_ctx->dpa_proc);
+	st = flexio_process_create(ctx, app_buf, app_size, &dpa_ctx->dpa_proc);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("%s: Failed to create DPA process\n", app_name);
 		goto free_dpa_pd;
@@ -347,7 +347,7 @@ int snap_dpa_app_start(struct snap_dpa_app *app, struct snap_dpa_app_attr *attr)
 	}
 
 	memset(app, 0, sizeof(*app));
-	app->dctx = snap_dpa_process_create(attr->sctx, attr->name);
+	app->dctx = snap_dpa_process_create(attr->ctx, attr->name);
 	if (!app->dctx)
 		goto out;
 
