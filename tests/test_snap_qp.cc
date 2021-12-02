@@ -4,6 +4,8 @@
 extern "C" {
 #include "snap.h"
 #include "snap_qp.h"
+#include "snap_dpa.h"
+#include "mlx5_ifc.h"
 }
 
 #include "tests_common.h"
@@ -135,6 +137,90 @@ TEST_P(SnapQpTest, create_qp) {
 	snap_qp_destroy(qp);
 	snap_cq_destroy(rx_cq);
 	snap_cq_destroy(tx_cq);
+}
+
+TEST_F(SnapQpTest, create_eq_cq_on_dpa) {
+	struct snap_cq_attr cq_attr = {0};
+	int cqe_sizes[] = { 64, 128 };
+	struct snap_cq *cq;
+	struct snap_hw_cq hw_cq;
+	int ret;
+	unsigned i;
+	struct snap_dpa_ctx *dpa_ctx;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	cq_attr.cq_type = SNAP_OBJ_DEVX;
+	cq_attr.cqe_cnt = 128;
+	/* check that we can create 128 */
+	cq_attr.cqe_size = 64;
+	cq_attr.cq_on_dpa = true;
+	cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
+	cq_attr.dpa_proc = dpa_ctx;
+
+	for (i = 0; i < ARRAY_SIZE(cqe_sizes); i++) {
+		cq_attr.cqe_size = cqe_sizes[i];
+		cq = snap_cq_create(m_pd->context, &cq_attr);
+		EXPECT_TRUE(cq);
+		if (!cq)
+			break;
+
+		ret = snap_cq_to_hw_cq(cq, &hw_cq);
+		EXPECT_EQ(0, ret);
+		EXPECT_EQ(cq_attr.cqe_size, hw_cq.cqe_size);
+		EXPECT_EQ(cq_attr.cqe_cnt, hw_cq.cqe_cnt);
+		if (!ret)
+			snap_cq_destroy(cq);
+	}
+
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapQpTest, create_thread_cq_on_dpa) {
+	struct snap_cq_attr cq_attr = {0};
+	struct snap_cq *cq;
+	struct snap_hw_cq hw_cq;
+	int ret;
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	/* We create "polling" threads and currently flexio automatically
+	 * attaches a cq to them.
+	 * TODO: allow creation of both polling and event threads
+	 */
+	SKIP_TEST_R("WIP: skipping test");
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+
+	cq_attr.cq_type = SNAP_OBJ_DEVX;
+	cq_attr.cqe_cnt = 128;
+	cq_attr.cqe_size = 64;
+	cq_attr.cq_on_dpa = true;
+	cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_THREAD;
+	cq_attr.dpa_thread = dpa_thr;
+
+	cq = snap_cq_create(m_pd->context, &cq_attr);
+	ASSERT_TRUE(cq);
+
+	ret = snap_cq_to_hw_cq(cq, &hw_cq);
+	EXPECT_EQ(0, ret);
+	EXPECT_EQ(cq_attr.cqe_size, hw_cq.cqe_size);
+	EXPECT_EQ(cq_attr.cqe_cnt, hw_cq.cqe_cnt);
+	if (!ret)
+		snap_cq_destroy(cq);
+
+	snap_dpa_thread_destroy(dpa_thr);
+	snap_dpa_process_destroy(dpa_ctx);
 }
 
 INSTANTIATE_TEST_SUITE_P(snap, SnapQpTest,
