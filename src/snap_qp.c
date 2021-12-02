@@ -20,9 +20,11 @@
 #include "snap.h"
 #include "snap_mr.h"
 #include "snap_qp.h"
+#include "snap_dpa.h"
 
 #include "mlx5_snap.h"
 #include "mlx5_ifc.h"
+
 
 static bool cq_validate_attr(const struct snap_cq_attr *attr)
 {
@@ -37,10 +39,15 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	uint32_t in[DEVX_ST_SZ_DW(create_cq_in)] = {0};
 	uint32_t out[DEVX_ST_SZ_DW(create_cq_out)] = {0};
 	void *cqctx = DEVX_ADDR_OF(create_cq_in, in, cq_context);
+	/* TODO: check what page size should be used on DPA */
 	const uint32_t log_page_size = snap_u32log2(sysconf(_SC_PAGESIZE));
 	struct snap_devx_cq *devx_cq = &cq->devx_cq;
+	int ret = 0;
 	struct snap_uar *cq_uar;
-	int i, ret;
+	int i;
+	size_t cq_mem_size;
+	uint32_t umem_id;
+	uint64_t umem_offset;
 
 	cq_uar = snap_uar_get(ctx);
 	if (!cq_uar)
@@ -49,28 +56,69 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	devx_cq->devx.ctx = ctx;
 	devx_cq->devx.uar = cq_uar;
 	devx_cq->cqe_cnt = SNAP_ROUNDUP_POW2(attr->cqe_cnt);
+	devx_cq->devx.on_dpa = attr->cq_on_dpa;
+	cq_mem_size = attr->cqe_size * devx_cq->cqe_cnt + SNAP_MLX5_DBR_SIZE;
 
-	/* get eqn
-	 * TODO: support non - polling mode
-	 */
-	ret = mlx5dv_devx_query_eqn(ctx, 0, &devx_cq->eqn);
-	if (ret)
-		goto deref_uar;
+	if (!attr->cq_on_dpa) {
+		/* get eqn
+		 * TODO: support non - polling mode
+		 */
+		ret = mlx5dv_devx_query_eqn(ctx, 0, &devx_cq->eqn_or_dpa_element);
+		if (ret)
+			goto deref_uar;
 
-	/* allocate umem:
-	 * TODO: apu support
-	 */
-	devx_cq->devx.umem.size = attr->cqe_size * devx_cq->cqe_cnt + SNAP_MLX5_DBR_SIZE;
-	ret = snap_umem_init(ctx, &devx_cq->devx.umem);
-	if (ret)
-		goto deref_uar;
+		devx_cq->devx.umem.size = cq_mem_size;
+		ret = snap_umem_init(ctx, &devx_cq->devx.umem);
+		if (ret)
+			goto deref_uar;
+		umem_id = devx_cq->devx.umem.devx_umem->umem_id;
+		umem_offset = 0;
+	} else {
+		struct snap_dpa_ctx *dpa_proc;
+
+		if (attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_THREAD) {
+			if (!attr->dpa_thread) {
+				ret = -EINVAL;
+				goto deref_uar;
+			}
+			devx_cq->eqn_or_dpa_element = snap_dpa_thread_id(attr->dpa_thread);
+			dpa_proc = attr->dpa_thread->dctx;
+		} else if (attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_EQ) {
+			dpa_proc = attr->dpa_proc;
+			if (!dpa_proc) {
+				ret = -EINVAL;
+				goto deref_uar;
+			}
+			devx_cq->eqn_or_dpa_element = snap_dpa_process_eq_id(dpa_proc);
+		} else {
+			snap_debug("bad dpa cq type %d\n", attr->dpa_element_type);
+			ret = -EINVAL;
+			goto deref_uar;
+		}
+
+		devx_cq->devx.dpa_mem = snap_dpa_mem_alloc(dpa_proc, cq_mem_size);
+		if (!devx_cq->devx.dpa_mem) {
+			ret = -ENOMEM;
+			goto deref_uar;
+		}
+
+		DEVX_SET(cqc, cqctx, apu_cq, 1);
+		DEVX_SET(cqc, cqctx, apu_element_type, attr->dpa_element_type);
+
+		umem_id = snap_dpa_process_umem_id(dpa_proc);
+		umem_offset = snap_dpa_process_umem_offset(dpa_proc, snap_dpa_mem_addr(devx_cq->devx.dpa_mem));
+
+		snap_debug("memsize %lu umem_id %d umem_offset %lu eqn/thr_id %d dpa_va: 0x%0lx\n",
+				cq_mem_size, umem_id, umem_offset,
+				devx_cq->eqn_or_dpa_element, snap_dpa_mem_addr(devx_cq->devx.dpa_mem));
+	}
 
 	/* create cq via devx */
 	DEVX_SET(create_cq_in, in, opcode, MLX5_CMD_OP_CREATE_CQ);
 
 	DEVX_SET(cqc, cqctx, dbr_umem_valid, 1);
-	DEVX_SET(cqc, cqctx, dbr_umem_id, devx_cq->devx.umem.devx_umem->umem_id);
-	DEVX_SET64(cqc, cqctx, dbr_addr, attr->cqe_size * devx_cq->cqe_cnt);
+	DEVX_SET(cqc, cqctx, dbr_umem_id, umem_id);
+	DEVX_SET64(cqc, cqctx, dbr_addr, umem_offset + attr->cqe_size * devx_cq->cqe_cnt);
 
 	DEVX_SET(cqc, cqctx, cqe_sz, attr->cqe_size == 128 ?  MLX5_CQE_SIZE_128B : MLX5_CQE_SIZE_64B);
 
@@ -81,12 +129,12 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	if (log_page_size > MLX5_ADAPTER_PAGE_SHIFT)
 		DEVX_SET(cqc, cqctx, log_page_size, log_page_size - MLX5_ADAPTER_PAGE_SHIFT);
 
-	DEVX_SET(cqc, cqctx, c_eqn, devx_cq->eqn);
+	DEVX_SET(cqc, cqctx, c_eqn_or_apu_element, devx_cq->eqn_or_dpa_element);
 	DEVX_SET(cqc, cqctx, uar_page, cq_uar->uar->page_id);
 
 	DEVX_SET(create_cq_in, in, cq_umem_valid, 1);
-	DEVX_SET(create_cq_in, in, cq_umem_id, devx_cq->devx.umem.devx_umem->umem_id);
-	DEVX_SET64(create_cq_in, in, cq_umem_offset, 0);
+	DEVX_SET(create_cq_in, in, cq_umem_id, umem_id);
+	DEVX_SET64(create_cq_in, in, cq_umem_offset, umem_offset);
 
 	devx_cq->devx.devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
 	if (!devx_cq->devx.devx_obj) {
@@ -94,25 +142,40 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 		goto reset_cq_umem;
 	}
 
-	for (i = 0; i < devx_cq->cqe_cnt; i++) {
-		struct mlx5_cqe64 *cqe;
+	/*
+	 * There is no load/store access to the memory allocated on DPA even though
+	 * it is backed by the DPU memory. The only way to access is by doing
+	 * DMA operation.
+	 *
+	 * So it is either DMA or let DPA initialize cqe memory once hw_cq is
+	 * transfered to dpa thread via mbox.
+	 *
+	 * At the moment we go with mbox because cqs will be created once at
+	 * the dpa thread startup.
+	 */
+	if (!attr->cq_on_dpa) {
+		for (i = 0; i < devx_cq->cqe_cnt; i++) {
+			struct mlx5_cqe64 *cqe;
 
-		cqe = (struct mlx5_cqe64 *)(devx_cq->devx.umem.buf + attr->cqe_size * i);
-		if (attr->cqe_size == 128)
-			cqe++;
-		cqe->op_own = (MLX5_CQE_INVALID << 4) | MLX5_CQE_OWNER_MASK;
+			cqe = (struct mlx5_cqe64 *)(devx_cq->devx.umem.buf + attr->cqe_size * i);
+			if (attr->cqe_size == 128)
+				cqe++;
+			cqe->op_own = (MLX5_CQE_INVALID << 4) | MLX5_CQE_OWNER_MASK;
+		}
 	}
 	/* TODO: notification support */
 
 	devx_cq->devx.id = DEVX_GET(create_cq_out, out, cqn);
 	devx_cq->cqe_size = attr->cqe_size;
-	snap_debug("created devx cq 0x%x cqe_size %d nelems %d memsize %d\n",
-		   devx_cq->devx.id, devx_cq->cqe_size, devx_cq->cqe_cnt,
-		   devx_cq->devx.umem.size);
+	snap_debug("created devx cq 0x%x cqe_size %d nelems %d memsize %lu\n",
+		   devx_cq->devx.id, devx_cq->cqe_size, devx_cq->cqe_cnt, cq_mem_size);
 	return 0;
 
 reset_cq_umem:
-	snap_umem_reset(&devx_cq->devx.umem);
+	if (!attr->cq_on_dpa)
+		snap_umem_reset(&devx_cq->devx.umem);
+	else
+		snap_dpa_mem_free(devx_cq->devx.dpa_mem);
 deref_uar:
 	snap_uar_put(cq_uar);
 	return ret;
@@ -121,7 +184,10 @@ deref_uar:
 static void devx_common_reset(struct snap_devx_common *base)
 {
 	mlx5dv_devx_obj_destroy(base->devx_obj);
-	snap_umem_reset(&base->umem);
+	if (!base->on_dpa)
+		snap_umem_reset(&base->umem);
+	else
+		snap_dpa_mem_free(base->dpa_mem);
 	snap_uar_put(base->uar);
 }
 
@@ -137,7 +203,10 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	struct snap_devx_cq *devx_cq = &cq->devx_cq;
 
 	memset(hw_cq, 0, sizeof(*hw_cq));
-	hw_cq->cq_addr = (uintptr_t)devx_cq->devx.umem.buf;
+	if (!devx_cq->devx.on_dpa)
+		hw_cq->cq_addr = (uintptr_t)devx_cq->devx.umem.buf;
+	else
+		hw_cq->cq_addr = snap_dpa_mem_addr(devx_cq->devx.dpa_mem);
 	hw_cq->ci = 0;
 	hw_cq->cqe_cnt = devx_cq->cqe_cnt;
 	hw_cq->cqe_size = devx_cq->cqe_size;

@@ -50,18 +50,22 @@ struct snap_devx_common {
 	uint32_t id;
 	struct mlx5dv_devx_obj *devx_obj;
 	struct snap_uar *uar;
-	struct snap_umem umem;
+	union {
+		struct snap_umem umem;
+		struct flexio_memory *dpa_mem;
+	};
 	union {
 		struct ibv_pd *pd;
 		struct ibv_context *ctx;
 	};
+	bool on_dpa;
 };
 
 struct snap_devx_cq {
 	struct snap_devx_common devx;
 	uint32_t cqe_cnt;
 	uint32_t cqe_size;
-	uint32_t eqn;
+	uint32_t eqn_or_dpa_element;
 };
 
 /**
@@ -74,8 +78,12 @@ struct snap_cq_attr {
 	void *cq_context;
 	struct ibv_comp_channel *comp_channel;
 	int comp_vector;
-	/* TODO: need more DPA specific attributes */
 	bool cq_on_dpa;
+	int dpa_element_type;
+	union {
+		struct snap_dpa_ctx *dpa_proc;
+		struct snap_dpa_thread *dpa_thread;
+	};
 };
 
 /* low level cq view, suitable for the direct polling, adapted from struct mlx5dv_cq */

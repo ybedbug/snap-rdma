@@ -4453,12 +4453,18 @@ enum {
 
 #define MLX5_ADAPTER_PAGE_SHIFT 12
 
+/* NOTE: PRM may have a bug and use 0 and 1 */
+enum {
+	MLX5_APU_ELEMENT_TYPE_THREAD = 0x1,
+	MLX5_APU_ELEMENT_TYPE_EQ = 0x2
+};
+
 struct mlx5_ifc_cqc_bits {
 	u8 status[0x4];
 	u8 as_notify[0x1];
 	u8 initiator_src_dct[0x1];
 	u8 dbr_umem_valid[0x1];
-	u8 reserved_at_7[0x1];
+	u8 apu_cq[0x1];
 	u8 cqe_sz[0x3];
 	u8 cc[0x1];
 	u8 reserved_at_c[0x1];
@@ -4469,36 +4475,48 @@ struct mlx5_ifc_cqc_bits {
 	u8 mini_cqe_res_format[0x2];
 	u8 st[0x4];
 	u8 reserved_at_18[0x1];
-	u8 cqe_comp_layout[0x7];
+	u8 apu_element_type[0x3];
+	u8 reserved_at_1c[0x2];
+	u8 cqe_compression_layout[0x2];
+
 	u8 dbr_umem_id[0x20];
+
 	u8 reserved_at_40[0x14];
 	u8 page_offset[0x6];
 	u8 reserved_at_5a[0x2];
-	u8 mini_cqe_res_format_ext[0x2];
-	u8 cq_timestamp_format[0x2];
+	u8 mini_cqe_res_format_3_2[0x2];
+	u8 cq_time_stamp_format[0x2];
+
 	u8 reserved_at_60[0x3];
 	u8 log_cq_size[0x5];
 	u8 uar_page[0x18];
+
 	u8 reserved_at_80[0x4];
 	u8 cq_period[0xc];
 	u8 cq_max_count[0x10];
-	u8 reserved_at_a0[0x18];
-	u8 c_eqn[0x8];
+
+	u8 c_eqn_or_apu_element[0x20];
+
 	u8 reserved_at_c0[0x3];
 	u8 log_page_size[0x5];
 	u8 reserved_at_c8[0x18];
+
 	u8 reserved_at_e0[0x20];
+
 	u8 reserved_at_100[0x8];
 	u8 last_notified_index[0x18];
+
 	u8 reserved_at_120[0x8];
 	u8 last_solicit_index[0x18];
+
 	u8 reserved_at_140[0x8];
 	u8 consumer_counter[0x18];
+
 	u8 reserved_at_160[0x8];
 	u8 producer_counter[0x18];
-	u8 local_partition_id[0xc];
-	u8 process_id[0x14];
-	u8 reserved_at_1A0[0x20];
+
+	u8 apu_user_arg[0x40];
+
 	u8 dbr_addr[0x40];
 };
 
