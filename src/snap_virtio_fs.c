@@ -207,35 +207,6 @@ out_free:
 	return ret;
 }
 
-static int snap_consume_virtio_fs_queue_event(struct mlx5_snap_devx_obj *obj,
-		struct snap_event *sevent)
-{
-	struct snap_device *sdev = obj->sdev;
-	struct snap_virtio_fs_device *vbdev;
-	struct snap_virtio_fs_queue *vfsq = NULL;
-	int i;
-
-	if (sdev->pci->type != SNAP_VIRTIO_FS_PF &&
-	    sdev->pci->type != SNAP_VIRTIO_FS_VF)
-		return -EINVAL;
-
-	vbdev = (struct snap_virtio_fs_device *)sdev->dd_data;
-	for (i = 0; i < vbdev->num_queues; i++) {
-		if (vbdev->virtqs[i].virtq.virtq == obj) {
-			vfsq = &vbdev->virtqs[i];
-			break;
-		}
-	}
-
-	if (!vfsq)
-		return -EINVAL;
-
-	sevent->type = SNAP_EVENT_VIRTIO_FS_QUEUE_CHANGE;
-	sevent->obj = vfsq;
-
-	return 0;
-}
-
 /**
  * snap_virtio_fs_teardown_device() - Teardown Virtio fs specifics from a
  *                                     snap device
@@ -306,6 +277,7 @@ snap_virtio_fs_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_fs_device *vbdev;
 	struct snap_virtio_fs_queue *vfsq;
+	int ret;
 
 	vbdev = (struct snap_virtio_fs_device *)sdev->dd_data;
 
@@ -316,11 +288,13 @@ snap_virtio_fs_create_queue(struct snap_device *sdev,
 
 	vfsq = &vbdev->virtqs[attr->vattr.idx];
 
-	if (snap_virtio_create_hw_queue(sdev, &vfsq->virtq,
+	ret = snap_virtio_create_hw_queue(sdev, &vfsq->virtq,
 					&sdev->sctx->virtio_fs_caps,
-					&attr->vattr,
-					snap_consume_virtio_fs_queue_event))
+					&attr->vattr);
+	if (ret) {
+		snap_error("Failed to create hw queue, err(%d)\n", ret);
 		return NULL;
+	}
 
 	vfsq->virtq.q_ops = &snap_virtq_fs_hw_ops;
 	return &vfsq->virtq;

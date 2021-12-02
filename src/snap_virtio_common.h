@@ -267,13 +267,10 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	struct snap_virtio_queue_attr *vattr);
 
-typedef int (*event_consumer_fn)(struct mlx5_snap_devx_obj *obj,
-				 struct snap_event *sevent);
 int snap_virtio_create_hw_queue(struct snap_device *sdev,
 				struct snap_virtio_queue *vq,
 				struct snap_virtio_caps *caps,
-				struct snap_virtio_queue_attr *vattr,
-				event_consumer_fn consume_fn);
+				struct snap_virtio_queue_attr *vattr);
 int snap_virtio_destroy_hw_queue(struct snap_virtio_queue *vq);
 
 int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr,

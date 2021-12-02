@@ -856,8 +856,7 @@ static int snap_virtio_destroy_queue(struct snap_virtio_queue *vq)
 int snap_virtio_create_hw_queue(struct snap_device *sdev,
 				struct snap_virtio_queue *vq,
 				struct snap_virtio_caps *caps,
-				struct snap_virtio_queue_attr *vattr,
-				event_consumer_fn consume_fn)
+				struct snap_virtio_queue_attr *vattr)
 {
 	int ret;
 	struct snap_cross_mkey *snap_cross_mkey;
@@ -882,24 +881,10 @@ int snap_virtio_create_hw_queue(struct snap_device *sdev,
 	if (!vq->virtq)
 		goto destroy_mkey;
 
-	if (sdev->mdev.channel) {
-		uint16_t ev_type = MLX5_EVENT_TYPE_OBJECT_CHANGE;
-
-		ret = mlx5dv_devx_subscribe_devx_event(sdev->mdev.channel,
-			vq->virtq->obj,
-			sizeof(ev_type), &ev_type,
-			(uint64_t)vq->virtq);
-		if (ret)
-			goto destroy_queue;
-
-		vq->virtq->consume_event = consume_fn;
-	}
 	vq->idx = vattr->idx;
 
 	return 0;
 
-destroy_queue:
-	(void)snap_virtio_destroy_queue(vq);
 destroy_mkey:
 	(void)snap_destroy_cross_mkey(vq->snap_cross_mkey);
 	vq->snap_cross_mkey = NULL;
@@ -913,8 +898,6 @@ err:
 int snap_virtio_destroy_hw_queue(struct snap_virtio_queue *vq)
 {
 	int mkey_ret, q_ret;
-
-	vq->virtq->consume_event = NULL;
 
 	q_ret = snap_virtio_destroy_queue(vq);
 	mkey_ret = snap_destroy_cross_mkey(vq->snap_cross_mkey);

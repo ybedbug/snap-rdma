@@ -313,6 +313,7 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 {
 	struct snap_virtio_net_device *vndev;
 	struct snap_virtio_net_queue *vnq;
+	int ret;
 
 	vndev = (struct snap_virtio_net_device *)sdev->dd_data;
 
@@ -323,11 +324,13 @@ snap_virtio_net_create_queue(struct snap_device *sdev,
 
 	vnq = &vndev->virtqs[attr->vattr.idx];
 
-	if (snap_virtio_create_hw_queue(sdev, &vnq->virtq,
+	ret = snap_virtio_create_hw_queue(sdev, &vnq->virtq,
 					&sdev->sctx->virtio_net_caps,
-					&attr->vattr,
-					NULL))
+					&attr->vattr);
+	if (ret) {
+		snap_error("Failed to create hw queue, err(%d)\n", ret);
 		return NULL;
+	}
 
 	return vnq;
 
