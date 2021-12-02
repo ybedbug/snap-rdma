@@ -20,17 +20,37 @@
 #include "snap.h"
 #include "snap_dpa_common.h"
 
+bool snap_dpa_enabled(struct ibv_context *ctx);
+
 struct snap_dpa_ctx {
 	struct flexio_process  *dpa_proc;
+	struct flexio_eq       *dpa_eq;
 	struct ibv_pd          *pd;
+	struct snap_uar        *uar;
 	uint64_t               entry_point;
 };
 
 struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size);
-void *snap_dpa_mem_addr(struct flexio_memory *mem);
+uint64_t snap_dpa_mem_addr(struct flexio_memory *mem);
 void snap_dpa_mem_free(struct flexio_memory *mem);
+
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name);
 void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
+uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx);
+uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx);
+uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx);
+
+/**
+ * snap_dpa_umem_offset() - get virtual address umem offset
+ * @proc:   dpa process context
+ * @dpa_va: dpa virtual address
+ *
+ * Return: offset relative to the dpa process heap umem
+ */
+static inline uint64_t snap_dpa_process_umem_offset(struct snap_dpa_ctx *proc, uint64_t dpa_va)
+{
+	return dpa_va - snap_dpa_process_umem_addr(proc);
+}
 
 enum {
 	SNAP_DPA_THREAD_ATTR_POLLING = 0x1
@@ -60,6 +80,7 @@ struct snap_dpa_thread {
 struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		struct snap_dpa_thread_attr *attr);
 void snap_dpa_thread_destroy(struct snap_dpa_thread *thr);
+uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr);
 
 void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);

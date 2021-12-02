@@ -48,9 +48,9 @@ void snap_dpa_mem_free(struct flexio_memory *mem)
 	free(mem);
 }
 
-void *snap_dpa_mem_addr(struct flexio_memory *mem)
+uint64_t snap_dpa_mem_addr(struct flexio_memory *mem)
 {
-	return (void *)mem->base_addr;
+	return mem->base_addr;
 }
 
 /**
@@ -69,6 +69,7 @@ void *snap_dpa_mem_addr(struct flexio_memory *mem)
  */
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
 {
+	struct flexio_eq_attr eq_attr = {0};
 	char *file_name;
 	flexio_status st;
 	int ret;
@@ -122,9 +123,27 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 		goto free_dpa_pd;
 	}
 
+	dpa_ctx->uar = snap_uar_get(ctx);
+	if (!dpa_ctx->uar)
+		goto free_dpa_proc;
+
+	/* create a placeholder eq to attach cqs */
+	eq_attr.log_eq_ring_size = 5; /* 32 elems */
+	eq_attr.uar_id = dpa_ctx->uar->uar->page_id;
+
+	st = flexio_eq_create(dpa_ctx->dpa_proc, ctx, &eq_attr, &dpa_ctx->dpa_eq);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("%s: Failed to create DPA event queue\n", app_name);
+		goto deref_uar;
+	}
+
 	dpa_ctx->entry_point = entry_point;
 	return dpa_ctx;
 
+deref_uar:
+	snap_uar_put(dpa_ctx->uar);
+free_dpa_proc:
+	flexio_process_destroy(dpa_ctx->dpa_proc);
 free_dpa_pd:
 	ibv_dealloc_pd(dpa_ctx->pd);
 free_dpa_ctx:
@@ -141,8 +160,43 @@ free_dpa_ctx:
 void snap_dpa_process_destroy(struct snap_dpa_ctx *ctx)
 {
 	ibv_dealloc_pd(ctx->pd);
+	flexio_eq_destroy(ctx->dpa_eq);
+	snap_uar_put(ctx->uar);
 	flexio_process_destroy(ctx->dpa_proc);
 	free(ctx);
+}
+
+/**
+ * snap_dpa_process_umem_id() - get DPA process 'umem' id
+ * @ctx: DPA context
+ *
+ * Return: DPA process umem id
+ */
+uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx)
+{
+	return flexio_process_get_dumem_id(ctx->dpa_proc);
+}
+
+/**
+ * snap_dpa_process_umem_id() - get DPA process 'umem' address
+ * @ctx: DPA context
+ *
+ * Return: DPA process umem address
+ */
+uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx)
+{
+	return flexio_process_get_dumem_addr(ctx->dpa_proc);
+}
+
+/**
+ * snap_dpa_process_eq_id() - get DPA process event queue id
+ * @ctx: DPA context
+ *
+ * Return: DPA process event queue id
+ */
+uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx)
+{
+	return flexio_eq_get_hw_eq(ctx->dpa_eq)->eq_num;
 }
 
 static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr);
@@ -294,6 +348,17 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 }
 
 /**
+ * snap_dpa_thread_id() - get DPA thread id
+ * @thr: DPA thread
+ *
+ * Return: DPA thread id
+ */
+uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
+{
+	return flexio_thread_get_id(thr->dpa_thread);
+}
+
+/**
  * snap_dpa_thread_mbox_acquire() - get thread mailbox
  * @thr: DPA thread
  *
@@ -410,5 +475,92 @@ void snap_dpa_app_stop(struct snap_dpa_app *app)
 
 	pthread_mutex_unlock(&app->lock);
 }
+
+/**
+ * snap_dpa_enabled() - check if DPA support is present
+ *
+ * Return: true if DPA is available
+ */
+bool snap_dpa_enabled(struct ibv_context *ctx)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	uint64_t general_obj_types = 0;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+
+	ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		return false;
+
+	general_obj_types = DEVX_GET64(query_hca_cap_out, out,
+				       capability.cmd_hca_cap.general_obj_types);
+
+	return (MLX5_OBJ_TYPE_APU_MEM & general_obj_types) &&
+		(MLX5_OBJ_TYPE_APU_PROCESS & general_obj_types) &&
+		(MLX5_OBJ_TYPE_APU_THREAD & general_obj_types);
+}
+
 #else
+
+struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
+{
+	return NULL;
+}
+
+void snap_dpa_process_destroy(struct snap_dpa_ctx *ctx)
+{
+}
+
+struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
+		struct snap_dpa_thread_attr *attr)
+{
+	return NULL;
+}
+
+void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
+{
+}
+
+uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
+{
+	return 0;
+}
+
+struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
+{
+	return NULL;
+}
+
+void snap_dpa_mem_free(struct flexio_memory *mem)
+{
+}
+
+uint64_t snap_dpa_mem_addr(struct flexio_memory *mem)
+{
+	return 0;
+}
+
+uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx)
+{
+	return 0;
+}
+
+uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx)
+{
+	return 0;
+}
+
+uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx)
+{
+	return 0;
+}
+
+bool snap_dpa_enabled(struct ibv_context *ctx)
+{
+	return false;
+}
 #endif
