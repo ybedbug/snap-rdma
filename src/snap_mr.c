@@ -199,7 +199,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	struct mlx5_klm *klm_array = attr->klm_array;
 	int klm_num = attr->klm_num;
 	int in_size_dw = DEVX_ST_SZ_DW(create_mkey_in) +
-			SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM * DEVX_ST_SZ_DW(klm);
+			(klm_num ? SNAP_ALIGN_CEIL(klm_num, 4) : 0) * DEVX_ST_SZ_DW(klm);
 	uint32_t in[in_size_dw];
 	uint32_t out[DEVX_ST_SZ_DW(create_mkey_out)] = {0};
 	void *mkc;
@@ -223,10 +223,6 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 
 	if (klm_num > 0) {
 		translation_size = SNAP_ALIGN_CEIL(klm_num, 4);
-		if (translation_size > SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM) {
-			snap_error("Too large translaion entry tables\n");
-			goto out_err;
-		}
 
 		for (i = 0; i < klm_num; i++) {
 			DEVX_SET(klm, klm, byte_count, klm_array[i].byte_count);
@@ -234,13 +230,13 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 			DEVX_SET64(klm, klm, address, klm_array[i].address);
 			klm += DEVX_ST_SZ_BYTES(klm);
 		}
-	}
 
-	for (; i < SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM; i++) {
-		DEVX_SET(klm, klm, byte_count, 0x0);
-		DEVX_SET(klm, klm, mkey, 0x0);
-		DEVX_SET64(klm, klm, address, 0x0);
-		klm += DEVX_ST_SZ_BYTES(klm);
+		for (; i < (int)translation_size; i++) {
+			DEVX_SET(klm, klm, byte_count, 0x0);
+			DEVX_SET(klm, klm, mkey, 0x0);
+			DEVX_SET64(klm, klm, address, 0x0);
+			klm += DEVX_ST_SZ_BYTES(klm);
+		}
 	}
 
 	DEVX_SET(mkc, mkc, access_mode_1_0, attr->log_entity_size ?
@@ -279,8 +275,10 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 
 	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
 						 sizeof(out));
-	if (!cmkey->devx_obj)
+	if (!cmkey->devx_obj) {
+		snap_error("mlx5dv_devx_obj_create() failed to mkey, errno:%d\n", errno);
 		goto out_err;
+	}
 
 	cmkey->mkey = DEVX_GET(create_mkey_out, out, mkey_index) << 8 | 0x42;
 	return cmkey;
