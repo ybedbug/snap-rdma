@@ -983,8 +983,6 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 {
 #define IOV_CNT 3
 	struct snap_dma_q *q;
-	struct snap_indirect_mkey *klm_mkey;
-	struct mlx5_devx_mkey_attr mkey_attr = {};
 	int i, j, n, ret;
 	char *lbuf, *rbuf;
 	struct ibv_mr *lmr, *rmr;
@@ -994,17 +992,6 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 	q = snap_dma_q_create(pd, dma_q_attr);
 	ASSERT_TRUE(q);
 	ASSERT_TRUE(q->iov_supported);
-
-	mkey_attr.addr = 0;
-	mkey_attr.size = 0;
-	mkey_attr.log_entity_size = 0;
-	mkey_attr.relaxed_ordering_write = 0;
-	mkey_attr.relaxed_ordering_read = 0;
-	mkey_attr.klm_array = NULL;
-	mkey_attr.klm_num = 0;
-
-	klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
-	ASSERT_TRUE(klm_mkey);
 
 	lbuf = (char *)malloc(bsize * IOV_CNT * 2);
 	if (!lbuf)
@@ -1077,10 +1064,11 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 		ASSERT_EQ(ret, 0);
 
 		n = 0;
-		while (n < 10000) {
+		while (n < 10) {
 			ret = snap_dma_q_progress(q);
-			if (g_comp_count == 1)
+			if (ret == 1)
 				break;
+			sleep(1);
 			n++;
 		}
 
@@ -1096,7 +1084,6 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 	free(rbuf);
 	ibv_dereg_mr(lmr);
 	free(lbuf);
-	snap_destroy_indirect_mkey(klm_mkey);
 	snap_dma_q_destroy(q);
 }
 
