@@ -22,6 +22,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_env.h \
 		     snap_sw_virtio_blk.h \
 		     snap_crypto.h \
+		     snap_macros.h \
 		     snap_qp.h
 
 libsnap_la_SOURCES = snap.c \
