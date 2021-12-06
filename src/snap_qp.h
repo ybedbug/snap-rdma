@@ -52,7 +52,7 @@ struct snap_devx_common {
 	struct snap_uar *uar;
 	union {
 		struct snap_umem umem;
-		struct flexio_memory *dpa_mem;
+		struct snap_dpa_memh *dpa_mem;
 	};
 	union {
 		struct ibv_pd *pd;

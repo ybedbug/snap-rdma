@@ -30,9 +30,14 @@ struct snap_dpa_ctx {
 	uint64_t               entry_point;
 };
 
-struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size);
-uint64_t snap_dpa_mem_addr(struct flexio_memory *mem);
-void snap_dpa_mem_free(struct flexio_memory *mem);
+struct snap_dpa_memh {
+	uint64_t *va;
+	size_t size;
+};
+
+struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size);
+uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem);
+void snap_dpa_mem_free(struct snap_dpa_memh *mem);
 
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name);
 void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
@@ -74,7 +79,7 @@ struct snap_dpa_thread {
 	void                  *cmd_mbox;
 	pthread_mutex_t       cmd_lock;
 	struct ibv_mr         *cmd_mr;
-	struct flexio_memory  *mem;
+	struct snap_dpa_memh  *mem;
 };
 
 struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,

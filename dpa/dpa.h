@@ -18,7 +18,8 @@
 
 #include <libflexio-dev/flexio_dev.h>
 #include <libflexio-dev/flexio_dev_debug.h>
-#include <apu_syscall.h>
+#include <libflexio-os/flexio_os_syscall.h>
+#include <libflexio-os/flexio_os.h>
 
 #include "snap_dpa_common.h"
 
@@ -47,11 +48,23 @@ static inline void dpa_print_one_arg(char *msg, uint64_t arg)
  */
 static inline void dpa_window_set_mkey(uint32_t mkey)
 {
+	struct flexio_os_thread_ctx *ctx;
 	uint32_t *window_u_cfg;
 
-	/* currently this is a hack based on flexio rpc entry_point.c */
-	window_u_cfg = (uint32_t *)window_get_cfg();
+	/* this is based on flexio rpc entry_point.c */
+	ctx = flexio_os_get_thread_ctx();
+	window_u_cfg = (uint32_t *)ctx->window_config_base;
 	*window_u_cfg = mkey;
+}
+
+/**
+ * dpa_window_get_base() - get window base address
+ *
+ * Return: window base address
+ */
+static inline uint64_t dpa_window_get_base()
+{
+	return flexio_os_get_thread_ctx()->window_base;
 }
 
 /**

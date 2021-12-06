@@ -6,7 +6,7 @@ ACLOCAL_AMFLAGS = -I m4
 #
 COMPILE = $(DPA_CC) $(AM_CFLAGS)
 LINK = $(DPA_CC) $(AM_LDFLAGS) -o $@
-LIBS = -lapu_dev
+LIBS = -lapu_dev -l:flexio_os.a
 
 noinst_PROGRAMS =
 
@@ -15,10 +15,10 @@ if HAVE_DPA_CC
 AM_CFLAGS = $(BASE_CFLAGS) \
 	    -fPIC -fpic -mno-relax -mcmodel=medany -march=rv64imac -mabi=lp64 \
 	    -DE_MODE_LE -DUSER_SPACE -D__DPA=1 \
-	    -I. -I.. -I$(top_srcdir)/src -I$(FLEXIO_DIR) -I$(FLEXIO_DIR)/libflexio-os/include
+	    -I. -I.. -I$(top_srcdir)/src -I$(FLEXIO_DIR) -I$(FLEXIO_DIR)/include -I$(FLEXIO_DIR)/include/libflexio
 
 AM_LDFLAGS = -fPIE -fpie -flto -pie -static -nostartfiles \
-	     -T $(srcdir)/flexio_linker.ld -L$(FLEXIO_DIR)/libflexio-dev/lib
+	     -T $(srcdir)/flexio_linker.ld -L$(FLEXIO_DIR)/lib/
 
 noinst_PROGRAMS += dpa_hello dpa_virtq_split
 

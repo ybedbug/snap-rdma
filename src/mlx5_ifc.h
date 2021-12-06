@@ -4453,10 +4453,9 @@ enum {
 
 #define MLX5_ADAPTER_PAGE_SHIFT 12
 
-/* NOTE: PRM may have a bug and use 0 and 1 */
 enum {
-	MLX5_APU_ELEMENT_TYPE_THREAD = 0x1,
-	MLX5_APU_ELEMENT_TYPE_EQ = 0x2
+	MLX5_APU_ELEMENT_TYPE_THREAD = 0x0,
+	MLX5_APU_ELEMENT_TYPE_EQ = 0x1
 };
 
 struct mlx5_ifc_cqc_bits {
@@ -4532,16 +4531,23 @@ struct mlx5_ifc_create_cq_out_bits {
 struct mlx5_ifc_create_cq_in_bits {
 	u8 opcode[0x10];
 	u8 uid[0x10];
+
 	u8 reserved_at_20[0x10];
 	u8 op_mod[0x10];
+
 	u8 reserved_at_40[0x40];
+
 	struct mlx5_ifc_cqc_bits cq_context;
+
 	u8 cq_umem_offset[0x40];
+
 	u8 cq_umem_id[0x20];
+
 	u8 cq_umem_valid[0x1];
 	u8 reserved_at_2e1[0x1f];
+
 	u8 reserved_at_300[0x580];
-	u8 pas[];
+	u8 pas[0x0];
 };
 
 #endif /* MLX5_IFC_H */

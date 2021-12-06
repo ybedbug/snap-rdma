@@ -20,8 +20,11 @@ uint32_t mbox_lkey __attribute__((section (".data"))); // per thread
 
 static void dpa_mbox_config(struct snap_dpa_tcb *tcb)
 {
+	struct flexio_os_thread_ctx *ctx;
+
+	ctx = flexio_os_get_thread_ctx();
 	dpa_window_set_mkey(tcb->mbox_lkey);
-	tcb->mbox_address = window_get_base() + tcb->mbox_address;
+	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 }
 
 int __snap_dpa_thread_start(uint64_t tcb_addr)

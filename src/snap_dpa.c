@@ -18,22 +18,34 @@
 #if HAVE_FLEXIO
 #include <libflexio/flexio_elf.h>
 #include <libflexio/flexio.h>
+#include <libflexio/flexio_poll.h>
 #endif
 
 #include "snap_dpa.h"
 #include "mlx5_ifc.h"
 
 #if HAVE_FLEXIO
-struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
+/**
+ * snap_dpa_mem_alloc() - allocate memory on DPA
+ * @dctx: snap context
+ * @size: amount of memory to allocate
+ *
+ * The function allocate DPA virtual memory and return it's memory handle
+ *
+ * Return: memory handle or NULL on error
+ */
+struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 {
-	struct flexio_memory *mem = (struct flexio_memory *) calloc(1, sizeof(struct flexio_memory));
+	struct snap_dpa_memh *mem;
 
+	mem = calloc(1, sizeof(*mem));
 	if (!mem) {
-		snap_error("Failed to allocate flexio_memory\n");
+		snap_error("Failed to allocate dpa memory handle\n");
 		return 0;
 	}
+
 	mem->size = size;
-	if (flexio_mem_alloc(dctx->dpa_proc, mem)) {
+	if (flexio_buf_dev_alloc(dctx->dpa_proc, size, &mem->va)) {
 		snap_error("Failed to allocate dpa memory\n");
 		free(mem);
 		return 0;
@@ -42,15 +54,27 @@ struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 	return mem;
 }
 
-void snap_dpa_mem_free(struct flexio_memory *mem)
+/**
+ * snap_dpa_mem_free() - free DPA memory
+ * @mem: memory handle
+ *
+ * The function frees memory handle and its associated memory
+ */
+void snap_dpa_mem_free(struct snap_dpa_memh *mem)
 {
-	flexio_mem_free(mem);
+	flexio_buf_dev_free(mem->va);
 	free(mem);
 }
 
-uint64_t snap_dpa_mem_addr(struct flexio_memory *mem)
+/**
+ * snap_dpa_mem_addr() - get DPA virtual address
+ * @mem: memory handle
+ *
+ * Return: virtual address
+ */
+uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem)
 {
-	return mem->base_addr;
+	return *mem->va;
 }
 
 /**
@@ -70,6 +94,7 @@ uint64_t snap_dpa_mem_addr(struct flexio_memory *mem)
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
 {
 	struct flexio_eq_attr eq_attr = {0};
+	struct flexio_process_attr proc_attr = {0};
 	char *file_name;
 	flexio_status st;
 	int ret;
@@ -117,7 +142,8 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 		goto free_dpa_ctx;
 	}
 
-	st = flexio_process_create(ctx, app_buf, app_size, &dpa_ctx->dpa_proc);
+	proc_attr.pd = dpa_ctx->pd;
+	st = flexio_process_create(ctx, app_buf, app_size, &proc_attr, &dpa_ctx->dpa_proc);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("%s: Failed to create DPA process\n", app_name);
 		goto free_dpa_pd;
@@ -260,7 +286,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	if (!thr->mem)
 		goto free_window;
 
-	tcb.data_address = thr->mem->base_addr;
+	tcb.data_address = snap_dpa_mem_addr(thr->mem);
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
@@ -278,7 +304,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	 * the attributes.
 	 */
 	st = flexio_thread_create(thr->dctx->dpa_proc, thr->dctx->entry_point, *dpa_tcb_addr,
-			thr->cmd_window, &thr->dpa_thread);
+			thr->cmd_window, NULL, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
 		goto free_tcb;
@@ -290,15 +316,15 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_error("DPA thread failed to start\n");
 		snap_dpa_thread_destroy_force(thr);
-		flexio_memory_free(dpa_tcb_addr);
+		flexio_buf_dev_free(dpa_tcb_addr);
 		return NULL;
 	}
 
-	flexio_memory_free(dpa_tcb_addr);
+	flexio_buf_dev_free(dpa_tcb_addr);
 	return thr;
 
 free_tcb:
-	flexio_memory_free(dpa_tcb_addr);
+	flexio_buf_dev_free(dpa_tcb_addr);
 free_mem:
 	snap_dpa_mem_free(thr->mem);
 free_window:
@@ -530,16 +556,16 @@ uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 	return 0;
 }
 
-struct flexio_memory *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
+struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 {
 	return NULL;
 }
 
-void snap_dpa_mem_free(struct flexio_memory *mem)
+void snap_dpa_mem_free(struct snap_dpa_memh *mem)
 {
 }
 
-uint64_t snap_dpa_mem_addr(struct flexio_memory *mem)
+uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem)
 {
 	return 0;
 }

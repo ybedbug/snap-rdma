@@ -10,6 +10,8 @@
  * provided with the software product.
  */
 
+#include <stddef.h>
+
 #include "dpa.h"
 #include "snap_dpa_virtq.h"
 
@@ -186,7 +188,7 @@ static inline void virtq_progress()
 
 		/* load avail index */
 		dpa_window_set_mkey(vq->host_mkey);
-		avail_ring = (void *)window_get_base() + vq->device;
+		avail_ring = (void *)dpa_window_get_base() + vq->device;
 		host_avail_idx = avail_ring->idx;
 		dpa_print_one_arg("vq->dpa_avail_idx: ", vq->dpa_avail_idx);
 		if (vq->dpa_avail_idx == host_avail_idx)
@@ -198,16 +200,17 @@ static inline void virtq_progress()
 
 		/* copy avail to dpu */
 		dpa_window_set_mkey(vq->dpu_avail_mkey);
-		avail_ring = (void *)window_get_base() + vq->dpu_avail_ring_addr;
+		avail_ring = (void *)dpa_window_get_base() + vq->dpu_avail_ring_addr;
 		avail_ring->idx = host_avail_idx;
 	}
 }
 
 int main(int argc, char *argv[])
 {
+	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *) argv;
 	int done;
 	int ret;
-	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *) argv;
+
 	dpa_print_one_arg("virtq_split starting ",(uint64_t) tcb->mbox_address);
 	do {
 		ret = process_commands(tcb, &done);

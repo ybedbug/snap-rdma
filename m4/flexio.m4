@@ -21,8 +21,8 @@ AS_IF([test "x$flexio_app" == xyes], [
 	save_CFLAGS="$CFLAGS"
 	save_CPPFLAGS="$CPPFLAGS"
 
-	flexio_incl="-I$with_flexio"
-	flexio_libs="-L$with_flexio/libflexio/lib"
+	flexio_incl="-I$with_flexio/include -I$with_flexio/include/libflexio"
+	flexio_libs="-L$with_flexio/lib"
 
 	CFLAGS="$flexio_incl $CFLAGS"
 	CPPFLAGS="$flexio_incl $CFLAGS"
