@@ -501,7 +501,6 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 		goto out;
 	}
 
-	snap_info("virtio controller start with %d queues\n", (int)ctrl->max_queues);
 	for (i = 0; i < ctrl->max_queues; i++) {
 		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
 
