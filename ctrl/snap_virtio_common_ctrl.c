@@ -607,6 +607,30 @@ bool snap_virtio_ctrl_is_suspended(struct snap_virtio_ctrl *ctrl)
 }
 
 /**
+ * snap_virtio_ctrl_is_configurable() - check if virtio controller is
+ * configurable, meaning PCI BAR can be modified.
+ * @ctrl:   virtio controller
+ *
+ * Return:
+ * true if virtio controller is configurable
+ */
+bool snap_virtio_ctrl_is_configurable(struct snap_virtio_ctrl *ctrl)
+{
+	struct snap_virtio_device_attr vattr = {};
+	const int invalid_mask = ~(SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET |
+				   SNAP_VIRTIO_DEVICE_S_ACKNOWLEDGE |
+				   SNAP_VIRTIO_DEVICE_S_RESET |
+				   SNAP_VIRTIO_DEVICE_S_FAILED);
+
+	if (!ctrl->bar_ops->get_attr)
+		return true;
+
+	//TODO: On legacy driver, device is never configurable
+	ctrl->bar_ops->get_attr(ctrl, &vattr);
+	return (vattr.status & invalid_mask) == 0;
+}
+
+/**
  * snap_virtio_ctrl_suspend() - suspend virtio controller
  * @ctrl:   virtio controller
  *

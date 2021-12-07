@@ -238,6 +238,8 @@ bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl);
 
+bool snap_virtio_ctrl_is_configurable(struct snap_virtio_ctrl *ctrl);
+
 bool snap_virtio_ctrl_is_suspended(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl);
 int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl);
