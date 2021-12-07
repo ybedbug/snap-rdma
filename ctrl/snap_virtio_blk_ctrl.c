@@ -331,23 +331,33 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 		return -EINVAL;
 	}
 
+	if (regs->max_queues > 0) {
+		/*
+		 * snap_virtio_blk_ctrl_bar_setup_valid() will make sure later
+		 * that max_queues is either configurable, or same as in PCI bar.
+		 * That means we only left to verify it doesn't break capacity
+		 */
+		if (snap_unlikely(regs->max_queues > ctrl->common.max_queues)) {
+			snap_error("Too many queues were requested (max allowed %lu)\n",
+				ctrl->common.max_queues);
+			return -EINVAL;
+		}
+	} else {
+		if (snap_virtio_ctrl_is_configurable(&ctrl->common)) {
+			/*
+			 * Default configuration is optimized to kernel driver case,
+			 * which assumes num_queues+1 <= num_msix equation for
+			 * best performance
+			 */
+			regs->max_queues = snap_min(ctrl->common.max_queues,
+						bar.vattr.num_msix - 1);
+		} else
+			regs->max_queues = bar.vattr.max_queues;
+	}
+
 	if (!snap_virtio_blk_ctrl_bar_setup_valid(ctrl, &bar, regs)) {
 		snap_error("Setup is not valid\n");
 		return -EINVAL;
-	}
-
-	/*
-	 * If max_queues was not initialized correctly on bar,
-	 * and user didn't specify specific value for it, just
-	 * use the maximal value possible
-	 */
-	if (!regs->max_queues) {
-		if (bar.vattr.max_queues < 1 ||
-		    bar.vattr.max_queues > ctrl->common.max_queues) {
-			snap_warn("Invalid num_queues detected on bar. Clamping down to max possible (%lu)\n",
-				  ctrl->common.max_queues);
-			regs->max_queues = ctrl->common.max_queues;
-		}
 	}
 
 	if (regs_mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
@@ -359,16 +369,13 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 					     SNAP_VIRTIO_BLK_MODIFIABLE_FTRS);
 		bar.vattr.max_queue_size = regs->queue_size ? :
 					   bar.vattr.max_queue_size;
-		bar.vattr.max_queues = regs->max_queues ? :
-				       bar.vattr.max_queues;
-		if (regs->max_queues) {
-			/*
-			 * We always wish to keep blk queues and
-			 * virtio queues values aligned
-			 */
-			extra_flags |= SNAP_VIRTIO_MOD_DEV_CFG;
-			bar.max_blk_queues = regs->max_queues;
-		}
+		bar.vattr.max_queues = regs->max_queues;
+		/*
+		 * We always wish to keep blk queues and
+		 * virtio queues values aligned
+		 */
+		extra_flags |= SNAP_VIRTIO_MOD_DEV_CFG;
+		bar.max_blk_queues = regs->max_queues;
 	}
 
 	if (regs_mask & SNAP_VIRTIO_MOD_DEV_CFG) {

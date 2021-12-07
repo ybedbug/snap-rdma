@@ -57,6 +57,7 @@ int snap_virtio_blk_query_device(struct snap_device *sdev,
 				       pci_params));
 
 	attr->vattr.num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
+	attr->vattr.num_msix = sdev->pci->pci_attr.num_msix;
 	snap_virtio_get_device_attr(sdev, &attr->vattr,
 				    DEVX_ADDR_OF(virtio_blk_device_emulation,
 						 device_emulation_out,
