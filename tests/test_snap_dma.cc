@@ -816,6 +816,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		ret = snap_dma_q_post_umr_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, NULL, &n_bb);
 		ASSERT_EQ(ret, 0);
 	}
+	q->tx_available -= (n_bb - 1); /* n_bb included the DMA WQE */
 
 	for (j = 0; j < 2; j++) {
 		comp.func = dma_completion;
