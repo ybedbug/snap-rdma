@@ -50,6 +50,9 @@ struct mlx5_devx_mkey_attr {
 	uint32_t relaxed_ordering_read:1;
 	struct mlx5_klm *klm_array;
 	int klm_num;
+
+	bool crypto_en;
+	bool bsf_en;
 };
 
 struct snap_indirect_mkey {

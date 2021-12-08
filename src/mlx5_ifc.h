@@ -1858,7 +1858,12 @@ struct mlx5_ifc_mkc_bits {
 
 	u8	 bsf_octword_size[0x20];
 
-	u8	 reserved_at_120[0x60];
+	u8	 reserved_at_120[0x10];
+	u8	 bsf_handle_47_32[0x10];
+
+	u8	 bsf_handle_31_0[0x20];
+
+	u8	 reserved_at_160[0x20];
 
 	u8	 crossing_target_vhca_id[0x10];
 	u8	 reserved_at_190[0x10];
@@ -1870,7 +1875,10 @@ struct mlx5_ifc_mkc_bits {
 	u8	 reserved_at_1da[0x1];
 	u8	 log_page_size[0x5];
 
-	u8	 reserved_at_1e0[0x20];
+	u8	 reserved_at_1e0[0x3];
+	u8	 crypto_en[0x2];
+	u8	 reserved_at_1e5[0xb];
+	u8	 generation_counter[0x10];
 };
 
 struct mlx5_ifc_create_mkey_out_bits {

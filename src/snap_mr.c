@@ -257,7 +257,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, lr, 0x1);
 	DEVX_SET(mkc, mkc, rw, 0x1);
 	DEVX_SET(mkc, mkc, rr, 0x1);
-	DEVX_SET(mkc, mkc, umr_en, 0x1);
+	DEVX_SET(mkc, mkc, umr_en, 1);
 	DEVX_SET(mkc, mkc, qpn, 0xffffff);
 	DEVX_SET(mkc, mkc, pd, pd_id);
 	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey,
@@ -270,6 +270,13 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	DEVX_SET64(mkc, mkc, len, attr->size);
 	/* TODO: change mkey_7_0 to increasing counter */
 	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
+	if (attr->crypto_en)
+		DEVX_SET(mkc, mkc, crypto_en, 1);
+	if (attr->bsf_en) {
+		DEVX_SET(mkc, mkc, bsf_en, 1);
+		DEVX_SET(mkc, mkc, bsf_octword_size, 4);
+	}
+
 	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
 						 sizeof(out));
 	if (!cmkey->devx_obj)
