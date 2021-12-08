@@ -89,8 +89,9 @@ TEST_P(SnapQpTest, create_cq) {
 			EXPECT_TRUE(snap_cq_to_verbs_cq(cq));
 		} else {
 			EXPECT_EQ(cq_attr.cqe_size, hw_cq.cqe_size);
-			if (cq_attr.cq_type == SNAP_OBJ_DEVX)
+			if (cq_attr.cq_type == SNAP_OBJ_DEVX) {
 				EXPECT_EQ(cq_attr.cqe_cnt, hw_cq.cqe_cnt);
+			}
 		}
 		snap_cq_destroy(cq);
 	}
