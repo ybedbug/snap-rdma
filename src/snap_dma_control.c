@@ -844,7 +844,7 @@ static int snap_connect_loop_qp(struct snap_dma_q *q, struct ibv_pd *pd)
 static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr)
 {
-	int i, ret;
+	int i, ret, io_ctx_cnt;
 	struct snap_relaxed_ordering_caps caps;
 	struct mlx5_devx_mkey_attr mkey_attr = {};
 
@@ -860,14 +860,16 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
 		return 0;
 
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
 	ret = posix_memalign((void **)&q->io_ctx, SNAP_DMA_BUF_ALIGN,
-			q->tx_available * sizeof(struct snap_dma_q_io_ctx));
+			io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
 	if (ret) {
 		snap_error("alloc dma_q io_ctx array failed");
 		return -ENOMEM;
 	}
 
-	memset(q->io_ctx, 0, q->tx_available * sizeof(struct snap_dma_q_io_ctx));
+	memset(q->io_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
 
 	ret = snap_query_relaxed_ordering_caps(pd->context, &caps);
 	if (ret) {
@@ -885,7 +887,7 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 	mkey_attr.klm_num = 0;
 	mkey_attr.klm_array = NULL;
 
-	for (i = 0; i < q->tx_available; i++) {
+	for (i = 0; i < io_ctx_cnt; i++) {
 		q->io_ctx[i].klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
 		if (!q->io_ctx[i].klm_mkey) {
 			snap_error("create klm mkey for io_ctx[%d] failed\n", i);
@@ -914,12 +916,13 @@ free_io_ctx:
 
 static void snap_destroy_io_ctx(struct snap_dma_q *q)
 {
-	int i;
+	int i, io_ctx_cnt;
 
 	if (!q->io_ctx)
 		return;
 
-	for (i = 0; i < q->tx_available; i++) {
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+	for (i = 0; i < io_ctx_cnt; i++) {
 		TAILQ_REMOVE(&q->free_io_ctx, &q->io_ctx[i], entry);
 		snap_destroy_indirect_mkey(q->io_ctx[i].klm_mkey);
 	}
