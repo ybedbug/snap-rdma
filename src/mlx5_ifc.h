@@ -2576,6 +2576,7 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_NVME_SQ = 0x0007,
 	MLX5_OBJ_TYPE_NVME_CQ = 0x0009,
 	MLX5_OBJ_TYPE_FLOW_METER = 0x000a,
+	MLX5_OBJ_TYPE_DEK = 0x000c,
 	MLX5_OBJ_TYPE_VIRTIO_NET_Q = 0x000d,
 	MLX5_OBJ_TYPE_VHCA_TUNNEL = 0x000e,
 	MLX5_OBJ_TYPE_NVME_NAMESPACE = 0x000f,
@@ -4347,6 +4348,30 @@ struct mlx5_ifc_query_vuid_out_bits {
 	u8	num_of_entries[0x10];
 
 	struct mlx5_ifc_vuid_bits vuid[0];
+};
+
+struct mlx5_ifc_dek_bits {
+	u8	modify_field_select[0x40];
+
+	u8	state[0x8];
+	u8	reserved_at_0x48[0xc];
+	u8	key_size[0x4];
+	u8	has_keytag[0x1];
+	u8	reserved_at_0x59[0x3];
+	u8	key_purpose[0x4];
+
+	u8	reserved_at_0x60[0x8];
+	u8	pd[0x18];
+
+	u8	reserved_at_0x80[0x100];
+
+	u8	opaque[0x40];
+
+	u8	reserved_at_0x1c0[0x40];
+
+	u8	key[0x400];
+
+	u8	reserved_at_0x600[0x200];
 };
 
 enum {
