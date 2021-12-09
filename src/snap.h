@@ -29,6 +29,7 @@
 #endif
 
 #include "snap_mr.h"
+#include "snap_crypto.h"
 #include "mlx5_snap.h"
 
 #define PFX "snap: "
@@ -392,6 +393,8 @@ struct snap_context {
 	TAILQ_HEAD(, snap_hotplug_device)	hotplug_device_list;
 
 	bool					vuid_supported;
+
+	struct snap_crypto_context		crypto;
 };
 
 enum  mlx5_emulation_hotplug_state {

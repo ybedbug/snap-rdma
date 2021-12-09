@@ -3644,6 +3644,10 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 
 	sctx->vuid_supported = snap_query_vuid_is_supported(context);
 
+	rc = snap_query_crypto_caps(sctx);
+	if (rc)
+		snap_warn("query crypto caps failed, ret:%d\n", rc);
+
 	rc = snap_alloc_functions(sctx);
 	if (rc) {
 		errno = -rc;

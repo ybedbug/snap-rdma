@@ -21,6 +21,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_umr.h \
 		     snap_env.h \
 		     snap_sw_virtio_blk.h \
+		     snap_crypto.h \
 		     snap_qp.h
 
 libsnap_la_SOURCES = snap.c \
@@ -40,6 +41,7 @@ libsnap_la_SOURCES = snap.c \
 		     snap_env.c \
 		     snap_dpa_virtq.c \
 		     snap_sw_virtio_blk.c \
+		     snap_crypto.c \
 		     snap_qp.c
 
 libsnap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS)
