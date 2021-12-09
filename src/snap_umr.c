@@ -10,11 +10,12 @@
  * provided with the software product.
  */
 
+#include "snap_umr.h"
 #include "snap.h"
 #include "snap_dma_internal.h"
 #include "snap_mr.h"
 
-static inline void snap_set_umr_inline_klm_seg(union mlx5_wqe_umr_inline_seg *klm,
+static inline void set_umr_inline_klm_seg(union mlx5_wqe_umr_inline_seg *klm,
 					struct mlx5_klm *mtt)
 {
 	klm->klm.byte_count = htobe32(mtt->byte_count);
@@ -22,7 +23,7 @@ static inline void snap_set_umr_inline_klm_seg(union mlx5_wqe_umr_inline_seg *kl
 	klm->klm.address = htobe64(mtt->address);
 }
 
-static inline void snap_set_umr_mkey_seg(struct mlx5_wqe_mkey_context_seg *mkey,
+static inline void set_umr_mkey_seg_mtt(struct mlx5_wqe_mkey_context_seg *mkey,
 					struct mlx5_klm *klm_mtt, int klm_entries)
 {
 	int i;
@@ -37,7 +38,7 @@ static inline void snap_set_umr_mkey_seg(struct mlx5_wqe_mkey_context_seg *mkey,
 	mkey->len = htobe64(len);
 }
 
-static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
+static inline void set_umr_control_seg_mtt(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 					int klm_entries)
 {
 	/* explicitly set rsvd0 and rsvd1 from struct mlx5_wqe_umr_ctrl_seg to 0,
@@ -69,25 +70,23 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_START_ADDR);
 }
 
-int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
-			int klm_entries, struct snap_indirect_mkey *klm_mkey,
-			struct snap_dma_completion *comp, int *n_bb)
+static int build_inline_mtt_umr_wqe(struct snap_dma_q *q,
+			struct mlx5_wqe_ctrl_seg *ctrl, uint8_t fm_ce_se,
+			uint32_t to_end, struct snap_post_umr_attr *attr,
+			uint32_t *umr_wqe_n_bb)
 {
 	struct snap_dv_qp *dv_qp;
-	struct mlx5_wqe_ctrl_seg *ctrl, *gen_ctrl;
+	struct mlx5_wqe_ctrl_seg *gen_ctrl;
 	struct mlx5_wqe_umr_ctrl_seg *umr_ctrl;
 	struct mlx5_wqe_mkey_context_seg *mkey;
 	union mlx5_wqe_umr_inline_seg *klm;
-	int pi, i, umr_wqe_n_bb;
 	uint32_t wqe_size, inline_klm_size;
-	uint32_t translation_size, to_end;
-	uint8_t fm_ce_se = 0;
+	uint32_t i, translation_size;
 
-	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
-		return -ENOTSUP;
-
-	if (klm_mtt == NULL || klm_entries == 0)
+	if (attr->klm_mtt == NULL || attr->klm_entries == 0)
 		return -EINVAL;
+
+	dv_qp = &q->sw_qp.dv_qp;
 
 	/*
 	 * UMR WQE LAYOUT:
@@ -98,12 +97,12 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	 *
 	 * Note: size of inline klm mtt should be aligned to 64 bytes.
 	 */
-	translation_size = SNAP_ALIGN_CEIL(klm_entries, 4);
+	translation_size = SNAP_ALIGN_CEIL(attr->klm_entries, 4);
 	inline_klm_size = translation_size * sizeof(*klm);
 	wqe_size = sizeof(*gen_ctrl) + sizeof(*umr_ctrl) +
 		sizeof(*mkey) + inline_klm_size;
 
-	umr_wqe_n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB);
+	*umr_wqe_n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB);
 
 	/*
 	 * umr wqe only do the modification to klm-mkey,
@@ -113,17 +112,13 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	 * A .readv()/.writev() consider process succeed
 	 * only when both umr wqe and RDMA/GGA-READ/WEIR
 	 * wqes post succeed.
+	 *
+	 * In order to avoid post UMR WQE succeed but lack
+	 * of tx available resource to post followed DMA WQE
+	 * case, use umr_wqe_n_bb + 1 to do the can_tx check.
 	 */
-	*n_bb = umr_wqe_n_bb + 1;
-	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+	if (snap_unlikely(!qp_can_tx(q, *umr_wqe_n_bb + 1)))
 		return -EAGAIN;
-
-	dv_qp = &q->sw_qp.dv_qp;
-	fm_ce_se |= snap_dv_get_cq_update(dv_qp, comp);
-	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
-
-	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
-	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
 
 	/* sizeof(gen_ctrl) + sizeof(umr_ctrl) == MLX5_SEND_WQE_BB,
 	 * so do not need to worry about wqe buffer warp around.
@@ -132,11 +127,12 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	gen_ctrl = ctrl;
 	snap_set_ctrl_seg(gen_ctrl, dv_qp->hw_qp.sq.pi, MLX5_OPCODE_UMR, 0,
 				dv_qp->hw_qp.qp_num, fm_ce_se,
-				round_up(wqe_size, 16), 0, htobe32(klm_mkey->mkey));
+				round_up(wqe_size, 16), 0,
+				htobe32(attr->klm_mkey->mkey));
 
 	/* build umr ctrl segment */
 	umr_ctrl = (struct mlx5_wqe_umr_ctrl_seg *)(gen_ctrl + 1);
-	snap_set_umr_control_seg(umr_ctrl, klm_entries);
+	set_umr_control_seg_mtt(umr_ctrl, attr->klm_entries);
 
 	/* build mkey context segment */
 	to_end -= MLX5_SEND_WQE_BB;
@@ -146,7 +142,7 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 	} else {
 		mkey = (struct mlx5_wqe_mkey_context_seg *)(umr_ctrl + 1);
 	}
-	snap_set_umr_mkey_seg(mkey, klm_mtt, klm_entries);
+	set_umr_mkey_seg_mtt(mkey, attr->klm_mtt, attr->klm_entries);
 
 	/* build inline mtt entires */
 	to_end -= MLX5_SEND_WQE_BB;
@@ -157,8 +153,8 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 		klm = (union mlx5_wqe_umr_inline_seg *)(mkey + 1);
 	}
 
-	for (i = 0; i < klm_entries; i++) {
-		snap_set_umr_inline_klm_seg(klm, &klm_mtt[i]);
+	for (i = 0; i < attr->klm_entries; i++) {
+		set_umr_inline_klm_seg(klm, &attr->klm_mtt[i]);
 		/* sizeof(*klm) * 4 == MLX5_SEND_WQE_BB */
 		to_end -= sizeof(union mlx5_wqe_umr_inline_seg);
 		if (to_end == 0) { /* wqe buffer wap around */
@@ -178,13 +174,53 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 		klm = klm + 1;
 	}
 
+	attr->klm_mkey->addr = attr->klm_mtt[0].address;
+
+	return 0;
+}
+
+int snap_umr_post_wqe(struct snap_dma_q *q, struct snap_post_umr_attr *attr,
+			struct snap_dma_completion *comp, int *n_bb)
+{
+	int ret;
+	uint8_t fm_ce_se = 0;
+	uint32_t pi, to_end, umr_wqe_n_bb;
+	struct snap_dv_qp *dv_qp;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+		return -ENOTSUP;
+
+	dv_qp = &q->sw_qp.dv_qp;
+	fm_ce_se |= snap_dv_get_cq_update(dv_qp, comp);
+	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+
+	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
+	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
+
+	switch (attr->purpose) {
+	case SNAP_UMR_MKEY_MODIFY_ATTACH_MTT:
+		ret = build_inline_mtt_umr_wqe(q, ctrl,
+					fm_ce_se, to_end, attr, &umr_wqe_n_bb);
+		break;
+
+	default:
+		snap_error("Not supported post umr wqe operation\n");
+		return -EINVAL;
+	}
+
+	if (ret) {
+		snap_error("Failed to build umr wqe for purpose:%d\n", attr->purpose);
+		return ret;
+	}
+
+	*n_bb = umr_wqe_n_bb + 1;
+
 	dv_qp->hw_qp.sq.pi += (umr_wqe_n_bb - 1);
 
 	snap_dv_wqe_submit(dv_qp, ctrl);
 
 	snap_dv_set_comp(dv_qp, pi, comp, fm_ce_se, umr_wqe_n_bb);
-
-	klm_mkey->addr = klm_mtt[0].address;
 
 	return 0;
 }

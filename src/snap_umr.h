@@ -16,8 +16,20 @@
 #include "snap_dma.h"
 #include "snap_mr.h"
 
-int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
-			int klm_entries, struct snap_indirect_mkey *klm_mkey,
-			struct snap_dma_completion *comp, int *n_bb);
+enum {
+	SNAP_UMR_MKEY_MODIFY_ATTACH_MTT = 0x1 << 0,
+};
+
+struct snap_post_umr_attr {
+	uint32_t	purpose;
+
+	/* for attach inline mtt purpose */
+	int				klm_entries;
+	struct mlx5_klm *klm_mtt;
+	struct snap_indirect_mkey *klm_mkey;
+};
+
+int snap_umr_post_wqe(struct snap_dma_q *q, struct snap_post_umr_attr *attr,
+		struct snap_dma_completion *comp, int *n_bb);
 
 #endif /* SNAP_UMR_H */

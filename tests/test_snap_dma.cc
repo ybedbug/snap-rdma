@@ -754,6 +754,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 	struct ibv_mr *lmr[MTT_ENTRIES], *rmr;
 	struct mlx5_klm *klm_mtt;
 	struct snap_dma_completion comp;
+	struct snap_post_umr_attr umr_attr = {};
 
 	for (i = 0; i < MTT_ENTRIES; i++) {
 		lbuf[i] = (char *)malloc(bsize);
@@ -796,11 +797,16 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		klm_mtt[i].address = (uintptr_t)lmr[i]->addr;
 	}
 
+	umr_attr.purpose = SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
+	umr_attr.klm_mkey = klm_mkey;
+	umr_attr.klm_mtt = klm_mtt;
+	umr_attr.klm_entries = MTT_ENTRIES;
+
 	if (wait_umr_complete) {
 		comp.func = post_umr_completion;
 		comp.count = 1;
 		g_umr_wqe_comp = 0;
-		ret = snap_umr_post_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, &comp, &n_bb);
+		ret = snap_umr_post_wqe(q, &umr_attr, &comp, &n_bb);
 		ASSERT_EQ(ret, 0);
 
 		n = 0;
@@ -813,7 +819,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		ASSERT_EQ(1, g_umr_wqe_comp);
 		ASSERT_EQ(0, g_last_comp_status);
 	} else {
-		ret = snap_umr_post_wqe(q, klm_mtt, MTT_ENTRIES, klm_mkey, NULL, &n_bb);
+		ret = snap_umr_post_wqe(q, &umr_attr, NULL, &n_bb);
 		ASSERT_EQ(ret, 0);
 	}
 	q->tx_available -= (n_bb - 1); /* n_bb included the DMA WQE */

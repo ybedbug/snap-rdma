@@ -126,6 +126,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 #if !defined(__DPA)
 	int ret;
 	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_post_umr_attr attr = {0};
 
 	io_ctx = TAILQ_FIRST(&q->free_io_ctx);
 	if (!io_ctx) {
@@ -144,8 +145,12 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 	io_ctx->comp.func = snap_use_klm_mkey_done;
 	io_ctx->comp.count = 1;
 
-	ret = snap_umr_post_wqe(q, io_ctx->klm_mtt, iov_cnt,
-				io_ctx->klm_mkey, NULL, n_bb);
+	attr.purpose = SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
+	attr.klm_mkey = io_ctx->klm_mkey;
+	attr.klm_mtt = io_ctx->klm_mtt;
+	attr.klm_entries = iov_cnt;
+
+	ret = snap_umr_post_wqe(q, &attr, NULL, n_bb);
 	if (ret) {
 		snap_error("dma_q:%p post umr wqe failed, ret:%d\n", q, ret);
 		goto insert_back;
