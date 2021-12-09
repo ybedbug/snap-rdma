@@ -1151,3 +1151,123 @@ TEST_F(SnapDmaTest, rdma_iov_rw_gga) {
 	m_dma_q_attr.iov_enable = true;
 	snap_dma_q_rw_iov(&m_dma_q_attr, m_pd, m_bsize);
 }
+
+static void post_umr_modify_mkey(struct ibv_pd *pd,
+		struct snap_dma_q_create_attr *dma_q_attr,
+		bool attach_bsf, bool attach_mtt, bool wait_completion)
+{
+#define MTT_ENTRIES  5
+	int i, ret, n, n_bb;
+	struct snap_dma_q *q;
+	struct snap_indirect_mkey *klm_mkey;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+	struct snap_post_umr_attr attr = {};
+	struct snap_dma_completion comp;
+	char buf[MTT_ENTRIES][32];
+	struct ibv_mr *mr[MTT_ENTRIES];
+	struct mlx5_klm klm_mtt[MTT_ENTRIES];
+
+	dma_q_attr->mode = SNAP_DMA_Q_MODE_DV;
+	q = snap_dma_q_create(pd, dma_q_attr);
+	ASSERT_TRUE(q);
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = 0;
+	mkey_attr.relaxed_ordering_read = 0;
+	mkey_attr.klm_array = NULL;
+	mkey_attr.klm_num = 0;
+	if (attach_bsf) {
+		mkey_attr.bsf_en = true;
+		mkey_attr.crypto_en = true;
+	}
+
+	klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+	ASSERT_TRUE(klm_mkey);
+
+	attr.klm_mkey = klm_mkey;
+	if (attach_mtt) {
+		for (i = 0; i < MTT_ENTRIES; i++) {
+			mr[i] = ibv_reg_mr(pd, buf[i], 32, IBV_ACCESS_LOCAL_WRITE |
+					IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+			if (!mr[i])
+				FAIL() << "local memory register";
+		}
+
+		for (i = 0; i < MTT_ENTRIES; i++) {
+			klm_mtt[i].byte_count = mr[i]->length;
+			klm_mtt[i].mkey = mr[i]->lkey;
+			klm_mtt[i].address = (uintptr_t)mr[i]->addr;
+		}
+
+		attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
+		attr.klm_mtt = klm_mtt;
+		attr.klm_entries = MTT_ENTRIES;
+	}
+
+	if (attach_bsf) {
+		attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_CRYPTO_BSF;
+		attr.encryption_order = SNAP_CRYPTO_BSF_ENCRYPTION_ORDER_ENCRYPTED_MEMORY_SIGNATURE;
+		attr.encryption_standard = SNAP_CRYPTO_BSF_ENCRYPTION_STANDARD_AES_XTS;
+		attr.raw_data_size = 0;
+		attr.crypto_block_size_pointer = SNAP_CRYPTO_BSF_CRYPTO_BLOCK_SIZE_POINTER_512;
+		attr.dek_pointer = 0;
+		memset(attr.keytag, 0, SNAP_CRYPTO_KEYTAG_SIZE);
+		memset(attr.xts_initial_tweak, 0, SNAP_CRYPTO_XTS_INITIAL_TWEAK_SIZE);
+	}
+
+	if (wait_completion) {
+		comp.func = post_umr_completion;
+		comp.count = 1;
+		g_umr_wqe_comp = 0;
+		ret = snap_umr_post_wqe(q, &attr, &comp, &n_bb);
+		ASSERT_EQ(ret, 0);
+
+		n = 0;
+		while (n < 10) {
+			ret = snap_dma_q_progress(q);
+			if (ret == 1)
+				break;
+			sleep(1);
+			n++;
+		}
+		ASSERT_EQ(1, g_umr_wqe_comp);
+		ASSERT_EQ(0, g_last_comp_status);
+	} else {
+		ret = snap_umr_post_wqe(q, &attr, NULL, &n_bb);
+		ASSERT_EQ(ret, 0);
+	}
+
+	if (attach_mtt) {
+		for (i = 0; i < MTT_ENTRIES; i++) {
+			ibv_dereg_mr(mr[i]);
+		}
+	}
+	snap_destroy_indirect_mkey(klm_mkey);
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, attach_crypto_bsf_to_mkey_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, false, true);
+}
+
+TEST_F(SnapDmaTest, attach_crypto_bsf_to_mkey_no_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, false, false);
+}
+
+TEST_F(SnapDmaTest, attach_mtt_to_mkey_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, false, true, true);
+}
+
+TEST_F(SnapDmaTest, attach_mtt_to_mkey_no_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, false, true, false);
+}
+
+TEST_F(SnapDmaTest, attach_crypto_bsf_and_mtt_to_mkey_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, true, true);
+}
+
+TEST_F(SnapDmaTest, attach_crypto_bsf_and_mtt_to_mkey_no_wait_complete) {
+	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, true, false);
+}
