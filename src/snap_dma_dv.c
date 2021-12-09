@@ -281,6 +281,67 @@ static int dv_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
 	return do_dv_xfer_inline(q, src_buf, len, MLX5_OPCODE_SEND, 0, 0, NULL, n_bb);
 }
 
+static inline int dv_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
+				    uint64_t addr, int len, uint32_t key,
+				    int *n_bb)
+{
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct mlx5_wqe_inl_data_seg *in_seg;
+	struct mlx5_wqe_data_seg *data_seg;
+	uint16_t pi, wqe_size, to_end;
+	uint16_t complement = 0;
+	uint8_t fm_ce_se = 0;
+	void *pdata;
+
+	/* Every inline data segment occupies one or more octowords */
+	if ((sizeof(*in_seg) + in_len) % 16)
+		complement = 16 - ((sizeof(*in_seg) + in_len) % 16);
+	wqe_size = sizeof(*ctrl) + sizeof(*data_seg) + sizeof(*in_seg) + in_len	+
+			complement;
+
+	*n_bb = round_up(wqe_size, MLX5_SEND_WQE_BB);
+
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
+	fm_ce_se |= snap_dv_get_cq_update(dv_qp, NULL);
+
+	ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+	snap_set_ctrl_seg(ctrl, dv_qp->hw_qp.sq.pi, MLX5_OPCODE_SEND, 0,
+			dv_qp->hw_qp.qp_num, fm_ce_se,
+			    round_up(wqe_size, 16), 0, 0);
+
+	in_seg = (struct mlx5_wqe_inl_data_seg *)(ctrl + 1);
+	in_seg->byte_count = htobe32(in_len | MLX5_INLINE_SEG);
+	pdata = in_seg + 1;
+
+	/* handle wrap around, where inline data needs several building blocks */
+	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
+	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB -
+		 sizeof(*ctrl) - sizeof(*in_seg);
+
+	if (snap_unlikely((in_len + complement + sizeof(*data_seg)) > to_end)) {
+		memcpy(pdata, in_buf, to_end);
+		memcpy((void *)dv_qp->hw_qp.sq.addr, in_buf + to_end, in_len - to_end);
+		data_seg = (struct mlx5_wqe_data_seg *)
+				((void *)dv_qp->hw_qp.sq.addr + in_len - to_end + complement);
+		mlx5dv_set_data_seg(data_seg, len, key, (uintptr_t)addr);
+	} else {
+		memcpy(pdata, in_buf, in_len);
+		data_seg = (struct mlx5_wqe_data_seg *)(pdata + in_len + complement);
+		mlx5dv_set_data_seg(data_seg, len, key, (uintptr_t)addr);
+	}
+
+	dv_qp->hw_qp.sq.pi += (*n_bb - 1);
+
+	snap_dv_wqe_submit(dv_qp, ctrl);
+
+	snap_dv_set_comp(dv_qp, pi, NULL, fm_ce_se, *n_bb);
+	return 0;
+}
+
+
 static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 				uint64_t dstaddr, uint32_t rmkey, int *n_bb)
 {
@@ -644,6 +705,7 @@ struct snap_dma_q_ops dv_ops = {
 	.read            = dv_dma_q_read,
 	.readv           = dv_dma_q_readv,
 	.send_completion = dv_dma_q_send_completion,
+	.send            = dv_dma_q_send,
 	.progress_tx     = dv_dma_q_progress_tx,
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,
@@ -765,6 +827,7 @@ struct snap_dma_q_ops gga_ops = {
 	.read            = gga_dma_q_read,
 	.readv           = gga_dma_q_readv,
 	.send_completion = dv_dma_q_send_completion,
+	.send            = dv_dma_q_send,
 	.progress_tx     = dv_dma_q_progress_tx,
 	.progress_rx     = dv_dma_q_progress_rx,
 	.poll_rx         = dv_dma_q_poll_rx,

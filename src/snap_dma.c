@@ -373,3 +373,41 @@ struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
 	return NULL;
 #endif
 }
+
+/**
+ * snap_dma_q_send() - Send data segments (inline and memory pointer)
+ * @q:       dma queue
+ * @in_buf:  local buffer to copy the inline data from.
+ * @in_len:  the length of inline data.
+ * @addr:    address of memory pointer data segment
+ * @len:     length of data in memory pointer
+ * @key:     local key of the memory pointer data segment
+ *
+ * The function sends data segments in the following way:
+ * first an inline data segment followed by a memory pointer data segment
+ * total length (in_len + len) must be no greater than the value of the
+ * &struct snap_dma_q_create_attr.tx_elem_size
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ *
+ */
+int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
+		uint64_t addr, size_t len, uint32_t key)
+{
+	int n_bb, rc;
+
+	rc = q->ops->send(q, in_buf, in_len, addr, len, key, &n_bb);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available -= n_bb;
+
+	return 0;
+}

@@ -554,6 +554,53 @@ TEST_F(SnapDmaTest, poll_tx_dv)
 	poll_tx(SNAP_DMA_Q_MODE_DV);
 }
 
+TEST_F(SnapDmaTest, inline_data_test) {
+	struct snap_dma_q *q;
+	struct ibv_sge rx_sge;
+	struct ibv_recv_wr rx_wr, *bad_wr;
+	char cqe[32];
+	char rem_data[32];
+	int rc;
+	int n, saved_tx_available;
+	struct ibv_wc wc;
+
+	m_dma_q_attr.tx_elem_size = 64;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	struct ibv_mr *rem_mr = snap_reg_mr(m_pd, rem_data, 32);
+	saved_tx_available = q->tx_available;
+	rx_sge.addr = (uintptr_t)m_rbuf;
+	rx_sge.length =  m_dma_q_attr.tx_elem_size;
+	rx_sge.lkey = m_rmr->lkey;
+	rx_wr.next = NULL;
+	rx_wr.sg_list = &rx_sge;
+	rx_wr.num_sge = 1;
+
+	rc = ibv_post_recv(q->fw_qp.qp->verbs_qp, &rx_wr, &bad_wr);
+
+	ASSERT_EQ(0, rc);
+	memset(m_rbuf, 0, 64);
+	memset(cqe, 0xDA, sizeof(cqe));
+	memset(rem_data, 0xAD, 32);
+	rc = snap_dma_q_send(q, cqe, sizeof(cqe),(uint64_t) rem_data, 32, rem_mr->rkey);
+
+	ASSERT_EQ(0, rc);
+	n = 0;
+	while (q->tx_available < saved_tx_available && n < 10000) {
+		snap_dma_q_progress(q);
+		n++;
+	}
+
+	rc = ibv_poll_cq(snap_cq_to_verbs_cq(q->fw_qp.rx_cq), 1, &wc);
+	ASSERT_EQ(1, rc);
+	ASSERT_EQ(0, memcmp(cqe, m_rbuf, sizeof(cqe)));
+	ASSERT_EQ(0, memcmp(rem_data, &m_rbuf[sizeof(cqe)], sizeof(rem_data)));
+	snap_dma_q_flush(q);
+
+	snap_dma_q_destroy(q);
+}
+
 TEST_F(SnapDmaTest, error_checks) {
 	char data[4096];
 	struct snap_dma_q *q;

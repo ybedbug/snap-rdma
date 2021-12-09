@@ -308,6 +308,13 @@ static int verbs_dma_q_flush(struct snap_dma_q *q)
 	return n;
 }
 
+static inline int verbs_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
+				    uint64_t addr, int len, uint32_t key,
+				    int *n_bb)
+{
+	return -ENOTSUP;
+}
+
 struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
@@ -315,6 +322,7 @@ struct snap_dma_q_ops verb_ops = {
 	.read            = verbs_dma_q_read,
 	.readv            = verbs_dma_q_readv,
 	.send_completion = verbs_dma_q_send_completion,
+	.send            = verbs_dma_q_send,
 	.progress_tx     = verbs_dma_q_progress_tx,
 	.progress_rx     = verbs_dma_q_progress_rx,
 	.poll_rx     = verbs_dma_q_poll_rx,

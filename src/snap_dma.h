@@ -160,6 +160,9 @@ struct snap_dma_q_ops {
 			struct snap_dma_completion *comp, int *n_bb);
 	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
 			size_t len, int *n_bb);
+	int (*send)(struct snap_dma_q *q, void *in_buf, size_t in_len,
+		    uint64_t addr, int len, uint32_t key,
+		    int *n_bb);
 	int (*progress_tx)(struct snap_dma_q *q);
 	int (*progress_rx)(struct snap_dma_q *q);
 	int (*flush)(struct snap_dma_q *q);
@@ -296,6 +299,8 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	struct snap_dma_q_create_attr *attr);
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
 
+int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
+		uint64_t addr, size_t len, uint32_t key);
 /**
  * snap_dma_q_ctx - get queue context
  * @q: dma queue
