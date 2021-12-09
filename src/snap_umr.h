@@ -16,7 +16,7 @@
 #include "snap_dma.h"
 #include "snap_mr.h"
 
-int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
+int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 			int klm_entries, struct snap_indirect_mkey *klm_mkey,
 			struct snap_dma_completion *comp, int *n_bb);
 

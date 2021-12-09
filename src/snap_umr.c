@@ -69,7 +69,7 @@ static inline void snap_set_umr_control_seg(struct mlx5_wqe_umr_ctrl_seg *ctrl,
 				MLX5_WQE_UMR_CTRL_MKEY_MASK_START_ADDR);
 }
 
-int snap_dma_q_post_umr_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
+int snap_umr_post_wqe(struct snap_dma_q *q, struct mlx5_klm *klm_mtt,
 			int klm_entries, struct snap_indirect_mkey *klm_mkey,
 			struct snap_dma_completion *comp, int *n_bb)
 {

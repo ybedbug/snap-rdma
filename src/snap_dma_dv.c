@@ -144,7 +144,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 	io_ctx->comp.func = snap_use_klm_mkey_done;
 	io_ctx->comp.count = 1;
 
-	ret = snap_dma_q_post_umr_wqe(q, io_ctx->klm_mtt, iov_cnt,
+	ret = snap_umr_post_wqe(q, io_ctx->klm_mtt, iov_cnt,
 				io_ctx->klm_mkey, NULL, n_bb);
 	if (ret) {
 		snap_error("dma_q:%p post umr wqe failed, ret:%d\n", q, ret);
