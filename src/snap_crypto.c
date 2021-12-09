@@ -148,3 +148,96 @@ int snap_query_dek_obj(struct snap_crypto_obj *dek, struct snap_dek_attr *attr)
 
 	return 0;
 }
+
+struct snap_crypto_obj *
+snap_create_crypto_login_obj(struct ibv_context *context,
+			struct snap_crypto_login_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		DEVX_ST_SZ_BYTES(crypto_login)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	uint8_t *crypto_login_in;
+	struct snap_crypto_obj *crypto_login;
+	void *crypto_login_credential;
+
+	if ((attr->credential_pointer & 0xff000000)
+	    || (attr->session_import_kek_ptr & 0xff000000)) {
+		snap_error(" credential_pointer or import_kek_ptr is invalid");
+		goto out_err;
+	}
+
+	crypto_login = calloc(1, sizeof(*crypto_login));
+	if (!crypto_login)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_CRYPTO_LOGIN);
+
+	crypto_login_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(crypto_login, crypto_login_in, credential_pointer,
+		attr->credential_pointer);
+	DEVX_SET(crypto_login, crypto_login_in, session_import_kek_ptr,
+		attr->session_import_kek_ptr);
+	crypto_login_credential = DEVX_ADDR_OF(crypto_login, crypto_login_in,
+		credential);
+	memcpy(crypto_login_credential, attr->credential,
+		SNAP_CRYPTO_CREDENTIAL_SIZE);
+
+	crypto_login->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+		out, sizeof(out));
+	if (!crypto_login->obj)
+		goto out_free;
+
+	crypto_login->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	return crypto_login;
+
+out_free:
+	free(crypto_login);
+
+out_err:
+	return NULL;
+}
+
+int snap_query_crypto_login_obj(struct snap_crypto_obj *crypto_login,
+				struct snap_crypto_login_attr *attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		DEVX_ST_SZ_BYTES(crypto_login)] = {0};
+	uint8_t *crypto_login_out;
+	int ret;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		MLX5_OBJ_TYPE_CRYPTO_LOGIN);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, crypto_login->obj_id);
+
+	ret = mlx5dv_devx_obj_query(crypto_login->obj, in, sizeof(in),
+			out, sizeof(out));
+	if (ret)
+		return ret;
+
+	crypto_login_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	attr->modify_field_select = DEVX_GET64(crypto_login, crypto_login_out,
+			modify_field_select);
+	attr->state = DEVX_GET(crypto_login, crypto_login_out, state);
+
+	return 0;
+}
+
+int snap_destroy_crypto_obj(struct snap_crypto_obj *obj)
+{
+	int ret = -EINVAL;
+
+	ret = mlx5dv_devx_obj_destroy(obj->obj);
+	if (ret)
+		snap_error("Failed to destroy crypto obj:%p\n", obj);
+
+	free(obj);
+
+	return ret;
+}

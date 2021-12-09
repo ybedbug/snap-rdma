@@ -2588,6 +2588,7 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_VIRTIO_BLK_DEVICE_EMULATION = 0x0016,
 	MLX5_OBJ_TYPE_VIRTIO_BLK_Q = 0x0017,
 	MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS = 0x001c,
+	MLX5_OBJ_TYPE_CRYPTO_LOGIN = 0x001f,
 	MLX5_OBJ_TYPE_NVME_SQ_BE = 0x0038,
 	MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION = 0x003d,
 	MLX5_OBJ_TYPE_VIRTIO_FS_Q = 0x003e,
@@ -4372,6 +4373,25 @@ struct mlx5_ifc_dek_bits {
 	u8	key[0x400];
 
 	u8	reserved_at_0x600[0x200];
+};
+
+struct mlx5_ifc_crypto_login_bits {
+	u8	modify_field_select[0x40];
+
+	u8	reserved_at_0x40[0x40];
+
+	u8	reserved_at_0x80[0x4];
+	u8	state[0x4];
+	u8	credential_pointer[0x18];
+
+	u8	reserved_at_0xa0[0x8];
+	u8	session_import_kek_ptr[0x18];
+
+	u8	reserved_at_0xc0[0x140];
+
+	u8	credential[0x180];
+
+	u8	reserved_at_0x380[0x480];
 };
 
 enum {

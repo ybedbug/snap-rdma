@@ -51,6 +51,8 @@ struct snap_crypto_obj {
 
 /* Wrapped_DEK = ENC(iv_64b + key1_128b + key2_128b + keytag_64b) */
 #define SNAP_CRYPTO_DEK_SIZE            48
+/* Wrapped_CREDENTIAL = ENC(iv_64b + credential_320b) */
+#define SNAP_CRYPTO_CREDENTIAL_SIZE     48
 
 enum {
 	SNAP_CRYPTO_DEK_KEY_SIZE_128 = 0x0,
@@ -80,6 +82,17 @@ struct snap_dek_attr {
 	uint8_t  key[SNAP_CRYPTO_DEK_SIZE];
 };
 
+struct snap_crypto_login_attr {
+	/* for query */
+	uint64_t modify_field_select;
+	uint8_t  state;
+
+	/* for create */
+	uint32_t credential_pointer;
+	uint32_t session_import_kek_ptr;
+	uint8_t  credential[SNAP_CRYPTO_CREDENTIAL_SIZE];
+};
+
 int snap_query_crypto_caps(struct snap_context *sctx);
 
 struct snap_crypto_obj *
@@ -87,5 +100,14 @@ snap_create_dek_obj(struct ibv_context *context,
 			struct snap_dek_attr *attr);
 
 int snap_query_dek_obj(struct snap_crypto_obj *dek, struct snap_dek_attr *attr);
+
+struct snap_crypto_obj *
+snap_create_crypto_login_obj(struct ibv_context *context,
+			struct snap_crypto_login_attr *attr);
+
+int snap_query_crypto_login_obj(struct snap_crypto_obj *crypto_login,
+				struct snap_crypto_login_attr *attr);
+
+int snap_destroy_crypto_obj(struct snap_crypto_obj *obj);
 
 #endif
