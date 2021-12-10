@@ -23,6 +23,7 @@
 
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_IOV_SUPP, 0);
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_CRYPTO_SUPP, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_DBMODE, 0);
 
 struct snap_roce_caps {
@@ -843,17 +844,103 @@ static int snap_dma_ep_connect_helper(struct snap_dma_ibv_qp *qp1,
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
-static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr)
+static int snap_alloc_io_ctx(struct snap_dma_q *q,
+					struct ibv_pd *pd, int io_ctx_cnt, bool crypto,
+					struct snap_relaxed_ordering_caps *caps)
 {
-	int i, ret, io_ctx_cnt;
+	int i, ret;
+	struct snap_dma_q_io_ctx *io_ctx;
+	struct mlx5_devx_mkey_attr mkey_attr = {0};
+
+	ret = posix_memalign((void **)&io_ctx, SNAP_DMA_BUF_ALIGN,
+			io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
+	if (ret) {
+		snap_error("alloc dma_q io_ctx array failed");
+		return -ENOMEM;
+	}
+
+	memset(io_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
+
+	if (crypto)
+		TAILQ_INIT(&q->free_crypto_ctx);
+	else
+		TAILQ_INIT(&q->free_iov_ctx);
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = caps->relaxed_ordering_write;
+	mkey_attr.relaxed_ordering_read = caps->relaxed_ordering_read;
+	mkey_attr.klm_num = 0;
+	mkey_attr.klm_array = NULL;
+	if (crypto) {
+		mkey_attr.crypto_en = true;
+		mkey_attr.bsf_en = true;
+	}
+
+	for (i = 0; i < io_ctx_cnt; i++) {
+		io_ctx[i].klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+		if (!io_ctx[i].klm_mkey) {
+			snap_error("create klm mkey for io_ctx[%d] failed\n", i);
+			goto destroy_mkeys;
+		}
+
+		io_ctx[i].q = q;
+
+		if (crypto)
+			TAILQ_INSERT_TAIL(&q->free_crypto_ctx, &io_ctx[i], entry);
+		else
+			TAILQ_INSERT_TAIL(&q->free_iov_ctx, &io_ctx[i], entry);
+	}
+
+	if (crypto)
+		q->crypto_ctx = io_ctx;
+	else
+		q->iov_ctx = io_ctx;
+
+	return 0;
+
+destroy_mkeys:
+	for (i--; i >= 0; i--) {
+		if (crypto)
+			TAILQ_REMOVE(&q->free_crypto_ctx, &io_ctx[i], entry);
+		else
+			TAILQ_REMOVE(&q->free_iov_ctx, &io_ctx[i], entry);
+
+		snap_destroy_indirect_mkey(io_ctx[i].klm_mkey);
+	}
+
+	free(io_ctx);
+
+	return 1;
+}
+
+static void snap_free_io_ctx(struct snap_dma_q *q,
+				int io_ctx_cnt, bool crypto,
+				struct snap_dma_q_io_ctx *io_ctx)
+{
+	int i;
+
+	for (i = 0; i < io_ctx_cnt; i++) {
+		if (crypto)
+			TAILQ_REMOVE(&q->free_crypto_ctx, &io_ctx[i], entry);
+		else
+			TAILQ_REMOVE(&q->free_iov_ctx, &io_ctx[i], entry);
+
+		snap_destroy_indirect_mkey(io_ctx[i].klm_mkey);
+	}
+
+	free(io_ctx);
+}
+
+static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
+			struct snap_dma_q_create_attr *attr)
+{
+	int ret, io_ctx_cnt;
 	struct snap_relaxed_ordering_caps caps;
-	struct mlx5_devx_mkey_attr mkey_attr = {};
 
-	q->iov_supported = false;
-
-	if (!attr->iov_enable)
-		return 0;
+	q->iov_support = false;
+	q->crypto_support = false;
 
 	/*
 	 * io_ctx only required when post UMR WQE involved, and
@@ -862,76 +949,65 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
 		return 0;
 
-	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-
-	ret = posix_memalign((void **)&q->io_ctx, SNAP_DMA_BUF_ALIGN,
-			io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
-	if (ret) {
-		snap_error("alloc dma_q io_ctx array failed");
-		return -ENOMEM;
-	}
-
-	memset(q->io_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
+	if (!attr->iov_enable && !attr->crypto_enable)
+		return 0;
 
 	ret = snap_query_relaxed_ordering_caps(pd->context, &caps);
 	if (ret) {
 		snap_error("query relaxed_ordering_caps failed, ret:%d\n", ret);
-		goto free_io_ctx;
+		goto out;
 	}
 
-	TAILQ_INIT(&q->free_io_ctx);
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 
-	mkey_attr.addr = 0;
-	mkey_attr.size = 0;
-	mkey_attr.log_entity_size = 0;
-	mkey_attr.relaxed_ordering_write = caps.relaxed_ordering_write;
-	mkey_attr.relaxed_ordering_read = caps.relaxed_ordering_read;
-	mkey_attr.klm_num = 0;
-	mkey_attr.klm_array = NULL;
-
-	for (i = 0; i < io_ctx_cnt; i++) {
-		q->io_ctx[i].klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
-		if (!q->io_ctx[i].klm_mkey) {
-			snap_error("create klm mkey for io_ctx[%d] failed\n", i);
-			goto destroy_klm_mkeys;
+	if (attr->iov_enable) {
+		ret = snap_alloc_io_ctx(q, pd, io_ctx_cnt, false, &caps);
+		if (ret) {
+			snap_error("Allocate io_ctx to support IOV failed\n");
+			goto out;
 		}
 
-		q->io_ctx[i].q = q;
-		TAILQ_INSERT_TAIL(&q->free_io_ctx, &q->io_ctx[i], entry);
+		q->iov_support = true;
 	}
 
-	q->iov_supported = true;
+	if (attr->crypto_enable) {
+		ret = snap_alloc_io_ctx(q, pd, io_ctx_cnt, true, &caps);
+		if (ret) {
+			snap_error("Allocate io_ctx to support CRYPTO failed\n");
+			goto free_iov_io_ctx;
+		}
+
+		q->crypto_support = true;
+	}
 
 	return 0;
 
-destroy_klm_mkeys:
-	for (i--; i >= 0; i--) {
-		TAILQ_REMOVE(&q->free_io_ctx, &q->io_ctx[i], entry);
-		snap_destroy_indirect_mkey(q->io_ctx[i].klm_mkey);
-	}
-free_io_ctx:
-	free(q->io_ctx);
-	q->io_ctx = NULL;
+free_iov_io_ctx:
+	snap_free_io_ctx(q, io_ctx_cnt, false, q->iov_ctx);
+	q->iov_ctx = NULL;
+	q->iov_support = false;
 
+out:
 	return 1;
 }
 
 static void snap_destroy_io_ctx(struct snap_dma_q *q)
 {
-	int i, io_ctx_cnt;
-
-	if (!q->io_ctx)
-		return;
+	int io_ctx_cnt;
 
 	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-	for (i = 0; i < io_ctx_cnt; i++) {
-		TAILQ_REMOVE(&q->free_io_ctx, &q->io_ctx[i], entry);
-		snap_destroy_indirect_mkey(q->io_ctx[i].klm_mkey);
+
+	if (q->iov_support) {
+		snap_free_io_ctx(q, io_ctx_cnt, false, q->iov_ctx);
+		q->iov_ctx = NULL;
+		q->iov_support = false;
 	}
 
-	free(q->io_ctx);
-	q->io_ctx = NULL;
-	q->iov_supported = false;
+	if (q->crypto_support) {
+		snap_free_io_ctx(q, io_ctx_cnt, true, q->crypto_ctx);
+		q->crypto_ctx = NULL;
+		q->crypto_support = false;
+	}
 }
 
 /**

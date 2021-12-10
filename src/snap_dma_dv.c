@@ -85,7 +85,7 @@ __attribute__((unused)) static void snap_use_klm_mkey_done(struct snap_dma_compl
 	q = io_ctx->q;
 	orig_comp = (struct snap_dma_completion *)io_ctx->uctx;
 
-	TAILQ_INSERT_HEAD(&q->free_io_ctx, io_ctx, entry);
+	TAILQ_INSERT_HEAD(&q->free_iov_ctx, io_ctx, entry);
 
 	if (orig_comp && --orig_comp->count == 0)
 		orig_comp->func(orig_comp, status);
@@ -128,14 +128,14 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 	struct snap_dma_q_io_ctx *io_ctx;
 	struct snap_post_umr_attr attr = {0};
 
-	io_ctx = TAILQ_FIRST(&q->free_io_ctx);
+	io_ctx = TAILQ_FIRST(&q->free_iov_ctx);
 	if (!io_ctx) {
 		errno = -ENOMEM;
 		snap_error("dma_q:%p Out of io_ctx from pool\n", q);
 		return NULL;
 	}
 
-	TAILQ_REMOVE(&q->free_io_ctx, io_ctx, entry);
+	TAILQ_REMOVE(&q->free_iov_ctx, io_ctx, entry);
 
 	ret = snap_iov_to_klm_mtt(iov, iov_cnt, rmkey, io_ctx->klm_mtt, len);
 	if (ret)
@@ -159,7 +159,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
 	return io_ctx;
 
 insert_back:
-	TAILQ_INSERT_TAIL(&q->free_io_ctx, io_ctx, entry);
+	TAILQ_INSERT_TAIL(&q->free_iov_ctx, io_ctx, entry);
 	errno = ret;
 #endif
 	return NULL;

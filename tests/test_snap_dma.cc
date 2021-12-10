@@ -1044,7 +1044,7 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 
 	q = snap_dma_q_create(pd, dma_q_attr);
 	ASSERT_TRUE(q);
-	ASSERT_TRUE(q->iov_supported);
+	ASSERT_TRUE(q->iov_support);
 
 	lbuf = (char *)malloc(bsize * IOV_CNT * 2);
 	if (!lbuf)

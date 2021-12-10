@@ -25,9 +25,10 @@
 #include "snap_mr.h"
 #include "snap_qp.h"
 
-#define SNAP_DMA_Q_OPMODE     "SNAP_DMA_Q_OPMODE"
-#define SNAP_DMA_Q_IOV_SUPP   "SNAP_DMA_Q_IOV_SUPP"
-#define SNAP_DMA_Q_DBMODE     "SNAP_DMA_Q_DBMODE"
+#define SNAP_DMA_Q_OPMODE        "SNAP_DMA_Q_OPMODE"
+#define SNAP_DMA_Q_IOV_SUPP      "SNAP_DMA_Q_IOV_SUPP"
+#define SNAP_DMA_Q_CRYPTO_SUPP   "SNAP_DMA_Q_CRYPTO_SUPP"
+#define SNAP_DMA_Q_DBMODE        "SNAP_DMA_Q_DBMODE"
 
 #define SNAP_DMA_Q_MAX_IOV_CNT		128
 
@@ -210,14 +211,18 @@ struct snap_dma_q {
 	struct snap_dma_ibv_qp fw_qp;
 	struct snap_dma_q_ops  *ops;
 
-	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_dma_q_io_ctx *iov_ctx;
+	struct snap_dma_q_io_ctx *crypto_ctx;
 
-	TAILQ_HEAD(, snap_dma_q_io_ctx) free_io_ctx;
+	TAILQ_HEAD(, snap_dma_q_io_ctx) free_iov_ctx;
+
+	TAILQ_HEAD(, snap_dma_q_io_ctx) free_crypto_ctx;
 
 	/* public: */
 	/** @uctx:  user supplied context */
 	void                  *uctx;
-	bool                  iov_supported;
+	bool                  iov_support;
+	bool                  crypto_support;
 	bool                  no_events;
 };
 
@@ -249,6 +254,7 @@ enum {
  *                environment variable: 0 - autoselect, 1 - verbs, 2 - dv, 3 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
  * @iov_enable:   enable/disable this dma queue to use readv/writev API
+ * @crypto_enable:enable/disable this dma queue to use crypto rw API
  * @comp_channel: receive and DMA completion channel. See
  *                man ibv_create_comp_channel
  * @comp_vector:  completion vector
@@ -263,6 +269,7 @@ struct snap_dma_q_create_attr {
 	void  *uctx;
 	int   mode;
 	bool  iov_enable;
+	bool  crypto_enable;
 	snap_dma_rx_cb_t rx_cb;
 
 	struct ibv_comp_channel *comp_channel;
