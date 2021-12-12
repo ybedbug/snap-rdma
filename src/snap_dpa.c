@@ -347,12 +347,12 @@ static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
 	sleep(1); /* WA over simx bug */
 #endif
 	flexio_thread_destroy(thr->dpa_thread);
+	snap_dpa_mem_free(thr->mem);
 	flexio_window_destroy(thr->cmd_window);
 	ibv_dereg_mr(thr->cmd_mr);
 	pthread_mutex_destroy(&thr->cmd_lock);
 	free(thr->cmd_mbox);
 	free(thr);
-	snap_dpa_mem_free(thr->mem);
 }
 
 /**
