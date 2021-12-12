@@ -13,9 +13,6 @@
 #ifndef _DPA_H
 #define _DPA_H
 
-/* TODO: should be configurable */
-#define APU_BUILD 1
-
 #include <libflexio-dev/flexio_dev.h>
 #include <libflexio-dev/flexio_dev_debug.h>
 #include <libflexio-os/flexio_os_syscall.h>
@@ -23,7 +20,7 @@
 
 #include "snap_dpa_common.h"
 
-#if APU_BUILD
+#if SIMX_BUILD
 #define dpa_print_string(str)   print_sim_str((str), 0)
 #define dpa_print_hex(num)      print_sim_hex((num), 0)
 #else

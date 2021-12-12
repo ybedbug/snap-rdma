@@ -342,6 +342,10 @@ free_thread:
 
 static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
 {
+#if SIMX_BUILD
+	snap_debug("WA simx thread destroy bug: 1s sleep\n");
+	sleep(1); /* WA over simx bug */
+#endif
 	flexio_thread_destroy(thr->dpa_thread);
 	flexio_window_destroy(thr->cmd_window);
 	ibv_dereg_mr(thr->cmd_mr);

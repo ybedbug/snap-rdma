@@ -18,6 +18,9 @@
  * between DPA and DPU
  */
 
+/* TODO: should be configurable */
+#define SIMX_BUILD 1
+
 #define SNAP_DPA_THREAD_MBOX_LEN   4096
 #define SNAP_DPA_THREAD_MBOX_ALIGN 4096
 #define SNAP_DPA_THREAD_MBOX_CMD_OFFSET 0
