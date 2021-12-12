@@ -27,9 +27,8 @@ static void dpa_mbox_config(struct snap_dpa_tcb *tcb)
 	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 }
 
-int __snap_dpa_thread_start(uint64_t tcb_addr)
+void __snap_dpa_thread_start(uint64_t tcb_addr)
 {
-	int ret;
 	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *)tcb_addr;
 
 	dpa_mbox_config(tcb);
@@ -41,7 +40,7 @@ int __snap_dpa_thread_start(uint64_t tcb_addr)
 	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_START);
 	/* may be let main do it after init is done */
 	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
-	ret = main(1, tcb);
+	(void)main(1, tcb);
 	dpa_print_string("==> DPA thread done\n");
-	return ret;
+	flexio_dev_return();
 }
