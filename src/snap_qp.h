@@ -130,6 +130,7 @@ struct snap_qp_attr {
 	struct snap_cq *rq_cq;
 
 	bool qp_on_dpa;
+	struct snap_dpa_ctx *dpa_proc;
 };
 
 struct snap_hw_qp {

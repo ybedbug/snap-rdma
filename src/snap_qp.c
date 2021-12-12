@@ -416,6 +416,8 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	int ret;
 	size_t qp_buf_len;
 	uint32_t pd_id;
+	uint32_t umem_id;
+	uint64_t umem_offset;
 
 	/* TODO: check actual caps */
 	if (attr->sq_max_inline_size > 256)
@@ -433,8 +435,9 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	devx_qp->devx.uar = qp_uar;
 	devx_qp->sq_size = SNAP_ROUNDUP_POW2_OR0(attr->sq_size);
 	devx_qp->rq_size = SNAP_ROUNDUP_POW2_OR0(attr->rq_size);
+	devx_qp->devx.on_dpa = attr->qp_on_dpa;
 
-	/* TODO: add APU support
+	/*
 	 * TODO: consider keeping separate cache for the dbrecs like UCX or like
 	 * we had in our first devx_verbs code
 	 * TODO: guard buffer between sq and rq
@@ -444,10 +447,30 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 				     SNAP_MLX5_RECV_WQE_BB * devx_qp->rq_size,
 				     SNAP_MLX5_L2_CACHE_SIZE);
 
-	devx_qp->devx.umem.size = qp_buf_len + SNAP_MLX5_DBR_SIZE;
-	ret = snap_umem_init(ctx, &devx_qp->devx.umem);
-	if (ret)
-		goto deref_uar;
+	if (!attr->qp_on_dpa) {
+		devx_qp->devx.umem.size = qp_buf_len + SNAP_MLX5_DBR_SIZE;
+		ret = snap_umem_init(ctx, &devx_qp->devx.umem);
+		if (ret)
+			goto deref_uar;
+
+		umem_id = devx_qp->devx.umem.devx_umem->umem_id;
+		umem_offset = 0;
+
+	} else {
+		if (!attr->dpa_proc) {
+			ret = -EINVAL;
+			goto deref_uar;
+		}
+
+		devx_qp->devx.dpa_mem = snap_dpa_mem_alloc(attr->dpa_proc, qp_buf_len + SNAP_MLX5_DBR_SIZE);
+		if (!devx_qp->devx.dpa_mem) {
+			ret = -ENOMEM;
+			goto deref_uar;
+		}
+
+		umem_id = snap_dpa_process_umem_id(attr->dpa_proc);
+		umem_offset = snap_dpa_process_umem_offset(attr->dpa_proc, snap_dpa_mem_addr(devx_qp->devx.dpa_mem));
+	}
 
 	devx_qp->dbr_offset = qp_buf_len;
 
@@ -498,12 +521,13 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	}
 
 	DEVX_SET(qpc, qpc, dbr_umem_valid, 1);
-	DEVX_SET(qpc, qpc, dbr_umem_id, devx_qp->devx.umem.devx_umem->umem_id);
+	DEVX_SET(qpc, qpc, dbr_umem_id, umem_id);
 	/* offset within umem */
-	DEVX_SET64(qpc, qpc, dbr_addr, qp_buf_len);
+	DEVX_SET64(qpc, qpc, dbr_addr, umem_offset + qp_buf_len);
 
-	DEVX_SET(create_qp_in, in, wq_umem_id, devx_qp->devx.umem.devx_umem->umem_id);
+	DEVX_SET(create_qp_in, in, wq_umem_id, umem_id);
 	DEVX_SET(create_qp_in, in, wq_umem_valid, 1);
+	DEVX_SET64(create_qp_in, in, wq_umem_offset, umem_offset);
 
 	devx_qp->devx.devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
 	if (!devx_qp->devx.devx_obj) {
@@ -512,12 +536,15 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	}
 
 	devx_qp->devx.id = DEVX_GET(create_qp_out, out, qpn);
-	snap_debug("created devx qp 0x%x sq_size %d rq_size %d memsize %d\n", devx_qp->devx.id,
-		   devx_qp->sq_size, devx_qp->rq_size, devx_qp->devx.umem.size);
+	snap_debug("created devx qp 0x%x sq_size %d rq_size %d memsize %lu\n", devx_qp->devx.id,
+		   devx_qp->sq_size, devx_qp->rq_size, qp_buf_len + SNAP_MLX5_DBR_SIZE);
 	return 0;
 
 reset_qp_umem:
-	snap_umem_reset(&devx_qp->devx.umem);
+	if (!attr->qp_on_dpa)
+		snap_umem_reset(&devx_qp->devx.umem);
+	else
+		snap_dpa_mem_free(devx_qp->devx.dpa_mem);
 deref_uar:
 	snap_uar_put(qp_uar);
 	return ret;
@@ -534,9 +561,16 @@ static int devx_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
 {
 	struct snap_devx_qp *devx_qp = &qp->devx_qp;
 
-	hw_qp->sq.addr = (uintptr_t)devx_qp->devx.umem.buf + SNAP_MLX5_RECV_WQE_BB * devx_qp->rq_size;
-	hw_qp->rq.addr = (uintptr_t)devx_qp->devx.umem.buf;
-	hw_qp->dbr_addr = (uintptr_t)devx_qp->devx.umem.buf + devx_qp->dbr_offset;
+	if (!devx_qp->devx.on_dpa) {
+		hw_qp->sq.addr = (uintptr_t)devx_qp->devx.umem.buf + SNAP_MLX5_RECV_WQE_BB * devx_qp->rq_size;
+		hw_qp->rq.addr = (uintptr_t)devx_qp->devx.umem.buf;
+		hw_qp->dbr_addr = (uintptr_t)devx_qp->devx.umem.buf + devx_qp->dbr_offset;
+	} else {
+		hw_qp->sq.addr = snap_dpa_mem_addr(devx_qp->devx.dpa_mem) + SNAP_MLX5_RECV_WQE_BB * devx_qp->rq_size;
+		hw_qp->rq.addr = snap_dpa_mem_addr(devx_qp->devx.dpa_mem);
+		hw_qp->dbr_addr = snap_dpa_mem_addr(devx_qp->devx.dpa_mem) + devx_qp->dbr_offset;
+	}
+
 	hw_qp->sq.bf_addr = (uintptr_t)devx_qp->devx.uar->uar->reg_addr;
 	hw_qp->sq.wqe_cnt = devx_qp->sq_size;
 	hw_qp->rq.wqe_cnt = devx_qp->rq_size;
