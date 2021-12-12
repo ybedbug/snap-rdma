@@ -223,6 +223,57 @@ TEST_F(SnapQpTest, create_thread_cq_on_dpa) {
 	snap_dpa_process_destroy(dpa_ctx);
 }
 
+TEST_F(SnapQpTest, create_qp_on_dpa) {
+	struct snap_cq_attr cq_attr = {0};
+	struct snap_qp_attr qp_attr = {0};
+	struct snap_cq *rx_cq, *tx_cq;
+	struct snap_qp *qp;
+	struct snap_hw_qp hw_qp;
+	int ret;
+	struct snap_dpa_ctx *dpa_ctx;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	cq_attr.cq_type = qp_attr.qp_type = SNAP_OBJ_DEVX;
+	cq_attr.cqe_cnt = 1024;
+	cq_attr.cq_on_dpa = true;
+	cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
+	cq_attr.dpa_proc = dpa_ctx;
+
+	cq_attr.cqe_size = 64;
+	tx_cq = snap_cq_create(m_pd->context, &cq_attr);
+	ASSERT_TRUE(tx_cq);
+
+	cq_attr.cqe_size = 128;
+	rx_cq = snap_cq_create(m_pd->context, &cq_attr);
+	ASSERT_TRUE(rx_cq);
+
+	qp_attr.qp_on_dpa = true;
+	qp_attr.dpa_proc = dpa_ctx;
+	qp_attr.sq_cq = tx_cq;
+	qp_attr.rq_cq = rx_cq;
+	qp_attr.sq_max_inline_size = 128;
+	qp_attr.sq_max_sge = qp_attr.rq_max_sge = 1;
+	qp_attr.sq_size = 128;
+	qp_attr.rq_size = 128;
+
+	qp = snap_qp_create(m_pd, &qp_attr);
+	ASSERT_TRUE(qp);
+
+	ret = snap_qp_to_hw_qp(qp, &hw_qp);
+	EXPECT_EQ(0, ret);
+
+	snap_qp_destroy(qp);
+	snap_cq_destroy(rx_cq);
+	snap_cq_destroy(tx_cq);
+
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
 INSTANTIATE_TEST_SUITE_P(snap, SnapQpTest,
 		::testing::Values(SNAP_OBJ_VERBS, SNAP_OBJ_DV, SNAP_OBJ_DEVX));
 
