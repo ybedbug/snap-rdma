@@ -50,6 +50,7 @@ struct blk_virtq_cmd {
 	struct virtq_cmd common_cmd;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool zcopy;
+	int max_iov_cnt;
 	struct iovec *iov;
 	int iov_cnt;
 	struct snap_blk_mempool_ctx dma_pool_ctx;
@@ -206,6 +207,8 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 				   vq_priv->vq_ctx->idx, idx);
 			return -ENOMEM;
 		}
+
+		cmd->max_iov_cnt = seg_max;
 	}
 
 	if (cmd->common_cmd.vq_priv->use_mem_pool) {
@@ -383,9 +386,15 @@ static void bdev_io_comp_cb(enum snap_bdev_op_status status, void *done_arg)
 }
 
 
-static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
+static inline int virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
 {
 	int i;
+
+	if (cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS > cmd->max_iov_cnt) {
+		snap_warn("num_desc(%lu) from cmd is bigger than seg_max(%d) supported\n",
+				cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS, cmd->max_iov_cnt);
+		return -1;
+	}
 
 	for (i = 0; i < cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS; i++) {
 		cmd->iov[i].iov_base = (void *)to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr;
@@ -395,6 +404,8 @@ static inline void virtq_descs_to_iovec(struct blk_virtq_cmd *cmd)
 			       to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].addr, to_blk_cmd_aux(cmd->common_cmd.aux)->descs[i + 1].len);
 	}
 	cmd->iov_cnt = cmd->common_cmd.num_desc - NUM_HDR_FTR_DESCS;
+
+	return 0;
 }
 
 static inline bool zcopy_prepare(struct blk_virtq_cmd *cmd)
@@ -417,7 +428,8 @@ static inline bool zcopy_prepare(struct blk_virtq_cmd *cmd)
 	if (!ops->zcopy_validate_params)
 		return false;
 
-	virtq_descs_to_iovec(cmd);
+	if (virtq_descs_to_iovec(cmd))
+		return false;
 
 	if (!ops->zcopy_validate_params(priv->virtq_dev.ctx,
 				cmd->iov, cmd->iov_cnt,
