@@ -34,6 +34,20 @@ static bool cq_validate_attr(const struct snap_cq_attr *attr)
 	return true;
 }
 
+static void cq_init_buf(struct snap_devx_cq *devx_cq, void *cq_buf)
+{
+	int i;
+
+	for (i = 0; i < devx_cq->cqe_cnt; i++) {
+		struct mlx5_cqe64 *cqe;
+
+		cqe = (struct mlx5_cqe64 *)(cq_buf + devx_cq->cqe_size * i);
+		if (devx_cq->cqe_size == 128)
+			cqe++;
+		cqe->op_own = (MLX5_CQE_INVALID << 4) | MLX5_CQE_OWNER_MASK;
+	}
+}
+
 static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struct snap_cq_attr *attr)
 {
 	uint32_t in[DEVX_ST_SZ_DW(create_cq_in)] = {0};
@@ -42,9 +56,9 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	/* TODO: check what page size should be used on DPA */
 	const uint32_t log_page_size = snap_u32log2(sysconf(_SC_PAGESIZE));
 	struct snap_devx_cq *devx_cq = &cq->devx_cq;
+	struct snap_dpa_ctx *dpa_proc = NULL;
 	int ret = 0;
 	struct snap_uar *cq_uar;
-	int i;
 	size_t cq_mem_size;
 	uint32_t umem_id;
 	uint64_t umem_offset;
@@ -56,6 +70,7 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	devx_cq->devx.ctx = ctx;
 	devx_cq->devx.uar = cq_uar;
 	devx_cq->cqe_cnt = SNAP_ROUNDUP_POW2(attr->cqe_cnt);
+	devx_cq->cqe_size = attr->cqe_size;
 	devx_cq->devx.on_dpa = attr->cq_on_dpa;
 	cq_mem_size = attr->cqe_size * devx_cq->cqe_cnt + SNAP_MLX5_DBR_SIZE;
 
@@ -74,8 +89,6 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 		umem_id = devx_cq->devx.umem.devx_umem->umem_id;
 		umem_offset = 0;
 	} else {
-		struct snap_dpa_ctx *dpa_proc;
-
 		if (attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_THREAD) {
 			if (!attr->dpa_thread) {
 				ret = -EINVAL;
@@ -149,24 +162,29 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	 *
 	 * So it is either DMA or let DPA initialize cqe memory once hw_cq is
 	 * transfered to dpa thread via mbox.
-	 *
-	 * At the moment we go with mbox because cqs will be created once at
-	 * the dpa thread startup.
 	 */
 	if (!attr->cq_on_dpa) {
-		for (i = 0; i < devx_cq->cqe_cnt; i++) {
-			struct mlx5_cqe64 *cqe;
+		cq_init_buf(devx_cq, devx_cq->devx.umem.buf);
+	} else {
+		void *tmp_buf;
 
-			cqe = (struct mlx5_cqe64 *)(devx_cq->devx.umem.buf + attr->cqe_size * i);
-			if (attr->cqe_size == 128)
-				cqe++;
-			cqe->op_own = (MLX5_CQE_INVALID << 4) | MLX5_CQE_OWNER_MASK;
+		tmp_buf = calloc(1, cq_mem_size);
+		if (!tmp_buf) {
+			ret = -ENOMEM;
+			goto reset_cq_umem;
+		}
+
+		cq_init_buf(devx_cq, tmp_buf);
+		ret = snap_dpa_memcpy(dpa_proc, snap_dpa_mem_addr(devx_cq->devx.dpa_mem), tmp_buf, cq_mem_size);
+		free(tmp_buf);
+		if (ret) {
+			snap_error("failed to init cq buffer on DPA\n");
+			goto reset_cq_umem;
 		}
 	}
 	/* TODO: notification support */
 
 	devx_cq->devx.id = DEVX_GET(create_cq_out, out, cqn);
-	devx_cq->cqe_size = attr->cqe_size;
 	snap_debug("created devx cq 0x%x cqe_size %d nelems %d memsize %lu\n",
 		   devx_cq->devx.id, devx_cq->cqe_size, devx_cq->cqe_cnt, cq_mem_size);
 	return 0;
