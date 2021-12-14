@@ -61,6 +61,8 @@ enum {
 	SNAP_DPA_THREAD_ATTR_POLLING = 0x1
 };
 
+int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t n);
+
 /**
  * struct snap_dpa_thread_attr - DPA thread attributes
  *

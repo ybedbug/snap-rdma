@@ -534,6 +534,24 @@ bool snap_dpa_enabled(struct ibv_context *ctx)
 		(MLX5_OBJ_TYPE_APU_THREAD & general_obj_types);
 }
 
+/**
+ * snap_dpa_memcpy() - sync copy from DPU to DPA memory
+ * @ctx:    dpa process context
+ * @dpa_va: destination address on dpa
+ * @src:    source address
+ * @n:      bytes to copy
+ *
+ * The function copies @n bytes from memory area @src to memory area @dpa_va
+ *
+ * Return: 0 or -EINVAL on failure
+ */
+int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t n)
+{
+	flexio_status st;
+
+	st = flexio_host2dev_memcpy(ctx->dpa_proc, (uintptr_t)src, n, dpa_va);
+	return st != FLEXIO_STATUS_SUCCESS ? -EINVAL : 0;
+}
 #else
 
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
@@ -592,5 +610,10 @@ uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx)
 bool snap_dpa_enabled(struct ibv_context *ctx)
 {
 	return false;
+}
+
+int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t n)
+{
+	return -ENOTSUP;
 }
 #endif
