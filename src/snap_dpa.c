@@ -80,6 +80,68 @@ uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem)
 }
 
 /**
+ * snap_dpa_mkey_alloc() - create dpa process memory key
+ * @dctx: device context
+ * @pd:   protection domain
+ *
+ * The function creates DPA memory key that can be used to access @dctx memory
+ * by objects belonging to @pd.
+ *
+ * For example, a QP can use memory key to perform DMA or post_send operations
+ * TODO: consider caching protection domains and sharing the key
+ *
+ * NOTE: mkey_id returned by flexio is actually a pointer to its internal struct
+ *
+ * Return:
+ * mkey handle or NULL
+ */
+struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *dctx, struct ibv_pd *pd)
+{
+	struct snap_dpa_mkeyh *h;
+	flexio_status st;
+
+	h = calloc(1, sizeof(*h));
+	if (!h) {
+		snap_error("Failed to allocate dpa memory key handle\n");
+		return 0;
+	}
+
+	st = flexio_device_mkey_create(dctx->dpa_proc, pd, &h->mkey_id);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		free(h);
+		return NULL;
+	}
+
+	return h;
+}
+
+/**
+ * snap_dpa_mkey_id() - get memory key
+ * @h:  memory key handle created by snap_dpa_mkey_alloc()
+ *
+ * The function gets actual memory key value from the mkey handle @h
+ *
+ * Return:
+ * memory key
+ */
+uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h)
+{
+	return *h->mkey_id;
+}
+
+/**
+ * snap_dpa_mkey_free() - free memory key handle
+ * @h: memory key handle
+ *
+ * The function frees memory key handle and memory key object
+ */
+void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
+{
+	flexio_device_mkey_destroy(h->mkey_id);
+	free(h);
+}
+
+/**
  * snap_dpa_process_create() - create DPA application process
  * @ctx:         snap context
  * @app_name:    application name
@@ -617,5 +679,19 @@ bool snap_dpa_enabled(struct ibv_context *ctx)
 int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t n)
 {
 	return -ENOTSUP;
+}
+
+struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *ctx, struct ibv_pd *pd)
+{
+	return NULL;
+}
+
+uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h)
+{
+	return 0xFFFF;
+}
+
+void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
+{
 }
 #endif

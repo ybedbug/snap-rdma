@@ -39,6 +39,14 @@ struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem);
 void snap_dpa_mem_free(struct snap_dpa_memh *mem);
 
+struct snap_dpa_mkeyh {
+	uint32_t *mkey_id;
+};
+
+struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *ctx, struct ibv_pd *pd);
+uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h);
+void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h);
+
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name);
 void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
 uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx);
