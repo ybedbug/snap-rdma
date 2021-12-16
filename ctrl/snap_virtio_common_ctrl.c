@@ -993,10 +993,16 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto free_queues;
 	}
 
+	ctrl->xmkey = snap_create_cross_mkey(attr->pd, ctrl->sdev);
+	if (!ctrl->xmkey)
+		goto free_pgs;
+
 	ctrl->type = attr->type;
 	ctrl->force_in_order = attr->force_in_order;
 	return 0;
 
+free_pgs:
+	snap_pgs_free(&ctrl->pg_ctx);
 free_queues:
 	free(ctrl->queues);
 mutex_destroy:
@@ -1016,6 +1022,7 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
 		if (!TAILQ_EMPTY(&ctrl->pg_ctx.pgs[i].q_list))
 			snap_warn("Closing ctrl with queue %d still active", i);
+	(void)snap_destroy_cross_mkey(ctrl->xmkey);
 	snap_pgs_free(&ctrl->pg_ctx);
 	free(ctrl->queues);
 	pthread_mutex_destroy(&ctrl->progress_lock);
@@ -1640,29 +1647,21 @@ void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl)
 static int snap_virtio_ctrl_queue_recover_indexes(struct snap_virtio_ctrl *ctrl,
 						  struct snap_virtio_ctrl_queue_state *q_state)
 {
-	struct snap_cross_mkey *q_mkey;
 	struct vring_avail vra;
 	struct vring_used vru;
 	int ret;
 
 	/* Get available & used indexes of virtio ctrl queue (vring) from host memory */
 
-	q_mkey = snap_create_cross_mkey(ctrl->lb_pd, ctrl->sdev);
-	if (!q_mkey) {
-		snap_error("Failed to create snap MKey Entry for queue\n");
-		return -EINVAL;
-	}
-
 	ret = snap_virtio_get_vring_indexes_from_host(ctrl->lb_pd,
 						      q_state->queue_driver,
 						      q_state->queue_device,
-						      q_mkey->mkey, &vra, &vru);
+						      ctrl->xmkey->mkey, &vra, &vru);
 	if (!ret) {
 		q_state->hw_available_index = vra.idx;
 		q_state->hw_used_index = vru.idx;
 	}
 
-	snap_destroy_cross_mkey(q_mkey);
 	return ret;
 }
 

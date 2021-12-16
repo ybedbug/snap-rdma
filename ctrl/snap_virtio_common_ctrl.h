@@ -232,6 +232,7 @@ struct snap_virtio_ctrl {
 	bool pending_flr;
 	struct snap_device_attr sdev_attr;
 	int lm_state;
+	struct snap_cross_mkey *xmkey;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);

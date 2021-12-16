@@ -554,6 +554,7 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 
 	attr.hw_available_index = vbq->attr->hw_available_index;
 	attr.hw_used_index = vbq->attr->hw_used_index;
+	attr.xmkey = vctrl->xmkey->mkey;
 
 	vbq->common.ctrl = vctrl;
 	vbq->common.index = index;

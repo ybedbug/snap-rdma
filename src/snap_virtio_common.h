@@ -189,7 +189,6 @@ struct snap_virtio_queue {
 	uint64_t				mod_allowed_mask;
 	struct mlx5_snap_devx_obj		*ctrs_obj;
 
-	struct snap_cross_mkey			*snap_cross_mkey;
 	struct virtq_q_ops		*q_ops;
 };
 

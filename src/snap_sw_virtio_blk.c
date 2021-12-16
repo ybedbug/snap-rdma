@@ -33,7 +33,7 @@ struct snap_virtio_blk_sw_queue {
 	bool				read_done;
 	enum sw_queue_prog_state prog_state;
 	struct snap_dma_completion avail_read;
-
+	uint32_t dma_mkey;
 };
 
 
@@ -56,19 +56,10 @@ static struct snap_virtio_queue *
 snap_virtio_blk_create_sw_queue(struct snap_device *sdev,
 				struct snap_virtio_common_queue_attr *attr)
 {
-	struct snap_cross_mkey *snap_cross_mkey;
-
 	struct snap_virtio_blk_sw_queue *swq = malloc(sizeof(struct snap_virtio_blk_sw_queue));
 
 	if (!swq)
 		goto out;
-	snap_cross_mkey = snap_create_cross_mkey(attr->vattr.pd, sdev);
-	if (!snap_cross_mkey) {
-		snap_error("Failed to create snap MKey Entry for blk queue\n");
-		goto out;
-	}
-	swq->vbq.virtq.snap_cross_mkey = snap_cross_mkey;
-	attr->vattr.dma_mkey = snap_cross_mkey->mkey;
 	swq->avail_idx = 0;
 	swq->avail_mr = snap_reg_mr(attr->qp->pd,
 			&swq->avail_idx, sizeof(uint16_t));
@@ -89,6 +80,7 @@ snap_virtio_blk_create_sw_queue(struct snap_device *sdev,
 	swq->q_size = attr->vattr.size;
 	attr->q_provider = SNAP_SW_Q_PROVIDER;
 	swq->dma_q = attr->dma_q;
+	swq->dma_mkey = attr->vattr.dma_mkey;
 
 	return &swq->vbq.virtq;
 
@@ -102,15 +94,13 @@ out:
 
 static int snap_virtio_blk_destroy_sw_queue(struct snap_virtio_queue *vq)
 {
-	int mkey_ret;
 	struct snap_virtio_blk_sw_queue *swq = to_sw_queue(to_blk_queue(vq));
 
-	mkey_ret = snap_destroy_cross_mkey(vq->snap_cross_mkey);
 	ibv_dereg_mr(swq->avail_mr);
 	ibv_dereg_mr(swq->desc_head_mr);
 	free(swq);
 
-	return mkey_ret;
+	return 0;
 }
 
 static int snap_virtio_blk_query_sw_queue(struct snap_virtio_queue *vbq,
@@ -137,7 +127,7 @@ static int snap_virtio_blk_progress_sw_queue(struct snap_virtio_queue *vq)
 		sw_q->avail_read.count = 1;
 		sw_q->read_done = false;
 		ret = snap_dma_q_read(sw_q->dma_q, &sw_q->avail_idx, sizeof(uint16_t),
-				sw_q->avail_mr->lkey, avail_idx_addr, sw_q->vbq.virtq.snap_cross_mkey->mkey, &sw_q->avail_read);
+				sw_q->avail_mr->lkey, avail_idx_addr, sw_q->dma_mkey, &sw_q->avail_read);
 		if (snap_unlikely(ret)) {
 			snap_error("failed DMA read vring_available for drv: 0x%lx\n",
 					sw_q->driver_addr);
@@ -154,7 +144,7 @@ static int snap_virtio_blk_progress_sw_queue(struct snap_virtio_queue *vq)
 				sw_q->prev_avail = (sw_q->prev_avail + 1) % sw_q->q_size;
 				sw_q->avail_read.count = 1;
 				ret = snap_dma_q_read(sw_q->dma_q, &sw_q->desc_head_idx, sizeof(uint16_t),
-						sw_q->desc_head_mr->lkey, desc_hdr_idx_addr, sw_q->vbq.virtq.snap_cross_mkey->mkey, &sw_q->avail_read);
+						sw_q->desc_head_mr->lkey, desc_hdr_idx_addr, sw_q->dma_mkey, &sw_q->avail_read);
 				if (snap_unlikely(ret)) {
 					snap_error("failed DMA read descriptor head idx for drv: 0x%lx\n",
 							sw_q->driver_addr);

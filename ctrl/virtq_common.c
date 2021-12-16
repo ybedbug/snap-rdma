@@ -117,6 +117,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	virtq_vattr_from_attr(attr, &snap_attr->vattr, ctxt_attr->max_tunnel_desc);
 	vq_priv->vattr = &snap_attr->vattr;
 	vq_priv->vattr->size = attr->queue_size;
+	vq_priv->vattr->dma_mkey = attr->xmkey;
 
 	return true;
 

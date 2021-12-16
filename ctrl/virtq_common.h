@@ -102,6 +102,7 @@ struct virtq_create_attr {
 	uint16_t hw_available_index;
 	uint16_t hw_used_index;
 	bool force_in_order;
+	uint32_t xmkey;
 };
 
 struct virtq_start_attr {
