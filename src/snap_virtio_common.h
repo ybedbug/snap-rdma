@@ -107,6 +107,10 @@ struct snap_virtio_queue_attr {
 	uint64_t			device;
 	struct ibv_pd			*pd;
 	uint32_t			ctrs_obj_id;
+	uint16_t			hw_available_index;
+	uint16_t			hw_used_index;
+	uint32_t			tisn_or_qpn;
+	uint16_t			vhca_id;
 
 	enum snap_virtq_state		state; /* query and modify */
 	uint8_t				error_type;

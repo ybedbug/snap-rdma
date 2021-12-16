@@ -47,9 +47,12 @@ static void virtq_vattr_from_attr(struct virtq_create_attr *attr,
 	vattr->virtio_version_1_0 = attr->virtio_version_1_0;
 	vattr->offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
 	vattr->idx = attr->idx;
+	vattr->size = attr->queue_size;
 	vattr->desc = attr->desc;
 	vattr->driver = attr->driver;
 	vattr->device = attr->device;
+	vattr->hw_available_index = attr->hw_available_index;
+	vattr->hw_used_index = attr->hw_used_index;
 	vattr->full_emulation = true;
 	vattr->max_tunnel_desc = snap_min(attr->max_tunnel_desc, max_tunnel_desc);
 	vattr->event_qpn_or_msix = attr->msix_vector;
@@ -76,6 +79,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 		    struct virtq_ctx_init_attr *ctxt_attr)
 {
 	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
+	struct ibv_qp *fw_qp;
 
 	if (!vq_priv)
 		goto err;
@@ -107,6 +111,9 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	}
 	snap_virtio_common_queue_config(snap_attr,
 			attr->hw_available_index, attr->hw_used_index, vq_priv->dma_q);
+	fw_qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
+	snap_attr->vattr.tisn_or_qpn = fw_qp->qp_num;
+	snap_attr->vattr.vhca_id = snap_get_dev_vhca_id(fw_qp->context);
 	virtq_vattr_from_attr(attr, &snap_attr->vattr, ctxt_attr->max_tunnel_desc);
 	vq_priv->vattr = &snap_attr->vattr;
 	vq_priv->vattr->size = attr->queue_size;

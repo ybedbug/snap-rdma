@@ -695,27 +695,16 @@ snap_virtio_create_queue(struct snap_device *sdev,
 
 	if (sdev->pci->type == SNAP_VIRTIO_BLK_PF ||
 	    sdev->pci->type == SNAP_VIRTIO_BLK_VF) {
-		struct snap_virtio_common_queue_attr *attr;
-		int vhca_id;
-
-		attr = to_common_queue_attr(vattr);
 		in = in_blk;
 		inlen = sizeof(in_blk);
 		virtq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 		virtq_ctx = DEVX_ADDR_OF(virtio_blk_q, virtq_in, virtqc);
 
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_BLK_Q;
-		if (attr->qp) {
-			vhca_id = snap_get_dev_vhca_id(attr->qp->context);
-			if (vhca_id < 0) {
-				errno = EINVAL;
-				goto out;
-			}
-			DEVX_SET(virtio_blk_q, virtq_in, qpn, attr->qp->qp_num);
-			DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vhca_id);
-		}
-		DEVX_SET(virtio_blk_q, virtq_in, hw_available_index, attr->hw_available_index);
-		DEVX_SET(virtio_blk_q, virtq_in, hw_used_index, attr->hw_used_index);
+		DEVX_SET(virtio_blk_q, virtq_in, qpn, vattr->tisn_or_qpn);
+		DEVX_SET(virtio_blk_q, virtq_in, qpn_vhca_id, vattr->vhca_id);
+		DEVX_SET(virtio_blk_q, virtq_in, hw_available_index, vattr->hw_available_index);
+		DEVX_SET(virtio_blk_q, virtq_in, hw_used_index, vattr->hw_used_index);
 		if (sdev->sctx->virtio_blk_caps.virtio_q_counters)
 			DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
 
