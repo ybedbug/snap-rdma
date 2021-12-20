@@ -19,6 +19,7 @@ extern "C" {
 #include "snap_dma.h"
 #include "snap_umr.h"
 #include "host_uio.h"
+#include "snap_dpa.h"
 };
 
 #include "gtest/gtest.h"
@@ -252,11 +253,13 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 
 	if (is_read) {
 		memset(m_lbuf, 0, len);
-		memset(rvaddr, 0xED, len);
+		if (rvaddr)
+			memset(rvaddr, 0xED, len);
 		rc = snap_dma_q_read(q, m_lbuf, m_bsize, m_lmr->lkey,
 				(uintptr_t)rpaddr, rkey, &comp);
 	} else {
-		memset(rvaddr, 0, len);
+		if (rvaddr)
+			memset(rvaddr, 0, len);
 		memset(m_lbuf, 0xED, len);
 		rc = snap_dma_q_write(q, m_lbuf, m_bsize, m_lmr->lkey,
 				(uintptr_t)rpaddr, rkey, &comp);
@@ -290,7 +293,8 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 	ASSERT_EQ(1, g_comp_count);
 	ASSERT_EQ(0, g_last_comp_status);
 	ASSERT_EQ(0, comp.count);
-	ASSERT_EQ(0, memcmp(m_lbuf, rvaddr, len));
+	if (rvaddr)
+		ASSERT_EQ(0, memcmp(m_lbuf, rvaddr, len));
 }
 
 TEST_F(SnapDmaTest, dma_read) {
@@ -1270,4 +1274,83 @@ TEST_F(SnapDmaTest, attach_crypto_bsf_and_mtt_to_mkey_wait_complete) {
 
 TEST_F(SnapDmaTest, attach_crypto_bsf_and_mtt_to_mkey_no_wait_complete) {
 	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, true, false);
+}
+
+/* DPA section */
+TEST_F(SnapDmaTest, dpa_ep_create) {
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	int ret;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_proc = dpa_ctx;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	EXPECT_EQ(0, ret);
+
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDmaTest, dpa_rdma_from_dpu) {
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	int ret;
+	struct snap_dpa_memh *dpa_mem;
+	struct snap_dpa_mkeyh *dpa_mkey;
+	char tmp_buf[m_bsize];
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_proc = dpa_ctx;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	EXPECT_EQ(0, ret);
+
+	dpa_mem = snap_dpa_mem_alloc(dpa_ctx, m_bsize);
+	ASSERT_TRUE(dpa_mem);
+
+	dpa_mkey = snap_dpa_mkey_alloc(dpa_ctx, m_pd);
+
+	/* TODO: alloc dpa mem, use it to test rdma write and read */
+	memset(tmp_buf, 0xED, m_bsize);
+	/* this will write buffer filled with 0xED to dpa */
+	dma_xfer_test(dpu_qp, false, true, 0, (void *)snap_dpa_mem_addr(dpa_mem), snap_dpa_mkey_id(dpa_mkey), m_bsize);
+	/* read the same buffer back to m_lbuf */
+	dma_xfer_test(dpu_qp, true, true, 0, (void *)snap_dpa_mem_addr(dpa_mem), snap_dpa_mkey_id(dpa_mkey), m_bsize);
+	ASSERT_EQ(0, memcmp(m_lbuf, tmp_buf, m_bsize));
+
+	snap_dpa_mkey_free(dpa_mkey);
+	snap_dpa_mem_free(dpa_mem);
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_process_destroy(dpa_ctx);
 }
