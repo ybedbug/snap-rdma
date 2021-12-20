@@ -139,12 +139,14 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 
 static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 {
-	if (qp->dv_qp.comps)
-		free(qp->dv_qp.comps);
+	if (!snap_qp_on_dpa(qp->qp)) {
+		if (qp->dv_qp.comps)
+			free(qp->dv_qp.comps);
 
-	if (qp->dv_qp.opaque_buf) {
-		ibv_dereg_mr(qp->dv_qp.opaque_mr);
-		free(qp->dv_qp.opaque_buf);
+		if (qp->dv_qp.opaque_buf) {
+			ibv_dereg_mr(qp->dv_qp.opaque_mr);
+			free(qp->dv_qp.opaque_buf);
+		}
 	}
 
 	snap_qp_destroy(qp->qp);
@@ -201,6 +203,14 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		/* SNAP_OBJ_DEVX is also supported - enable manually */
 		cq_attr.cq_type = SNAP_OBJ_DV;
 
+	/* force cq creation on the dpa */
+	if (attr->qp_on_dpa) {
+		cq_attr.cq_type = SNAP_OBJ_DEVX;
+		cq_attr.cq_on_dpa = true;
+		cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
+		cq_attr.dpa_proc = attr->dpa_proc;
+	}
+
 	qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
 	if (!qp->tx_cq)
 		return -EINVAL;
@@ -228,23 +238,27 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 
 	rc = snap_qp_to_hw_qp(qp->qp, &qp->dv_qp.hw_qp);
 	if (rc)
-		goto free_comps;
-
-	rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
-			    qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
-	if (rc)
-		goto free_rx_cq;
-
-	memset(qp->dv_qp.comps, 0,
-	       qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+		goto free_qp;
 
 	rc = snap_cq_to_hw_cq(qp->tx_cq, &qp->dv_tx_cq);
 	if (rc)
-		goto free_comps;
+		goto free_qp;
 
 	rc = snap_cq_to_hw_cq(qp->rx_cq, &qp->dv_rx_cq);
 	if (rc)
-		goto free_comps;
+		goto free_qp;
+
+	if (!attr->qp_on_dpa) {
+		/* todo allocate on dpa */
+		rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
+				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+		if (rc)
+			goto free_qp;
+
+		/* to dpa */
+		memset(qp->dv_qp.comps, 0,
+				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+	}
 
 	if (!qp->dv_qp.hw_qp.sq.tx_db_nc) {
 #if defined(__aarch64__)
@@ -259,6 +273,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	if (mode == SNAP_DMA_Q_MODE_DV)
 		return 0;
 
+	/* TODO: gga on dpa */
 	rc = posix_memalign((void **)&qp->dv_qp.opaque_buf,
 			    sizeof(struct mlx5_dma_opaque),
 			    qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque));
@@ -276,11 +291,11 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 
 free_opaque:
 	free(qp->dv_qp.opaque_buf);
-
-	return 0;
-
 free_comps:
-	free(qp->dv_qp.comps);
+	if (!attr->qp_on_dpa)
+		free(qp->dv_qp.comps);
+free_qp:
+	snap_qp_destroy(qp->qp);
 free_rx_cq:
 	snap_cq_destroy(qp->rx_cq);
 free_tx_cq:
@@ -290,7 +305,9 @@ free_tx_cq:
 
 static void snap_destroy_sw_qp(struct snap_dma_q *q)
 {
-	snap_free_rx_wqes(&q->sw_qp);
+	if (!snap_qp_on_dpa(q->sw_qp.qp))
+		snap_free_rx_wqes(&q->sw_qp);
+
 	snap_destroy_qp_helper(&q->sw_qp);
 }
 
@@ -330,7 +347,15 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		snap_error("Invalid SNAP_DMA_Q_OPMODE %d\n", attr->mode);
 		return -EINVAL;
 	}
-	snap_debug("Opening dma_q of type %d\n", attr->mode);
+	snap_debug("Opening dma_q of type %d on_dpa %d\n", attr->mode, attr->on_dpa);
+	if (attr->on_dpa) {
+		if (attr->mode != SNAP_DMA_Q_MODE_DV)
+			return -EINVAL;
+		q->no_events = true;
+		qp_init_attr.qp_on_dpa = true;
+		qp_init_attr.dpa_proc = attr->dpa_proc;
+	}
+
 	/*
 	 * TODO: disable event mode if OBJ_DEVX are used to create qp and cq
 	 * q->no_events = true;
@@ -365,6 +390,10 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 		q->sw_qp.dv_qp.db_flag = snap_env_getenv(SNAP_DMA_Q_DBMODE);
 	}
+
+	if (attr->on_dpa)
+		/* TODO: alloc rx buffer on dpa memory */
+		return 0;
 
 	rc = snap_alloc_rx_wqes(pd, &q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
 	if (rc)
@@ -1040,6 +1069,9 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
  *
  * The function creates only a sw qp.
  * The use is to create 2 seperate sw only snap_dma_q's and connect them
+ *
+ * If the endpoint is created on DPA, dpa_dma_ep_init() must be called by a
+ * DPA thread to complete initialization.
  *
  * Return: dma queue or NULL on error.
  */

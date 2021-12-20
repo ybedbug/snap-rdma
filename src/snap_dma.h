@@ -260,6 +260,8 @@ enum {
  * @comp_vector:  completion vector
  * @comp_context: completion context that will be returned by the
  *                ibv_get_cq_event(). See man ibv_get_cq_event
+ * @on_dpa:       create dma queue on the DPA. Valid only with snap_dma_ep_create()
+ * @dpa_proc:     snap dpa process context. Must be valid if @on_dpa is true
  */
 struct snap_dma_q_create_attr {
 	int   tx_qsize;
@@ -275,6 +277,9 @@ struct snap_dma_q_create_attr {
 	struct ibv_comp_channel *comp_channel;
 	int                      comp_vector;
 	void                    *comp_context;
+
+	bool on_dpa;
+	struct snap_dpa_ctx *dpa_proc;
 };
 
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
