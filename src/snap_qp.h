@@ -117,6 +117,11 @@ void snap_cq_destroy(struct snap_cq *cq);
 int snap_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq);
 struct ibv_cq *snap_cq_to_verbs_cq(struct snap_cq *cq);
 
+static inline bool snap_cq_on_dpa(struct snap_cq *cq)
+{
+	return cq->type == SNAP_OBJ_DEVX && cq->devx_cq.devx.on_dpa;
+}
+
 struct snap_qp_attr {
 	int qp_type;
 
@@ -189,4 +194,9 @@ int snap_qp_modify(struct snap_qp *qp, const void *in, size_t inlen,
 		void *out, size_t outlen);
 uint32_t snap_qp_get_qpnum(struct snap_qp *qp);
 struct ibv_pd *snap_qp_get_pd(struct snap_qp *qp);
+
+static inline bool snap_qp_on_dpa(struct snap_qp *qp)
+{
+	return qp->type == SNAP_OBJ_DEVX && qp->devx_qp.devx.on_dpa;
+}
 #endif
