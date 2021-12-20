@@ -71,4 +71,6 @@
 #define SNAP_STATIC_ASSERT(_expr, _msg)
 #endif
 
+#define SNAP_PACKED __attribute__((packed))
+
 #endif
