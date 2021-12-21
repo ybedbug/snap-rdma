@@ -30,3 +30,20 @@
 		(var) != NULL && ((next) = TAILQ_NEXT((var), field), 1); \
 		(var) = (next))
 #endif
+
+/*
+ * Override buggy implementations in sys/queue.h
+ */
+#undef TAILQ_REMOVE
+#define TAILQ_REMOVE(head, elm, field) do {                \
+	if ((elm) == (head)->tqh_first)                     \
+		(head)->tqh_first = (elm)->field.tqe_next;      \
+	if (((elm)->field.tqe_next) != NULL)                \
+		(elm)->field.tqe_next->field.tqe_prev =         \
+			(elm)->field.tqe_prev;                \
+	else                                \
+		(head)->tqh_last = (elm)->field.tqe_prev;        \
+	*(elm)->field.tqe_prev = (elm)->field.tqe_next;            \
+(elm)->field.tqe_prev = NULL;                       \
+} while (/*CONSTCOND*/0)
+
