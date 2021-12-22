@@ -1198,6 +1198,7 @@ void blk_virtq_destroy(struct blk_virtq_ctx *q)
 
 	free_blk_virtq_cmd_arr(vq_priv);
 	virtq_ctx_destroy(vq_priv);
+	free(q);
 }
 
 int blk_virtq_get_debugstat(struct blk_virtq_ctx *q,
