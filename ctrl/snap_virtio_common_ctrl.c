@@ -62,12 +62,14 @@ snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl)
 static const char *lm_state2str(enum snap_virtio_ctrl_lm_state state)
 {
 	switch (state) {
-	case SNAP_VIRTIO_CTRL_LM_NORMAL:
-		return "LM_NORMAL";
+	case SNAP_VIRTIO_CTRL_LM_RUNNING:
+		return "LM_RUNNING";
 	case SNAP_VIRTIO_CTRL_LM_QUIESCED:
 		return "LM_QUISCED";
 	case SNAP_VIRTIO_CTRL_LM_FREEZED:
 		return "LM_FREEZED";
+	case SNAP_VIRTIO_CTRL_LM_INIT:
+		return "LM_INIT";
 	}
 
 	return "LM_UNKNOWN";
@@ -415,9 +417,9 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 
 		snap_info("virtio controller FLR detected\n");
 
-		if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_NORMAL) {
+		if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_RUNNING) {
 			snap_info("clearing live migration state");
-			ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_NORMAL;
+			snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
 		}
 
 		if (ctrl->bar_cbs.pre_flr) {
@@ -1413,8 +1415,8 @@ static int snap_virtio_ctrl_quiesce(void *data)
 
 	snap_virtio_ctrl_progress_lock(ctrl);
 
-	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_NORMAL) {
-		ret = -1;
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_RUNNING) {
+		ret = -EINVAL;
 		goto err;
 	}
 
@@ -1432,7 +1434,7 @@ static int snap_virtio_ctrl_quiesce(void *data)
 		snap_virtio_ctrl_progress_lock(ctrl);
 	}
 done:
-	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("%p: queisce: new state %s ret %d\n", ctrl,
@@ -1448,7 +1450,7 @@ static int snap_virtio_ctrl_unquiesce(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 
 	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_QUIESCED) {
-		ret = -1;
+		ret = -EINVAL;
 		goto err;
 	}
 
@@ -1456,7 +1458,7 @@ static int snap_virtio_ctrl_unquiesce(void *data)
 	if (ret)
 		goto err;
 
-	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_NORMAL;
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("%p: unqueisce: new state %s ret %d\n", ctrl,
@@ -1472,10 +1474,10 @@ static int snap_virtio_ctrl_freeze(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 
 	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_QUIESCED) {
-		ret = -1;
+		ret = -EINVAL;
 		goto err;
 	}
-	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_FREEZED;
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_FREEZED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("%p: freeze: new state %s ret %d\n", ctrl,
@@ -1491,10 +1493,10 @@ static int snap_virtio_ctrl_unfreeze(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 
 	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_FREEZED) {
-		ret = -1;
+		ret = -EINVAL;
 		goto err;
 	}
-	ctrl->lm_state = SNAP_VIRTIO_CTRL_LM_QUIESCED;
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("%p: unfreeze: new state %s ret %d\n", ctrl,

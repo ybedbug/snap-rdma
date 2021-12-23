@@ -34,19 +34,6 @@
 		fflush(stdout); \
 	} while (0)
 
-
-/**
- * enum snap_virtio_ctrl_lm_state - Virtio controller live migration state
- *
- * The enum tracks controller live migration state. See &struct snap_migration_ops
- * for the detailed description.
- */
-enum snap_virtio_ctrl_lm_state {
-	SNAP_VIRTIO_CTRL_LM_NORMAL,
-	SNAP_VIRTIO_CTRL_LM_QUIESCED,
-	SNAP_VIRTIO_CTRL_LM_FREEZED
-};
-
 /**
  * struct snap_migration_ops - completion handle and callback
  * for live migration support

@@ -341,6 +341,19 @@ struct snap_virtio_ctrl_queue_state {
 	uint16_t hw_used_index;
 } __attribute__((packed));
 
+/**
+ * enum snap_virtio_ctrl_lm_state - Virtio controller live migration state
+ *
+ * The enum define live migration state.
+ */
+enum snap_virtio_ctrl_lm_state {
+	SNAP_VIRTIO_CTRL_LM_NORMAL,
+	SNAP_VIRTIO_CTRL_LM_RUNNING = SNAP_VIRTIO_CTRL_LM_NORMAL,
+	SNAP_VIRTIO_CTRL_LM_QUIESCED,
+	SNAP_VIRTIO_CTRL_LM_FREEZED,
+	SNAP_VIRTIO_CTRL_LM_INIT,
+};
+
 int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
 				size_t *queue_cfg_len, size_t *dev_cfg_len);
 int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
@@ -359,4 +372,19 @@ const struct snap_virtio_ctrl_queue_stats *
 snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx);
 
 int snap_virtio_ctrl_hotunplug(struct snap_virtio_ctrl *ctrl);
+
+/**
+ * snap_virtio_ctrl_set_lm_state() - Set the live migtration state
+ * @ctrl: virtio controller
+ * @lm_state: the lm state value set to
+ *
+ * This function should be used to set the controller live migration state.
+ */
+static inline void
+snap_virtio_ctrl_set_lm_state(struct snap_virtio_ctrl *ctrl,
+			      enum snap_virtio_ctrl_lm_state lm_state)
+{
+	ctrl->lm_state = lm_state;
+}
+
 #endif
