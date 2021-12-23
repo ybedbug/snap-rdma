@@ -12,6 +12,7 @@ noinst_PROGRAMS = \
 		snap_create_destroy_nvme_ctrl \
 		snap_query_virtio_device \
 		snap_create_destroy_virtio_queue \
+		snap_dpa_p2p_test \
 		snap_create_destroy_virtio_ctrl \
 		snap_sample_device \
 		snap_sample_uio_driver \
@@ -62,6 +63,10 @@ snap_query_virtio_device_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
 snap_create_destroy_virtio_queue_CFLAGS = $(LOCAL_CFLAGS)
 snap_create_destroy_virtio_queue_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_virtio_queue.c
 snap_create_destroy_virtio_queue_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
+
+snap_dpa_p2p_test_CFLAGS = $(LOCAL_CFLAGS)
+snap_dpa_p2p_test_SOURCES = $(SNAP_TEST_FILES) snap_dpa_p2p_test.c
+snap_dpa_p2p_test_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
 
 snap_open_close_channel_CFLAGS = $(LOCAL_CFLAGS)
 snap_open_close_channel_SOURCES = $(SNAP_TEST_FILES) snap_open_close_channel.c
