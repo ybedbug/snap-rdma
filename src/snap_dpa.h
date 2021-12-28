@@ -25,6 +25,7 @@ bool snap_dpa_enabled(struct ibv_context *ctx);
 struct snap_dpa_ctx {
 	struct flexio_process  *dpa_proc;
 	struct flexio_eq       *dpa_eq;
+	struct flexio_outbox   *dpa_uar;
 	struct ibv_pd          *pd;
 	struct snap_uar        *uar;
 	uint64_t               entry_point;

@@ -217,6 +217,12 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	if (!dpa_ctx->uar)
 		goto free_dpa_proc;
 
+	st = flexio_outbox_create(dpa_ctx->dpa_proc, NULL, dpa_ctx->uar->uar->page_id, &dpa_ctx->dpa_uar);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("%s: Failed to create DPA outbox (uar)\n", app_name);
+		goto deref_uar;
+	}
+
 	/* create a placeholder eq to attach cqs */
 	eq_attr.log_eq_ring_size = 5; /* 32 elems */
 	eq_attr.uar_id = dpa_ctx->uar->uar->page_id;
@@ -224,12 +230,14 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	st = flexio_eq_create(dpa_ctx->dpa_proc, ctx, &eq_attr, &dpa_ctx->dpa_eq);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("%s: Failed to create DPA event queue\n", app_name);
-		goto deref_uar;
+		goto free_dpa_outbox;
 	}
 
 	dpa_ctx->entry_point = entry_point;
 	return dpa_ctx;
 
+free_dpa_outbox:
+	flexio_outbox_destroy(dpa_ctx->dpa_uar);
 deref_uar:
 	snap_uar_put(dpa_ctx->uar);
 free_dpa_proc:
@@ -249,10 +257,11 @@ free_dpa_ctx:
  */
 void snap_dpa_process_destroy(struct snap_dpa_ctx *ctx)
 {
-	ibv_dealloc_pd(ctx->pd);
 	flexio_eq_destroy(ctx->dpa_eq);
+	flexio_outbox_destroy(ctx->dpa_uar);
 	snap_uar_put(ctx->uar);
 	flexio_process_destroy(ctx->dpa_proc);
+	ibv_dealloc_pd(ctx->pd);
 	free(ctx);
 }
 
@@ -368,7 +377,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	 * the attributes.
 	 */
 	st = flexio_thread_create(thr->dctx->dpa_proc, thr->dctx->entry_point, *dpa_tcb_addr,
-			thr->cmd_window, NULL, &thr->dpa_thread);
+			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
 		goto free_tcb;
