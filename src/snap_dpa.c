@@ -314,11 +314,11 @@ static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr);
 struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		struct snap_dpa_thread_attr *attr)
 {
+	struct snap_dpa_tcb tcb = {0};
 	struct snap_dpa_thread *thr;
 	int ret;
 	flexio_status st;
 	flexio_uintptr_t *dpa_tcb_addr;
-	struct snap_dpa_tcb tcb;
 	struct snap_dpa_rsp *rsp;
 
 	thr = calloc(1, sizeof(*thr));
@@ -746,6 +746,15 @@ uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h)
 }
 
 void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
+{
+}
+
+void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr)
+{
+	return NULL;
+}
+
+void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
 {
 }
 #endif
