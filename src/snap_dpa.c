@@ -490,6 +490,46 @@ void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
 }
 
 /**
+ * snpa_dpa_thread_mr_copy_sync() - copy memory region to DPA thread
+ * @thr: DPA thread
+ * @va:  memory virtual or physical address
+ * @len: memory region length
+ * @mkey: memory region key
+ *
+ * The function copies memory region description (va, len, mkey) to the DPA
+ * thread. The copy is sync and is done via the command channel.
+ *
+ * Only description is copied. Data are not touched.
+ *
+ * Return:
+ * 0 on success or -errno
+ */
+int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey)
+{
+	int ret = 0;
+	struct snap_dpa_cmd_mr *cmd;
+	struct snap_dpa_rsp *rsp;
+	void *mbox;
+
+	mbox = snap_dpa_thread_mbox_acquire(thr);
+
+	cmd = (struct snap_dpa_cmd_mr *)snap_dpa_mbox_to_cmd(mbox);
+	cmd->va = va;
+	cmd->mkey = mkey;
+	cmd->len = len;
+	snap_dpa_cmd_send(&cmd->base, SNAP_DPA_CMD_MR);
+
+	rsp = snap_dpa_rsp_wait(mbox);
+	if (rsp->status != SNAP_DPA_RSP_OK) {
+		snap_error("Failed to copy MR: %d\n", rsp->status);
+		ret = -EINVAL;
+	}
+
+	snap_dpa_thread_mbox_release(thr);
+	return ret;
+}
+
+/**
  * snap_dpa_app_start() - start dpa application
  *
  * The function performs load of the application code, starts
@@ -649,6 +689,11 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 {
 	return 0;
+}
+
+int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey)
+{
+	return -ENOTSUP;
 }
 
 struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)

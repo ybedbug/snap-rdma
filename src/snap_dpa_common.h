@@ -53,6 +53,8 @@ struct snap_dpa_attr {
 enum {
 	SNAP_DPA_CMD_START = 0x1,
 	SNAP_DPA_CMD_STOP,
+	SNAP_DPA_CMD_MR = 0x10,
+	SNAP_DPA_CMD_DMA_EP_COPY = 0x100,
 	SNAP_DPA_CMD_APP_FIRST = 0xf0000000,
 };
 
@@ -83,6 +85,13 @@ enum {
 struct snap_dpa_rsp {
 	volatile uint32_t sn;
 	volatile uint32_t status;
+};
+
+struct snap_dpa_cmd_mr {
+	struct snap_dpa_cmd base;
+	uint64_t va;
+	uint64_t len;
+	uint32_t mkey;
 };
 
 static inline struct snap_dpa_cmd *snap_dpa_mbox_to_cmd(void *mbox)

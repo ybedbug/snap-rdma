@@ -101,6 +101,8 @@ uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr);
 void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);
 
+int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey);
+
 #define N_DPA_APP_WORKERS 1
 /**
  * struct snap_dpa_app - snap DPA application
