@@ -18,6 +18,7 @@
 #include "mlx5_ifc.h"
 #include "snap_internal.h"
 #include "snap_umr.h"
+#include "snap_dpa.h"
 
 #include "config.h"
 
@@ -147,6 +148,8 @@ static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 			ibv_dereg_mr(qp->dv_qp.opaque_mr);
 			free(qp->dv_qp.opaque_buf);
 		}
+	} else {
+		snap_dpa_mkey_free(qp->dpa.mkey);
 	}
 
 	snap_qp_destroy(qp->qp);
@@ -249,15 +252,18 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		goto free_qp;
 
 	if (!attr->qp_on_dpa) {
-		/* todo allocate on dpa */
 		rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 		if (rc)
 			goto free_qp;
 
-		/* to dpa */
 		memset(qp->dv_qp.comps, 0,
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+	} else {
+		qp->dpa.mkey = snap_dpa_mkey_alloc(attr->dpa_proc, pd);
+		if (!qp->dpa.mkey)
+			goto free_qp;
+		qp->dv_qp.dpa_mkey = snap_dpa_mkey_id(qp->dpa.mkey);
 	}
 
 	if (!qp->dv_qp.hw_qp.sq.tx_db_nc) {
@@ -294,6 +300,8 @@ free_opaque:
 free_comps:
 	if (!attr->qp_on_dpa)
 		free(qp->dv_qp.comps);
+	else
+		snap_dpa_mkey_free(qp->dpa.mkey);
 free_qp:
 	snap_qp_destroy(qp->qp);
 free_rx_cq:
@@ -1177,4 +1185,41 @@ void snap_dma_q_destroy(struct snap_dma_q *q)
 	snap_destroy_io_ctx(q);
 	snap_destroy_fw_qp(q);
 	snap_dma_ep_destroy(q);
+}
+
+_Static_assert(sizeof(struct snap_dma_q) < SNAP_DMA_THREAD_MBOX_CMD_SIZE,
+		"struct snap_dma_q is too big for the DPA thread mbox");
+/**
+ * snap_dma_ep_dpa_copy_sync() - Copy DMA endpoint to DPA
+ * @thr:  thread to copy endpoint to
+ * @q:    dma endpoint
+ *
+ * The function copies DMA endpoint to the DPA thread. The copy is done
+ * synchronously. After the function return endpoint is initialized by the
+ * DPA thread and is ready to use.
+ *
+ * Return:
+ * 0 on success or -errno
+ */
+int snap_dma_ep_dpa_copy_sync(struct snap_dpa_thread *thr, struct snap_dma_q *q)
+{
+	int ret = 0;
+	struct snap_dma_ep_copy_cmd *cmd;
+	struct snap_dpa_rsp *rsp;
+	void *mbox;
+
+	mbox = snap_dpa_thread_mbox_acquire(thr);
+
+	cmd = (struct snap_dma_ep_copy_cmd *)snap_dpa_mbox_to_cmd(mbox);
+	memcpy(&cmd->q, q, sizeof(*q));
+	snap_dpa_cmd_send(&cmd->base, SNAP_DPA_CMD_DMA_EP_COPY);
+
+	rsp = snap_dpa_rsp_wait(mbox);
+	if (rsp->status != SNAP_DPA_RSP_OK) {
+		snap_error("Failed to copy DMA queue: %d\n", rsp->status);
+		ret = -EINVAL;
+	}
+
+	snap_dpa_thread_mbox_release(thr);
+	return ret;
 }

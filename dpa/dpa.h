@@ -13,8 +13,11 @@
 #ifndef _DPA_H
 #define _DPA_H
 
+#include <stddef.h>
+
 #include <libflexio-dev/flexio_dev.h>
 #include <libflexio-dev/flexio_dev_debug.h>
+#include <libflexio-dev/flexio_dev_queue_access.h>
 #include <libflexio-os/flexio_os_syscall.h>
 #include <libflexio-os/flexio_os.h>
 
@@ -27,6 +30,8 @@
 #define dpa_print_string(str)
 #define dpa_print_hex(num)
 #endif
+
+#define DPA_CACHE_LINE_BYTES 64
 
 static inline void dpa_print_one_arg(char *msg, uint64_t arg)
 {
@@ -77,4 +82,17 @@ static inline void *dpa_mbox(struct snap_dpa_tcb *tcb)
 	return (void *)tcb->mbox_address;
 }
 
+void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size);
+void dpa_thread_free(struct snap_dpa_tcb *tcb, void *addr);
+
+struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd);
+
+static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	/* TODO: context should be cached and not a syscall */
+	ctx = flexio_os_get_thread_ctx();
+	flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
+}
 #endif

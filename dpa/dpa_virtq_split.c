@@ -41,28 +41,11 @@ struct dpa_virtq {
 	uint16_t dpa_avail_idx;
 };
 
-#define DPA_CACHE_LINE_BYTES 64
 #define DPA_VIRTQ_MAX 8
 static struct dpa_virtq *virtqs[DPA_VIRTQ_MAX]; // per thread
 
 /* currently set so that we have 1s polling interval on simx */
 #define COMMAND_DELAY 10000
-
-void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size)
-{
-	void *data_add = (void *) tcb->data_address + tcb->data_used;
-	//size is rounded up to cache line (64 bytes)
-	if (size % DPA_CACHE_LINE_BYTES)
-		tcb->data_used += size + (DPA_CACHE_LINE_BYTES - (size % DPA_CACHE_LINE_BYTES));
-	else tcb->data_used += size;
-
-	return data_add;
-}
-
-void dpa_thread_free(struct snap_dpa_tcb *tcb, void *addr)
-{
-
-}
 
 int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
 {

@@ -21,11 +21,14 @@
 /* TODO: should be configurable */
 #define SIMX_BUILD 1
 
+/* max length of *printf/log buffer on DPA */
+#define SNAP_DPA_PRINT_BUF_LEN 128 /* should be careful because this is allocated on stack */
+
 #define SNAP_DPA_THREAD_MBOX_LEN   4096
 #define SNAP_DPA_THREAD_MBOX_ALIGN 4096
 #define SNAP_DPA_THREAD_MBOX_CMD_OFFSET 0
 #define SNAP_DPA_THREAD_MBOX_RSP_OFFSET 2048
-
+#define SNAP_DMA_THREAD_MBOX_CMD_SIZE (SNAP_DPA_THREAD_MBOX_RSP_OFFSET - sizeof(struct snap_dpa_cmd))
 #define SNAP_DPA_THREAD_ENTRY_POINT "__snap_dpa_thread_start"
 
 /* TODO: make configurable. Some threads will not need this memory */

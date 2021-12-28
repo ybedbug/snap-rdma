@@ -1352,3 +1352,79 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpu) {
 	snap_dma_ep_destroy(dpu_qp);
 	snap_dpa_process_destroy(dpa_ctx);
 }
+
+/*
+ * Check that DPA can do basic dma operations
+ * See dpa/dpa_dma_test.c
+ */
+TEST_F(SnapDmaTest, dpa_rdma_from_dpa) {
+	int poll_cycles = 120;
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+	int ret, n;
+	struct snap_rx_completion comp;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_dma_test");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_proc = dpa_ctx;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	ASSERT_EQ(0, ret);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+
+	ret = snap_dma_ep_dpa_copy_sync(dpa_thr, dpa_qp);
+	ASSERT_EQ(0, ret);
+
+	/* rbuf because mr has required access permissions and lbuf does not */
+	strcpy(m_rbuf, "I am a DPU buffer\n");
+	ret = snap_dpa_thread_mr_copy_sync(dpa_thr, (uint64_t)m_rbuf, m_bsize, m_rmr->lkey);
+	ASSERT_EQ(0, ret);
+	/* at this point dpa thread is running dma tests */
+
+	/* Sync on ping pong test */
+	printf("Waiting for DPA PING\n");
+	do {
+		n = snap_dma_q_poll_rx(dpu_qp, &comp, 1);
+		if (n)
+			break;
+		sleep(1);
+		printf(".\n");
+	} while (poll_cycles-- > 0);
+	printf("Got ping\n");
+
+	EXPECT_EQ(1, n);
+	if (n == 1) {
+		char msg[16] = "PONG";
+
+		EXPECT_EQ(0, memcmp(comp.data, "PING", 4));
+		ret = snap_dma_q_send_completion(dpu_qp, msg, sizeof(msg));
+		EXPECT_EQ(0, ret);
+		snap_dma_q_flush(dpu_qp);
+	}
+
+	/* dpa thread destroy is a sync point */
+	snap_dpa_thread_destroy(dpa_thr);
+	printf("done, r_buf: %s status %s\n", m_rbuf, m_rbuf + m_bsize - 16);
+	/* at this point rbuf data a written by the DPA */
+	EXPECT_EQ(0, strcmp(m_rbuf, "I am a DPA buffer\n"));
+
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_process_destroy(dpa_ctx);
+}

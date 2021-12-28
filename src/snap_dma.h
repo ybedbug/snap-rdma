@@ -24,6 +24,7 @@
 
 #include "snap_mr.h"
 #include "snap_qp.h"
+#include "snap_dpa_common.h"
 
 #define SNAP_DMA_Q_OPMODE        "SNAP_DMA_Q_OPMODE"
 #define SNAP_DMA_Q_IOV_SUPP      "SNAP_DMA_Q_IOV_SUPP"
@@ -119,6 +120,7 @@ struct snap_dv_qp {
 	struct snap_hw_qp hw_qp;
 	int n_outstanding;
 	uint32_t opaque_lkey;
+	uint32_t dpa_mkey;
 	struct snap_dv_dma_completion *comps;
 	/* used to hold GGA data */
 	struct mlx5_dma_opaque     *opaque_buf;
@@ -142,6 +144,10 @@ struct snap_dma_ibv_qp {
 	struct ibv_mr  *rx_mr;
 	char           *rx_buf;
 	int            mode;
+	struct {
+		struct snap_dpa_memh *rx_mr;
+		struct snap_dpa_mkeyh *mkey;
+	} dpa;
 };
 
 struct snap_dma_q_ops {
@@ -202,6 +208,9 @@ struct snap_dma_q_io_ctx {
  */
 struct snap_dma_q {
 	/* private: */
+	/* TODO: for dpa/ep we don't need all fields. Group all frequently used
+	 * fields so that they all fit into 2 cachelines
+	 */
 	struct snap_dma_ibv_qp sw_qp;
 	int                    tx_available;
 	int                    tx_qsize;
@@ -313,6 +322,19 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
 
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key);
+
+struct snap_dma_ep_copy_cmd {
+	struct snap_dpa_cmd base;
+	struct snap_dma_q q;
+};
+
+static inline uint32_t snap_dma_q_dpa_mkey(struct snap_dma_q *q)
+{
+	return q->sw_qp.dv_qp.dpa_mkey;
+}
+
+int snap_dma_ep_dpa_copy_sync(struct snap_dpa_thread *thr, struct snap_dma_q *q);
+
 /**
  * snap_dma_q_ctx - get queue context
  * @q: dma queue

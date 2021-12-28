@@ -14,17 +14,22 @@ if HAVE_DPA_CC
 
 AM_CFLAGS = $(BASE_CFLAGS) \
 	    -fPIC -fpic -mno-relax -mcmodel=medany -march=rv64imac -mabi=lp64 \
+	    -fno-builtin-fprintf -fno-builtin-printf \
 	    -DE_MODE_LE -DUSER_SPACE -D__DPA=1 \
 	    -I. -I.. -I$(top_srcdir)/src -I$(FLEXIO_DIR) -I$(FLEXIO_DIR)/include -I$(FLEXIO_DIR)/include/libflexio
 
 AM_LDFLAGS = -fPIE -fpie -flto -pie -static -nostartfiles \
 	     -T $(srcdir)/flexio_linker.ld -L$(FLEXIO_DIR)/lib/
 
-noinst_PROGRAMS += dpa_hello dpa_virtq_split
+noinst_PROGRAMS += dpa_hello dpa_dma_test dpa_virtq_split
 
-noinst_LIBRARIES = libdpa_dma.a
+noinst_LIBRARIES = libdpa.a
 
-dpa_hello_SOURCES = dpa.h dpa_start.c dpa_hello.c
+dpa_hello_SOURCES = dpa_hello.c
+dpa_hello_LDADD = libdpa.a
+
+dpa_dma_test_SOURCES = dpa_dma_test.c
+dpa_dma_test_LDADD = libdpa.a
 
 # copy snap_dma datapath sources, we need to compile them both on host and on
 # the DPA
@@ -36,10 +41,10 @@ dpa_snap_dma.c : ../src/snap_dma.c
 dpa_snap_dma_dv.c : ../src/snap_dma_dv.c
 	cp $(srcdir)/../src/snap_dma_dv.c $@
 
-libdpa_dma_a_SOURCES = snap_dma_compat.h
-nodist_libdpa_dma_a_SOURCES = dpa_snap_dma.c dpa_snap_dma_dv.c
+libdpa_a_SOURCES = dpa.h snap_dma_compat.h dpa_common.c dpa_start.c
+nodist_libdpa_a_SOURCES = dpa_snap_dma.c dpa_snap_dma_dv.c
 
-dpa_virtq_split_SOURCES = dpa.h dpa_start.c dpa_virtq_split.c
-dpa_virtq_split_LDADD = libdpa_dma.a
+dpa_virtq_split_SOURCES = dpa_virtq_split.c
+dpa_virtq_split_LDADD = libdpa.a
 
 endif

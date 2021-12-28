@@ -16,6 +16,10 @@
 #include "snap_dma.h"
 #include "snap.h"
 
+#if __DPA
+#include "../dpa/dpa.h"
+#endif
+
 /* memory barriers */
 
 #define snap_compiler_fence() asm volatile(""::: "memory")
@@ -141,6 +145,7 @@ snap_set_ctrl_seg(struct mlx5_wqe_ctrl_seg *ctrl, uint16_t pi,
 
 static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
+#if !__DPA
 	/* 8.9.3.1  Posting a Work Request to Work Queue
 	 * 1. Write WQE to the WQE buffer sequentially to previously-posted
 	 * WQE (on WQEBB granularity)
@@ -171,6 +176,24 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 #if !defined(__aarch64__)
 	if (!dv_qp->hw_qp.sq.tx_db_nc)
 		snap_memory_bus_store_fence();
+#endif
+
+#else
+	/* Based on review with Eliav:
+	 * - only need a store fence to ensure that the wqe is commited to the
+	 *   memory
+	 * - there is no need to update dbr on DPA
+	 *
+	 * TODO: store outbox address in the qp as bf_addr instead of doing
+	 * syscall
+	 */
+#if SIMX_BUILD
+	snap_memory_cpu_store_fence();
+	/* must for simx */
+	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_SND_DBR] = htobe32(dv_qp->hw_qp.sq.pi);
+#endif
+	snap_memory_bus_store_fence();
+	dpa_dma_q_ring_tx_db(dv_qp->hw_qp.qp_num, dv_qp->hw_qp.sq.pi);
 #endif
 }
 

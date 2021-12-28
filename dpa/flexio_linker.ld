@@ -1,5 +1,7 @@
 OUTPUT_ARCH( "riscv" )
 
+ENTRY(__snap_dpa_thread_start)
+
 MEMORY
 {
 	code (rx) : ORIGIN =  0x0000000010000000, LENGTH = 128M
