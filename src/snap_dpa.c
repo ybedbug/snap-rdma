@@ -355,7 +355,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mr;
 	}
 
-	thr->mem = snap_dpa_mem_alloc(dctx, 4096);
+	thr->mem = snap_dpa_mem_alloc(dctx, SNAP_DPA_THREAD_HEAP_SIZE);
 	if (!thr->mem)
 		goto free_window;
 
@@ -363,7 +363,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
-	snap_debug("tcb mailbox lkey 0x%x addr %p\n", thr->cmd_mr->lkey, thr->cmd_mbox);
+	snap_debug("tcb mailbox lkey 0x%x addr %p mem_base at 0x%lx\n", thr->cmd_mr->lkey, thr->cmd_mbox, tcb.data_address);
 
 	st = flexio_copy_from_host(thr->dctx->dpa_proc, (uintptr_t)&tcb, sizeof(tcb), &dpa_tcb_addr);
 	if (st != FLEXIO_STATUS_SUCCESS) {

@@ -28,6 +28,9 @@
 
 #define SNAP_DPA_THREAD_ENTRY_POINT "__snap_dpa_thread_start"
 
+/* TODO: make configurable. Some threads will not need this memory */
+#define SNAP_DPA_THREAD_HEAP_SIZE  2*16384
+
 /**
  * struct snap_dpa_tcb - DPA thread control block
  *
