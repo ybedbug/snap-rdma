@@ -13,7 +13,6 @@
 #ifndef SNAP_UMR_H
 #define SNAP_UMR_H
 
-#include <linux/types.h>
 #include "snap_dma.h"
 #include "snap_mr.h"
 
