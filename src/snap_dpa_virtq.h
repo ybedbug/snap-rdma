@@ -15,14 +15,6 @@
 
 #include "snap_dpa_common.h"
 
-struct snap_dpa_virtq {
-	struct snap_dpa_thread *dpa_worker;
-	struct ibv_mr *dpa_window_mr;
-	void *dpa_window;
-	/* hack to do window copy without xgvmi mkey */
-	struct ibv_mr *host_driver_mr;
-};
-
 enum {
 	DPA_VIRTQ_CMD_CREATE = SNAP_DPA_CMD_APP_FIRST,
 	DPA_VIRTQ_CMD_DESTROY,
@@ -70,6 +62,6 @@ struct __attribute__((packed)) dpa_virtq_cmd {
 };
 
 extern struct virtq_q_ops snap_virtq_blk_dpa_ops;
-
+struct virtq_q_ops *get_dpa_ops(void);
 #endif
 

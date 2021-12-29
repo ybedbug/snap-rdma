@@ -13,7 +13,8 @@
 
 #include "config.h"
 #include "snap_virtio_blk.h"
-
+#include "snap_dpa_p2p.h"
+#include "snap_dpa_virtq.h"
 #if HAVE_FLEXIO
 #include "snap_dpa.h"
 #include "snap_dpa_virtq.h"
@@ -22,9 +23,6 @@ static struct snap_dpa_app dpa_virtq_app = SNAP_DPA_APP_INIT_ATTR;
 
 #define SNAP_DPA_VIRTQ_BBUF_SIZE  4096
 #define SNAP_DPA_VIRTQ_BBUF_ALIGN 4096
-
-SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_virtq) < sizeof(struct snap_virtio_queue),
-		"Ooops, struct snap_dpa_virtq is too big");
 
 /* make sure our virtq commands are fit into mailbox */
 SNAP_STATIC_ASSERT(sizeof(struct dpa_virtq_cmd) < SNAP_DPA_THREAD_MBOX_LEN/2,
@@ -227,9 +225,79 @@ static int virtq_blk_dpa_modify(struct snap_virtio_queue *vq,
 
 #endif
 
+struct snap_dpa_virtq *to_dpa_queue(struct snap_virtio_queue *vq)
+{
+	return container_of(vq, struct snap_dpa_virtq, vq);
+}
+
+static void vq_heads_msg_handle(struct snap_dpa_virtq *vq,
+		struct snap_dpa_p2p_msg_vq_update *msg)
+{
+	struct virtq_split_tunnel_req_hdr hdr;
+	int i;
+
+	hdr.num_desc = 0;
+
+	for (i = 0; i < msg->descr_head_count; i++) {
+		hdr.descr_head_idx = msg->descr_heads[i];
+		vq->q->dma_q->rx_cb(vq->q->dma_q, &hdr, 0, 0);
+	}
+}
+
+static void vq_table_msg_handle(struct snap_dpa_virtq *vq,
+		struct snap_dpa_p2p_msg_vq_update *msg)
+{
+	struct virtq_split_tunnel_req req;
+	int i;
+
+	req.hdr.num_desc = 0;
+	req.tunnel_descs = vq->descs_table;
+	req.hdr.dpa_vq_table_flag = VQ_TABLE_REC;
+	for (i = 0; i < msg->descr_head_count; i++) {
+		 /* TODO: arrange descriptors in parallel and avoid extra memcpy */
+		req.hdr.descr_head_idx = msg->descr_heads[i];
+		vq->q->dma_q->rx_cb(vq->q->dma_q, &req, 0, 0);
+	}
+}
+
+static int snap_virtio_blk_progress_dpa_queue(struct snap_virtio_queue *vq)
+{
+	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
+	int n, i;
+	struct snap_dpa_p2p_msg msgs[64];
+
+	n = snap_dpa_p2p_recv_msg(dpa_q->q, msgs, 64);
+	for (i = 0; i < n; i++) {
+		dpa_q->q->credit_count += msgs[i].base.credit_delta;
+		switch (msgs[i].base.type) {
+		case SNAP_DPA_P2P_MSG_CR_UPDATE:
+			break;
+		case SNAP_DPA_P2P_MSG_VQ_HEADS:
+			vq_heads_msg_handle(dpa_q, (struct snap_dpa_p2p_msg_vq_update *) &msgs[i]);
+			break;
+		case SNAP_DPA_P2P_MSG_VQ_TABLE:
+			vq_table_msg_handle(dpa_q, (struct snap_dpa_p2p_msg_vq_update *) &msgs[i]);
+			break;
+		default:
+			snap_error("invalid message type %d\n", msgs[i].base.type);
+			break;
+		}
+	}
+	if (n)
+		snap_dpa_p2p_send_cr_update(dpa_q->q, n);
+
+	return 0;
+}
+
 struct virtq_q_ops snap_virtq_blk_dpa_ops = {
 	.create = virtq_blk_dpa_create,
 	.destroy = virtq_blk_dpa_destroy,
 	.query = virtq_blk_dpa_query,
 	.modify = virtq_blk_dpa_modify,
+	.progress = snap_virtio_blk_progress_dpa_queue
 };
+
+struct virtq_q_ops *get_dpa_ops(void)
+{
+	return &snap_virtq_blk_dpa_ops;
+}

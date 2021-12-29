@@ -226,6 +226,8 @@ struct snap_virtio_device_attr {
 	uint8_t				pci_hotplug_state;
 };
 
+
+#define VQ_TABLE_REC 5
 /**
  * struct virtq_split_tunnel_req_hdr - header of command received from FW
  *
@@ -234,14 +236,33 @@ struct snap_virtio_device_attr {
 struct virtq_split_tunnel_req_hdr {
 	uint16_t descr_head_idx;
 	uint16_t num_desc;
-	uint32_t rsvd1;
+	uint32_t dpa_vq_table_flag;
 	uint32_t rsvd2;
+};
+
+struct virtq_split_tunnel_req {
+	struct virtq_split_tunnel_req_hdr hdr;
+	struct vring_desc *tunnel_descs;
 };
 
 enum {
 	SNAP_HW_Q_PROVIDER = 0,
 	SNAP_SW_Q_PROVIDER = 1,
 	SNAP_DPA_Q_PROVIDER = 2,
+};
+
+//TODO: move struct snap_dpa_virtq to seperate file
+struct snap_dpa_virtq {
+	struct snap_virtio_queue vq;
+	struct snap_dpa_p2p_q *q;
+	struct snap_dpa_thread *dpa_worker;
+	struct ibv_mr *dpa_window_mr;
+	void *dpa_window;
+	/* hack to do window copy without xgvmi mkey */
+	struct ibv_mr *host_driver_mr;
+	struct vring_desc *descs_table;
+	struct ibv_mr *descs_mr;
+
 };
 
 static inline struct snap_virtio_common_queue_attr*

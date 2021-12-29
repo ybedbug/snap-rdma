@@ -703,6 +703,23 @@ virtq_rx_cb_common_set(struct virtq_priv *vq_priv, void *data)
 	return cmd;
 }
 
+static int arrange_descs(struct vring_desc *descs_table, struct vring_desc *arranged, int header_idx)
+{
+	struct vring_desc curr = descs_table[header_idx];
+	int i = 0;
+
+	arranged[i] = curr;
+	i++;
+	while (curr.flags & VRING_DESC_F_NEXT) {
+		curr = descs_table[curr.next];
+		arranged[i] = curr;
+		i++;
+	}
+
+	return i;
+}
+
+
 /**
  * virtq_rx_cb_common_proc() - common processing api for new command received from host
  * @cmd:	virtqueue command received from virtq_rx_cb_common_set
@@ -734,6 +751,13 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 		int len = sizeof(struct vring_desc) * split_hdr->num_desc;
 
 		memcpy(aux_descs, tunn_descs, len);
+	}
+
+	if (split_hdr->dpa_vq_table_flag == VQ_TABLE_REC) {
+		void *data_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
+		struct vring_desc *aux_descs = cmd->vq_priv->ops->get_descs(cmd);
+
+		cmd->num_desc = arrange_descs(data_descs, aux_descs, split_hdr->descr_head_idx);
 	}
 
 	++cmd->vq_priv->cmd_cntrs.outstanding_total;
