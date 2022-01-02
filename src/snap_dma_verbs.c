@@ -203,7 +203,7 @@ static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 }
 
 static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
-		struct snap_rx_completion **rx_completions, int max_completions)
+		struct snap_rx_completion *rx_completions, int max_completions)
 {
 	struct ibv_wc wcs[max_completions];
 	int i, n;
@@ -231,9 +231,9 @@ static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
 			return n;
 		}
 
-		rx_completions[i]->data = (void *)wcs[i].wr_id;
-		rx_completions[i]->byte_len = wcs[i].byte_len;
-		rx_completions[i]->imm_data = wcs[i].imm_data;
+		rx_completions[i].data = (void *)wcs[i].wr_id;
+		rx_completions[i].byte_len = wcs[i].byte_len;
+		rx_completions[i].imm_data = wcs[i].imm_data;
 
 		rx_sge[i].addr = wcs[i].wr_id;
 		rx_sge[i].length = q->rx_elem_size;

@@ -466,12 +466,10 @@ void SnapDmaTest::poll_rx(int mode)
 	char *sqe = m_rbuf;
 	int rc, i;
 	int rx_reqs = 16;
-	struct snap_rx_completion *read_comp[rx_reqs];
+	struct snap_rx_completion read_comp[rx_reqs];
 	int n;
 	m_dma_q_attr.mode = mode;
-	for(i = 0; i < rx_reqs; i++) {
-		read_comp[i] =(struct snap_rx_completion *) malloc(sizeof(struct snap_rx_completion));
-	}
+
 	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
 	ASSERT_TRUE(q);
 
@@ -485,8 +483,7 @@ void SnapDmaTest::poll_rx(int mode)
 	sleep(1);
 	n = snap_dma_q_poll_rx(q, read_comp, rx_reqs);
 	for(i = 0; i < n; i++) {
-		q->rx_cb(q, read_comp[i]->data, read_comp[i]->byte_len, read_comp[i]->imm_data);
-		free(read_comp[i]);
+		q->rx_cb(q, read_comp[i].data, read_comp[i].byte_len, read_comp[i].imm_data);
 	}
 	ASSERT_EQ(rx_reqs, g_rx_count);
 	ASSERT_EQ(0, memcmp(g_last_rx, sqe, m_dma_q_attr.rx_elem_size));

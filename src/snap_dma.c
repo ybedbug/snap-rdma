@@ -45,7 +45,7 @@ int snap_dma_q_progress(struct snap_dma_q *q)
 /**
  * snap_dma_q_poll_rx() - Poll rx from dma queue
  * @q: dma queue
- * @rx_completions: array of pointers that stores polled events
+ * @rx_completions: array that stores polled events
  * @max_completions: max supported events
  *
  * The function polls receive operations on the given dma
@@ -57,7 +57,7 @@ int snap_dma_q_progress(struct snap_dma_q *q)
  *
  * Return: number of send events that were polled
  */
-int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion **rx_completions, int max_completions)
+int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions)
 {
 	return q->ops->poll_rx(q, rx_completions, max_completions);
 }

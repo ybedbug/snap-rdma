@@ -592,7 +592,7 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 }
 
 static inline int dv_dma_q_poll_rx(struct snap_dma_q *q,
-		struct snap_rx_completion **rx_completions, int max_completions)
+		struct snap_rx_completion *rx_completions, int max_completions)
 {
 	struct mlx5_cqe64 *cqe;
 	int n;
@@ -611,9 +611,12 @@ static inline int dv_dma_q_poll_rx(struct snap_dma_q *q,
 			return n;
 		}
 
-		dv_dma_q_get_rx_comp(q, cqe, rx_completions[n]);
+		dv_dma_q_get_rx_comp(q, cqe, &rx_completions[n]);
 		n++;
 	} while (n < max_completions);
+
+	if (n == 0)
+		return 0;
 
 	q->sw_qp.dv_qp.hw_qp.rq.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);

@@ -169,7 +169,7 @@ struct snap_dma_q_ops {
 	int (*flush)(struct snap_dma_q *q);
 	int (*arm)(struct snap_dma_q *q);
 	int (*poll)(struct snap_dma_q *q);
-	int (*poll_rx)(struct snap_dma_q *q, struct snap_rx_completion **rx_completions, int max_completions);
+	int (*poll_rx)(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions);
 	int (*poll_tx)(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions);
 };
 
@@ -302,7 +302,7 @@ int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 		struct snap_dma_completion *comp);
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len);
 int snap_dma_q_progress(struct snap_dma_q *q);
-int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion **rx_completions, int max_completions);
+int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions);
 int snap_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions);
 int snap_dma_q_flush(struct snap_dma_q *q);
 int snap_dma_q_arm(struct snap_dma_q *q);
