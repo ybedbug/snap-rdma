@@ -188,9 +188,14 @@ static inline void virtq_progress()
 	}
 }
 
-int main(int argc, char *argv[])
+int dpa_init(struct snap_dpa_tcb *tcb)
 {
-	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *) argv;
+	dpa_print_string("VirtQ init done!\n");
+	return 0;
+}
+
+int dpa_run(struct snap_dpa_tcb *tcb)
+{
 	int done;
 	int ret;
 

@@ -95,4 +95,32 @@ static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
 	ctx = flexio_os_get_thread_ctx();
 	flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
 }
+
+/**
+ * dpa_init() - initialize thread
+ * @tcb: thread control block
+ *
+ * The function is called ONCE when the thread is run for the first
+ * time.
+ *
+ * The function must be provided by the DPA application code
+ *
+ * Return:
+ * 0 on success
+ */
+int dpa_init(struct snap_dpa_tcb *tcb);
+
+
+/**
+ * dpa_run() - run thread
+ * @tcb: thread control block
+ *
+ * The function is called every time the thread is invoked.
+ *
+ * The function must be provided by the DPA application code
+ *
+ * Return:
+ * 0 on success
+ */
+int dpa_run(struct snap_dpa_tcb *tcb);
 #endif

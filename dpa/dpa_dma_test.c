@@ -102,9 +102,14 @@ static int test_ping_pong(struct snap_dma_q *q)
 	return 0;
 }
 
-int main(int argc, char *argv[])
+int dpa_init(struct snap_dpa_tcb *tcb)
 {
-	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *)argv;
+	printf("DMA test init done!\n");
+	return 0;
+}
+
+int dpa_run(struct snap_dpa_tcb *tcb)
+{
 	struct snap_dpa_cmd *cmd;
 	struct snap_dpa_cmd_mr *cmd_mr;
 	struct snap_dma_q *q;
@@ -138,6 +143,7 @@ int main(int argc, char *argv[])
 	printf("All done. Waiting for DPU command\n");
 	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_STOP);
 	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+
 	printf("DMA test done. Exiting\n");
 	return 0;
 }

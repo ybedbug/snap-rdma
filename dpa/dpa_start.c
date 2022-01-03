@@ -12,8 +12,6 @@
 
 #include "dpa.h"
 
-extern int main();
-
 // hack to force creation of the data section
 void *mbox_base __attribute__((section (".data"))); // per thread
 uint32_t mbox_lkey __attribute__((section (".data"))); // per thread
@@ -40,10 +38,17 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	dpa_print_one_arg("Heap base   : ", (uint64_t)tcb->data_address);
 	dpa_print_one_arg("Heap size   : ", (uint64_t)SNAP_DPA_THREAD_HEAP_SIZE);
 
+	/* TODO:
+	 * interrupt thread support:
+	 * - init should be run only once
+	 * - start barrier should be run only once
+	 */
+	dpa_init(tcb);
+
 	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_START);
-	/* may be let main do it after init is done */
 	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
-	(void)main(1, tcb);
+	dpa_run(tcb);
+
 	dpa_print_string("==> DPA thread done\n");
 	flexio_dev_return();
 }

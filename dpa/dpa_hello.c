@@ -10,16 +10,24 @@
  * provided with the software product.
  */
 
+#include <stdio.h>
+
 #include "dpa.h"
 
-int main(int argc, char *argv[])
+int dpa_init(struct snap_dpa_tcb *tcb)
 {
-	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *)argv;
+	printf("Init done!\n");
+	return 0;
+}
 
-	dpa_print_string("hello, i am dummy dpa code\n");
+int dpa_run(struct snap_dpa_tcb *tcb)
+{
+	printf("hello, i am dummy dpa code\n");
+
+	printf("thread_ctx@%p size %ld\n", flexio_os_get_thread_ctx(), sizeof(struct flexio_os_thread_ctx));
+
 	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_STOP);
 	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
-	dpa_print_string("All done. Exiting\n");
-
+	printf("All done. Exiting\n");
 	return 0;
 }
