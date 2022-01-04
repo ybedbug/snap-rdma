@@ -293,8 +293,9 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 	ASSERT_EQ(1, g_comp_count);
 	ASSERT_EQ(0, g_last_comp_status);
 	ASSERT_EQ(0, comp.count);
-	if (rvaddr)
+	if (rvaddr) {
 		ASSERT_EQ(0, memcmp(m_lbuf, rvaddr, len));
+	}
 }
 
 TEST_F(SnapDmaTest, dma_read) {
