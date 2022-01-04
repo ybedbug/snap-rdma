@@ -32,11 +32,11 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 
 	dpa_thread_config(tcb);
 
-	dpa_print_string("==> Starting DPA thread\n");
-	dpa_print_one_arg("TCB         : ", tcb_addr);
-	dpa_print_one_arg("Mailbox base: ", (uint64_t)tcb->mbox_address);
-	dpa_print_one_arg("Heap base   : ", (uint64_t)tcb->data_address);
-	dpa_print_one_arg("Heap size   : ", (uint64_t)SNAP_DPA_THREAD_HEAP_SIZE);
+	dpa_debug("==> Starting DPA thread\n");
+	dpa_debug("TCB         : 0x%lx\n", tcb_addr);
+	dpa_debug("Mailbox base: 0x%lx\n", tcb->mbox_address);
+	dpa_debug("Heap base   : 0x%lx\n", tcb->data_address);
+	dpa_debug("Heap size   : %ld\n", SNAP_DPA_THREAD_HEAP_SIZE);
 
 	/* TODO:
 	 * interrupt thread support:
@@ -49,6 +49,6 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
 	dpa_run(tcb);
 
-	dpa_print_string("==> DPA thread done\n");
+	dpa_debug("==> DPA thread done\n");
 	flexio_dev_return();
 }

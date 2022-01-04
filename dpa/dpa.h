@@ -27,20 +27,11 @@
 
 #if SIMX_BUILD
 #define dpa_print_string(str)   print_sim_str((str), 0)
-#define dpa_print_hex(num)      print_sim_hex((num), 0)
 #else
 #define dpa_print_string(str)
-#define dpa_print_hex(num)
 #endif
 
 #define DPA_CACHE_LINE_BYTES 64
-
-static inline void dpa_print_one_arg(char *msg, uint64_t arg)
-{
-	dpa_print_string(msg);
-	dpa_print_hex(arg);
-	dpa_print_string("\n");
-}
 
 /**
  * dpa_window_set_mkey() - set window memory key

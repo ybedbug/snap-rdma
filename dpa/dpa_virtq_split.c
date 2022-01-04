@@ -54,9 +54,9 @@ int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
 	uint16_t idx;
 
 	idx = vcmd->cmd_create.idx;
-	dpa_print_one_arg("virtq create", idx);
+	dpa_info("virtq create: id: %d\n", idx);
 	if (idx >= DPA_VIRTQ_MAX) {
-		dpa_print_one_arg("invalid vq number", idx);
+		dpa_error("invalid vq number %d\n", idx);
 		return SNAP_DPA_RSP_ERR;
 	}
 
@@ -81,20 +81,20 @@ int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
 
 int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 {
-	dpa_print_string("virtq destroy\n");
+	dpa_info("virtq destroy\n");
 	n_virtqs--;
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_modify(struct snap_dpa_cmd *cmd)
 {
-	dpa_print_string("virtq modify\n");
+	dpa_info("virtq modify\n");
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 {
-	dpa_print_string("virtq query\n");
+	dpa_info("virtq query\n");
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -106,14 +106,14 @@ static int do_command(struct snap_dpa_tcb *tcb, int *done)
 	uint32_t rsp_status;
 
 	*done = 0;
-	dpa_print_string("command check\n");
+	dpa_debug("command check\n");
 
 	cmd = snap_dpa_mbox_to_cmd(dpa_mbox(tcb));
 
 	if (cmd->sn == last_sn)
 		return 0;
 
-	dpa_print_one_arg("new command", cmd->cmd);
+	dpa_debug("new command", cmd->cmd);
 
 	last_sn = cmd->sn;
 	rsp_status = SNAP_DPA_RSP_OK;
@@ -135,7 +135,7 @@ static int do_command(struct snap_dpa_tcb *tcb, int *done)
 			rsp_status = dpa_virtq_query(cmd);
 			break;
 		default:
-			dpa_print_string("unsupported command\n");
+			dpa_warn("unsupported command\n");
 	}
 
 	snap_dpa_rsp_send(dpa_mbox(tcb), rsp_status);
@@ -173,11 +173,11 @@ static inline void virtq_progress()
 		dpa_window_set_mkey(vq->host_mkey);
 		avail_ring = (void *)dpa_window_get_base() + vq->device;
 		host_avail_idx = avail_ring->idx;
-		dpa_print_one_arg("vq->dpa_avail_idx: ", vq->dpa_avail_idx);
+		dpa_debug("vq->dpa_avail_idx: %d\n", vq->dpa_avail_idx);
 		if (vq->dpa_avail_idx == host_avail_idx)
 			continue;
 
-		dpa_print_one_arg("==> New avail idx: ", host_avail_idx);
+		dpa_debug("==> New avail idx: %d\n", host_avail_idx);
 
 		vq->dpa_avail_idx = host_avail_idx;
 
@@ -190,7 +190,7 @@ static inline void virtq_progress()
 
 int dpa_init(struct snap_dpa_tcb *tcb)
 {
-	dpa_print_string("VirtQ init done!\n");
+	dpa_debug("VirtQ init done!\n");
 	return 0;
 }
 
@@ -199,14 +199,13 @@ int dpa_run(struct snap_dpa_tcb *tcb)
 	int done;
 	int ret;
 
-	dpa_print_one_arg("virtq_split starting ",(uint64_t) tcb->mbox_address);
 	do {
 		ret = process_commands(tcb, &done);
 		virtq_progress();
 	} while (!done);
 
 	//snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
-	dpa_print_string("virtq_split done\n");
+	dpa_debug("virtq_split done\n");
 
 	return ret;
 }
