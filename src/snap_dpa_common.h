@@ -22,7 +22,7 @@
 #define SIMX_BUILD 1
 
 /* max length of *printf/log buffer on DPA */
-#define SNAP_DPA_PRINT_BUF_LEN 128 /* should be careful because this is allocated on stack */
+#define SNAP_DPA_PRINT_BUF_LEN 160 /* should be careful because this is allocated on stack */
 
 #define SNAP_DPA_THREAD_MBOX_LEN   4096
 #define SNAP_DPA_THREAD_MBOX_ALIGN 4096

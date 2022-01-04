@@ -93,10 +93,9 @@ void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size)
 		tcb->data_used += size;
 
 	if (tcb->data_used > SNAP_DPA_THREAD_HEAP_SIZE)
-		dpa_print_one_arg("thread alloc: OOM: used more than ", SNAP_DPA_THREAD_HEAP_SIZE);
+		dpa_fatal("thread alloc: OOM: used more than %d bytes\n", SNAP_DPA_THREAD_HEAP_SIZE);
 
-	dpa_print_one_arg("thread alloc: addr ", (uint64_t)data_add);
-	dpa_print_one_arg("thread alloc: used ", (uint64_t)tcb->data_used);
+	dpa_debug("thread alloc: addr %p used %ld\n", data_add, tcb->data_used);
 	return data_add;
 }
 
@@ -144,4 +143,20 @@ int fprintf(FILE *stream, const char *format, ...)
 	ret = do_print(format, ap);
 	va_end(ap);
 	return ret;
+}
+
+void dpa_logger(const char *file_name, unsigned int line_num,
+		int level, const char *level_c, const char *format, ...)
+{
+	va_list ap;
+
+	printf("%s:%s:%d ", level_c, file_name, line_num);
+	va_start(ap, format);
+	do_print(format, ap);
+	va_end(ap);
+}
+
+void dpa_error_freeze()
+{
+	/* TODO: report fatal to OS */
 }

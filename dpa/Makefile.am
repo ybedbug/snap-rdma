@@ -41,7 +41,7 @@ dpa_snap_dma.c : ../src/snap_dma.c
 dpa_snap_dma_dv.c : ../src/snap_dma_dv.c
 	cp $(srcdir)/../src/snap_dma_dv.c $@
 
-libdpa_a_SOURCES = dpa.h snap_dma_compat.h dpa_common.c dpa_start.c
+libdpa_a_SOURCES = dpa.h snap_dma_compat.h dpa_log.h dpa_common.c dpa_start.c
 nodist_libdpa_a_SOURCES = dpa_snap_dma.c dpa_snap_dma_dv.c
 
 dpa_virtq_split_SOURCES = dpa_virtq_split.c

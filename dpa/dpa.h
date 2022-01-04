@@ -21,6 +21,8 @@
 #include <libflexio-os/flexio_os_syscall.h>
 #include <libflexio-os/flexio_os.h>
 
+#include "dpa_log.h"
+
 #include "snap_dpa_common.h"
 
 #if SIMX_BUILD
