@@ -14,20 +14,20 @@
 
 #include "dpa.h"
 
-int dpa_init(struct snap_dpa_tcb *tcb)
+int dpa_init()
 {
 	printf("Init done!\n");
 	return 0;
 }
 
-int dpa_run(struct snap_dpa_tcb *tcb)
+int dpa_run()
 {
 	printf("hello, i am dummy dpa code\n");
 
 	printf("thread_ctx@%p size %ld\n", flexio_os_get_thread_ctx(), sizeof(struct flexio_os_thread_ctx));
 
-	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	printf("All done. Exiting\n");
 	return 0;
 }

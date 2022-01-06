@@ -57,9 +57,28 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
  *
  * Return: window base address
  */
-static inline uint64_t dpa_window_get_base()
+static inline uint64_t dpa_window_get_base(void)
 {
 	return flexio_os_get_thread_ctx()->window_base;
+}
+
+/**
+ * dpa_tcb() - get thread control block
+ *
+ * Return:
+ * Thread control block
+ */
+static inline struct snap_dpa_tcb *dpa_tcb(void)
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	ctx = flexio_os_get_thread_ctx();
+
+	/* TODO: need to replace with the real thing,
+	 * at the moment we use hacked rtos that adds extra 8 bytes
+	 * to the thread contexts and sets it to thread arg
+	 */
+	return (struct snap_dpa_tcb *)(*(uint64_t *)(ctx + 1));
 }
 
 /**
@@ -68,23 +87,27 @@ static inline uint64_t dpa_window_get_base()
  * Return:
  * Mailbox address
  */
-static inline void *dpa_mbox(struct snap_dpa_tcb *tcb)
+static inline void *dpa_mbox(void)
 {
+
+	struct snap_dpa_tcb *tcb = dpa_tcb();
 
 	dpa_window_set_mkey(tcb->mbox_lkey);
 	return (void *)tcb->mbox_address;
 }
 
-void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size);
-void dpa_thread_free(struct snap_dpa_tcb *tcb, void *addr);
+void *dpa_thread_alloc(size_t size);
+void dpa_thread_free(void *addr);
 
-struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd);
+struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_cmd *cmd);
 
 static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
 {
 	struct flexio_os_thread_ctx *ctx;
 
-	/* TODO: context should be cached and not a syscall */
+	/* NOTE: thread context is not a syscall but a read of tp register
+	 * this is fast but flexio should make these inline 
+	 */
 	ctx = flexio_os_get_thread_ctx();
 	flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
 }
@@ -101,8 +124,7 @@ static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
  * Return:
  * 0 on success
  */
-int dpa_init(struct snap_dpa_tcb *tcb);
-
+int dpa_init(void);
 
 /**
  * dpa_run() - run thread
@@ -115,5 +137,5 @@ int dpa_init(struct snap_dpa_tcb *tcb);
  * Return:
  * 0 on success
  */
-int dpa_run(struct snap_dpa_tcb *tcb);
+int dpa_run(void);
 #endif

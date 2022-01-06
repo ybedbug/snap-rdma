@@ -24,6 +24,8 @@ static void dpa_thread_config(struct snap_dpa_tcb *tcb)
 	dpa_window_set_mkey(tcb->mbox_lkey);
 	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 	flexio_os_outbox_set_cfg(ctx->outbox_config_id);
+	/* TODO: use real meta param */
+	dpa_debug("Thread data : 0x%lx\n", *(uint64_t *)(ctx + 1));
 }
 
 void __snap_dpa_thread_start(uint64_t tcb_addr)
@@ -43,11 +45,11 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	 * - init should be run only once
 	 * - start barrier should be run only once
 	 */
-	dpa_init(tcb);
+	dpa_init();
 
-	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_START);
-	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
-	dpa_run(tcb);
+	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
+	dpa_run();
 
 	dpa_debug("==> DPA thread done\n");
 	flexio_dev_return();

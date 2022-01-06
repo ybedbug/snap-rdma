@@ -102,13 +102,13 @@ static int test_ping_pong(struct snap_dma_q *q)
 	return 0;
 }
 
-int dpa_init(struct snap_dpa_tcb *tcb)
+int dpa_init()
 {
 	printf("DMA test init done!\n");
 	return 0;
 }
 
-int dpa_run(struct snap_dpa_tcb *tcb)
+int dpa_run()
 {
 	struct snap_dpa_cmd *cmd;
 	struct snap_dpa_cmd_mr *cmd_mr;
@@ -117,17 +117,17 @@ int dpa_run(struct snap_dpa_tcb *tcb)
 
 	printf("DMA test starting\n");
 	printf("Waiting for EP\n");
-	cmd = snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_DMA_EP_COPY);
-	q = dpa_dma_ep_cmd_copy(tcb, cmd);
-	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+	cmd = snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_DMA_EP_COPY);
+	q = dpa_dma_ep_cmd_copy(cmd);
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	printf("dma q at %p\n", q);
 
 	printf("Waiting for MR to read/write\n");
-	cmd_mr = (struct snap_dpa_cmd_mr *)snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_MR);
-	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+	cmd_mr = (struct snap_dpa_cmd_mr *)snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_MR);
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	printf("dma mr at 0x%lx len %ld rkey 0x%x\n", cmd_mr->va, cmd_mr->len, cmd_mr->mkey);
 
-	lbuf = dpa_thread_alloc(tcb, cmd_mr->len);
+	lbuf = dpa_thread_alloc(cmd_mr->len);
 
 	test_read_sync(q, lbuf, cmd_mr);
 
@@ -140,9 +140,11 @@ int dpa_run(struct snap_dpa_tcb *tcb)
 	/* ping pong */
 	test_ping_pong(q);
 
+	dpa_thread_free(lbuf);
+
 	printf("All done. Waiting for DPU command\n");
-	snap_dpa_cmd_recv(dpa_mbox(tcb), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(tcb), SNAP_DPA_RSP_OK);
+	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 
 	printf("DMA test done. Exiting\n");
 	return 0;

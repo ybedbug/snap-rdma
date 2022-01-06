@@ -23,7 +23,7 @@
  * The function takes endpoint that was created with snap_dma_ep_create()
  * and prepares it for use on DPA
  */
-int dpa_dma_ep_init(struct snap_dpa_tcb *tcb, struct snap_dma_q *q)
+int dpa_dma_ep_init(struct snap_dma_q *q)
 {
 	uint32_t sq_wqe_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 	uint32_t rq_wqe_cnt = q->sw_qp.dv_qp.hw_qp.rq.wqe_cnt;
@@ -35,7 +35,7 @@ int dpa_dma_ep_init(struct snap_dpa_tcb *tcb, struct snap_dma_q *q)
 	 */
 	/* If qp has non zero rx post receives */
 	if (rq_wqe_cnt) {
-		q->sw_qp.rx_buf = dpa_thread_alloc(tcb, 2 * rq_wqe_cnt * q->rx_elem_size);
+		q->sw_qp.rx_buf = dpa_thread_alloc(2 * rq_wqe_cnt * q->rx_elem_size);
 		for (i = 0; i < 2 * rq_wqe_cnt; i++) {
 			snap_dv_post_recv(&q->sw_qp.dv_qp,
 					  q->sw_qp.rx_buf + i * q->rx_elem_size,
@@ -47,7 +47,7 @@ int dpa_dma_ep_init(struct snap_dpa_tcb *tcb, struct snap_dma_q *q)
 
 	/* setup completion memory */
 	if (sq_wqe_cnt) {
-		q->sw_qp.dv_qp.comps = dpa_thread_alloc(tcb, sq_wqe_cnt * sizeof(struct snap_dv_dma_completion));
+		q->sw_qp.dv_qp.comps = dpa_thread_alloc(sq_wqe_cnt * sizeof(struct snap_dv_dma_completion));
 		memset(q->sw_qp.dv_qp.comps, 0, sq_wqe_cnt * sizeof(struct snap_dv_dma_completion));
 	}
 
@@ -56,20 +56,19 @@ int dpa_dma_ep_init(struct snap_dpa_tcb *tcb, struct snap_dma_q *q)
 	return 0;
 }
 
-struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
+struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_cmd *cmd)
 {
 	struct snap_dma_ep_copy_cmd *ep_cmd = (struct snap_dma_ep_copy_cmd *)cmd;
 	struct snap_dma_q *q;
 
-	q = dpa_thread_alloc(tcb, sizeof(*q));
+	q = dpa_thread_alloc(sizeof(*q));
 	memcpy(q, &ep_cmd->q, sizeof(*q));
-	dpa_dma_ep_init(tcb, q);
+	dpa_dma_ep_init(q);
 	return q;
 }
 
 /**
  * dpa_thread_alloc() - allocate memory on thread heap
- * @tcb: thread control block
  * @size: amount of memory to allocate
  *
  * The function implements sbrk() like memory allocator. It reserves requested
@@ -82,8 +81,9 @@ struct snap_dma_q *dpa_dma_ep_cmd_copy(struct snap_dpa_tcb *tcb, struct snap_dpa
  * Return:
  * pointer to the reserved memory, fatal event on failure
  */
-void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size)
+void *dpa_thread_alloc(size_t size)
 {
+	struct snap_dpa_tcb *tcb = dpa_tcb();
 	void *data_add = (void *) tcb->data_address + tcb->data_used;
 
 	//size is rounded up to cache line (64 bytes)
@@ -101,13 +101,12 @@ void *dpa_thread_alloc(struct snap_dpa_tcb *tcb, size_t size)
 
 /**
  * dpa_thread_free() - free memory on the per thread heap
- * @tcb: thread control block
  * @addr: address of memory block to free
  *
  * The function does nothing at the moment. In the future it may
  * set heap top to the @addr.
  */
-void dpa_thread_free(struct snap_dpa_tcb *tcb, void *addr)
+void dpa_thread_free(void *addr)
 {
 }
 
@@ -158,5 +157,5 @@ void dpa_logger(const char *file_name, unsigned int line_num,
 
 void dpa_error_freeze()
 {
-	/* TODO: report fatal to OS */
+	flexio_os_app_fatal_error(1);
 }

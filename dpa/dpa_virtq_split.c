@@ -47,7 +47,7 @@ static struct dpa_virtq *virtqs[DPA_VIRTQ_MAX]; // per thread
 /* currently set so that we have 1s polling interval on simx */
 #define COMMAND_DELAY 10000
 
-int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
+int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq;
@@ -60,7 +60,7 @@ int dpa_virtq_create(struct snap_dpa_tcb *tcb, struct snap_dpa_cmd *cmd)
 		return SNAP_DPA_RSP_ERR;
 	}
 
-	vq = (struct dpa_virtq *) dpa_thread_alloc(tcb, sizeof(struct dpa_virtq));
+	vq = (struct dpa_virtq *) dpa_thread_alloc(sizeof(struct dpa_virtq));
 	virtqs[idx] = vq;
 	/* TODO: check that it is free and other validations */
 
@@ -98,7 +98,7 @@ int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 	return SNAP_DPA_RSP_OK;
 }
 
-static int do_command(struct snap_dpa_tcb *tcb, int *done)
+static int do_command(int *done)
 {
 	static uint32_t last_sn; // per thread
 
@@ -108,7 +108,7 @@ static int do_command(struct snap_dpa_tcb *tcb, int *done)
 	*done = 0;
 	dpa_debug("command check\n");
 
-	cmd = snap_dpa_mbox_to_cmd(dpa_mbox(tcb));
+	cmd = snap_dpa_mbox_to_cmd(dpa_mbox());
 
 	if (cmd->sn == last_sn)
 		return 0;
@@ -123,7 +123,7 @@ static int do_command(struct snap_dpa_tcb *tcb, int *done)
 			*done = 1;
 			break;
 		case DPA_VIRTQ_CMD_CREATE:
-			rsp_status = dpa_virtq_create(tcb, cmd);
+			rsp_status = dpa_virtq_create(cmd);
 			break;
 		case DPA_VIRTQ_CMD_DESTROY:
 			rsp_status = dpa_virtq_destroy(cmd);
@@ -138,11 +138,11 @@ static int do_command(struct snap_dpa_tcb *tcb, int *done)
 			dpa_warn("unsupported command\n");
 	}
 
-	snap_dpa_rsp_send(dpa_mbox(tcb), rsp_status);
+	snap_dpa_rsp_send(dpa_mbox(), rsp_status);
 	return 0;
 }
 
-static inline int process_commands(struct snap_dpa_tcb *tcb, int *done)
+static inline int process_commands(int *done)
 {
 	static unsigned count; //per thread
 
@@ -151,7 +151,7 @@ static inline int process_commands(struct snap_dpa_tcb *tcb, int *done)
 		return 0;
 	}
 
-	return do_command(tcb, done);
+	return do_command(done);
 }
 
 static inline void virtq_progress()
@@ -188,19 +188,19 @@ static inline void virtq_progress()
 	}
 }
 
-int dpa_init(struct snap_dpa_tcb *tcb)
+int dpa_init()
 {
 	dpa_debug("VirtQ init done!\n");
 	return 0;
 }
 
-int dpa_run(struct snap_dpa_tcb *tcb)
+int dpa_run()
 {
 	int done;
 	int ret;
 
 	do {
-		ret = process_commands(tcb, &done);
+		ret = process_commands(&done);
 		virtq_progress();
 	} while (!done);
 
