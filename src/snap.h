@@ -216,17 +216,19 @@ struct snap_nvme_registers {
 	uint32_t intms;
 	uint32_t intmc;
 	uint32_t cc;
+	uint32_t rsvd;
 	uint32_t csts;
 	uint32_t nssr;
 	uint32_t aqa;
-	uint32_t asq;
-	uint32_t acq;
+	uint64_t asq;
+	uint64_t acq;
 	uint32_t cmbloc;
 	uint32_t cmbsz;
 	uint32_t bpinfo;
 	uint32_t bprsel;
-	uint32_t bpmbl;
+	uint64_t bpmbl;
 } __attribute__((packed));
+static_assert(sizeof(struct snap_nvme_registers) == 80, "Bad snap_nvme_registers size");
 
 struct snap_virtio_net_registers {
 	uint64_t	device_features;

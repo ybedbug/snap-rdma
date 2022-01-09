@@ -12,6 +12,7 @@
 
 #ifndef _SNAP_COMPILER_H_
 #define _SNAP_COMPILER_H_
+#include <assert.h>
 
 #ifndef offsetof
 #define offsetof(t, m) ((size_t) &((t *)0)->m)
@@ -56,5 +57,9 @@
 
 #define SNAP_ROUNDUP_POW2_OR0(_n) \
 	(((_n) == 0) ? 0 : SNAP_ROUNDUP_POW2(_n))
+
+#ifndef static_assert
+#define static_assert(cond, msg)
+#endif
 
 #endif
