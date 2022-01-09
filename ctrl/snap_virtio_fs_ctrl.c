@@ -545,6 +545,7 @@ static int fs_virtq_create_helper(struct snap_virtio_fs_ctrl_queue *vfsq,
 
 	attr.hw_available_index = vfsq->attr->hw_available_index;
 	attr.hw_used_index = vfsq->attr->hw_used_index;
+	attr.xmkey = vctrl->xmkey->mkey;
 
 	vfsq->common.ctrl = vctrl;
 	vfsq->common.index = index;
