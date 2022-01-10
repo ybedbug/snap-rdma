@@ -548,45 +548,6 @@ static int dv_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			dstaddr, rmkey, NULL, n_bb);
 }
 
-static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_hw_cq *dv_cq, int cqe_size)
-{
-	struct mlx5_cqe64 *cqe;
-
-	/* note: that the cq_size is known at the compilation time. We pass it
-	 * down here so that branch and multiplication will be done at the
-	 * compile time during inlining
-	 **/
-	cqe = (struct mlx5_cqe64 *)(dv_cq->cq_addr + (dv_cq->ci & (dv_cq->cqe_cnt - 1)) *
-				    (uint64_t)cqe_size);
-	return cqe_size == 64 ? cqe : cqe + 1;
-}
-
-static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_hw_cq *dv_cq, int cqe_size)
-{
-	struct mlx5_cqe64 *cqe;
-
-	cqe = snap_dv_get_cqe(dv_cq, cqe_size);
-
-	/* cqe is hw owned */
-	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cqe_cnt))
-		return NULL;
-
-	/* and must have valid opcode */
-	if (mlx5dv_get_cqe_opcode(cqe) == MLX5_CQE_INVALID)
-		return NULL;
-
-	dv_cq->ci++;
-
-	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d scatter32 %d scatter64 %d\n",
-		   dv_cq->ci,
-		   mlx5dv_get_cqe_opcode(cqe),
-		   be32toh(cqe->byte_cnt),
-		   be16toh(cqe->wqe_counter),
-		   cqe->op_own & MLX5_INLINE_SCATTER_32,
-		   cqe->op_own & MLX5_INLINE_SCATTER_64);
-	return cqe;
-}
-
 static const char *snap_dv_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
 {
 	uint8_t wqe_err_opcode = be32toh(ecqe->s_wqe_opcode_qpn) >> 24;

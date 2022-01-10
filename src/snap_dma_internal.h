@@ -255,6 +255,45 @@ extern const struct snap_dma_q_ops verb_ops;
 extern const struct snap_dma_q_ops dv_ops;
 extern const struct snap_dma_q_ops gga_ops;
 
+static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_hw_cq *dv_cq, int cqe_size)
+{
+	struct mlx5_cqe64 *cqe;
+
+	/* note: that the cq_size is known at the compilation time. We pass it
+	 * down here so that branch and multiplication will be done at the
+	 * compile time during inlining
+	 **/
+	cqe = (struct mlx5_cqe64 *)(dv_cq->cq_addr + (dv_cq->ci & (dv_cq->cqe_cnt - 1)) *
+				    cqe_size);
+	return cqe_size == 64 ? cqe : cqe + 1;
+}
+
+static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_hw_cq *dv_cq, int cqe_size)
+{
+	struct mlx5_cqe64 *cqe;
+
+	cqe = snap_dv_get_cqe(dv_cq, cqe_size);
+
+	/* cqe is hw owned */
+	if (mlx5dv_get_cqe_owner(cqe) == !(dv_cq->ci & dv_cq->cqe_cnt))
+		return NULL;
+
+	/* and must have valid opcode */
+	if (mlx5dv_get_cqe_opcode(cqe) == MLX5_CQE_INVALID)
+		return NULL;
+
+	dv_cq->ci++;
+
+	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d scatter32 %d scatter64 %d\n",
+		   dv_cq->ci,
+		   mlx5dv_get_cqe_opcode(cqe),
+		   be32toh(cqe->byte_cnt),
+		   be16toh(cqe->wqe_counter),
+		   cqe->op_own & MLX5_INLINE_SCATTER_32,
+		   cqe->op_own & MLX5_INLINE_SCATTER_64);
+	return cqe;
+}
+
 /* `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
 static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 		int *n_bb, int *num_sge, struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM],
