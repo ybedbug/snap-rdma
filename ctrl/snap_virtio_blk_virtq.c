@@ -865,7 +865,7 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 			return true;
 		}
 		cmd->dma_comp.count = 1;
-		len = snap_min(ret, to_blk_cmd_aux(cmd->aux)->descs[1].len);
+		len = snap_min(ret + 1, to_blk_cmd_aux(cmd->aux)->descs[1].len);
 		cmd->total_in_len += len;
 		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
 				to_blk_cmd_aux(cmd->aux)->descs[1].addr, len);
