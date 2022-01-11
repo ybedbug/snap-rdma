@@ -92,10 +92,11 @@ void *dpa_thread_alloc(size_t size)
 	else
 		tcb->data_used += size;
 
-	if (tcb->data_used > SNAP_DPA_THREAD_HEAP_SIZE)
-		dpa_fatal("thread alloc: OOM: used more than %d bytes\n", SNAP_DPA_THREAD_HEAP_SIZE);
+	if (tcb->data_used > tcb->heap_size)
+		dpa_fatal("thread alloc: OOM: want %d bytes, will use %d which is more than %d bytes\n",
+				size, tcb->data_used, tcb->heap_size);
 
-	dpa_debug("thread alloc: addr %p used %ld\n", data_add, tcb->data_used);
+	dpa_debug("thread alloc: addr %p wanted %ld total used %ld\n", data_add, size, tcb->data_used);
 	return data_add;
 }
 

@@ -38,7 +38,7 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	dpa_debug("TCB         : 0x%lx\n", tcb_addr);
 	dpa_debug("Mailbox base: 0x%lx\n", tcb->mbox_address);
 	dpa_debug("Heap base   : 0x%lx\n", tcb->data_address);
-	dpa_debug("Heap size   : %ld\n", SNAP_DPA_THREAD_HEAP_SIZE);
+	dpa_debug("Heap size   : %ld\n", tcb->heap_size);
 
 	/* TODO:
 	 * interrupt thread support:

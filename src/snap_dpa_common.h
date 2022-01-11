@@ -32,7 +32,7 @@
 #define SNAP_DPA_THREAD_ENTRY_POINT "__snap_dpa_thread_start"
 
 /* TODO: make configurable. Some threads will not need this memory */
-#define SNAP_DPA_THREAD_HEAP_SIZE  2*16384
+#define SNAP_DPA_THREAD_MIN_HEAP_SIZE  2*16384
 
 /**
  * struct snap_dpa_tcb - DPA thread control block
@@ -49,6 +49,7 @@ struct snap_dpa_tcb {
 	uint32_t mbox_lkey;
 	uint64_t data_address;
 	uint64_t data_used;
+	uint64_t heap_size;
 };
 
 struct snap_dpa_attr {

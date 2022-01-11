@@ -78,6 +78,7 @@ int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t
  * At the moment attributes are not used yet
  */
 struct snap_dpa_thread_attr {
+	size_t heap_size;
 	/* private: */
 	uint32_t thread_attr;
 	uint32_t cpu_mask[16]; // hart, best effort according to PRM

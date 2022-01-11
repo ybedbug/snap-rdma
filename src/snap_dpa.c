@@ -315,6 +315,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		struct snap_dpa_thread_attr *attr)
 {
 	struct snap_dpa_tcb tcb = {0};
+	struct snap_dpa_thread_attr default_attr = {0};
 	struct snap_dpa_thread *thr;
 	int ret;
 	flexio_status st;
@@ -328,6 +329,8 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	}
 
 	thr->dctx = dctx;
+	if (!attr)
+		attr = &default_attr;
 
 	ret = pthread_mutex_init(&thr->cmd_lock, NULL);
 	if (ret < 0) {
@@ -355,7 +358,8 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mr;
 	}
 
-	thr->mem = snap_dpa_mem_alloc(dctx, SNAP_DPA_THREAD_HEAP_SIZE);
+	tcb.heap_size = snap_max(attr->heap_size, SNAP_DPA_THREAD_MIN_HEAP_SIZE);
+	thr->mem = snap_dpa_mem_alloc(dctx, tcb.heap_size);
 	if (!thr->mem)
 		goto free_window;
 
