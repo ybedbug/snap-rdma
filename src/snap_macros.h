@@ -31,7 +31,7 @@
 #define snap_unlikely(x) __builtin_expect(!!(x), 0)
 
 #ifndef ARRAY_SIZE
-#define ARRAY_SIZE(n) (sizeof(n) / sizeof(n[0]))
+#define ARRAY_SIZE(n) (sizeof(n) / sizeof(*n))
 #endif
 
 #define SNAP_ALIGN_FLOOR(val, align) \
