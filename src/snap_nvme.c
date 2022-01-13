@@ -108,6 +108,7 @@ int snap_nvme_query_device(struct snap_device *sdev,
 				       device_emulation_out,
 				       pci_params));
 
+	memcpy(&attr->bar, sdev->pci->bar.data, sizeof(attr->bar));
 	attr->num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
 	attr->enabled = DEVX_GET(nvme_device_emulation, device_emulation_out,
 				 enabled);
