@@ -320,11 +320,26 @@ static int verbs_dma_q_flush(struct snap_dma_q *q)
 	return n;
 }
 
+static int verbs_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp, int *n_bb)
+{
+	*n_bb = 1;
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
+	return do_verbs_dma_xfer(q, 0, 0, 0, 0, 0,
+			IBV_WR_RDMA_WRITE, 0, comp);
+}
+
 static inline int verbs_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 				    uint64_t addr, int len, uint32_t key,
 				    int *n_bb)
 {
 	return -ENOTSUP;
+}
+
+static bool verbs_dma_q_empty(struct snap_dma_q *q)
+{
+	return q->tx_available == q->tx_qsize;
 }
 
 struct snap_dma_q_ops verb_ops = {
@@ -342,5 +357,7 @@ struct snap_dma_q_ops verb_ops = {
 	.poll_rx     = verbs_dma_q_poll_rx,
 	.poll_tx     = verbs_dma_q_poll_tx,
 	.arm = verbs_dma_q_arm,
-	.flush = verbs_dma_q_flush
+	.flush = verbs_dma_q_flush,
+	.flush_nowait = verbs_dma_q_flush_nowait,
+	.empty = verbs_dma_q_empty
 };

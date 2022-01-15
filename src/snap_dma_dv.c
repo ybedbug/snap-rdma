@@ -795,6 +795,16 @@ static int dv_dma_q_flush(struct snap_dma_q *q)
 	return n_out + n;
 }
 
+static int dv_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp, int *n_bb)
+{
+	return do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, comp, n_bb);
+}
+
+static bool dv_dma_q_empty(struct snap_dma_q *q)
+{
+	return q->tx_available == q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+}
+
 struct snap_dma_q_ops dv_ops = {
 	.write           = dv_dma_q_write,
 	.writev          = dv_dma_q_writev,
@@ -811,6 +821,8 @@ struct snap_dma_q_ops dv_ops = {
 	.poll_tx         = dv_dma_q_poll_tx,
 	.arm             = dv_dma_q_arm,
 	.flush           = dv_dma_q_flush,
+	.flush_nowait    = dv_dma_q_flush_nowait,
+	.empty		 = dv_dma_q_empty,
 };
 
 /* GGA */
@@ -945,4 +957,6 @@ struct snap_dma_q_ops gga_ops = {
 	.poll_tx         = dv_dma_q_poll_tx,
 	.arm             = dv_dma_q_arm,
 	.flush           = dv_dma_q_flush,
+	.flush_nowait    = dv_dma_q_flush_nowait,
+	.empty		 = dv_dma_q_empty,
 };

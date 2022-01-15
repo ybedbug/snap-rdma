@@ -399,7 +399,6 @@ TEST_F(SnapDmaTest, send_completion) {
 	snap_dma_q_destroy(q);
 }
 
-
 TEST_F(SnapDmaTest, flush) {
 	struct snap_dma_q *q;
 	int rc;
@@ -436,6 +435,94 @@ TEST_F(SnapDmaTest, flush) {
 	ASSERT_EQ(3, rc);
 
 	snap_dma_q_destroy(q);
+}
+
+void SnapDmaTest::empty(int mode)
+{
+        struct snap_dma_q *q;
+        int rc;
+        bool status;
+
+        m_dma_q_attr.mode = mode;
+        q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+        ASSERT_TRUE(q);
+
+        status = snap_dma_q_empty(q);
+        ASSERT_TRUE(status);
+
+        rc = snap_dma_q_read(q, m_lbuf, m_bsize, m_lmr->lkey,
+                        (uintptr_t)m_rbuf, m_rmr->lkey, NULL);
+        ASSERT_EQ(0, rc);
+
+        status = snap_dma_q_empty(q);
+        ASSERT_FALSE(status);
+
+        rc = snap_dma_q_flush(q);
+
+        status = snap_dma_q_empty(q);
+        ASSERT_TRUE(status);
+
+        snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, empty_verbs) {
+        empty(SNAP_DMA_Q_MODE_VERBS);
+}
+
+TEST_F(SnapDmaTest, empty_dv) {
+        empty(SNAP_DMA_Q_MODE_DV);
+}
+
+void SnapDmaTest::flush_async(int mode)
+{
+        bool status;
+        int rc, n;
+        struct snap_dma_q *q;
+        struct snap_dma_completion comp;
+
+        m_dma_q_attr.mode = mode;
+        q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+        ASSERT_TRUE(q);
+
+        rc = snap_dma_q_read(q, m_lbuf, m_bsize, m_lmr->lkey,
+                        (uintptr_t)m_rbuf, m_rmr->lkey, NULL);
+        ASSERT_EQ(0, rc);
+
+        status = snap_dma_q_empty(q);
+        ASSERT_FALSE(status);
+
+        g_comp_count = 0;
+
+        comp.count = 1;
+        comp.func = dma_completion;
+        rc = snap_dma_q_flush_nowait(q, &comp);
+        ASSERT_EQ(0, rc);
+
+        ASSERT_EQ(0, g_comp_count);
+        status = snap_dma_q_empty(q);
+        ASSERT_FALSE(status);
+
+        n = 0;
+        while (n < 10000) {
+                snap_dma_q_progress(q);
+                if (g_comp_count == 1)
+                        break;
+                n++;
+        }
+
+        ASSERT_EQ(1, g_comp_count);
+        status = snap_dma_q_empty(q);
+        ASSERT_TRUE(status);
+
+        snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, flush_async_verbs) {
+	flush_async(SNAP_DMA_Q_MODE_VERBS);
+}
+
+TEST_F(SnapDmaTest, flush_async_dv) {
+	flush_async(SNAP_DMA_Q_MODE_DV);
 }
 
 TEST_F(SnapDmaTest, rx_callback) {

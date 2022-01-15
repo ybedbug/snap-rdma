@@ -113,6 +113,50 @@ int snap_dma_q_flush(struct snap_dma_q *q)
 }
 
 /**
+ * snap_dma_q_flush_nowait() - Start queue flush
+ * @q:       dma queue to
+ * @comp:    dma completion structure
+ *
+ * The function starts a flush process by issuing a zero-length write.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ *
+ */
+int snap_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp)
+{
+	int rc, n_bb;
+
+	rc = q->ops->flush_nowait(q, comp, &n_bb);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available -= n_bb;
+	return 0;
+}
+
+/**
+ * snap_dma_q_empty()
+ * @q:       dma queue
+ *
+ * Return:
+ * true
+ *	queue is idle and has no outstanding data
+ * false
+ *	queue contains some data in progress
+ */
+bool snap_dma_q_empty(struct snap_dma_q *q)
+{
+	return q->ops->empty(q);
+}
+
+/**
  * snap_dma_q_write() - DMA write to the host memory
  * @q:            dma queue
  * @src_buf:      where to get/put data
