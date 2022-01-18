@@ -23,11 +23,11 @@ static struct snap_dpa_app dpa_virtq_app = SNAP_DPA_APP_INIT_ATTR;
 #define SNAP_DPA_VIRTQ_BBUF_SIZE  4096
 #define SNAP_DPA_VIRTQ_BBUF_ALIGN 4096
 
-_Static_assert(sizeof(struct snap_dpa_virtq) < sizeof(struct snap_virtio_queue),
+SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_virtq) < sizeof(struct snap_virtio_queue),
 		"Ooops, struct snap_dpa_virtq is too big");
 
 /* make sure our virtq commands are fit into mailbox */
-_Static_assert(sizeof(struct dpa_virtq_cmd) < SNAP_DPA_THREAD_MBOX_LEN/2,
+SNAP_STATIC_ASSERT(sizeof(struct dpa_virtq_cmd) < SNAP_DPA_THREAD_MBOX_LEN/2,
 		"Ooops, struct dpa_virtq_cmd is too big");
 
 struct snap_dpa_virtq_attr {

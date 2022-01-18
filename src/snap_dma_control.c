@@ -1187,7 +1187,7 @@ void snap_dma_q_destroy(struct snap_dma_q *q)
 	snap_dma_ep_destroy(q);
 }
 
-_Static_assert(sizeof(struct snap_dma_q) < SNAP_DMA_THREAD_MBOX_CMD_SIZE,
+SNAP_STATIC_ASSERT(sizeof(struct snap_dma_q) < SNAP_DMA_THREAD_MBOX_CMD_SIZE,
 		"struct snap_dma_q is too big for the DPA thread mbox");
 /**
  * snap_dma_ep_dpa_copy_sync() - Copy DMA endpoint to DPA

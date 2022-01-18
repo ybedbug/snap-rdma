@@ -58,8 +58,17 @@
 #define SNAP_ROUNDUP_POW2_OR0(_n) \
 	(((_n) == 0) ? 0 : SNAP_ROUNDUP_POW2(_n))
 
-#ifndef static_assert
-#define static_assert(cond, msg)
+/**
+ * It looks like static assert is defined differently for C and C++.
+ * For us it is enougn to check static assertions during C code compilation
+ *
+ * TODO: older C compilers may have static_assert macro instead of
+ * _Static_assert keyword.
+ */
+#if !defined(__cplusplus)
+#define SNAP_STATIC_ASSERT(_expr, _msg) _Static_assert((_expr), _msg)
+#else
+#define SNAP_STATIC_ASSERT(_expr, _msg)
 #endif
 
 #endif

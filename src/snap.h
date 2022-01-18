@@ -228,7 +228,8 @@ struct snap_nvme_registers {
 	uint32_t bprsel;
 	uint64_t bpmbl;
 } __attribute__((packed));
-static_assert(sizeof(struct snap_nvme_registers) == 80, "Bad snap_nvme_registers size");
+
+SNAP_STATIC_ASSERT(sizeof(struct snap_nvme_registers) == 80, "Bad snap_nvme_registers size");
 
 struct snap_virtio_net_registers {
 	uint64_t	device_features;

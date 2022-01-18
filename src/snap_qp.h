@@ -13,6 +13,8 @@
 #ifndef SNAP_QP_H
 #define SNAP_QP_H
 
+#include "snap_macros.h"
+
 /**
  * The purpose of having snap_cq and snap_qp objects is to
  * - provide migration to the full DEVX object creation while keeping
@@ -157,10 +159,8 @@ struct snap_hw_qp {
 	uint32_t qp_num;
 };
 
-#if !defined(__cplusplus)
-_Static_assert(sizeof(struct snap_hw_qp) <= SNAP_MLX5_L2_CACHE_SIZE,
+SNAP_STATIC_ASSERT(sizeof(struct snap_hw_qp) <= SNAP_MLX5_L2_CACHE_SIZE,
 		"Oops snap_hw_qp does not fit into cache line!!!!");
-#endif
 
 struct snap_devx_qp {
 	struct snap_devx_common devx;
