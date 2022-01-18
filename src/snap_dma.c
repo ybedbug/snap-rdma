@@ -157,7 +157,7 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
  * @q:            dma queue
  * @src_buf:      where to get data
  * @lkey:         local memory key
- * @iov:             A scatter gather list of buffers to be read into
+ * @iov:          A scatter gather list of buffers to be write into
  * @iov_cnt:      The number of elements in @iov
  * @rmkey:        host memory key that describes remote memory
  * @comp:         dma completion structure
@@ -193,6 +193,55 @@ int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 	io_attr.iov_cnt = iov_cnt;
 
 	rc = q->ops->writev(q, &io_attr, comp, &n_bb);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available -= n_bb;
+
+	return 0;
+}
+
+/**
+ * snap_dma_q_writec() - DMA write to the host memory, and
+ *                          do inline date decryption
+ * @q:            dma queue
+ * @src_buf:      where to get data
+ * @lkey:         local memory key
+ * @iov:          A scatter gather list of buffers to be write into
+ * @iov_cnt:      The number of elements in @iov
+ * @rmkey:        host memory key that describes remote memory
+ * @dek_obj_id:   DEK Object ID
+ * @comp:         dma completion structure
+ *
+ * The function starts non blocking memory transfer to the host memory. Once
+ * data transfer is completed the user defined callback may be called.
+ * Operations on the same dma queue are done in order.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
+			struct iovec *iov, int iov_cnt, uint32_t rmkey,
+			uint32_t dek_obj_id, struct snap_dma_completion *comp)
+{
+	int rc, n_bb;
+	struct snap_dma_q_io_attr io_attr = {0};
+
+	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV | SNAP_DMA_Q_IO_TYPE_ENCRYPTO;
+	io_attr.lbuf = src_buf;
+	io_attr.lkey = lkey;
+	io_attr.rkey = rmkey;
+	io_attr.iov = iov;
+	io_attr.iov_cnt = iov_cnt;
+	io_attr.dek_obj_id = dek_obj_id;
+
+	rc = q->ops->writec(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 
@@ -286,7 +335,7 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
  * @q:            dma queue
  * @dst_buf:      where to put data
  * @lkey:         local memory key
- * @iov:             A scatter gather list of buffers to be read into
+ * @iov:          A scatter gather list of buffers to be read from
  * @iov_cnt:      The number of elements in @iov
  * @rmkey:        host memory key that describes remote memory
  * @comp:         dma completion structure
@@ -322,6 +371,55 @@ int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 	io_attr.iov_cnt = iov_cnt;
 
 	rc = q->ops->readv(q, &io_attr, comp, &n_bb);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available -= n_bb;
+
+	return 0;
+}
+
+/**
+ * snap_dma_q_readc() - DMA read from the host memory, and
+ *                         do inline data encryption
+ * @q:            dma queue
+ * @dst_buf:      where to put data
+ * @lkey:         local memory key
+ * @iov:          A scatter gather list of buffers to be read from
+ * @iov_cnt:      The number of elements in @iov
+ * @rmkey:        host memory key that describes remote memory
+ * @dek_obj_id:   DEK Object ID
+ * @comp:         dma completion structure
+ *
+ * The function starts non blocking memory transfer from the host memory. Once
+ * data transfer is completed the user defined callback may be called.
+ * Operations on the same dma queue are done in order.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occured. Return value is -errno
+ */
+int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
+			struct iovec *iov, int iov_cnt, uint32_t rmkey,
+		    uint32_t dek_obj_id, struct snap_dma_completion *comp)
+{
+	int rc, n_bb;
+	struct snap_dma_q_io_attr io_attr = {0};
+
+	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV | SNAP_DMA_Q_IO_TYPE_ENCRYPTO;
+	io_attr.lbuf = dst_buf;
+	io_attr.lkey = lkey;
+	io_attr.rkey = rmkey;
+	io_attr.iov = iov;
+	io_attr.iov_cnt = iov_cnt;
+	io_attr.dek_obj_id = dek_obj_id;
+
+	rc = q->ops->readc(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 

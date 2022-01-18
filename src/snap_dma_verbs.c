@@ -60,6 +60,13 @@ static inline int verbs_dma_q_writev(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
+static inline int verbs_dma_q_writec(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return -ENOTSUP;
+}
+
 static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
 					  size_t len, uint64_t dstaddr,
 					  uint32_t rmkey, int *n_bb)
@@ -81,6 +88,13 @@ static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t l
 }
 
 static int verbs_dma_q_readv(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return -ENOTSUP;
+}
+
+static int verbs_dma_q_readc(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
@@ -316,9 +330,11 @@ static inline int verbs_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in
 struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
+	.writec           = verbs_dma_q_writec,
 	.write_short     = verbs_dma_q_write_short,
 	.read            = verbs_dma_q_read,
 	.readv            = verbs_dma_q_readv,
+	.readc            = verbs_dma_q_readc,
 	.send_completion = verbs_dma_q_send_completion,
 	.send            = verbs_dma_q_send,
 	.progress_tx     = verbs_dma_q_progress_tx,

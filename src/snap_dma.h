@@ -33,6 +33,9 @@
 
 #define SNAP_DMA_Q_MAX_IOV_CNT		128
 
+#define SNAP_CRYPTO_KEYTAG_SIZE              8
+#define SNAP_CRYPTO_XTS_INITIAL_TWEAK_SIZE   16
+
 struct snap_dma_q;
 struct snap_dma_completion;
 
@@ -152,6 +155,7 @@ struct snap_dma_ibv_qp {
 
 enum {
 	SNAP_DMA_Q_IO_TYPE_IOV      = 0x1,
+	SNAP_DMA_Q_IO_TYPE_ENCRYPTO = 0x2,
 };
 
 struct snap_dma_q_io_attr {
@@ -165,6 +169,10 @@ struct snap_dma_q_io_attr {
 	/* for IOV TYPE IO */
 	struct iovec *iov;
 	int iov_cnt;
+
+	/* for ENCRYPTO IO */
+	uint32_t dek_obj_id;
+	uint8_t  xts_initial_tweak[SNAP_CRYPTO_XTS_INITIAL_TWEAK_SIZE];
 };
 
 struct snap_dma_q_ops {
@@ -173,12 +181,16 @@ struct snap_dma_q_ops {
 		     struct snap_dma_completion *comp);
 	int (*writev)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
 		     struct snap_dma_completion *comp, int *n_bb);
+	int (*writec)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
+		     struct snap_dma_completion *comp, int *n_bb);
 	int (*write_short)(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey, int *n_bb);
 	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		    struct snap_dma_completion *comp);
 	int (*readv)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
+		    struct snap_dma_completion *comp, int *n_bb);
+	int (*readc)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
 		    struct snap_dma_completion *comp, int *n_bb);
 	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
 			size_t len, int *n_bb);
@@ -317,6 +329,9 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 		struct iovec *iov, int iov_cnt, uint32_t rmkey,
 		struct snap_dma_completion *comp);
+int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
+		struct iovec *iov, int iov_cnt, uint32_t rmkey,
+		uint32_t dek_obj_id, struct snap_dma_completion *comp);
 int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 		uint64_t dstaddr, uint32_t rmkey);
 int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
@@ -325,6 +340,9 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 		struct iovec *iov, int iov_cnt, uint32_t rmkey,
 		struct snap_dma_completion *comp);
+int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
+		struct iovec *iov, int iov_cnt, uint32_t rmkey,
+	    uint32_t dek_obj_id, struct snap_dma_completion *comp);
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len);
 int snap_dma_q_progress(struct snap_dma_q *q);
 int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions);

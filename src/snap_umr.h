@@ -16,9 +16,6 @@
 #include "snap_dma.h"
 #include "snap_mr.h"
 
-#define SNAP_CRYPTO_KEYTAG_SIZE              8
-#define SNAP_CRYPTO_XTS_INITIAL_TWEAK_SIZE   16
-
 enum {
 	SNAP_UMR_MKEY_MODIFY_ATTACH_MTT        = 0x1 << 0,
 	SNAP_UMR_MKEY_MODIFY_ATTACH_CRYPTO_BSF = 0x1 << 1,
