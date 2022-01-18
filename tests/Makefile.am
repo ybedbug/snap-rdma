@@ -20,7 +20,7 @@ noinst_PROGRAMS = \
 		snap_live_migration_cmd_test
 
 
-LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src
+LOCAL_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) -I$(top_srcdir)/src -I$(top_srcdir)/ctrl
 SNAP_TEST_FILES = snap_test.h snap_test.c
 
 snap_open_close_CFLAGS = $(LOCAL_CFLAGS)
@@ -132,7 +132,7 @@ sample_channel_la_LDFLAGS =  -avoid-version -module -shared -export-dynamic
 if HAVE_GTEST
 noinst_PROGRAMS += gtest_snap_rdma
 
-gtest_snap_rdma_CXXFLAGS = $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS)
+gtest_snap_rdma_CXXFLAGS = $(LOCAL_CFLAGS) $(GTEST_CXXFLAGS) -fpermissive
 gtest_snap_rdma_CFLAGS = $(LOCAL_CFLAGS)
 gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  test_snap_dma.h \

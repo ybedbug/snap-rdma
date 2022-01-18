@@ -2,6 +2,7 @@
 #include "gtest/gtest.h"
 
 extern "C" {
+#include "snap_virtio_common_ctrl.h"
 #include "snap_channel.h"
 };
 
