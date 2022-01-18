@@ -150,21 +150,36 @@ struct snap_dma_ibv_qp {
 	} dpa;
 };
 
+enum {
+	SNAP_DMA_Q_IO_TYPE_IOV      = 0x1,
+};
+
+struct snap_dma_q_io_attr {
+	int io_type;
+
+	void *lbuf;
+	uint32_t lkey;
+	uint32_t rkey;
+	size_t len;
+
+	/* for IOV TYPE IO */
+	struct iovec *iov;
+	int iov_cnt;
+};
+
 struct snap_dma_q_ops {
 	int (*write)(struct snap_dma_q *q, void *src_buf, size_t len,
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		     struct snap_dma_completion *comp);
-	int (*writev)(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
-			struct iovec *iov, int iov_cnt, uint32_t rmkey,
-			struct snap_dma_completion *comp, int *n_bb);
+	int (*writev)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
+		     struct snap_dma_completion *comp, int *n_bb);
 	int (*write_short)(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey, int *n_bb);
 	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		    struct snap_dma_completion *comp);
-	int (*readv)(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
-			struct iovec *iov, int iov_cnt, uint32_t rmkey,
-			struct snap_dma_completion *comp, int *n_bb);
+	int (*readv)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
+		    struct snap_dma_completion *comp, int *n_bb);
 	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
 			size_t len, int *n_bb);
 	int (*send)(struct snap_dma_q *q, void *in_buf, size_t in_len,
@@ -185,6 +200,7 @@ struct snap_dma_q_io_ctx {
 	struct mlx5_klm klm_mtt[SNAP_DMA_Q_MAX_IOV_CNT];
 	struct snap_dma_completion comp;
 	void *uctx;
+	int io_type;
 
 	TAILQ_ENTRY(snap_dma_q_io_ctx) entry;
 };

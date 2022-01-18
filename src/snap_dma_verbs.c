@@ -53,10 +53,9 @@ static inline int verbs_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t 
 			IBV_WR_RDMA_WRITE, 0, comp);
 }
 
-static inline int verbs_dma_q_writev(struct snap_dma_q *q, void *src_buf,
-				uint32_t lkey, struct iovec *iov, int iov_cnt,
-				uint32_t rmkey, struct snap_dma_completion *comp,
-				int *n_bb)
+static inline int verbs_dma_q_writev(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
 	return -ENOTSUP;
 }
@@ -81,10 +80,9 @@ static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t l
 			IBV_WR_RDMA_READ, 0, comp);
 }
 
-static inline int verbs_dma_q_readv(struct snap_dma_q *q, void *dst_buf,
-				uint32_t lkey, struct iovec *iov, int iov_cnt,
-				uint32_t rmkey, struct snap_dma_completion *comp,
-				int *n_bb)
+static int verbs_dma_q_readv(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
 	return -ENOTSUP;
 }

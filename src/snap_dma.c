@@ -183,8 +183,16 @@ int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 				struct snap_dma_completion *comp)
 {
 	int rc, n_bb;
+	struct snap_dma_q_io_attr io_attr = {0};
 
-	rc = q->ops->writev(q, src_buf, lkey, iov, iov_cnt, rmkey, comp, &n_bb);
+	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
+	io_attr.lbuf = src_buf;
+	io_attr.lkey = lkey;
+	io_attr.rkey = rmkey;
+	io_attr.iov = iov;
+	io_attr.iov_cnt = iov_cnt;
+
+	rc = q->ops->writev(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 
@@ -304,8 +312,16 @@ int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 				struct snap_dma_completion *comp)
 {
 	int rc, n_bb;
+	struct snap_dma_q_io_attr io_attr = {0};
 
-	rc = q->ops->readv(q, dst_buf, lkey, iov, iov_cnt, rmkey, comp, &n_bb);
+	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
+	io_attr.lbuf = dst_buf;
+	io_attr.lkey = lkey;
+	io_attr.rkey = rmkey;
+	io_attr.iov = iov;
+	io_attr.iov_cnt = iov_cnt;
+
+	rc = q->ops->readv(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
 		return rc;
 

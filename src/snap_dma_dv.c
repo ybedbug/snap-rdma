@@ -21,6 +21,17 @@
 
 #include "config.h"
 
+struct snap_dma_xfer_ctx {
+	void *lbuf;
+	uint32_t lkey;
+	uint32_t rkey;
+	uint64_t raddr;
+	size_t len;
+
+	bool use_fence;
+	struct snap_dma_completion *comp;
+};
+
 static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
 		struct snap_dma_completion *comp, bool use_fence)
@@ -74,7 +85,8 @@ static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 }
 
 /* UMRs are not supported on the DPA yet */
-__attribute__((unused)) static void snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
+__attribute__((unused)) static void
+snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
 {
 	struct snap_dma_q_io_ctx *io_ctx;
 	struct snap_dma_q *q;
@@ -85,7 +97,10 @@ __attribute__((unused)) static void snap_use_klm_mkey_done(struct snap_dma_compl
 	q = io_ctx->q;
 	orig_comp = (struct snap_dma_completion *)io_ctx->uctx;
 
-	TAILQ_INSERT_HEAD(&q->free_iov_ctx, io_ctx, entry);
+	if (io_ctx->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
+		TAILQ_INSERT_HEAD(&q->free_iov_ctx, io_ctx, entry);
+	else
+		TAILQ_INSERT_HEAD(&q->free_crypto_ctx, io_ctx, entry);
 
 	if (orig_comp && --orig_comp->count == 0)
 		orig_comp->func(orig_comp, status);
@@ -103,6 +118,7 @@ static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
 		return -EINVAL;
 	}
 
+	*len = 0;
 	for (i = 0; i < iov_cnt; i++) {
 		klm_mtt[i].byte_count = iov[i].iov_len;
 		klm_mtt[i].mkey = mkey;
@@ -118,95 +134,128 @@ static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
  * and use 'errno' to pass the actually failure reason.
  */
 static struct snap_dma_q_io_ctx*
-snap_prepare_io_ctx(struct snap_dma_q *q, struct iovec *iov,
-				int iov_cnt, uint32_t rmkey,
-				struct snap_dma_completion *comp,
-				size_t *len, int *n_bb)
+snap_prepare_io_ctx(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
 #if !defined(__DPA)
 	int ret;
 	struct snap_dma_q_io_ctx *io_ctx;
-	struct snap_post_umr_attr attr = {0};
+	struct snap_post_umr_attr umr_attr = {0};
 
-	io_ctx = TAILQ_FIRST(&q->free_iov_ctx);
+	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
+		io_ctx = TAILQ_FIRST(&q->free_iov_ctx);
+	else
+		io_ctx = TAILQ_FIRST(&q->free_crypto_ctx);
 	if (!io_ctx) {
 		errno = -ENOMEM;
 		snap_error("dma_q:%p Out of io_ctx from pool\n", q);
 		return NULL;
 	}
 
-	TAILQ_REMOVE(&q->free_iov_ctx, io_ctx, entry);
+	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
+		TAILQ_REMOVE(&q->free_iov_ctx, io_ctx, entry);
+	else
+		TAILQ_REMOVE(&q->free_crypto_ctx, io_ctx, entry);
 
-	ret = snap_iov_to_klm_mtt(iov, iov_cnt, rmkey, io_ctx->klm_mtt, len);
-	if (ret)
-		goto insert_back;
+	*n_bb = 0;
 
-	io_ctx->uctx = comp;
-	io_ctx->comp.func = snap_use_klm_mkey_done;
-	io_ctx->comp.count = 1;
+	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_IOV) {
+		int iov_bb;
 
-	attr.purpose = SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
-	attr.klm_mkey = io_ctx->klm_mkey;
-	attr.klm_mtt = io_ctx->klm_mtt;
-	attr.klm_entries = iov_cnt;
+		ret = snap_iov_to_klm_mtt(io_attr->iov, io_attr->iov_cnt,
+					io_attr->rkey, io_ctx->klm_mtt, &io_attr->len);
+			if (ret)
+				goto insert_back;
 
-	ret = snap_umr_post_wqe(q, &attr, NULL, n_bb);
-	if (ret) {
-		snap_error("dma_q:%p post umr wqe failed, ret:%d\n", q, ret);
-		goto insert_back;
+		io_ctx->uctx = comp;
+		io_ctx->comp.func = snap_use_klm_mkey_done;
+		io_ctx->comp.count = 1;
+		io_ctx->io_type = io_attr->io_type;
+
+		umr_attr.purpose = SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
+		umr_attr.klm_mkey = io_ctx->klm_mkey;
+		umr_attr.klm_mtt = io_ctx->klm_mtt;
+		umr_attr.klm_entries = io_attr->iov_cnt;
+
+		ret = snap_umr_post_wqe(q, &umr_attr, NULL, &iov_bb);
+		if (ret) {
+			snap_error("dma_q:%p post umr wqe failed, ret:%d\n", q, ret);
+			goto insert_back;
+		}
+
+		*n_bb += iov_bb;
 	}
 
 	return io_ctx;
 
 insert_back:
-	TAILQ_INSERT_TAIL(&q->free_iov_ctx, io_ctx, entry);
+	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
+		TAILQ_INSERT_TAIL(&q->free_iov_ctx, io_ctx, entry);
+	else
+		TAILQ_INSERT_TAIL(&q->free_crypto_ctx, io_ctx, entry);
+
 	errno = ret;
 #endif
 	return NULL;
 }
 
-static int dv_dma_q_writev(struct snap_dma_q *q, void *src_buf,
-				uint32_t lkey, struct iovec *iov, int iov_cnt,
-				uint32_t rmkey, struct snap_dma_completion *comp,
-				int *n_bb)
+int snap_prepare_dma_xfer_ctx(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp,
+				int *n_bb, struct snap_dma_xfer_ctx *dx_ctx)
 {
-	size_t len = 0;
-	struct snap_indirect_mkey *klm_mkey;
 	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_indirect_mkey *klm_mkey;
 
-	io_ctx = snap_prepare_io_ctx(q, iov, iov_cnt, rmkey, comp, &len, n_bb);
+	io_ctx = snap_prepare_io_ctx(q, io_attr, comp, n_bb);
 	if (!io_ctx)
 		return errno;
 
 	klm_mkey = io_ctx->klm_mkey;
 
-	return do_dv_dma_xfer(q, src_buf, len, lkey,
-			klm_mkey->addr, klm_mkey->mkey,
-			MLX5_OPCODE_RDMA_WRITE, 0,
-			&io_ctx->comp, true);
+	dx_ctx->lbuf = io_attr->lbuf;
+	dx_ctx->lkey = io_attr->lkey;
+	dx_ctx->raddr = klm_mkey->addr;
+	dx_ctx->rkey = klm_mkey->mkey;
+	dx_ctx->len = io_attr->len;
+	dx_ctx->comp = &io_ctx->comp;
+	dx_ctx->use_fence = true;
+
+	return 0;
 }
 
-static int dv_dma_q_readv(struct snap_dma_q *q, void *dst_buf,
-				uint32_t lkey, struct iovec *iov, int iov_cnt,
-				uint32_t rmkey, struct snap_dma_completion *comp,
-				int *n_bb)
+static int dv_dma_q_writev(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
-	size_t len = 0;
-	struct snap_indirect_mkey *klm_mkey;
-	struct snap_dma_q_io_ctx *io_ctx;
+	int ret;
+	struct snap_dma_xfer_ctx dx_ctx = {0};
 
-	io_ctx = snap_prepare_io_ctx(q, iov, iov_cnt, rmkey, comp, &len, n_bb);
-	if (!io_ctx)
-		return errno;
+	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
+	if (ret)
+		return ret;
 
-	klm_mkey = io_ctx->klm_mkey;
-
-	return do_dv_dma_xfer(q, dst_buf, len, lkey,
-			klm_mkey->addr, klm_mkey->mkey,
-			MLX5_OPCODE_RDMA_READ, 0,
-			&io_ctx->comp, true);
+	return do_dv_dma_xfer(q, dx_ctx.lbuf, dx_ctx.len, dx_ctx.lkey,
+			dx_ctx.raddr, dx_ctx.rkey, MLX5_OPCODE_RDMA_WRITE, 0,
+			dx_ctx.comp, dx_ctx.use_fence);
 }
 
+static int dv_dma_q_readv(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	int ret;
+	struct snap_dma_xfer_ctx dx_ctx = {0};
+
+	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
+	if (ret)
+		return ret;
+
+	return do_dv_dma_xfer(q, dx_ctx.lbuf, dx_ctx.len, dx_ctx.lkey,
+			dx_ctx.raddr, dx_ctx.rkey, MLX5_OPCODE_RDMA_READ, 0,
+			dx_ctx.comp, dx_ctx.use_fence);
+}
 
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
 				    int op, uint64_t raddr, uint32_t rkey,
@@ -730,7 +779,7 @@ __attribute__((unused)) static void dump_gga_wqe(int op, uint32_t *wqe)
 			be32toh(wqe[i + 2]), be32toh(wqe[i + 3]));
 }
 
-static inline int do_gga_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
+static inline int do_gga_dma_xfer(struct snap_dma_q *q, uint64_t saddr, size_t len,
 			      uint32_t s_lkey, uint64_t daddr, uint32_t d_lkey,
 			      struct snap_dma_completion *comp, bool use_fence)
 {
@@ -775,7 +824,7 @@ static int gga_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 			  uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 			  struct snap_dma_completion *comp)
 {
-	return do_gga_xfer(q, (uint64_t)src_buf, len, lkey,
+	return do_gga_dma_xfer(q, (uint64_t)src_buf, len, lkey,
 			dstaddr, rmkey, comp, false);
 }
 
@@ -783,44 +832,40 @@ static int gga_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 			 uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 			 struct snap_dma_completion *comp)
 {
-	return do_gga_xfer(q, srcaddr, len, rmkey,
+	return do_gga_dma_xfer(q, srcaddr, len, rmkey,
 			(uint64_t)dst_buf, lkey, comp, false);
 }
 
-static int gga_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
-			struct iovec *iov, int iov_cnt, uint32_t rmkey,
-			struct snap_dma_completion *comp, int *n_bb)
+static int gga_dma_q_writev(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
-	size_t len = 0;
-	struct snap_indirect_mkey *klm_mkey;
-	struct snap_dma_q_io_ctx *io_ctx;
+	int ret;
+	struct snap_dma_xfer_ctx dx_ctx = {0};
 
-	io_ctx = snap_prepare_io_ctx(q, iov, iov_cnt, rmkey, comp, &len, n_bb);
-	if (!io_ctx)
-		return errno;
+	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
+	if (ret)
+		return ret;
 
-	klm_mkey = io_ctx->klm_mkey;
-
-	return do_gga_xfer(q, (uint64_t)src_buf, len, lkey,
-			klm_mkey->addr, klm_mkey->mkey, &io_ctx->comp, true);
+	return do_gga_dma_xfer(q, (uint64_t)dx_ctx.lbuf, dx_ctx.len,
+			dx_ctx.lkey, dx_ctx.raddr, dx_ctx.rkey,
+			dx_ctx.comp, dx_ctx.use_fence);
 }
 
-static int gga_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
-			struct iovec *iov, int iov_cnt, uint32_t rmkey,
-			struct snap_dma_completion *comp, int *n_bb)
+static int gga_dma_q_readv(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
 {
-	size_t len = 0;
-	struct snap_indirect_mkey *klm_mkey;
-	struct snap_dma_q_io_ctx *io_ctx;
+	int ret;
+	struct snap_dma_xfer_ctx dx_ctx = {0};
 
-	io_ctx = snap_prepare_io_ctx(q, iov, iov_cnt, rmkey, comp, &len, n_bb);
-	if (!io_ctx)
-		return errno;
+	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
+	if (ret)
+		return ret;
 
-	klm_mkey = io_ctx->klm_mkey;
-
-	return do_gga_xfer(q, klm_mkey->addr, len, klm_mkey->mkey,
-			(uint64_t)dst_buf, lkey, &io_ctx->comp, true);
+	return do_gga_dma_xfer(q, dx_ctx.raddr, dx_ctx.len,
+			dx_ctx.rkey, (uint64_t)dx_ctx.lbuf, dx_ctx.lkey,
+			dx_ctx.comp, dx_ctx.use_fence);
 }
 
 struct snap_dma_q_ops gga_ops = {
