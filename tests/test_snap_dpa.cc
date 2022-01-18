@@ -4,6 +4,8 @@
 extern "C" {
 #include "snap.h"
 #include "snap_dpa.h"
+#include "snap_qp.h"
+#include "snap_dpa_rt.h"
 }
 
 #include "tests_common.h"
@@ -95,6 +97,43 @@ TEST_F(SnapDpaTest, create_thread) {
 	snap_dpa_log_print(dpa_thr->dpa_log);
 	snap_dpa_thread_destroy(dpa_thr);
 	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDpaTest, create_rt)
+{
+	struct snap_dpa_rt_attr attr = {};
+	struct snap_dpa_rt *rt1, *rt2;
+
+	rt1 = snap_dpa_rt_get(get_ib_ctx(), "dpa_hello", &attr);
+	ASSERT_TRUE(rt1);
+
+	rt2 = snap_dpa_rt_get(get_ib_ctx(), "dpa_hello", &attr);
+	ASSERT_TRUE(rt2);
+	ASSERT_TRUE(rt1 == rt2);
+	EXPECT_EQ(rt1->refcount, rt2->refcount);
+
+	snap_dpa_rt_put(rt2);
+	EXPECT_EQ(1, rt1->refcount);
+	snap_dpa_rt_put(rt1);
+}
+
+TEST_F(SnapDpaTest, create_rt_thread_single_polling)
+{
+	struct snap_dpa_rt_attr attr = {};
+	struct snap_dpa_rt *rt;
+	struct snap_dpa_rt_thread *thr;
+	struct snap_dpa_rt_filter f = {
+		.mode = SNAP_DPA_RT_THR_POLLING,
+		.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE
+	};
+
+	rt = snap_dpa_rt_get(get_ib_ctx(), "dpa_rt_test_polling", &attr);
+	ASSERT_TRUE(rt);
+
+	thr = snap_dpa_rt_thread_get(rt, &f);
+	ASSERT_TRUE(thr);
+	snap_dpa_rt_thread_put(thr);
+	snap_dpa_rt_put(rt);
 }
 
 extern "C" {

@@ -138,4 +138,12 @@ int dpa_init(void);
  * 0 on success
  */
 int dpa_run(void);
+
+static inline struct dpa_rt_context *dpa_rt_ctx()
+{
+	return (struct dpa_rt_context *)dpa_tcb()->data_address;
+}
+
+void dpa_rt_init(void);
+void dpa_rt_start(void);
 #endif

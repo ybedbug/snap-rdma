@@ -14,6 +14,7 @@
 #include "dpa.h"
 #include "snap_dma.h"
 #include "snap_dma_internal.h"
+#include "snap_dpa_rt.h"
 
 /**
  * dpa_dma_ep_init() - initialize dma_q endpoint on DPA
@@ -116,6 +117,31 @@ static void __attribute__((unused)) dpa_log_add(const char *msg)
 	struct snap_dpa_log *log = dpa_mbox() + SNAP_DPA_THREAD_MBOX_LEN;
 
 	snap_dpa_log_add(log, 0, msg);
+}
+
+void dpa_rt_init(void)
+{
+	struct snap_dpa_tcb *tcb = dpa_tcb();
+	struct dpa_rt_context *ctx;
+
+	ctx = dpa_thread_alloc(sizeof(*ctx));
+	if (ctx != (void *)tcb->data_address)
+		dpa_fatal("oops, rt context is not at the beginning of the heap\n");
+}
+
+void dpa_rt_start(void)
+{
+	struct dpa_rt_context *ctx = dpa_rt_ctx();
+	struct snap_dpa_cmd *cmd;
+
+	cmd = snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_DMA_EP_COPY);
+
+	ctx->dpa_cmd_chan.dma_q = dpa_dma_ep_cmd_copy(cmd);
+	ctx->dpa_cmd_chan.q_size = SNAP_DPA_RT_QP_RX_SIZE;
+	ctx->dpa_cmd_chan.credit_count = SNAP_DPA_RT_QP_RX_SIZE;
+
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
+	dpa_debug("dma q at %p db_cq at %p\n", ctx->dpa_cmd_chan.dma_q, (void *)ctx->db_cq.cq_addr);
 }
 
 /* TODO: per dpa process/thread logging instead of dumping to simx */
