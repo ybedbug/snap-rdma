@@ -3,7 +3,7 @@ ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libsnap.la
 
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
-		 snap_dpa.h snap_dpa_common.h snap_dpa_virtq.h snap_dma_internal.h \
+		 snap_dpa.h snap_dpa_virtq.h snap_dma_internal.h \
 		 snap_sw_virtio_blk.h
 
 #snap lib
@@ -23,7 +23,8 @@ libsnap_la_HEADERS = snap.h \
 		     snap_sw_virtio_blk.h \
 		     snap_crypto.h \
 		     snap_macros.h \
-		     snap_qp.h
+		     snap_qp.h \
+		     snap_dpa_common.h
 
 libsnap_la_SOURCES = snap.c \
 		     snap_mr.c \
