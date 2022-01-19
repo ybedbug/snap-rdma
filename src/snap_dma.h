@@ -215,6 +215,7 @@ struct snap_dma_q_io_ctx {
 	struct snap_dma_completion comp;
 	void *uctx;
 	int io_type;
+	int n_bb;
 
 	TAILQ_ENTRY(snap_dma_q_io_ctx) entry;
 };

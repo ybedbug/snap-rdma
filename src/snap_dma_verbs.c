@@ -15,49 +15,157 @@
 
 /* Verbs implementation */
 
-static inline int do_verbs_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
-		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
-		struct snap_dma_completion *comp)
+static inline int do_verbs_dma_xfer(struct snap_dma_q *q,
+			struct ibv_send_wr *wr)
 {
-	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->sw_qp.qp);
-	struct ibv_send_wr rdma_wr, *bad_wr;
-	struct ibv_sge sge;
 	int rc;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->sw_qp.qp);
 
-	sge.addr = (uint64_t)buf;
-	sge.length = len;
-	sge.lkey = lkey;
-
-	rdma_wr.opcode = op;
-	rdma_wr.send_flags = IBV_SEND_SIGNALED | flags;
-	rdma_wr.num_sge = 1;
-	rdma_wr.sg_list = &sge;
-	rdma_wr.wr_id = (uint64_t)comp;
-	rdma_wr.wr.rdma.rkey = rkey;
-	rdma_wr.wr.rdma.remote_addr = raddr;
-	rdma_wr.next = NULL;
-
-	rc = ibv_post_send(qp, &rdma_wr, &bad_wr);
+	rc = ibv_post_send(qp, wr, &bad_wr);
 	if (snap_unlikely(rc))
 		snap_error("DMA queue: %p failed to post opcode 0x%x\n",
-			   q, op);
+			   q, bad_wr->opcode);
 
 	return rc;
 }
 
-static inline int verbs_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
-				    uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
-				    struct snap_dma_completion *comp)
+static void verbs_dma_done(struct snap_dma_completion *comp, int status)
 {
-	return do_verbs_dma_xfer(q, src_buf, len, lkey, dstaddr, rmkey,
+	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_dma_q *q;
+	struct snap_dma_completion *orig_comp;
+
+	io_ctx = container_of(comp, struct snap_dma_q_io_ctx, comp);
+
+	q = io_ctx->q;
+	orig_comp = (struct snap_dma_completion *)io_ctx->uctx;
+
+	q->tx_available += (io_ctx->n_bb - 1);
+	TAILQ_INSERT_HEAD(&q->free_iov_ctx, io_ctx, entry);
+
+	if (orig_comp && --orig_comp->count == 0)
+		orig_comp->func(orig_comp, status);
+}
+
+static struct snap_dma_q_io_ctx*
+verbs_prepare_io_ctx(struct snap_dma_q *q, int n_bb,
+		struct snap_dma_completion *comp)
+{
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	io_ctx = TAILQ_FIRST(&q->free_iov_ctx);
+	if (!io_ctx) {
+		errno = -ENOMEM;
+		snap_error("dma_q:%p Out of iov io_ctx from pool\n", q);
+		return NULL;
+	}
+
+	TAILQ_REMOVE(&q->free_iov_ctx, io_ctx, entry);
+
+	io_ctx->n_bb = n_bb;
+	io_ctx->uctx = comp;
+	io_ctx->comp.func = verbs_dma_done;
+	io_ctx->comp.count = 1;
+
+	return io_ctx;
+}
+
+static inline void verbs_dma_q_prepare_wr(struct ibv_send_wr *wr,
+			int num_wr,	struct ibv_sge **l_sgl, int *num_sge,
+			struct ibv_sge *r_sgl, int op, int flags,
+			struct snap_dma_completion *comp)
+{
+	int i;
+
+	for (i = 0; i < num_wr; i++) {
+		wr[i].opcode = op;
+		wr[i].send_flags = IBV_SEND_SIGNALED | flags;
+		wr[i].num_sge = num_sge[i];
+		wr[i].sg_list = l_sgl[i];
+		wr[i].wr.rdma.rkey = r_sgl[i].lkey;
+		wr[i].wr.rdma.remote_addr = r_sgl[i].addr;
+		if (i < num_wr - 1) {
+			wr[i].wr_id = 0;
+			wr[i].next = &wr[i + 1];
+		} else {
+			wr[i].wr_id = (uint64_t)comp;
+			wr[i].next = NULL;
+		}
+	}
+}
+
+static inline int verbs_dma_q_write(struct snap_dma_q *q,
+				void *src_buf, size_t len, uint32_t lkey,
+				uint64_t dstaddr, uint32_t rmkey,
+				struct snap_dma_completion *comp)
+{
+	int num_sge[1];
+	struct ibv_send_wr wr[1];
+	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+
+	l_sge[0][0].addr = (uint64_t)src_buf;
+	l_sge[0][0].length = len;
+	l_sge[0][0].lkey = lkey;
+
+	l_sgl[0] = l_sge[0];
+	num_sge[0] = 1;
+
+	r_sgl[0].addr = dstaddr;
+	r_sgl[0].length = len;
+	r_sgl[0].lkey = rmkey;
+
+	verbs_dma_q_prepare_wr(wr, 1, l_sgl, num_sge, r_sgl,
 			IBV_WR_RDMA_WRITE, 0, comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static inline int verbs_dma_q_writev(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
-	return -ENOTSUP;
+	int i, num_sge[io_attr->iov_cnt];
+	size_t offset;
+	struct ibv_send_wr wr[io_attr->iov_cnt];
+	struct ibv_sge r_sgl[io_attr->iov_cnt];
+	struct ibv_sge *l_sgl[io_attr->iov_cnt], l_sge[io_attr->iov_cnt][1];
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	/* `iov_cnt` number of wr, each wr will need a WQE
+	 * and each WQE only consume 1 BB
+	 */
+	*n_bb = io_attr->iov_cnt;
+	if (snap_unlikely(!qp_can_tx(q, *n_bb))) {
+		snap_debug("q->tx_available out of use\n");
+		return -EAGAIN;
+	}
+
+	offset = 0;
+	/* `iov_cnt` number of wr, and each wr with a sgl only have 1 sge */
+	for (i = 0; i < io_attr->iov_cnt; i++) {
+		l_sge[i][0].addr = (uint64_t)(io_attr->lbuf + offset);
+		l_sge[i][0].length = io_attr->iov[i].iov_len;
+		l_sge[i][0].lkey = io_attr->lkey;
+
+		l_sgl[i] = l_sge[i];
+		num_sge[i] = 1;
+
+		r_sgl[i].addr = (uint64_t)io_attr->iov[i].iov_base;
+		r_sgl[i].length = io_attr->iov[i].iov_len;
+		r_sgl[i].lkey = io_attr->rkey;
+
+		offset += io_attr->iov[i].iov_len;
+	}
+
+	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
+	if (!io_ctx)
+		return errno;
+
+	verbs_dma_q_prepare_wr(wr, io_attr->iov_cnt, l_sgl, num_sge, r_sgl,
+			IBV_WR_RDMA_WRITE, 0, &io_ctx->comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static inline int verbs_dma_q_writec(struct snap_dma_q *q,
@@ -71,27 +179,101 @@ static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
 					  size_t len, uint64_t dstaddr,
 					  uint32_t rmkey, int *n_bb)
 {
+	int num_sge[1];
+	struct ibv_send_wr wr[1];
+	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+
 	*n_bb = 1;
 	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
 		return -EAGAIN;
 
-	return do_verbs_dma_xfer(q, src_buf, len, 0, dstaddr, rmkey,
-				 IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
+	l_sge[0][0].addr = (uint64_t)src_buf;
+	l_sge[0][0].length = len;
+	l_sge[0][0].lkey = 0;
+
+	l_sgl[0] = l_sge[0];
+	num_sge[0] = 1;
+
+	r_sgl[0].addr = dstaddr;
+	r_sgl[0].length = len;
+	r_sgl[0].lkey = rmkey;
+
+	verbs_dma_q_prepare_wr(wr, 1, l_sgl, num_sge, r_sgl,
+			IBV_WR_RDMA_WRITE, IBV_SEND_INLINE, NULL);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 				   uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 				   struct snap_dma_completion *comp)
 {
-	return do_verbs_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
+	int num_sge[1];
+	struct ibv_send_wr wr[1];
+	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+
+	l_sge[0][0].addr = (uint64_t)dst_buf;
+	l_sge[0][0].length = len;
+	l_sge[0][0].lkey = lkey;
+
+	l_sgl[0] = l_sge[0];
+	num_sge[0] = 1;
+
+	r_sgl[0].addr = srcaddr;
+	r_sgl[0].length = len;
+	r_sgl[0].lkey = rmkey;
+
+	verbs_dma_q_prepare_wr(wr, 1, l_sgl, num_sge, r_sgl,
 			IBV_WR_RDMA_READ, 0, comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static int verbs_dma_q_readv(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
-	return -ENOTSUP;
+	int i, num_sge[io_attr->iov_cnt];
+	size_t offset;
+	struct ibv_send_wr wr[io_attr->iov_cnt];
+	struct ibv_sge r_sgl[io_attr->iov_cnt];
+	struct ibv_sge *l_sgl[io_attr->iov_cnt], l_sge[io_attr->iov_cnt][1];
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	/* `iov_cnt` number of wr, each wr will need a WQE
+	 * and each WQE only consume 1 BB
+	 */
+	*n_bb = io_attr->iov_cnt;
+	if (snap_unlikely(!qp_can_tx(q, *n_bb))) {
+		snap_debug("q->tx_available out of use\n");
+		return -EAGAIN;
+	}
+
+	offset = 0;
+	/* `iov_cnt` number of wr, and each wr with a sgl only have 1 sge */
+	for (i = 0; i < io_attr->iov_cnt; i++) {
+		l_sge[i][0].addr = (uint64_t)(io_attr->lbuf + offset);
+		l_sge[i][0].length = io_attr->iov[i].iov_len;
+		l_sge[i][0].lkey = io_attr->lkey;
+
+		l_sgl[i] = l_sge[i];
+		num_sge[i] = 1;
+
+		r_sgl[i].addr = (uint64_t)io_attr->iov[i].iov_base;
+		r_sgl[i].length = io_attr->iov[i].iov_len;
+		r_sgl[i].lkey = io_attr->rkey;
+
+		offset += io_attr->iov[i].iov_len;
+	}
+
+	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
+	if (!io_ctx)
+		return errno;
+
+	verbs_dma_q_prepare_wr(wr, io_attr->iov_cnt, l_sgl, num_sge, r_sgl,
+			IBV_WR_RDMA_READ, 0, &io_ctx->comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static int verbs_dma_q_readc(struct snap_dma_q *q,
@@ -314,7 +496,7 @@ static int verbs_dma_q_flush(struct snap_dma_q *q)
 	int n;
 
 	n = 0;
-	while (q->tx_available < q->tx_qsize)
+	while (q->tx_available < q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt)
 		n += verbs_dma_q_progress_tx(q);
 
 	return n;
@@ -322,12 +504,29 @@ static int verbs_dma_q_flush(struct snap_dma_q *q)
 
 static int verbs_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp, int *n_bb)
 {
+	int num_sge[1];
+	struct ibv_send_wr wr[1];
+	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+
 	*n_bb = 1;
 	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
 		return -EAGAIN;
 
-	return do_verbs_dma_xfer(q, 0, 0, 0, 0, 0,
+	l_sge[0][0].addr = 0;
+	l_sge[0][0].length = 0;
+	l_sge[0][0].lkey = 0;
+
+	l_sgl[0] = l_sge[0];
+	num_sge[0] = 1;
+
+	r_sgl[0].addr = 0;
+	r_sgl[0].length = 0;
+	r_sgl[0].lkey = 0;
+
+	verbs_dma_q_prepare_wr(wr, 1, l_sgl, num_sge, r_sgl,
 			IBV_WR_RDMA_WRITE, 0, comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static inline int verbs_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
@@ -339,7 +538,7 @@ static inline int verbs_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in
 
 static bool verbs_dma_q_empty(struct snap_dma_q *q)
 {
-	return q->tx_available == q->tx_qsize;
+	return q->tx_available == q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 }
 
 struct snap_dma_q_ops verb_ops = {

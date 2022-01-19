@@ -656,17 +656,6 @@ static void verbs_qp_reset(struct snap_qp *qp)
 	ibv_destroy_qp(qp->verbs_qp);
 }
 
-int verbs_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
-{
-	return -ENOTSUP;
-}
-
-static struct snap_qp_ops verbs_qp_ops = {
-	.init = verbs_qp_init,
-	.init_hw_qp = verbs_qp_to_hw_qp,
-	.reset = verbs_qp_reset
-};
-
 static bool uar_memory_is_nc(struct mlx5dv_qp *dv_qp)
 {
 	/*
@@ -680,7 +669,7 @@ static bool uar_memory_is_nc(struct mlx5dv_qp *dv_qp)
 	return dv_qp->bf.size == 0;
 }
 
-static int dv_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
+static int verbs_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
 {
 	struct mlx5dv_qp dv_qp;
 	struct mlx5dv_obj dv_obj;
@@ -715,9 +704,15 @@ static int dv_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
 	return 0;
 }
 
+static struct snap_qp_ops verbs_qp_ops = {
+	.init = verbs_qp_init,
+	.init_hw_qp = verbs_qp_to_hw_qp,
+	.reset = verbs_qp_reset
+};
+
 static struct snap_qp_ops dv_qp_ops = {
 	.init = verbs_qp_init,
-	.init_hw_qp = dv_qp_to_hw_qp,
+	.init_hw_qp = verbs_qp_to_hw_qp,
 	.reset = verbs_qp_reset
 };
 
