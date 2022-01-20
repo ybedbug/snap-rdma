@@ -336,7 +336,7 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct snap_post_umr_attr *attr,
 		return ret;
 	}
 
-	*n_bb = umr_wqe_n_bb + 1;
+	*n_bb += umr_wqe_n_bb;
 
 	dv_qp->hw_qp.sq.pi += (umr_wqe_n_bb - 1);
 

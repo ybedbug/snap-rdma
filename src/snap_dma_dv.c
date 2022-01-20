@@ -140,6 +140,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 {
 #if !defined(__DPA)
 	int ret;
+	size_t llen, rlen;
 	struct snap_dma_q_io_ctx *io_ctx;
 	struct snap_post_umr_attr umr_attr = {0};
 
@@ -165,11 +166,37 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 	io_ctx->comp.count = 1;
 	io_ctx->io_type = io_attr->io_type;
 
+	if (io_attr->liov_cnt > 1) {
+		/* post UMR WQE for local IOV memory */
+		ret = snap_iov_to_klm_mtt(io_attr->liov, io_attr->liov_cnt,
+					io_attr->lkey, io_ctx->klm_mtt, &llen);
+		if (ret)
+			goto insert_back;
+
+		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
+		umr_attr.klm_mkey = io_ctx->l_klm_mkey;
+		umr_attr.klm_mtt = io_ctx->klm_mtt;
+		umr_attr.klm_entries = io_attr->liov_cnt;
+
+		ret = snap_umr_post_wqe(q, &umr_attr, NULL, n_bb);
+		if (ret) {
+			snap_error("dma_q:%p post umr wqe for local mkey failed, ret:%d\n", q, ret);
+			goto insert_back;
+		}
+	} else {
+		llen = io_attr->liov[0].iov_len;
+	}
+
+	/* post UMR WQE for remote klm mkey */
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_IOV) {
 		ret = snap_iov_to_klm_mtt(io_attr->riov, io_attr->riov_cnt,
-					io_attr->rkey, io_ctx->klm_mtt, &io_attr->len);
-			if (ret)
-				goto insert_back;
+					io_attr->rkey, io_ctx->klm_mtt, &rlen);
+		if (ret)
+			goto insert_back;
+
+		io_attr->len = rlen;
+		if (rlen > llen)
+			snap_error("lIOV(total len:%lu) cannot fit rIOV(total len:%lu)\n", llen, rlen);
 
 		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
 		umr_attr.klm_mkey = io_ctx->r_klm_mkey;
@@ -193,9 +220,11 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 
 	ret = snap_umr_post_wqe(q, &umr_attr, NULL, n_bb);
 	if (ret) {
-		snap_error("dma_q:%p post umr wqe failed, ret:%d\n", q, ret);
+		snap_error("dma_q:%p post umr wqe for remote mkey failed, ret:%d\n", q, ret);
 		goto insert_back;
 	}
+
+	*n_bb += 1; /* +1 for DMA WQE */
 
 	return io_ctx;
 
@@ -216,21 +245,24 @@ int snap_prepare_dma_xfer_ctx(struct snap_dma_q *q,
 				int *n_bb, struct snap_dma_xfer_ctx *dx_ctx)
 {
 	struct snap_dma_q_io_ctx *io_ctx;
-	struct snap_indirect_mkey *klm_mkey;
 
 	io_ctx = snap_prepare_io_ctx(q, io_attr, comp, n_bb);
 	if (!io_ctx)
 		return errno;
 
-	klm_mkey = io_ctx->r_klm_mkey;
+	if (io_attr->liov_cnt == 1) {
+		dx_ctx->lbuf = io_attr->liov[0].iov_base;
+		dx_ctx->lkey = io_attr->lkey[0];
+	} else {
+		dx_ctx->lbuf = (void *)io_ctx->l_klm_mkey->addr;
+		dx_ctx->lkey = io_ctx->l_klm_mkey->mkey;
+	}
 
-	dx_ctx->lbuf = io_attr->liov[0].iov_base;
-	dx_ctx->lkey = io_attr->lkey[0];
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_ENCRYPTO)
 		dx_ctx->raddr = 0; /* use zero based rdma if use bsf enabled mkey */
 	else
-		dx_ctx->raddr = klm_mkey->addr;
-	dx_ctx->rkey = klm_mkey->mkey;
+		dx_ctx->raddr = io_ctx->r_klm_mkey->addr;
+	dx_ctx->rkey = io_ctx->r_klm_mkey->mkey;
 	dx_ctx->len = io_attr->len;
 	dx_ctx->comp = &io_ctx->comp;
 	dx_ctx->use_fence = true;

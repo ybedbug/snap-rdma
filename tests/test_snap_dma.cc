@@ -885,7 +885,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 #define MTT_ENTRIES  5
 	struct snap_indirect_mkey *klm_mkey;
 	struct mlx5_devx_mkey_attr mkey_attr = {};
-	int i, j, n, ret, n_bb;
+	int i, j, n, ret, n_bb = 0;
 	char *lbuf[MTT_ENTRIES], *rbuf;
 	struct ibv_mr *lmr[MTT_ENTRIES], *rmr;
 	struct mlx5_klm *klm_mtt;
@@ -958,7 +958,7 @@ static void post_umr_wqe(struct snap_dma_q *q,
 		ret = snap_umr_post_wqe(q, &umr_attr, NULL, &n_bb);
 		ASSERT_EQ(ret, 0);
 	}
-	q->tx_available -= (n_bb - 1); /* n_bb included the DMA WQE */
+	q->tx_available -= n_bb;
 
 	for (j = 0; j < 2; j++) {
 		comp.func = dma_completion;
@@ -1362,7 +1362,7 @@ static void post_umr_modify_mkey(struct ibv_pd *pd,
 		bool attach_bsf, bool attach_mtt, bool wait_completion)
 {
 #define MTT_ENTRIES  5
-	int i, ret, n, n_bb;
+	int i, ret, n, n_bb = 0;
 	struct snap_dma_q *q;
 	struct snap_indirect_mkey *klm_mkey;
 	struct mlx5_devx_mkey_attr mkey_attr = {};
@@ -1429,6 +1429,7 @@ static void post_umr_modify_mkey(struct ibv_pd *pd,
 		ret = snap_umr_post_wqe(q, &attr, &comp, &n_bb);
 		ASSERT_EQ(ret, 0);
 
+		q->tx_available -= n_bb;
 		n = 0;
 		while (n < 10) {
 			ret = snap_dma_q_progress(q);
