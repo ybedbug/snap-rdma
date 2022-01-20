@@ -1357,6 +1357,18 @@ TEST_F(SnapDmaTest, rdma_iov2v_rw_verbs) {
 	snap_dma_q_rw_iov2v(&m_dma_q_attr, m_pd, m_bsize);
 }
 
+TEST_F(SnapDmaTest, rdma_iov2v_rw_dv) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.iov_enable = true;
+	snap_dma_q_rw_iov2v(&m_dma_q_attr, m_pd, m_bsize);
+}
+
+TEST_F(SnapDmaTest, rdma_iov2v_rw_gga) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_GGA;
+	m_dma_q_attr.iov_enable = true;
+	snap_dma_q_rw_iov2v(&m_dma_q_attr, m_pd, m_bsize);
+}
+
 static void post_umr_modify_mkey(struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *dma_q_attr,
 		bool attach_bsf, bool attach_mtt, bool wait_completion)
