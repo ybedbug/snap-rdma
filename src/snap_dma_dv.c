@@ -286,6 +286,13 @@ static int dv_dma_q_writev(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
+static int dv_dma_q_writev2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return dv_dma_q_writev(q, io_attr, comp, n_bb);
+}
+
 static int dv_dma_q_writec(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
@@ -316,6 +323,13 @@ static int dv_dma_q_readv(struct snap_dma_q *q,
 	return do_dv_dma_xfer(q, dx_ctx.lbuf, dx_ctx.len, dx_ctx.lkey,
 			dx_ctx.raddr, dx_ctx.rkey, MLX5_OPCODE_RDMA_READ, 0,
 			dx_ctx.comp, dx_ctx.use_fence);
+}
+
+static int dv_dma_q_readv2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return dv_dma_q_readv(q, io_attr, comp, n_bb);
 }
 
 static int dv_dma_q_readc(struct snap_dma_q *q,
@@ -831,10 +845,12 @@ static bool dv_dma_q_empty(struct snap_dma_q *q)
 struct snap_dma_q_ops dv_ops = {
 	.write           = dv_dma_q_write,
 	.writev          = dv_dma_q_writev,
+	.writev2v        = dv_dma_q_writev2v,
 	.writec          = dv_dma_q_writec,
 	.write_short     = dv_dma_q_write_short,
 	.read            = dv_dma_q_read,
 	.readv           = dv_dma_q_readv,
+	.readv2v         = dv_dma_q_readv2v,
 	.readc           = dv_dma_q_readc,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,
@@ -934,6 +950,13 @@ static int gga_dma_q_writev(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
+static int gga_dma_q_writev2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return gga_dma_q_writev(q, io_attr, comp, n_bb);
+}
+
 static int gga_dma_q_writec(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
@@ -957,6 +980,14 @@ static int gga_dma_q_readv(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
+
+static int gga_dma_q_readv2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	return gga_dma_q_readv(q, io_attr, comp, n_bb);
+}
+
 static int gga_dma_q_readc(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
@@ -967,10 +998,12 @@ static int gga_dma_q_readc(struct snap_dma_q *q,
 struct snap_dma_q_ops gga_ops = {
 	.write           = gga_dma_q_write,
 	.writev          = gga_dma_q_writev,
+	.writev2v        = gga_dma_q_writev2v,
 	.writec          = gga_dma_q_writec,
 	.write_short     = dv_dma_q_write_short,
 	.read            = gga_dma_q_read,
 	.readv           = gga_dma_q_readv,
+	.readv2v         = gga_dma_q_readv2v,
 	.readc           = gga_dma_q_readc,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,
