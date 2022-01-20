@@ -28,14 +28,14 @@ env:
   CCACHE_TEMPDIR: '/tmp'
 
 runs_on_dockers:
-  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed54', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed54', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed54', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed54', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed54', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed54', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed54', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed54', arch: 'aarch64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed55', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.centos8.3.2011', name: 'centos83ofed55', arch: 'aarch64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed55', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed55', arch: 'aarch64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed55', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed55', arch: 'aarch64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed55', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed55', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.euleros2sp8aarch64', name: 'euleros2sp8', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.euleros2sp9x86', name: 'euleros2sp9', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.centos8.3.2011', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: 'latest'}
@@ -50,9 +50,9 @@ steps:
   - name: Upload distro package
     credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d'
     containerSelector:
-      - "{name: 'centos83ofed54', variant:1}"
-      - "{name: 'ubuntu2004ofed54', variant:1}"
-      - "{name: 'centos79ofed54', variant:1}"
+      - "{name: 'centos83ofed55', variant:1}"
+      - "{name: 'ubuntu2004ofed55', variant:1}"
+      - "{name: 'centos79ofed55', variant:1}"
       - "{name: 'euleros2sp8', variant:1}"
       - "{name: 'euleros2sp9', variant:1}"
     run: |
