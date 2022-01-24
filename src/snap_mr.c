@@ -383,10 +383,8 @@ struct snap_uar *snap_uar_get(struct ibv_context *ctx)
 	}
 
 	if (uar->refcnt > 0) {
-		uar->refcnt++;
-		if (uar->refcnt == 0) {
+		if (snap_ref_safe(&uar->refcnt)) {
 			snap_error("%s: uar refcnt overflow\n", snap_uar_name(uar));
-			uar->refcnt = INT_MAX;
 			goto uar_ref_fail;
 		}
 		snap_debug("%s: uar ref: %d\n", snap_uar_name(uar), uar->refcnt);

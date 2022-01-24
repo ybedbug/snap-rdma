@@ -12,6 +12,8 @@
 
 #ifndef _SNAP_MACROS_H_
 #define _SNAP_MACROS_H_
+
+#include <limits.h>
 #include <assert.h>
 
 #ifndef SNAP_DEBUG
@@ -83,4 +85,14 @@
 #define assert_debug(_expr)
 #endif
 
+static inline int snap_ref_safe(int *refcnt)
+{
+	*refcnt = *refcnt + 1;
+
+	if (*refcnt == 0) {
+		*refcnt = INT_MAX;
+		return -1;
+	}
+	return 0;
+}
 #endif
