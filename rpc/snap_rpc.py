@@ -837,6 +837,82 @@ def main():
                               help='Get debug statistics from memory pool')
     p.set_defaults(func=mempool_get_debugstat)
 
+    def controller_nvme_async_event_disable(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.ctrl is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.ctrl is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
+        params = {
+        }
+        if args.ctrl:
+            params['ctrl'] = args.ctrl
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
+        if args.event_bit != -1:
+            params['event_bit'] = args.event_bit
+        result = args.client.call('controller_nvme_async_event_disable', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('controller_nvme_async_event_disable',
+                              help='Disable Async event on NVMe controller')
+    p.add_argument('-c', '--ctrl', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--ctrl\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--ctrl\' is not set',
+                   default=-1, type=int, required=False)
+    p.add_argument('-e', '--event_bit', help='''Event to disable, given by event bit.'''
+                   '''Regarding to what event use which bit, please refer the documentation'''
+                   '''to "Figure 291: Asynchronous Event Configuration – Command Dword 11" in the nvme specification''',
+                   default=-1, type=int, required=False)
+    p.set_defaults(func=controller_nvme_async_event_disable)
+
+    def controller_nvme_async_event_enable(args):
+        if args.subnqn is None and args.cntlid != -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.subnqn is not None and args.cntlid == -1:
+            raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
+                                       " or neither of them should be configured");
+        if args.ctrl is None and args.cntlid == -1:
+            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
+        if args.ctrl is not None and args.cntlid != -1:
+            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
+        params = {
+        }
+        if args.ctrl:
+            params['ctrl'] = args.ctrl
+        if args.subnqn:
+            params['subnqn'] = args.subnqn
+        if args.cntlid != -1:
+            params['cntlid'] = args.cntlid
+        if args.event_bit != -1:
+            params['event_bit'] = args.event_bit
+        result = args.client.call('controller_nvme_async_event_enable', params)
+        print(json.dumps(result, indent=2))
+    p = subparsers.add_parser('controller_nvme_async_event_enable',
+                              help='Enable Async event on NVMe controller')
+    p.add_argument('-c', '--ctrl', help='Controller Name. Must be set if \'--nqn\' '
+                   'and \'--cntlid\' are not set', type=str, required=False)
+    p.add_argument('-n', '--subnqn', help='NVMe subsystem nqn.'
+                   ' Must be set if \'--ctrl\' is not set', type=str, required=False)
+    p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
+                   ' Must be set if \'--ctrl\' is not set',
+                   default=-1, type=int, required=False)
+    p.add_argument('-e', '--event_bit', help='''Event to enable, given by event bit.'''
+                   '''Regarding to what event use which bit, please refer the documentation'''
+                   '''to "Figure 291: Asynchronous Event Configuration – Command Dword 11" in the nvme specification''',
+                   default=-1, type=int, required=False)
+    p.set_defaults(func=controller_nvme_async_event_enable)
+
     def call_rpc_func(args):
         args.func(args)
 
