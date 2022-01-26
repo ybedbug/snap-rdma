@@ -14,6 +14,7 @@
 #include "snap_queue.h"
 #include "snap_channel.h"
 #include "snap_virtio_common.h"
+#include "snap_vq_adm.h"
 
 /*
  * Driver may choose to reset device for numerous reasons:
@@ -62,14 +63,14 @@ snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl)
 static const char *lm_state2str(enum snap_virtio_ctrl_lm_state state)
 {
 	switch (state) {
+	case SNAP_VIRTIO_CTRL_LM_INIT:
+		return "LM_INIT";
 	case SNAP_VIRTIO_CTRL_LM_RUNNING:
 		return "LM_RUNNING";
 	case SNAP_VIRTIO_CTRL_LM_QUIESCED:
 		return "LM_QUISCED";
 	case SNAP_VIRTIO_CTRL_LM_FREEZED:
 		return "LM_FREEZED";
-	case SNAP_VIRTIO_CTRL_LM_INIT:
-		return "LM_INIT";
 	}
 
 	return "LM_UNKNOWN";
@@ -538,6 +539,9 @@ vq_cleanup:
 			snap_virtio_ctrl_queue_destroy(ctrl->queues[j]);
 
 out:
+	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
+		snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
+
 	return ret;
 }
 
@@ -764,6 +768,19 @@ static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
 	return 0;
 }
 
+static void snap_virtio_ctrl_quiesce_adm_done(struct snap_virtio_ctrl *ctrl)
+{
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
+	snap_info("%p: queisce: new state %s\n", ctrl,
+		   lm_state2str(ctrl->lm_state));
+	ctrl->is_quiesce = false;
+
+	/* Complete modify internal state to quiesce command */
+	snap_vaq_cmd_complete(ctrl->quiesce_cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+	ctrl->quiesce_cmd = NULL;
+}
+
+
 static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
 {
 	int i;
@@ -788,6 +805,10 @@ static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
 			snap_error("virtio controlelr pending reset failed\n");
 		ctrl->pending_reset = false;
 	}
+
+	/* For live migration - finish ongoing quiesce command */
+	if (ctrl->is_quiesce)
+		snap_virtio_ctrl_quiesce_adm_done(ctrl);
 }
 
 /**
@@ -1408,6 +1429,48 @@ int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
 	return ret;
 }
 
+int snap_virtio_ctrl_quiesce_adm(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int ret = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+
+	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_RUNNING) {
+		ret = -EINVAL;
+		goto err;
+	}
+
+	if (snap_virtio_ctrl_is_stopped(ctrl))
+		goto done;
+
+	ret = snap_virtio_ctrl_suspend(ctrl);
+	if (ret)
+		goto err;
+
+	/*
+	 * Mark ctrl as in process of quiesce,
+	 * checked in snap_virtio_ctrl_progress_suspend()
+	 */
+	ctrl->is_quiesce = true;
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	return 0;
+done:
+	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
+err:
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: queisce: new state %s ret %d\n", ctrl,
+		  lm_state2str(ctrl->lm_state), ret);
+
+	/* Complete modify internal state to quiesce command */
+	if (ret)
+		snap_vaq_cmd_complete(ctrl->quiesce_cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+	else
+		snap_vaq_cmd_complete(ctrl->quiesce_cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+	ctrl->quiesce_cmd = NULL;
+	return ret;
+}
+
 static int snap_virtio_ctrl_quiesce(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
@@ -1442,7 +1505,7 @@ err:
 	return ret;
 }
 
-static int snap_virtio_ctrl_unquiesce(void *data)
+int snap_virtio_ctrl_unquiesce(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 	int ret = 0;
@@ -1466,7 +1529,7 @@ err:
 	return ret;
 }
 
-static int snap_virtio_ctrl_freeze(void *data)
+int snap_virtio_ctrl_freeze(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 	int ret = 0;
@@ -1485,7 +1548,7 @@ err:
 	return ret;
 }
 
-static int snap_virtio_ctrl_unfreeze(void *data)
+int snap_virtio_ctrl_unfreeze(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 	int ret = 0;
@@ -1504,7 +1567,7 @@ err:
 	return ret;
 }
 
-static int snap_virtio_ctrl_get_state_size(void *data)
+int snap_virtio_ctrl_get_state_size(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 	size_t dev_cfg_len, queue_cfg_len, common_cfg_len, len;
@@ -1580,7 +1643,7 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	return bdf;
 }
 
-static enum snap_virtio_ctrl_lm_state snap_virtio_ctrl_get_lm_state(void *data)
+enum snap_virtio_ctrl_lm_state snap_virtio_ctrl_get_lm_state(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 	enum snap_virtio_ctrl_lm_state lm_state;

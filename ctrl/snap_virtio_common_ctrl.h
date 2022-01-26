@@ -233,6 +233,8 @@ struct snap_virtio_ctrl {
 	struct snap_device_attr sdev_attr;
 	int lm_state;
 	struct snap_cross_mkey *xmkey;
+	bool is_quiesce;
+	struct snap_vq_cmd *quiesce_cmd;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
@@ -347,11 +349,11 @@ struct snap_virtio_ctrl_queue_state {
  * The enum define live migration state.
  */
 enum snap_virtio_ctrl_lm_state {
-	SNAP_VIRTIO_CTRL_LM_NORMAL,
+	SNAP_VIRTIO_CTRL_LM_INIT,
+	SNAP_VIRTIO_CTRL_LM_NORMAL, // Keep for anyone using snap_channel
 	SNAP_VIRTIO_CTRL_LM_RUNNING = SNAP_VIRTIO_CTRL_LM_NORMAL,
 	SNAP_VIRTIO_CTRL_LM_QUIESCED,
 	SNAP_VIRTIO_CTRL_LM_FREEZED,
-	SNAP_VIRTIO_CTRL_LM_INIT,
 };
 
 int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
@@ -373,6 +375,13 @@ snap_virtio_ctrl_q_io_stats(struct snap_virtio_ctrl *ctrl, uint16_t q_idx);
 
 int snap_virtio_ctrl_hotunplug(struct snap_virtio_ctrl *ctrl);
 
+
+int snap_virtio_ctrl_quiesce_adm(void *data);
+int snap_virtio_ctrl_freeze(void *data);
+int snap_virtio_ctrl_unquiesce(void *data);
+int snap_virtio_ctrl_unfreeze(void *data);
+int snap_virtio_ctrl_get_state_size(void *data);
+enum snap_virtio_ctrl_lm_state snap_virtio_ctrl_get_lm_state(void *data);
 /**
  * snap_virtio_ctrl_set_lm_state() - Set the live migtration state
  * @ctrl: virtio controller
