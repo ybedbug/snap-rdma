@@ -43,6 +43,7 @@ struct snap_virtio_blk_ctrl_queue {
 	const struct snap_virtio_common_queue_attr	*attr;
 	void *q_impl;
 	bool in_error;
+	bool is_adm_vq;
 };
 
 struct snap_virtio_blk_ctrl_attr {
@@ -59,6 +60,9 @@ struct snap_virtio_blk_ctrl {
 	bool pending_bdev_detach;
 	void (*bdev_detach_cb)(void *arg);
 	void *bdev_detach_cb_arg;
+	struct snap_virtio_blk_ctrl **vfs_ctrl;
+	uint8_t *lm_buf;
+	bool has_adm_vq;
 };
 
 struct snap_virtio_blk_ctrl *

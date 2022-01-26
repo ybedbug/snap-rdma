@@ -15,13 +15,16 @@
 #include <linux/virtio_blk.h>
 #include <linux/virtio_config.h>
 #include <sys/mman.h>
-
+#include "snap_vq_adm.h"
+#include "snap_buf.h"
 
 #define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
 					 (1ULL << VIRTIO_BLK_F_MQ) |\
 					 (1ULL << VIRTIO_BLK_F_SIZE_MAX) |\
 					 (1ULL << VIRTIO_BLK_F_SEG_MAX) |\
-					 (1ULL << VIRTIO_BLK_F_BLK_SIZE))
+					 (1ULL << VIRTIO_BLK_F_BLK_SIZE)|\
+					 (1ULL << VIRTIO_F_ADMIN_VQ)|\
+					 (1ULL << VIRTIO_F_ADMIN_MIGRATION))
 
 static inline struct snap_virtio_blk_ctrl_queue*
 to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
@@ -358,6 +361,10 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 			regs->max_queues = bar.vattr.max_queues;
 	}
 
+	/* If we set admin queue feature make sure we create at least 1 io queue as well */
+	if (regs->device_features & 1ULL << VIRTIO_F_ADMIN_VQ && regs->max_queues == 1)
+		regs->max_queues++;
+
 	if (!snap_virtio_blk_ctrl_bar_setup_valid(ctrl, &bar, regs)) {
 		snap_error("Setup is not valid\n");
 		return -EINVAL;
@@ -421,7 +428,7 @@ snap_virtio_blk_ctrl_count_error(struct snap_virtio_blk_ctrl *ctrl)
 	struct snap_virtio_common_queue_attr *attr;
 	struct snap_virtio_queue_attr *vattr;
 
-	for (i = 0; i < ctrl->common.max_queues; i++) {
+	for (i = ctrl->has_adm_vq; i < ctrl->common.max_queues; i++) {
 		vq = ctrl->common.queues[i];
 		if (!vq)
 			continue;
@@ -461,7 +468,7 @@ snap_virtio_blk_ctrl_global_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	struct snap_virtio_queue_counters_attr vqc_attr = {};
 
 	vbdev = ctrl->common.sdev->dd_data;
-	for (i = 0; i < vbdev->num_queues; i++) {
+	for (i = ctrl->has_adm_vq; i < vbdev->num_queues; i++) {
 		virtq = &vbdev->virtqs[i];
 
 		ret = snap_virtio_query_queue_counters(virtq->virtq.ctrs_obj, &vqc_attr);
@@ -514,7 +521,7 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	if (ret)
 		goto out;
 
-	for (i = 0; i < ctrl->common.max_queues; i++) {
+	for (i = ctrl->has_adm_vq; i < ctrl->common.max_queues; i++) {
 		struct snap_virtio_ctrl_queue *vq = ctrl->common.queues[i];
 
 		if (!vq)
@@ -530,6 +537,315 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 
 out:
 	return ret;
+}
+
+static struct snap_virtio_ctrl*
+snap_virtio_blk_ctrl_get_vf(struct snap_virtio_ctrl *vctrl, struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_blk_ctrl *pf_ctrl = to_blk_ctrl(vctrl);
+	struct snap_virtio_blk_ctrl *vf_ctrl;
+	int vdev_id;
+
+	/* vdev_id as given in cmd_in starts count with 1 */
+	vdev_id = snap_vaq_cmd_layout_get(cmd)->in.vdev_id - 1;
+	if (vdev_id < 0)
+		return NULL;
+
+	if (pf_ctrl->common.sdev->pci->num_vfs > vdev_id && pf_ctrl->vfs_ctrl) {
+		vf_ctrl =  pf_ctrl->vfs_ctrl[vdev_id];
+		if (vf_ctrl) {
+			snap_debug("Got adm cmd to run on VF %s\n",
+				   vf_ctrl->common.sdev->pci->pci_number);
+			return &vf_ctrl->common;
+		}
+	}
+	return NULL;
+}
+
+static void snap_virtio_blk_ctrl_lm_status_get(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *ctrl;
+	struct snap_vq_adm_get_status_result *res;
+
+	res = &snap_vaq_cmd_layout_get(cmd)->out.get_status_res;
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	res->internal_status = snap_virtio_ctrl_get_lm_state(ctrl);
+	snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
+static void snap_virtio_blk_ctrl_lm_status_modify(struct snap_virtio_ctrl *vctrl, struct snap_vq_cmd *cmd)
+{
+	struct snap_vq_adm_modify_status_data data;
+	enum snap_virtio_ctrl_lm_state cur_status, new_status;
+	struct snap_virtio_ctrl *ctrl;
+	int ret = -1;
+
+	data = snap_vaq_cmd_layout_get(cmd)->in.modify_status_data;
+	new_status = data.internal_status;
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	cur_status =  snap_virtio_ctrl_get_lm_state(ctrl);
+	switch (new_status) {
+	case SNAP_VIRTIO_CTRL_LM_QUIESCED:
+		if (cur_status == SNAP_VIRTIO_CTRL_LM_FREEZED)
+			ret = snap_virtio_ctrl_unfreeze(ctrl);
+		else {
+			/*
+			 * snap_vaq_cmd_complete will be called from
+			 * snap_virtio_ctrl_adm_quiesce_done after ctrl moved to
+			 * SUSPENDED state, or from snap_virtio_ctrl_adm_quiesce.
+			 */
+			ctrl->quiesce_cmd = cmd;
+			snap_virtio_ctrl_quiesce_adm(ctrl);
+			return;
+		}
+		break;
+	case SNAP_VIRTIO_CTRL_LM_FREEZED:
+		ret = snap_virtio_ctrl_freeze(ctrl);
+		break;
+	case SNAP_VIRTIO_CTRL_LM_RUNNING:
+		ret = snap_virtio_ctrl_unquiesce(ctrl);
+	default:
+		break;
+	}
+
+	if (ret)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	else
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
+static void snap_virtio_blk_ctrl_lm_pending_bytes_get(struct snap_virtio_ctrl *vctrl,
+					struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *ctrl;
+	struct snap_vq_adm_get_pending_bytes_result *res;
+
+	res = &snap_vaq_cmd_layout_get(cmd)->out.pending_bytes_res;
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	res->pending_bytes = snap_virtio_ctrl_get_state_size(ctrl);
+	if (res->pending_bytes < 0)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	else
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
+static void snap_virtio_blk_ctrl_lm_state_save_cb(struct snap_vq_cmd *vcmd,
+				  enum ibv_wc_status status)
+{
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+
+	if (snap_unlikely(status != IBV_WC_SUCCESS))
+		return snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+
+	blk_ctrl = to_blk_ctrl(snap_vaq_cmd_ctrl_get(vcmd));
+	if (blk_ctrl->lm_buf) {
+		snap_buf_free(blk_ctrl->lm_buf);
+		blk_ctrl->lm_buf = NULL;
+	}
+
+	snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
+static void snap_virtio_blk_ctrl_lm_state_restore_cb(struct snap_vq_cmd *vcmd,
+						  enum ibv_wc_status status)
+{
+	struct snap_virtio_ctrl *vf_ctrl;
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+	struct snap_vq_adm_restore_state_data data;
+	int ret;
+
+	if (status != IBV_WC_SUCCESS) {
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DATA_TRANSFER_ERR);
+		return;
+	}
+
+	vf_ctrl = snap_virtio_blk_ctrl_get_vf(snap_vaq_cmd_ctrl_get(vcmd), vcmd);
+	if (!vf_ctrl) {
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	data = snap_vaq_cmd_layout_get(vcmd)->in.restore_state_data;
+	blk_ctrl = to_blk_ctrl(snap_vaq_cmd_ctrl_get(vcmd));
+	ret = snap_virtio_ctrl_state_restore(vf_ctrl, blk_ctrl->lm_buf, data.length);
+	if (ret >= 0)
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_OK);
+	else
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+
+	if (blk_ctrl->lm_buf) {
+		snap_buf_free(blk_ctrl->lm_buf);
+		blk_ctrl->lm_buf = NULL;
+	}
+}
+
+
+static void snap_virtio_blk_ctrl_lm_state_save(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *vf_vctrl;
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+	struct snap_vq_adm_save_state_data data;
+	int ret;
+
+	vf_vctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!vf_vctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	data = snap_vaq_cmd_layout_get(cmd)->in.save_state_data;
+	blk_ctrl = to_blk_ctrl(vctrl);
+	blk_ctrl->lm_buf = snap_buf_alloc(vctrl->lb_pd, data.length * sizeof(uint8_t));
+	if (!blk_ctrl->lm_buf) {
+		snap_error("Failed allocating data buf for save internal state.\n");
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	}
+	ret = snap_virtio_ctrl_state_save(vf_vctrl, blk_ctrl->lm_buf, data.length);
+	if (ret < 0) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+	ret = snap_vaq_cmd_layout_data_write(cmd, data.length, blk_ctrl->lm_buf,
+				  snap_buf_get_mkey(blk_ctrl->lm_buf),
+				snap_virtio_blk_ctrl_lm_state_save_cb);
+	if (ret)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+
+}
+
+static void snap_virtio_blk_ctrl_lm_state_restore(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	struct snap_vq_adm_restore_state_data data;
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+	size_t offset;
+	int ret;
+
+	data = snap_vaq_cmd_layout_get(cmd)->in.restore_state_data;
+	blk_ctrl = to_blk_ctrl(vctrl);
+
+	blk_ctrl->lm_buf = snap_buf_alloc(vctrl->lb_pd, data.length * sizeof(uint8_t));
+	if (!blk_ctrl->lm_buf) {
+		snap_error("Failed allocating data buf for restore internal state.\n");
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	}
+
+	offset = sizeof(struct snap_virtio_adm_cmd_hdr) +
+		sizeof(struct snap_vq_adm_restore_state_data);
+
+	ret = snap_vaq_cmd_layout_data_read(cmd, data.length, blk_ctrl->lm_buf,
+			snap_buf_get_mkey(blk_ctrl->lm_buf),
+			snap_virtio_blk_ctrl_lm_state_restore_cb, offset);
+	if (ret)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+}
+
+static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
+					struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_adm_cmd_hdr hdr = snap_vaq_cmd_layout_get(cmd)->hdr;
+
+	snap_debug("Proceessing adm cmd class %d cmd %d\n", hdr.class, hdr.command);
+	switch (hdr.class) {
+	case SNAP_VQ_ADM_MIG_CTRL:
+		switch (hdr.command) {
+		case SNAP_VQ_ADM_MIG_GET_STATUS:
+			snap_virtio_blk_ctrl_lm_status_get(vctrl, cmd);
+			break;
+		case SNAP_VQ_ADM_MIG_MODIFY_STATUS:
+			snap_virtio_blk_ctrl_lm_status_modify(vctrl, cmd);
+			break;
+		case SNAP_VQ_ADM_MIG_GET_STATE_PENDING_BYTES:
+			snap_virtio_blk_ctrl_lm_pending_bytes_get(vctrl, cmd);
+			break;
+		case SNAP_VQ_ADM_MIG_SAVE_STATE:
+			snap_virtio_blk_ctrl_lm_state_save(vctrl, cmd);
+			break;
+		case SNAP_VQ_ADM_MIG_RESTORE_STATE:
+			snap_virtio_blk_ctrl_lm_state_restore(vctrl, cmd);
+			break;
+		default:
+			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.class);
+			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_COMMAND);
+			break;
+		}
+		break;
+	case SNAP_VQ_ADM_DP_TRACK_CTRL:
+		switch (hdr.command) {
+		case SNAP_VQ_ADM_DP_IDENTITY:
+		case SNAP_VQ_ADM_DP_START_TRACK:
+		case SNAP_VQ_ADM_DP_STOP_TRACK:
+		case SNAP_VQ_ADM_DP_GET_MAP_PENDING_BYTES:
+		case SNAP_VQ_ADM_DP_REPORT_MAP:
+		default:
+			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.class);
+			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_COMMAND);
+			break;
+		}
+		break;
+	default:
+		snap_error("Invalid admin cmd class %d\n", hdr.class);
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_CLASS);
+		break;
+	}
+}
+
+static int blk_adm_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
+				   struct snap_virtio_ctrl *vctrl, int index)
+{
+	struct snap_vq_adm_create_attr attr = {};
+	struct snap_virtio_blk_device_attr *dev_attr;
+	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(vctrl);
+
+	dev_attr = to_blk_device_attr(vctrl->bar_curr);
+	vbq->attr = &dev_attr->q_attrs[index];
+	vbq->common.ctrl = vctrl;
+	vbq->common.index = index;
+
+	attr.common.index = index;
+	attr.common.size = vbq->attr->vattr.size;
+	attr.common.desc_pa = vbq->attr->vattr.desc;
+	attr.common.driver_pa = vbq->attr->vattr.driver;
+	attr.common.device_pa = vbq->attr->vattr.device;
+	attr.common.hw_avail_index = vbq->attr->hw_available_index;
+	attr.common.hw_used_index = vbq->attr->hw_used_index;
+	attr.common.msix_vector = vbq->attr->vattr.msix_vector;
+	attr.common.op_flags = SNAP_VQ_OP_FLAGS_IN_ORDER_COMPLETIONS;
+	attr.common.xmkey = vctrl->xmkey->mkey;
+	attr.common.pd = vctrl->lb_pd;
+	attr.common.sdev = vctrl->sdev;
+	attr.common.caps = &vctrl->sdev->sctx->virtio_blk_caps;
+	attr.common.vctrl = vctrl;
+
+	attr.adm_process_fn = snap_virtio_blk_adm_cmd_process;
+
+	vbq->q_impl = snap_vq_adm_create(&attr);
+	if (!vbq->q_impl) {
+		snap_error("Controller failed to create admin virtq\n");
+		return -EINVAL;
+	}
+
+	vbq->is_adm_vq = true;
+	blk_ctrl->has_adm_vq = true;
+
+	return 0;
 }
 
 static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
@@ -587,11 +903,18 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 	if (vctrl->state == SNAP_VIRTIO_CTRL_SUSPENDED)
 		return &vbq->common;
 
-	if (blk_virtq_create_helper(vbq, vctrl, index)) {
-		free(vbq);
-		return NULL;
+	if (index == 0 && vctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
+	    vctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ)) {
+		if (blk_adm_virtq_create_helper(vbq, vctrl, index)) {
+			free(vbq);
+			return NULL;
+		}
+	} else {
+		if (blk_virtq_create_helper(vbq, vctrl, index)) {
+			free(vbq);
+			return NULL;
+		}
 	}
-
 	return &vbq->common;
 }
 
@@ -611,9 +934,12 @@ static void snap_virtio_blk_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq
 	struct snap_virtio_blk_device_attr *dev_attr;
 
 	/* in the case of resume failure vbq->q_impl may be NULL */
-	if (vbq->q_impl)
-		blk_virtq_destroy(vbq->q_impl);
-
+	if (vbq->q_impl) {
+		if (vbq->is_adm_vq)
+			snap_vq_adm_destroy(vbq->q_impl);
+		else
+			blk_virtq_destroy(vbq->q_impl);
+	}
 	/* make sure that next time the queue is created with
 	 * the default hw_avail and used values
 	 */
@@ -627,18 +953,36 @@ static void snap_virtio_blk_ctrl_queue_suspend(struct snap_virtio_ctrl_queue *vq
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	virtq_suspend(&to_blk_ctx(vbq->q_impl)->common_ctx);
+	if (!vbq->is_adm_vq) {
+		virtq_suspend(&to_blk_ctx(vbq->q_impl)->common_ctx);
+		return;
+	}
+	if (snap_unlikely(!vbq->q_impl))
+		return;
+
+	snap_vq_suspend(vbq->q_impl);
+	snap_info("ctrl %p qid %d is FLUSHING\n", vq->ctrl, vq->index);
 }
 
 static bool snap_virtio_blk_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
+	bool suspended;
 
-	if (!virtq_is_suspended(&to_blk_ctx(vbq->q_impl)->common_ctx))
-		return false;
+	if (!vbq->is_adm_vq) {
+		if (!virtq_is_suspended(&to_blk_ctx(vbq->q_impl)->common_ctx))
+			return false;
 
-	snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
-	return true;
+		snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
+		return true;
+	}
+
+	if (snap_unlikely(!vbq->q_impl))
+		return true;
+	suspended = snap_vq_is_suspended(vbq->q_impl);
+	if (suspended)
+		snap_info("ctrl %p qid %d is SUSPENDED\n", vq->ctrl, vq->index);
+	return suspended;
 }
 
 static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
@@ -649,10 +993,18 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	struct snap_virtio_blk_device_attr *dev_attr;
 	struct snap_virtio_ctrl *ctrl;
 
+	if (vbq->is_adm_vq) {
+		if (snap_unlikely(!vbq->q_impl))
+			return 0;
+
+		snap_vq_resume(vbq->q_impl);
+		snap_info("ctrl %p qid %d is RESUMED\n", vq->ctrl, vq->index);
+		return 0;
+	}
+
 	index = vq->index;
 	ctrl = vq->ctrl;
 	dev_attr = to_blk_device_attr(ctrl->bar_curr);
-
 	/* if q_impl is NULL it means that we are resuming after
 	 * the state restore
 	 */
@@ -673,7 +1025,13 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 		dev_attr->q_attrs[index].hw_used_index = state.hw_used_index;
 	}
 
-	ret = blk_virtq_create_helper(vbq, ctrl, index);
+	// The check here is only for when is_adm_vq isnt set because we are before the vq create-
+	// this should use the new blk vq implementation when its added.
+	if (index == 0 && ctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
+		ctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ))
+		ret = blk_adm_virtq_create_helper(vbq, ctrl, index);
+	else
+		ret = blk_virtq_create_helper(vbq, ctrl, index);
 	if (ret)
 		return ret;
 
@@ -689,13 +1047,20 @@ static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *v
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 	struct virtq_common_ctx *q = &to_blk_ctx(vbq->q_impl)->common_ctx;
 
-	virtq_progress(q, vq->thread_id);
+	if (vbq->is_adm_vq) {
+		if (snap_likely(vbq->q_impl))
+			snap_vq_progress(vbq->q_impl);
+	} else
+		virtq_progress(q, vq->thread_id);
 }
 
 static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 	struct virtq_start_attr attr = {};
+
+	if (vbq->is_adm_vq)
+		return;
 
 	attr.pg_id = vq->pg->id;
 	virtq_start(&to_blk_ctx(vbq->q_impl)->common_ctx, &attr);
@@ -706,7 +1071,9 @@ static int snap_virtio_blk_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *v
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	return blk_virtq_get_state(vbq->q_impl, state);
+	if (!vbq->is_adm_vq)
+		return blk_virtq_get_state(vbq->q_impl, state);
+	return 0;
 }
 
 const struct snap_virtio_ctrl_queue_stats *
@@ -714,7 +1081,9 @@ snap_virtio_blk_ctrl_queue_get_io_stats(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	return blk_virtq_get_io_stats(vbq->q_impl);
+	if (!vbq->is_adm_vq)
+		return blk_virtq_get_io_stats(vbq->q_impl);
+	return NULL;
 }
 
 static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
@@ -806,7 +1175,7 @@ snap_virtio_blk_ctrl_open(struct snap_context *sctx,
 
 	if (attr->common.pci_type == SNAP_VIRTIO_BLK_VF &&
 	    (attr->common.vf_id < 0 ||
-	     attr->common.vf_id >= sctx->virtio_blk_pfs.pfs[attr->common.pf_id].num_vfs)) {
+	    attr->common.vf_id >= sctx->virtio_blk_pfs.pfs[attr->common.pf_id].num_vfs)) {
 		snap_error("Bad VF id (%d). Only %d VFs are supported for PF %d\n",
 			   attr->common.vf_id,
 			   sctx->virtio_blk_pfs.pfs[attr->common.pf_id].num_vfs,

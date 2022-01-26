@@ -10,6 +10,8 @@
  * provided with the software product.
  */
 
+#define _ISOC11_SOURCE //For aligned_alloc
+
 #include <stdlib.h>
 #include "snap_vq_adm.h"
 #include "snap_vq_internal.h"
