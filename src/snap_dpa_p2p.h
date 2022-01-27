@@ -129,22 +129,6 @@ struct snap_dpa_p2p_q {
 	uint64_t q_size;
 };
 
-/**
- * struct dpa_queue - DPA side queue
- * @q:           p2p protocol queue
- * @descs_table: descriptor table on snap side
- * @descs_key:   descriptor table key
- * @driver_addr: host side vring address
- * @driver_key:  host side vring key
- */
-struct dpa_queue {
-	struct snap_dpa_p2p_q q;
-	uint64_t descs_table;
-	uint32_t descs_key;
-	uint64_t driver_addr;
-	uint32_t driver_key;
-};
-
 int snap_dpa_p2p_send_msg(struct snap_dpa_p2p_q *q,
 		struct snap_dpa_p2p_msg *msg);
 

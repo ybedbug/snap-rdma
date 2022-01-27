@@ -11,96 +11,75 @@
  */
 
 #include <stddef.h>
+#include <string.h>
 
 #include "dpa.h"
+#include "snap_macros.h"
+#include "snap_dma.h"
+#include "snap_dpa_rt.h"
 #include "snap_dpa_virtq.h"
 
-/* At the moment we only run one thread with one virtq slot
- * TODO:
- * - multiple threads, per thread storage
+/**
+ * Single virtio/nvme queue per thread implementation. The thread can be
+ * either in polling or in event mode
  */
-static int n_virtqs; //per thread
 
-/* TODO: optimize field alignment */
-struct dpa_virtq {
-	// ro section
-	uint16_t idx;
-	uint16_t size;
-	uint64_t desc;
-	uint64_t driver;
-	uint64_t device;
-
-	uint32_t dpu_avail_mkey;
-	// copy avail index there
-	uint64_t dpu_avail_ring_addr;
-
-	// a key that can be used to access host memory
-	uint32_t host_mkey;
-
-	//rw
-	uint16_t dpa_avail_idx;
-};
-
-#define DPA_VIRTQ_MAX 8
-static struct dpa_virtq *virtqs[DPA_VIRTQ_MAX]; // per thread
 
 /* currently set so that we have 1s polling interval on simx */
 #define COMMAND_DELAY 10000
 
+static inline struct dpa_virtq *get_vq()
+{
+	/* will redo to be mt safe */
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
+
+	/* vq is always allocated after rt context */
+	return (struct dpa_virtq *)(rt_ctx + 1);
+}
+
 int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
-	struct dpa_virtq *vq;
+	struct dpa_virtq *vq = get_vq();
 	uint16_t idx;
+	uint16_t vhca_id;
 
-	idx = vcmd->cmd_create.idx;
-	dpa_info("virtq create: id: %d\n", idx);
-	if (idx >= DPA_VIRTQ_MAX) {
-		dpa_error("invalid vq number %d\n", idx);
-		return SNAP_DPA_RSP_ERR;
-	}
+	idx = vcmd->cmd_create.vq.common.idx;
+	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
+	dpa_info("0x%0x virtq create: %d\n", vhca_id, idx);
 
-	vq = (struct dpa_virtq *) dpa_thread_alloc(sizeof(struct dpa_virtq));
-	virtqs[idx] = vq;
-	/* TODO: check that it is free and other validations */
-
-	vq->idx = idx;
-	vq->size = vcmd->cmd_create.size;
-	vq->desc = vcmd->cmd_create.desc;
-	vq->driver = vcmd->cmd_create.driver;
-	vq->device = vcmd->cmd_create.device;
-	vq->dpu_avail_mkey = vcmd->cmd_create.dpu_avail_mkey;
-	vq->dpu_avail_ring_addr = vcmd->cmd_create.dpu_avail_ring_addr;
-	vq->host_mkey = vcmd->cmd_create.host_mkey;
-
-	vq->dpa_avail_idx = 0;
-
-	n_virtqs++;
+	/* TODO: input validation/sanity check */
+	memcpy(vq, &vcmd->cmd_create.vq, sizeof(vcmd->cmd_create.vq));
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 {
-	dpa_info("virtq destroy\n");
-	n_virtqs--;
+	struct dpa_virtq *vq = get_vq();
+
+	dpa_info("0x%0x virtq destroy: %d\n", vq->common.vhca_id, vq->common.idx);
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_modify(struct snap_dpa_cmd *cmd)
 {
-	dpa_info("virtq modify\n");
+	struct dpa_virtq *vq = get_vq();
+
+	dpa_info("0x%0x virtq modify: %d\n", vq->common.vhca_id, vq->common.idx);
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 {
-	dpa_info("virtq query\n");
+	struct dpa_virtq *vq = get_vq();
+
+	dpa_info("0x%0x virtq modify: %d\n", vq->common.vhca_id, vq->common.idx);
 	return SNAP_DPA_RSP_OK;
 }
 
 static int do_command(int *done)
 {
-	static uint32_t last_sn; // per thread
+	struct snap_dpa_tcb *tcb = dpa_tcb();
 
 	struct snap_dpa_cmd *cmd;
 	uint32_t rsp_status;
@@ -110,12 +89,12 @@ static int do_command(int *done)
 
 	cmd = snap_dpa_mbox_to_cmd(dpa_mbox());
 
-	if (cmd->sn == last_sn)
+	if (snap_likely(cmd->sn == tcb->cmd_last_sn))
 		return 0;
 
 	dpa_debug("new command", cmd->cmd);
 
-	last_sn = cmd->sn;
+	tcb->cmd_last_sn = cmd->sn;
 	rsp_status = SNAP_DPA_RSP_OK;
 
 	switch (cmd->cmd) {
@@ -144,9 +123,7 @@ static int do_command(int *done)
 
 static inline int process_commands(int *done)
 {
-	static unsigned count; //per thread
-
-	if (count++ % COMMAND_DELAY) { // TODO: mark unlikely
+	if (snap_likely(dpa_tcb()->counter++ % COMMAND_DELAY)) {
 		*done = 0;
 		return 0;
 	}
@@ -156,40 +133,41 @@ static inline int process_commands(int *done)
 
 static inline void virtq_progress()
 {
-	int i;
 	uint16_t host_avail_idx;
-	struct dpa_virtq *vq;
+	struct dpa_virtq *vq = get_vq();
 	struct virtq_device_ring *avail_ring;
 
 	// hack to slow thing down on simx
+#if SIMX_BUILD
 	static unsigned count;
 	if (count++ % COMMAND_DELAY)
 		return;
+#endif
 
-	for (i = 0; i < n_virtqs; i++) {
-		vq = virtqs[i];
+	/* load avail index */
+	dpa_window_set_mkey(vq->host_mkey); // TODO: only need to set once
+	avail_ring = (void *)dpa_window_get_base() + vq->common.device;
+	host_avail_idx = avail_ring->idx;
+	//dpa_debug("vq->dpa_avail_idx: %d\n", vq->dpa_avail_idx);
+	if (vq->hw_available_index == host_avail_idx)
+		return;
 
-		/* load avail index */
-		dpa_window_set_mkey(vq->host_mkey);
-		avail_ring = (void *)dpa_window_get_base() + vq->device;
-		host_avail_idx = avail_ring->idx;
-		dpa_debug("vq->dpa_avail_idx: %d\n", vq->dpa_avail_idx);
-		if (vq->dpa_avail_idx == host_avail_idx)
-			continue;
+	dpa_debug("==> New avail idx: %d\n", host_avail_idx);
 
-		dpa_debug("==> New avail idx: %d\n", host_avail_idx);
-
-		vq->dpa_avail_idx = host_avail_idx;
-
-		/* copy avail to dpu */
-		dpa_window_set_mkey(vq->dpu_avail_mkey);
-		avail_ring = (void *)dpa_window_get_base() + vq->dpu_avail_ring_addr;
-		avail_ring->idx = host_avail_idx;
-	}
+	/* add actual processing logic */
+	vq->hw_available_index = host_avail_idx;
 }
 
 int dpa_init()
 {
+	struct dpa_virtq *vq;
+
+	dpa_rt_init();
+
+	vq = dpa_thread_alloc(sizeof(*vq));
+	if ((void *)vq != (void *)(dpa_rt_ctx() + 1))
+		dpa_fatal("vq must follow rt context\n");
+
 	dpa_debug("VirtQ init done!\n");
 	return 0;
 }
@@ -199,12 +177,13 @@ int dpa_run()
 	int done;
 	int ret;
 
+	dpa_rt_start();
+
 	do {
 		ret = process_commands(&done);
 		virtq_progress();
 	} while (!done);
 
-	//snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
 	dpa_debug("virtq_split done\n");
 
 	return ret;

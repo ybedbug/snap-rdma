@@ -15,6 +15,48 @@
 
 #include "snap_dpa_common.h"
 
+struct __attribute__((packed)) virtq_desc {
+	uint64_t addr;
+	uint32_t len;
+	uint16_t flags;
+	uint16_t next;
+};
+
+struct __attribute__((packed)) virtq_device_ring {
+	uint16_t flags;
+	uint16_t idx;
+	uint16_t ring[];
+};
+
+#define SNAP_DPA_VIRTQ_DESC_SHADOW_ALIGN 64
+/* TODO: this seems to be the common part for all virtqs, not just dpa */
+struct snap_dpa_virtq_common {
+	uint16_t idx;
+	uint16_t size;
+	uint64_t desc;
+	uint64_t driver;
+	uint64_t device;
+	uint16_t msix_vector;
+	uint16_t vhca_id;
+};
+
+#if !__DPA
+struct snap_dpa_virtq {
+	struct snap_virtio_queue vq;
+
+	struct snap_dpa_rt *rt;
+	struct snap_dpa_rt_thread *rt_thr;
+
+	struct ibv_mr *desc_shadow_mr;
+	struct virtq_desc *desc_shadow;
+
+	/* hack to do window copy without xgvmi mkey */
+	struct ibv_mr *host_driver_mr;
+
+	struct snap_dpa_virtq_common common;
+};
+#endif
+
 enum {
 	DPA_VIRTQ_CMD_CREATE = SNAP_DPA_CMD_APP_FIRST,
 	DPA_VIRTQ_CMD_DESTROY,
@@ -22,36 +64,20 @@ enum {
 	DPA_VIRTQ_CMD_QUERY,
 };
 
-struct virtq_device_ring {
-	uint16_t flags;
-	uint16_t idx;
-	uint16_t ring[];
+/* TODO: optimize field alignment */
+struct dpa_virtq {
+	struct snap_dpa_virtq_common common;
+
+	uint16_t hw_available_index;
+	uint16_t hw_used_index;
+
+	uint32_t host_mkey; /* todo: should be part of the rt thread */
+	uint32_t dpu_desc_shadow_mkey;
+	uint64_t dpu_desc_shadow_addr;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd_create {
-	uint16_t idx;
-	uint16_t size;
-	uint64_t desc;
-	uint64_t driver;
-	uint64_t device;
-	uint16_t hw_avail_index;
-	uint16_t hw_used_index;
-	/* dpa specific: points to the vq staging buffer on DPU.
-	 * todo: evaluate if window is the best way to transfer avail index.
-	 * at the moment we want to load avail index to dpa and decide how
-	 * to handle descriptor reads based on the difference between it and
-	 * hw_avail_index.
-	 * If the difference is to big we want to transfer whole table to DPU
-	 * else dpa or dpu can walk descr chain
-	 *
-	 * Most probably we will go with the qp here
-	 */
-	uint32_t dpu_avail_mkey;
-	uint64_t dpu_avail_ring_addr;
-	/* todo: cross gvmi mkey - move to tcb. at the moment gtest will
-	 * register vq memory on snap pd and will pass its lkey.
-	 */
-	uint32_t host_mkey;
+	struct dpa_virtq vq;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd {
@@ -63,5 +89,7 @@ struct __attribute__((packed)) dpa_virtq_cmd {
 
 extern struct virtq_q_ops snap_virtq_blk_dpa_ops;
 struct virtq_q_ops *get_dpa_ops(void);
-#endif
 
+#define SNAP_DPA_VIRTQ_APP "snap_dpa_virtq_split"
+
+#endif

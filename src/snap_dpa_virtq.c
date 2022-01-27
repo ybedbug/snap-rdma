@@ -16,17 +16,17 @@
 #include "snap_virtio_blk.h"
 #include "snap_dpa_p2p.h"
 #include "snap_dpa_virtq.h"
+#include "snap_dpa_rt.h"
+
 #if HAVE_FLEXIO
 #include "snap_dpa.h"
 #include "snap_dpa_virtq.h"
 
-static struct snap_dpa_app dpa_virtq_app = SNAP_DPA_APP_INIT_ATTR;
 
-#define SNAP_DPA_VIRTQ_BBUF_SIZE  4096
 #define SNAP_DPA_VIRTQ_BBUF_ALIGN 4096
 
 /* make sure our virtq commands are fit into mailbox */
-SNAP_STATIC_ASSERT(sizeof(struct dpa_virtq_cmd) < SNAP_DPA_THREAD_MBOX_LEN/2,
+SNAP_STATIC_ASSERT(sizeof(struct dpa_virtq_cmd) < SNAP_DMA_THREAD_MBOX_CMD_SIZE,
 		"Ooops, struct dpa_virtq_cmd is too big");
 
 struct snap_dpa_virtq_attr {
@@ -37,74 +37,85 @@ struct snap_dpa_virtq_attr {
 static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 		struct snap_dpa_virtq_attr *dpa_vq_attr, struct snap_virtio_common_queue_attr *vq_attr)
 {
+	/* TODO: should get these from the upper layer */
+	struct snap_dpa_rt_filter f = {
+		.mode = SNAP_DPA_RT_THR_POLLING,
+		.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE
+	};
+	struct snap_dpa_rt_attr attr = {};
+
 	struct snap_dpa_virtq *vq;
 	void *mbox;
 	struct dpa_virtq_cmd *cmd;
 	struct snap_dpa_rsp *rsp;
+	size_t desc_shadow_size;
 	int ret;
 
-	struct snap_dpa_app_attr app_attr = {
-		.ctx = sdev->sctx->context,
-		.name = "dpa_virtq_split",
-		.n_workers = 1
-	};
-
-	snap_info("create dpa virtq\n");
-
-	if (snap_dpa_app_start(&dpa_virtq_app, &app_attr))
-		return NULL;
+	snap_debug("create dpa virtq\n");
 
 	vq = calloc(1, dpa_vq_attr->type_size);
 	if (!vq)
 		return NULL;
 
-	/* TODO: scedule vq to the worker */
-	vq->dpa_worker = dpa_virtq_app.dpa_workers[0];
+	vq->rt = snap_dpa_rt_get(sdev->sctx->context, SNAP_DPA_VIRTQ_APP, &attr);
+	if (!vq->rt)
+		goto free_vq;
+
+	vq->rt_thr = snap_dpa_rt_thread_get(vq->rt, &f);
+	if (vq->rt_thr)
+		goto put_rt;
 
 	/* pass queue data to the worker */
-	mbox = snap_dpa_thread_mbox_acquire(vq->dpa_worker);
+	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
 
 	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
 	/* convert vq_attr to the create command */
 	memset(&cmd->cmd_create, 0, sizeof(cmd->cmd_create));
 	/* at the momemnt pass only avail/used/descr addresses */
-	cmd->cmd_create.idx = vq_attr->vattr.idx;
-	cmd->cmd_create.size = vq_attr->vattr.size;
-
-	cmd->cmd_create.desc = vq_attr->vattr.desc;
-	cmd->cmd_create.driver = vq_attr->vattr.driver;
-	cmd->cmd_create.device = vq_attr->vattr.device;
+	vq->common.idx = vq_attr->vattr.idx;
+	vq->common.size = vq_attr->vattr.size;
+	vq->common.desc = vq_attr->vattr.desc;
+	vq->common.driver = vq_attr->vattr.driver;
+	vq->common.device = vq_attr->vattr.device;
 
 	/* register mr for the avail staging buffer */
-	ret = posix_memalign(&vq->dpa_window, SNAP_DPA_VIRTQ_BBUF_ALIGN,
-			SNAP_DPA_VIRTQ_BBUF_SIZE);
+	desc_shadow_size = vq->common.size * sizeof(struct virtq_desc);
+
+	ret = posix_memalign((void **)&vq->desc_shadow, SNAP_DPA_VIRTQ_DESC_SHADOW_ALIGN, desc_shadow_size);
 	if (ret) {
 		snap_error("Failed to allocate virtq dpa window buffer: %d\n", ret);
 		goto release_mbox;
 	}
 
-	vq->dpa_window_mr = snap_reg_mr(dpa_virtq_app.dctx->pd, vq->dpa_window, SNAP_DPA_VIRTQ_BBUF_SIZE);
-	if (!vq->dpa_window_mr) {
+	memset(vq->desc_shadow, 0, desc_shadow_size);
+
+	/* TODO: rename to descr staging buffer */
+	vq->desc_shadow_mr = snap_reg_mr(vq->rt->dpa_proc->pd, vq->desc_shadow, desc_shadow_size);
+	if (!vq->desc_shadow_mr) {
 		snap_error("Failed to allocate virtq dpa window mr: %m\n");
 		goto free_dpa_window;
 	}
 
-	cmd->cmd_create.dpu_avail_mkey = vq->dpa_window_mr->lkey;
-	cmd->cmd_create.dpu_avail_ring_addr = (uint64_t)vq->dpa_window;
+	memset(&cmd->cmd_create.vq, 0, sizeof(cmd->cmd_create.vq));
+	memcpy(&cmd->cmd_create.vq.common, &vq->common, sizeof(vq->common));
+	cmd->cmd_create.vq.hw_available_index = vq_attr->hw_available_index;
+	cmd->cmd_create.vq.hw_used_index = vq_attr->hw_used_index;
+	cmd->cmd_create.vq.dpu_desc_shadow_mkey = vq->desc_shadow_mr->lkey;
+	cmd->cmd_create.vq.dpu_desc_shadow_addr = (uint64_t)vq->desc_shadow;
 
 	/* HACK!!! TODO: build cross gvmi mkey
 	 * The hack allows us to run unit test on simx
 	 * TODO: generate cross sgvmi mkey
 	 */
 	//cmd->cmd_create.host_mkey = ;
-	vq->host_driver_mr = ibv_reg_mr(dpa_virtq_app.dctx->pd, (void *)vq_attr->vattr.device, 4096,
+	vq->host_driver_mr = ibv_reg_mr(vq->rt->dpa_proc->pd, (void *)vq_attr->vattr.device, 4096,
 			IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_WRITE|IBV_ACCESS_REMOTE_READ);
 	if (!vq->host_driver_mr) {
 		printf("oops host_driver_mr\n");
 		goto free_dpa_window_mr;
 	}
 
-	cmd->cmd_create.host_mkey = vq->host_driver_mr->lkey;
+	cmd->cmd_create.vq.host_mkey = vq->host_driver_mr->lkey;
 	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_CREATE);
 
 	rsp = snap_dpa_rsp_wait(mbox);
@@ -113,15 +124,19 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 		goto free_dpa_window_mr;
 	}
 
-	snap_dpa_thread_mbox_release(vq->dpa_worker);
+	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
 	return vq;
 
 free_dpa_window_mr:
-	ibv_dereg_mr(vq->dpa_window_mr);
+	ibv_dereg_mr(vq->desc_shadow_mr);
 free_dpa_window:
-	free(vq->dpa_window);
+	free(vq->desc_shadow);
 release_mbox:
-	snap_dpa_thread_mbox_release(vq->dpa_worker);
+	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
+	snap_dpa_rt_thread_put(vq->rt_thr);
+put_rt:
+	snap_dpa_rt_put(vq->rt);
+free_vq:
 	free(vq);
 	return NULL;
 
@@ -134,32 +149,35 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	struct snap_dpa_rsp *rsp;
 
 	snap_info("destroy dpa virtq\n");
-	mbox = snap_dpa_thread_mbox_acquire(vq->dpa_worker);
+	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
 
 	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
 	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_DESTROY);
 
 	rsp = snap_dpa_rsp_wait(mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
-		snap_dpa_thread_mbox_release(vq->dpa_worker);
+		snap_dpa_thread_mbox_release(vq->rt_thr->thread);
 		snap_error("Failed to destroy DPA virtio queue: %d\n", rsp->status);
 	}
-	snap_dpa_thread_mbox_release(vq->dpa_worker);
-
-	ibv_dereg_mr(vq->dpa_window_mr);
+	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
+	snap_dpa_rt_thread_put(vq->rt_thr);
+	snap_dpa_rt_put(vq->rt);
 	ibv_dereg_mr(vq->host_driver_mr);
-	free(vq->dpa_window);
+	ibv_dereg_mr(vq->desc_shadow_mr);
+	free(vq->desc_shadow);
 	free(vq);
-	snap_dpa_app_stop(&dpa_virtq_app);
 }
 
 int snap_dpa_virtq_query(struct snap_dpa_virtq *vq,
 		struct snap_virtio_common_queue_attr *attr)
 {
+#if 0
+	/* TODO */
 	struct virtq_device_ring *avail_ring;
 
 	avail_ring = (struct virtq_device_ring *)vq->dpa_window;
 	attr->hw_available_index = avail_ring->idx;
+#endif
 	return 0;
 }
 
@@ -241,7 +259,7 @@ static void vq_heads_msg_handle(struct snap_dpa_virtq *vq,
 
 	for (i = 0; i < msg->descr_head_count; i++) {
 		hdr.descr_head_idx = msg->descr_heads[i];
-		vq->q->dma_q->rx_cb(vq->q->dma_q, &hdr, 0, 0);
+		vq->rt_thr->dpu_cmd_chan.dma_q->rx_cb(vq->rt_thr->dpu_cmd_chan.dma_q, &hdr, 0, 0);
 	}
 }
 
@@ -252,12 +270,13 @@ static void vq_table_msg_handle(struct snap_dpa_virtq *vq,
 	int i;
 
 	req.hdr.num_desc = 0;
-	req.tunnel_descs = vq->descs_table;
+	/* TODO: use our own vring desc type */
+	req.tunnel_descs = (struct vring_desc *)vq->desc_shadow;
 	req.hdr.dpa_vq_table_flag = VQ_TABLE_REC;
 	for (i = 0; i < msg->descr_head_count; i++) {
 		 /* TODO: arrange descriptors in parallel and avoid extra memcpy */
 		req.hdr.descr_head_idx = msg->descr_heads[i];
-		vq->q->dma_q->rx_cb(vq->q->dma_q, &req, 0, 0);
+		vq->rt_thr->dpu_cmd_chan.dma_q->rx_cb(vq->rt_thr->dpu_cmd_chan.dma_q, &req, 0, 0);
 	}
 }
 
@@ -271,9 +290,9 @@ static int snap_virtio_blk_progress_dpa_queue(struct snap_virtio_queue *vq)
 	struct snap_dpa_p2p_msg msgs[64];
 #endif
 
-	n = snap_dpa_p2p_recv_msg(dpa_q->q, msgs, 64);
+	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, msgs, 64);
 	for (i = 0; i < n; i++) {
-		dpa_q->q->credit_count += msgs[i].base.credit_delta;
+		dpa_q->rt_thr->dpu_cmd_chan.credit_count += msgs[i].base.credit_delta;
 		switch (msgs[i].base.type) {
 		case SNAP_DPA_P2P_MSG_CR_UPDATE:
 			break;
@@ -289,7 +308,7 @@ static int snap_virtio_blk_progress_dpa_queue(struct snap_virtio_queue *vq)
 		}
 	}
 	if (n)
-		snap_dpa_p2p_send_cr_update(dpa_q->q, n);
+		snap_dpa_p2p_send_cr_update(&dpa_q->rt_thr->dpu_cmd_chan, n);
 
 	return 0;
 }
