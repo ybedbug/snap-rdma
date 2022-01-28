@@ -847,10 +847,13 @@ int snap_virtio_create_hw_queue(struct snap_device *sdev,
 				struct snap_virtio_caps *caps,
 				struct snap_virtio_queue_attr *vattr)
 {
+	struct ibv_context *context;
 	int ret;
 
-	ret = snap_virtio_init_virtq_umem(sdev->sctx->context, caps, vq,
-					  vattr->size);
+	context = sdev->mdev.context ? sdev->mdev.context :
+		sdev->sctx->context;
+
+	ret = snap_virtio_init_virtq_umem(context, caps, vq, vattr->size);
 	if (ret)
 		goto err;
 
