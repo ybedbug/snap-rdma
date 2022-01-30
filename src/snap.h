@@ -35,10 +35,6 @@
 
 #define PFX "snap: "
 
-#ifndef SNAP_DEBUG
-#define SNAP_DEBUG 0
-#endif
-
 #define snap_debug(fmt, ...) \
 	do { if (SNAP_DEBUG) \
 		printf("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \

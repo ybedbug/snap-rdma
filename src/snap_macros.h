@@ -10,9 +10,13 @@
  * provided with the software product.
  */
 
-#ifndef _SNAP_COMPILER_H_
-#define _SNAP_COMPILER_H_
+#ifndef _SNAP_MACROS_H_
+#define _SNAP_MACROS_H_
 #include <assert.h>
+
+#ifndef SNAP_DEBUG
+#define SNAP_DEBUG 0
+#endif
 
 #ifndef offsetof
 #define offsetof(t, m) ((size_t) &((t *)0)->m)
@@ -72,5 +76,11 @@
 #endif
 
 #define SNAP_PACKED __attribute__((packed))
+
+#ifdef SNAP_DEBUG
+#define assert_debug(_expr) assert(_expr)
+#else
+#define assert_debug(_expr)
+#endif
 
 #endif
