@@ -346,6 +346,11 @@ def main():
             params['mem'] = args.mem
         if args.vuid:
             params['vuid'] = args.vuid
+        if args.admin_q:
+            if args.vf_id == -1:
+                params['admin_q'] = args.admin_q
+            else:
+                raise JsonRpcSnapException("Admin queue cannot be created on a VF")
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -382,6 +387,8 @@ def main():
                    required=False, choices=['static', 'pool'])
     p.add_argument('--vuid', help='VUID for device to start emilation on.',
                    type=str, required=False)
+    p.add_argument('--admin_q', help='Create admin queue. Used for live migration.',
+                   required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_virtio_blk_bdev_attach(args):
