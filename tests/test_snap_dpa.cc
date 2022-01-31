@@ -91,7 +91,8 @@ TEST_F(SnapDpaTest, create_thread) {
 	ASSERT_TRUE(dpa_thr);
 	printf("thread is running now...\n");
 	//getchar();
-
+	sleep(1);
+	snap_dpa_log_print(dpa_thr->dpa_log);
 	snap_dpa_thread_destroy(dpa_thr);
 	snap_dpa_process_destroy(dpa_ctx);
 }

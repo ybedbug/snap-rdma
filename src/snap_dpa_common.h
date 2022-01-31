@@ -13,6 +13,7 @@
 #ifndef _SNAP_DPA_COMMON_H
 #define _SNAP_DPA_COMMON_H
 
+#include <string.h>
 /*
  * This file contains definitions and inline functions that are common
  * between DPA and DPU
@@ -34,6 +35,8 @@
 /* TODO: make configurable. Some threads will not need this memory */
 #define SNAP_DPA_THREAD_MIN_HEAP_SIZE  2*16384
 
+/* TODO: make configurable */
+#define SNAP_DPA_THREAD_N_LOG_ENTRIES 128
 /**
  * struct snap_dpa_tcb - DPA thread control block
  *
@@ -159,4 +162,51 @@ static inline struct snap_dpa_cmd *snap_dpa_cmd_recv(void *mbox, uint32_t type)
 	return cmd;
 }
 
+/**
+ * Cyclical logger
+ *
+ * NOTE: consider continuous text buffer instead of fixed size messages.
+ * If binary data are not needed, it is a better approach
+ */
+#define SNAP_DPA_LOG_MSG_LEN 160
+
+struct snap_dpa_log_entry {
+	uint64_t timestamp;
+	char msg[SNAP_DPA_LOG_MSG_LEN];
+};
+
+struct snap_dpa_log {
+	volatile uint32_t avail_idx;
+	volatile uint32_t used_idx;
+	uint32_t n_entries;
+	uint64_t epoch;
+	struct snap_dpa_log_entry entries[];
+};
+
+size_t snap_dpa_log_size(int n_entries);
+void snap_dpa_log_init(struct snap_dpa_log *log, int n_entries);
+void snap_dpa_log_print(struct snap_dpa_log *log);
+
+/**
+ * snap_dpa_log_add() - add entry to the cyclic log buffer
+ * @log: cyclic log buffer
+ * @ts:  timestamp
+ * @msg: strings to add to the buffer
+ *
+ * The function places entry into the cyclic log buffer. If the log message
+ * is too big it will be truncated.
+ *
+ * The function is inline because it is going to be used by the DPA application
+ */
+static inline void snap_dpa_log_add(struct snap_dpa_log *log, uint64_t ts, const char *msg)
+{
+	uint32_t n;
+
+	/* allow overflow */
+	n = log->avail_idx % log->n_entries;
+	strncpy(log->entries[n].msg, msg, sizeof(log->entries[n].msg));
+	log->entries[n].timestamp = ts;
+	/* todo: barrier */
+	log->avail_idx++;
+}
 #endif

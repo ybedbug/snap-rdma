@@ -321,6 +321,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	flexio_status st;
 	flexio_uintptr_t *dpa_tcb_addr;
 	struct snap_dpa_rsp *rsp;
+	size_t mbox_size;
 
 	thr = calloc(1, sizeof(*thr));
 	if (!thr) {
@@ -338,15 +339,20 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_thread;
 	}
 
-	ret = posix_memalign(&thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_ALIGN,
-			SNAP_DPA_THREAD_MBOX_LEN);
+	mbox_size = SNAP_DPA_THREAD_MBOX_LEN + snap_dpa_log_size(SNAP_DPA_THREAD_N_LOG_ENTRIES);
+	ret = posix_memalign(&thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_ALIGN, mbox_size);
 	if (ret < 0) {
 		snap_error("Failed to allocate DPA thread mailbox\n");
 		goto free_mutex;
 	}
 
-	memset(thr->cmd_mbox, 0, SNAP_DPA_THREAD_MBOX_LEN);
-	thr->cmd_mr = ibv_reg_mr(thr->dctx->pd, thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_LEN, 0);
+	memset(thr->cmd_mbox, 0, mbox_size);
+	/* log is written into memory owned by DPU. This way even if DPA thread
+	 * crashes or becomes unresponsive, we can still read its log
+	 */
+	thr->dpa_log = thr->cmd_mbox + SNAP_DPA_THREAD_MBOX_LEN;
+	snap_dpa_log_init(thr->dpa_log, SNAP_DPA_THREAD_N_LOG_ENTRIES);
+	thr->cmd_mr = ibv_reg_mr(thr->dctx->pd, thr->cmd_mbox, mbox_size, 0);
 	if (!thr->cmd_mr) {
 		snap_error("Failed to allocate DPA thread mailbox mr\n");
 		goto free_mbox;
@@ -392,6 +398,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_error("DPA thread failed to start\n");
+		snap_dpa_log_print(thr->dpa_log);
 		snap_dpa_thread_destroy_force(thr);
 		flexio_buf_dev_free(dpa_tcb_addr);
 		return NULL;
@@ -448,8 +455,10 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 
 	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_STOP);
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
-	if (rsp->status != SNAP_DPA_RSP_OK)
+	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_warn("DPA thread was not properly stopped\n");
+		snap_dpa_log_print(thr->dpa_log);
+	}
 
 	snap_dpa_thread_destroy_force(thr);
 }
@@ -762,3 +771,63 @@ void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
 {
 }
 #endif
+
+/**
+ * snap_dpa_log_size() - return size of the cyclic log buffer
+ * @n_entries: number of entries in the log buffer
+ *
+ * The function returns size of the log buffer in bytes
+ */
+size_t snap_dpa_log_size(int n_entries)
+{
+	return sizeof(struct snap_dpa_log) + n_entries * sizeof(struct snap_dpa_log_entry);
+}
+
+/**
+ * snap_dpa_log_init() - initialize cyclic log buffer
+ * @log:       log buffer to init
+ * @n_entries: number of entries in the buffer
+ *
+ * The function initializes cyclic log buffer
+ */
+void snap_dpa_log_init(struct snap_dpa_log *log, int n_entries)
+{
+	memset(log, 0, snap_dpa_log_size(n_entries));
+
+	log->n_entries = n_entries;
+}
+
+/**
+ * snap_dpa_log_print() - pretty print log buffer
+ * @log: log buffer to print
+ *
+ * The function prints log buffer to the stdout. It tries to detect newlines
+ * and combine log entries.
+ */
+void snap_dpa_log_print(struct snap_dpa_log *log)
+{
+	bool newline = true;
+	int n;
+	size_t len;
+
+	if (log->avail_idx - log->used_idx >= log->n_entries)
+		log->used_idx = log->avail_idx - log->n_entries + 1;
+
+	while (log->used_idx != log->avail_idx) {
+		n = log->used_idx % log->n_entries;
+		len = strnlen(log->entries[n].msg, SNAP_DPA_PRINT_BUF_LEN);
+
+		if (newline)
+			printf("[DPA] %s", log->entries[n].msg);
+		else
+			printf("%s", log->entries[n].msg);
+
+		if (len && log->entries[n].msg[len - 1] == '\n')
+			newline = true;
+		else
+			newline = false;
+
+		log->used_idx++;
+	}
+	fflush(stdout);
+}

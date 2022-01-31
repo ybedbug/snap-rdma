@@ -92,6 +92,7 @@ struct snap_dpa_thread {
 	pthread_mutex_t       cmd_lock;
 	struct ibv_mr         *cmd_mr;
 	struct snap_dpa_memh  *mem;
+	struct snap_dpa_log   *dpa_log;
 };
 
 struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,

@@ -111,6 +111,13 @@ void dpa_thread_free(void *addr)
 {
 }
 
+static void __attribute__((unused)) dpa_log_add(const char *msg)
+{
+	struct snap_dpa_log *log = dpa_mbox() + SNAP_DPA_THREAD_MBOX_LEN;
+
+	snap_dpa_log_add(log, 0, msg);
+}
+
 /* TODO: per dpa process/thread logging instead of dumping to simx */
 static int do_print(const char *format, va_list ap)
 {
@@ -119,6 +126,7 @@ static int do_print(const char *format, va_list ap)
 
 	ret = vsnprintf(str, sizeof(str), format, ap);
 	dpa_print_string(str);
+	dpa_log_add(str);
 	return ret;
 }
 

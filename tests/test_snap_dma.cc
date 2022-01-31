@@ -1505,6 +1505,8 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpa) {
 		snap_dma_q_flush(dpu_qp);
 	}
 
+	sleep(1);
+	snap_dpa_log_print(dpa_thr->dpa_log);
 	/* dpa thread destroy is a sync point */
 	snap_dpa_thread_destroy(dpa_thr);
 	printf("done, r_buf: %s status %s\n", m_rbuf, m_rbuf + m_bsize - 16);
