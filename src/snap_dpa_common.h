@@ -30,6 +30,9 @@
 #define SNAP_DPA_THREAD_MBOX_CMD_OFFSET 0
 #define SNAP_DPA_THREAD_MBOX_RSP_OFFSET 2048
 #define SNAP_DMA_THREAD_MBOX_CMD_SIZE (SNAP_DPA_THREAD_MBOX_RSP_OFFSET - sizeof(struct snap_dpa_cmd))
+#define SNAP_DPA_THREAD_MBOX_TIMEOUT_MSEC (10*1000)
+#define SNAP_DPA_THREAD_MBOX_POLL_INTERVAL_MSEC 1
+
 #define SNAP_DPA_THREAD_ENTRY_POINT "__snap_dpa_thread_start"
 
 /* TODO: make configurable. Some threads will not need this memory */
@@ -89,7 +92,8 @@ struct snap_dpa_cmd {
 
 enum {
 	SNAP_DPA_RSP_OK = 0,
-	SNAP_DPA_RSP_ERR = 1
+	SNAP_DPA_RSP_ERR = 1,
+	SNAP_DPA_RSP_TO = 2
 };
 
 struct snap_dpa_rsp {
@@ -136,19 +140,7 @@ static inline void snap_dpa_rsp_send(void *mbox, int type)
 	rsp->sn = cmd->sn;
 }
 
-static inline struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
-{
-	struct snap_dpa_rsp *rsp;
-	struct snap_dpa_cmd *cmd;
-
-	cmd = snap_dpa_mbox_to_cmd(mbox);
-	/* wait for report back from the thread. TODO: timeout */
-	do {
-		rsp = snap_dpa_mbox_to_rsp(mbox);
-	} while (rsp->sn != cmd->sn);
-
-	return rsp;
-}
+struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox);
 
 static inline struct snap_dpa_cmd *snap_dpa_cmd_recv(void *mbox, uint32_t type)
 {

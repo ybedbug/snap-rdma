@@ -831,3 +831,28 @@ void snap_dpa_log_print(struct snap_dpa_log *log)
 	}
 	fflush(stdout);
 }
+
+struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
+{
+	int n = 0;
+	struct snap_dpa_rsp *rsp;
+	struct snap_dpa_cmd *cmd;
+
+	cmd = snap_dpa_mbox_to_cmd(mbox);
+	/* wait for report back from the thread */
+	do {
+		rsp = snap_dpa_mbox_to_rsp(mbox);
+		if (rsp->sn == cmd->sn)
+			break;
+
+		usleep(1000 * SNAP_DPA_THREAD_MBOX_POLL_INTERVAL_MSEC);
+		n += SNAP_DPA_THREAD_MBOX_POLL_INTERVAL_MSEC;
+		if (n == SNAP_DPA_THREAD_MBOX_TIMEOUT_MSEC) {
+			rsp->status = SNAP_DPA_RSP_TO;
+			rsp->sn = cmd->sn;
+			break;
+		}
+	} while (1);
+
+	return rsp;
+}
