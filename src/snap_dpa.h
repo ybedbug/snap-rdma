@@ -112,39 +112,4 @@ void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);
 
 int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey);
-
-#define N_DPA_APP_WORKERS 1
-/**
- * struct snap_dpa_app - snap DPA application
- *
- * a process that contains a set of 'worker' threads.
- * Each application is unique and started/stopped on 'demand'
- */
-struct snap_dpa_app {
-	/* private: */
-	struct snap_dpa_ctx *dctx;
-	struct snap_dpa_thread *dpa_workers[N_DPA_APP_WORKERS];
-	int refcount;
-	int n_workers;
-	pthread_mutex_t lock;
-};
-
-#define SNAP_DPA_APP_INIT_ATTR { .refcount = 0, \
-	.lock = PTHREAD_MUTEX_INITIALIZER }
-
-/**
- * struct snap_dpa_app_attr - snap DPA application attributes
- * @ctx:  ibv context
- * @name: name of the file that contains application code
- * @n_workers: number of DPA worker threads to create
- */
-struct snap_dpa_app_attr {
-	struct ibv_context *ctx;
-	const char *name;
-	int n_workers;
-};
-
-int snap_dpa_app_start(struct snap_dpa_app *app,  struct snap_dpa_app_attr *attr);
-void snap_dpa_app_stop(struct snap_dpa_app *app);
-
 #endif
