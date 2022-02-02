@@ -295,12 +295,14 @@ def main():
     p.set_defaults(func=controller_virtio_blk_delete)
 
     def controller_virtio_blk_create(args):
-        if args.pci_bdf is None and args.pf_id == -1:
-            raise JsonRpcSnapException("Either pci_bdf or pf_id must "
+        if args.pci_bdf is None and args.pf_id == -1 and args.vuid is None:
+            raise JsonRpcSnapException("Either pci_bdf, pf_id or vuid must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pf_id != -1:
-            raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
-                                       "both configured")
+        if ((args.pci_bdf is not None and args.pf_id != -1) or
+           (args.pci_bdf is not None and args.vuid is not None) or
+           (args.vuid is not None and args.pf_id != -1)) :
+            raise JsonRpcSnapException("Only one of pci_bdf, pf_id and vuid can be "
+                                       "configured")
         if args.suspend and args.new is False:
             raise JsonRpcSnapException("suspend and recover cannot be "
                                        "both configured")
@@ -333,6 +335,8 @@ def main():
             params['suspend'] = args.suspend
         if args.mem:
             params['mem'] = args.mem
+        if args.vuid:
+            params['vuid'] = args.vuid
         result = args.client.call('controller_virtio_blk_create', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_create',
@@ -367,6 +371,8 @@ def main():
                    required=False, action='store_true')
     p.add_argument('--mem', help='Memory model', type=str,
                    required=False, choices=['static', 'pool'])
+    p.add_argument('--vuid', help='VUID for device to start emilation on.',
+                   type=str, required=False)
     p.set_defaults(func=controller_virtio_blk_create)
 
     def controller_virtio_blk_bdev_attach(args):
@@ -431,10 +437,14 @@ def main():
         if args.subnqn is not None and args.cntlid == -1:
             raise JsonRpcSnapException("subnqn and cntlid must be both configured,"
                                        " or neither of them should be configured");
-        if args.name is None and args.cntlid == -1:
-            raise JsonRpcSnapException("Either ctrl name or subnqn/cntlid pair must be configured");
-        if args.name is not None and args.cntlid != -1:
-            raise JsonRpcSnapException("ctrl name and subnqn/cntlid pair cannot both be configured");
+        if args.name is None and args.cntlid == -1 and args.vuid is None:
+            raise JsonRpcSnapException("Either ctrl name, vuid or subnqn/cntlid"
+                                       " pair must be configured");
+        if ((args.name is not None and args.cntlid != -1) or
+           (args.name is not None and args.vuid is not None) or
+           (args.vuid is not None and args.cntlid != -1)) :
+            raise JsonRpcSnapException("Only one of ctrl name, vuid and subnqn/cntlid"
+                                       " pair can be be configured");
         params = {
         }
         if args.name:
@@ -443,6 +453,8 @@ def main():
             params['subnqn'] = args.subnqn
         if args.cntlid != -1:
             params['cntlid'] = args.cntlid
+        if args.vuid:
+            params['vuid'] = args.vuid
         args.client.call('controller_nvme_delete', params)
     p = subparsers.add_parser('controller_nvme_delete',
                               help='Destroy NVMe SNAP controller')
@@ -453,6 +465,9 @@ def main():
     p.add_argument('-i', '--cntlid', help='Controller Identifier in NVMe subsystem.'
                    ' Must be set if \'--name\' is not set',
                    default=-1, type=int, required=False)
+    p.add_argument('--vuid', help='VUID for device to delete controller on',
+                   type=str, required=False)
+
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
