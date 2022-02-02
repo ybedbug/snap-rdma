@@ -280,16 +280,25 @@ def main():
     p.set_defaults(func=controller_virtio_blk_state)
 
     def controller_virtio_blk_delete(args):
+        if args.name is None and args.vuid is None:
+            raise JsonRpcSnapException("Either ctrl name or vuid must be configured");
+        if args.name is not None and args.vuid is not None:
+            raise JsonRpcSnapException("ctrl name and vuid cannot both be configured");
         params = {
-            'name': args.name,
         }
+        if args.name:
+            params['name'] = args.name
+        if args.vuid:
+            params['vuid'] = args.vuid
         if args.f:
             params['force'] = args.f
 
         args.client.call('controller_virtio_blk_delete', params)
     p = subparsers.add_parser('controller_virtio_blk_delete',
                               help='Destroy VirtIO BLK SNAP controller')
-    p.add_argument('name', help='Controller Name', type=str)
+    p.add_argument('-c', '--name', help='Controller Name', type=str, required=False)
+    p.add_argument('--vuid', help='VUID for device to detach controller', type=str,
+                    required=False)
     p.add_argument('--f', '--force', help='Force controller deletion',
                    required=False, action='store_true')
     p.set_defaults(func=controller_virtio_blk_delete)
@@ -471,12 +480,14 @@ def main():
     p.set_defaults(func=controller_nvme_delete)
 
     def controller_nvme_create(args):
-        if args.pci_bdf is None and args.pf_id == -1:
-            raise JsonRpcSnapException("Either pci_bdf or pf_id must "
+        if args.pci_bdf is None and args.pf_id == -1 and args.vuid is None:
+            raise JsonRpcSnapException("Either pci_bdf, pf_id or vuid must "
                                        "be configured")
-        if args.pci_bdf is not None and args.pf_id != -1:
-            raise JsonRpcSnapException("pci_bdf and pf_id cannot be "
-                                       "both configured")
+        if ((args.pci_bdf is not None and args.pf_id != -1) or
+           (args.pci_bdf is not None and args.vuid is not None) or
+           (args.vuid is not None and args.pf_id != -1)) :
+            raise JsonRpcSnapException("Only one of pci_bdf, pf_id and vuid can be "
+                                       "configured")
 
         if args.nqn is None and args.subsys_id == -1:
             raise JsonRpcSnapException("Either nqn  or subsys_id must "
@@ -514,6 +525,8 @@ def main():
             params['mem'] = args.mem
         if args.cntlid != -1:
             params['cntlid'] = args.cntlid
+        if args.vuid:
+            params['vuid'] = args.vuid
 
         result = args.client.call('controller_nvme_create', params)
         print(json.dumps(result, indent=2).strip('"'))
@@ -552,6 +565,8 @@ def main():
                    required=False, choices=['static', 'pool'])
     p.add_argument('--cntlid', help='NVMe Controller id.',
                    default=-1, type=int, required=False)
+    p.add_argument('--vuid', help='VUID for device to start emilation on.',
+                   type=str, required=False)
     p.set_defaults(func=controller_nvme_create)
 
     def controller_list(args):
