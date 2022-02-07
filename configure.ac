@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([mlnx-libsnap], [1.3.2], [support@mellanox.com])
+AC_INIT([mlnx-libsnap], [1.4.0], [support@mellanox.com])
 AC_CONFIG_SRCDIR([src/snap.h])
 AC_CONFIG_HEADERS([config.h])
 
