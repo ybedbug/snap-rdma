@@ -719,16 +719,30 @@ snap_virtio_create_queue(struct snap_device *sdev,
 		virtq_ctx = DEVX_ADDR_OF(virtio_net_q, virtq_in, virtqc);
 
 		obj_type = MLX5_OBJ_TYPE_VIRTIO_NET_Q;
-		DEVX_SET(virtio_net_q, virtq_in, tisn_or_qpn, attr->tisn_or_qpn);
-		if (attr->tisn_or_qpn)
-			DEVX_SET(virtio_net_q, virtq_in, vhca_id, attr->vhca_id);
-		DEVX_SET(virtio_net_q, virtq_in, tso_ipv4, attr->tso_ipv4);
-		DEVX_SET(virtio_net_q, virtq_in, tso_ipv6, attr->tso_ipv6);
-		DEVX_SET(virtio_net_q, virtq_in, tx_csum, attr->tx_csum);
-		DEVX_SET(virtio_net_q, virtq_in, rx_csum, attr->rx_csum);
-		DEVX_SET(virtio_net_q, virtq_in, hw_available_index, attr->hw_available_index);
-		DEVX_SET(virtio_net_q, virtq_in, hw_used_index, attr->hw_used_index);
-		DEVX_SET(virtio_q, virtq_ctx, counter_set_id, vattr->ctrs_obj_id);
+
+		DEVX_SET(virtio_net_q, virtq_in, tisn_or_qpn,
+			 vattr->tisn_or_qpn);
+		if (vattr->tisn_or_qpn)
+			DEVX_SET(virtio_net_q, virtq_in, vhca_id,
+				 vattr->vhca_id);
+		DEVX_SET(virtio_net_q, virtq_in, hw_available_index,
+			 vattr->hw_available_index);
+		DEVX_SET(virtio_net_q, virtq_in, hw_used_index,
+			 vattr->hw_used_index);
+		DEVX_SET(virtio_q, virtq_ctx, counter_set_id,
+			 vattr->ctrs_obj_id);
+
+		if (offload_type == MLX5_VIRTIO_Q_OFFLOAD_TYPE_ETH_FRAME) {
+			DEVX_SET(virtio_net_q, virtq_in, tso_ipv4,
+				 attr->tso_ipv4);
+			DEVX_SET(virtio_net_q, virtq_in, tso_ipv6,
+				 attr->tso_ipv6);
+			DEVX_SET(virtio_net_q, virtq_in, tx_csum,
+				 attr->tx_csum);
+			DEVX_SET(virtio_net_q, virtq_in, rx_csum,
+				 attr->rx_csum);
+		}
+
 	} else if (sdev->pci->type == SNAP_VIRTIO_FS_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_FS_VF) {
 		struct snap_virtio_common_queue_attr *attr;
