@@ -195,7 +195,7 @@ TEST_F(SnapQpTest, create_thread_cq_on_dpa) {
 	 * attaches a cq to them.
 	 * TODO: allow creation of both polling and event threads
 	 */
-	SKIP_TEST_R("WIP: skipping test");
+	//SKIP_TEST_R("WIP: skipping test");
 	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
 	ASSERT_TRUE(dpa_ctx);
 
