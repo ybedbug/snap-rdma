@@ -28,7 +28,6 @@ struct snap_dpa_ctx {
 	struct flexio_outbox   *dpa_uar;
 	struct ibv_pd          *pd;
 	struct snap_uar        *uar;
-	uint64_t               entry_point;
 };
 
 struct snap_dpa_memh {

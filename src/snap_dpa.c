@@ -161,11 +161,9 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	struct flexio_process_attr proc_attr = {0};
 	char *file_name;
 	flexio_status st;
-	int ret;
 	int len;
 	void *app_buf;
 	size_t app_size;
-	uint64_t entry_point, sym_size;
 	struct snap_dpa_ctx *dpa_ctx;
 
 	if (getenv("LIBSNAP_DPA_DIR"))
@@ -183,13 +181,6 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	free(file_name);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to find %s\n", app_name);
-		return NULL;
-	}
-
-	ret = flexio_get_elf_func_sym_val(app_buf, SNAP_DPA_THREAD_ENTRY_POINT,
-					  &entry_point, &sym_size);
-	if (ret) {
-		snap_error("%s: has no snap entry point %s\n", app_name, SNAP_DPA_THREAD_ENTRY_POINT);
 		return NULL;
 	}
 
@@ -224,7 +215,7 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	}
 
 	/* create a placeholder eq to attach cqs */
-	eq_attr.log_eq_ring_size = 5; /* 32 elems */
+	eq_attr.log_eq_ring_depth = 5; /* 32 elems */
 	eq_attr.uar_id = dpa_ctx->uar->uar->page_id;
 
 	st = flexio_eq_create(dpa_ctx->dpa_proc, ctx, &eq_attr, &dpa_ctx->dpa_eq);
@@ -233,7 +224,6 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 		goto free_dpa_outbox;
 	}
 
-	dpa_ctx->entry_point = entry_point;
 	return dpa_ctx;
 
 free_dpa_outbox:
@@ -386,7 +376,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	 * In the future we can decide what type of thread to create based on
 	 * the attributes.
 	 */
-	st = flexio_thread_create(thr->dctx->dpa_proc, thr->dctx->entry_point, *dpa_tcb_addr,
+	st = flexio_thread_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, *dpa_tcb_addr,
 			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
