@@ -24,7 +24,15 @@ static void dpa_thread_config(struct snap_dpa_tcb *tcb)
 	dpa_window_set_mkey(tcb->mbox_lkey);
 	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 	flexio_os_outbox_set_cfg(ctx->outbox_config_id);
-	/* TODO: use real meta param */
+	 /* There is an extra 8 bytes at the end of the os thread context
+	  * that can be used to hold arbitrary data. It is called 'metadata'
+	  * in the PRM.
+	  * We use it to hold thread control block address in order to avoid
+	  * passing it as extra parameter everywhere.
+	  * TODO: hope that flexio updates flexio_os_thread_ctx struct and
+	  * allows 'metadata' configuration on thread startup.
+	  */
+	*(uint64_t *)(ctx + 1) = (uint64_t)tcb;
 	dpa_debug("Thread data : 0x%lx\n", *(uint64_t *)(ctx + 1));
 }
 
