@@ -180,8 +180,6 @@ struct snap_dma_q_ops {
 	int (*write)(struct snap_dma_q *q, void *src_buf, size_t len,
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		     struct snap_dma_completion *comp);
-	int (*writev)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
-		     struct snap_dma_completion *comp, int *n_bb);
 	int (*writev2v)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
 		     struct snap_dma_completion *comp, int *n_bb);
 	int (*writec)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
@@ -191,8 +189,6 @@ struct snap_dma_q_ops {
 	int (*read)(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 		    struct snap_dma_completion *comp);
-	int (*readv)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
-		    struct snap_dma_completion *comp, int *n_bb);
 	int (*readv2v)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
 		    struct snap_dma_completion *comp, int *n_bb);
 	int (*readc)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
@@ -341,9 +337,6 @@ void snap_dma_ep_destroy(struct snap_dma_q *q);
 int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 		uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		struct snap_dma_completion *comp);
-int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
-		struct iovec *iov, int iov_cnt, uint32_t rmkey,
-		struct snap_dma_completion *comp);
 int snap_dma_q_writev2v(struct snap_dma_q *q,
 		uint32_t *lkey, struct iovec *src_iov, int src_iovcnt,
 		uint32_t *rkey, struct iovec *dst_iov, int dst_iovcnt,
@@ -355,9 +348,6 @@ int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 		uint64_t dstaddr, uint32_t rmkey);
 int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 		uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
-		struct snap_dma_completion *comp);
-int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
-		struct iovec *iov, int iov_cnt, uint32_t rmkey,
 		struct snap_dma_completion *comp);
 int snap_dma_q_readv2v(struct snap_dma_q *q,
 		uint32_t *lkey, struct iovec *dst_iov, int dst_iovcnt,

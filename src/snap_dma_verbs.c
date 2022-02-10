@@ -121,54 +121,6 @@ static inline int verbs_dma_q_write(struct snap_dma_q *q,
 	return do_verbs_dma_xfer(q, wr);
 }
 
-static inline int verbs_dma_q_writev(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int i, num_sge[io_attr->riov_cnt];
-	size_t offset;
-	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge r_sgl[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt];
-	struct ibv_sge l_sge[io_attr->riov_cnt][1];
-	struct snap_dma_q_io_ctx *io_ctx;
-
-	/* `riov_cnt` number of wr, each wr will need a WQE
-	 * and each WQE only consume 1 BB
-	 */
-	*n_bb = io_attr->riov_cnt;
-	if (snap_unlikely(!qp_can_tx(q, *n_bb))) {
-		snap_debug("q->tx_available out of use\n");
-		return -EAGAIN;
-	}
-
-	offset = 0;
-	/* `riov_cnt` number of wr, and each wr with a sgl only have 1 sge */
-	for (i = 0; i < io_attr->riov_cnt; i++) {
-		l_sge[i][0].addr = (uint64_t)(io_attr->liov[0].iov_base + offset);
-		l_sge[i][0].length = io_attr->riov[i].iov_len;
-		l_sge[i][0].lkey = io_attr->lkey[0];
-
-		l_sgl[i] = l_sge[i];
-		num_sge[i] = 1;
-
-		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
-		r_sgl[i].length = io_attr->riov[i].iov_len;
-		r_sgl[i].lkey = io_attr->rkey[i];
-
-		offset += io_attr->riov[i].iov_len;
-	}
-
-	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
-	if (!io_ctx)
-		return errno;
-
-	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
-			IBV_WR_RDMA_WRITE, 0, &io_ctx->comp);
-
-	return do_verbs_dma_xfer(q, wr);
-}
-
 static inline int verbs_dma_q_writec(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
@@ -310,54 +262,6 @@ static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t l
 
 	verbs_dma_q_prepare_wr(wr, 1, l_sgl, num_sge, r_sgl,
 			IBV_WR_RDMA_READ, 0, comp);
-
-	return do_verbs_dma_xfer(q, wr);
-}
-
-static int verbs_dma_q_readv(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int i, num_sge[io_attr->riov_cnt];
-	size_t offset;
-	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge r_sgl[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt];
-	struct ibv_sge l_sge[io_attr->riov_cnt][1];
-	struct snap_dma_q_io_ctx *io_ctx;
-
-	/* `riov_cnt` number of wr, each wr will need a WQE
-	 * and each WQE only consume 1 BB
-	 */
-	*n_bb = io_attr->riov_cnt;
-	if (snap_unlikely(!qp_can_tx(q, *n_bb))) {
-		snap_debug("q->tx_available out of use\n");
-		return -EAGAIN;
-	}
-
-	offset = 0;
-	/* `riov_cnt` number of wr, and each wr with a sgl only have 1 sge */
-	for (i = 0; i < io_attr->riov_cnt; i++) {
-		l_sge[i][0].addr = (uint64_t)(io_attr->liov[0].iov_base + offset);
-		l_sge[i][0].length = io_attr->riov[i].iov_len;
-		l_sge[i][0].lkey = io_attr->lkey[0];
-
-		l_sgl[i] = l_sge[i];
-		num_sge[i] = 1;
-
-		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
-		r_sgl[i].length = io_attr->riov[i].iov_len;
-		r_sgl[i].lkey = io_attr->rkey[i];
-
-		offset += io_attr->riov[i].iov_len;
-	}
-
-	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
-	if (!io_ctx)
-		return errno;
-
-	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
-			IBV_WR_RDMA_READ, 0, &io_ctx->comp);
 
 	return do_verbs_dma_xfer(q, wr);
 }
@@ -713,12 +617,10 @@ static bool verbs_dma_q_empty(struct snap_dma_q *q)
 
 struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
-	.writev           = verbs_dma_q_writev,
 	.writev2v         = verbs_dma_q_writev2v,
 	.writec           = verbs_dma_q_writec,
 	.write_short     = verbs_dma_q_write_short,
 	.read            = verbs_dma_q_read,
-	.readv            = verbs_dma_q_readv,
 	.readv2v          = verbs_dma_q_readv2v,
 	.readc            = verbs_dma_q_readc,
 	.send_completion = verbs_dma_q_send_completion,

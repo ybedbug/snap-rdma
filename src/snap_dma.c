@@ -197,67 +197,6 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 }
 
 /**
- * snap_dma_q_writev() - DMA write to the host memory
- * @q:            dma queue
- * @src_buf:      where to get data
- * @lkey:         local memory key
- * @iov:          A scatter gather list of buffers to be write into
- * @iov_cnt:      The number of elements in @iov
- * @rmkey:        host memory key that describes remote memory
- * @comp:         dma completion structure
- *
- * The function starts non blocking memory transfer to the host memory,
- * those memory described in a scatter gather list.
- * Once data transfer is completed the user defined callback may be called.
- * Operations on the same dma queue are done in order.
- *
- * Return:
- * 0
- *     operation has been successfully submitted to the queue
- *     and is now in progress
- * \-EAGAIN
- *     queue does not have enough resources, must be retried later
- * \--ENOTSUP
- *     queue does not support write by provide a scatter gather list of buffers
- * < 0
- *     some other error has occured. Return value is -errno
- */
-int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
-				struct iovec *iov, int iov_cnt, uint32_t rmkey,
-				struct snap_dma_completion *comp)
-{
-	int i, rc, n_bb;
-	uint32_t rkey[iov_cnt];
-	size_t len;
-	struct iovec liov;
-	struct snap_dma_q_io_attr io_attr = {0};
-
-	for (i = 0, len = 0; i < iov_cnt; i++) {
-		rkey[i] = rmkey;
-		len += iov[i].iov_len;
-	}
-
-	liov.iov_base = src_buf;
-	liov.iov_len = len;
-
-	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lkey = &lkey;
-	io_attr.liov = &liov;
-	io_attr.liov_cnt = 1;
-	io_attr.rkey = rkey;
-	io_attr.riov = iov;
-	io_attr.riov_cnt = iov_cnt;
-
-	rc = q->ops->writev(q, &io_attr, comp, &n_bb);
-	if (snap_unlikely(rc))
-		return rc;
-
-	q->tx_available -= n_bb;
-
-	return 0;
-}
-
-/**
  * snap_dma_q_writev2v() - DMA write to the host memory
  * @q:              dma queue
  * @lkey:           lmkey for local sgl memory
@@ -447,67 +386,6 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 		return rc;
 
 	q->tx_available--;
-	return 0;
-}
-
-/**
- * snap_dma_q_readv() - DMA read from the host memory
- * @q:            dma queue
- * @dst_buf:      where to put data
- * @lkey:         local memory key
- * @iov:          A scatter gather list of buffers to be read from
- * @iov_cnt:      The number of elements in @iov
- * @rmkey:        host memory key that describes remote memory
- * @comp:         dma completion structure
- *
- * The function starts non blocking memory transfer from the host memory,
- * those memory described in a scatter gather list.
- * Once data transfer is completed the user defined callback may be called.
- * Operations on the same dma queue are done in order.
- *
- * Return:
- * 0
- *     operation has been successfully submitted to the queue
- *     and is now in progress
- * \-EAGAIN
- *     queue does not have enough resources, must be retried later
- * \--ENOTSUP
- *     queue does not support read by provide a scatter gather list of buffers
- * < 0
- *     some other error has occured. Return value is -errno
- */
-int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
-				struct iovec *iov, int iov_cnt, uint32_t rmkey,
-				struct snap_dma_completion *comp)
-{
-	int i, rc, n_bb;
-	uint32_t rkey[iov_cnt];
-	size_t len;
-	struct iovec liov;
-	struct snap_dma_q_io_attr io_attr = {0};
-
-	for (i = 0, len = 0; i < iov_cnt; i++) {
-		rkey[i] = rmkey;
-		len += iov[i].iov_len;
-	}
-
-	liov.iov_base = dst_buf;
-	liov.iov_len = len;
-
-	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lkey = &lkey;
-	io_attr.liov = &liov;
-	io_attr.liov_cnt = 1;
-	io_attr.rkey = rkey;
-	io_attr.riov = iov;
-	io_attr.riov_cnt = iov_cnt;
-
-	rc = q->ops->readv(q, &io_attr, comp, &n_bb);
-	if (snap_unlikely(rc))
-		return rc;
-
-	q->tx_available -= n_bb;
-
 	return 0;
 }
 
