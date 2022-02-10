@@ -1128,8 +1128,6 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 	int i, j, n, ret;
 	char *lbuf, *rbuf;
 	struct ibv_mr *lmr, *rmr;
-	uint32_t lkey;
-	uint32_t rkey[IOV_CNT];
 	struct iovec l_iov;
 	struct iovec iov[2][IOV_CNT];
 	struct snap_dma_completion comp;
@@ -1196,12 +1194,8 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 		memset(lbuf + (2 * i + 1) * bsize, 'a' + i, bsize);
 	}
 
-	lkey = rmr->lkey;
 	l_iov.iov_base = rbuf;
 	l_iov.iov_len = IOV_CNT * bsize;
-
-	for (i = 0; i < IOV_CNT; i++)
-		rkey[i] = lmr->lkey;
 
 	for (j = 0; j < 2; j++) {
 		comp.func = dma_completion;
@@ -1209,9 +1203,11 @@ static void snap_dma_q_rw_iov(struct snap_dma_q_create_attr *dma_q_attr,
 		g_comp_count = 0;
 
 		if (j == 0) { /* readv: iov[0] --> rbuf */
-			ret = snap_dma_q_readv2v(q, &lkey, &l_iov, 1, rkey, &iov[0][0], IOV_CNT, &comp);
+			ret = snap_dma_q_readv2v(q, &rmr->lkey, &l_iov, 1,
+					&lmr->lkey, &iov[0][0], IOV_CNT, true, true, &comp);
 		} else { /* writev: rbuf --> iov[1] */
-			ret = snap_dma_q_writev2v(q, &lkey, &l_iov, 1, rkey, &iov[1][0], IOV_CNT, &comp);
+			ret = snap_dma_q_writev2v(q, &rmr->lkey, &l_iov, 1,
+					&lmr->lkey, &iov[1][0], IOV_CNT, true, true, &comp);
 		}
 		ASSERT_EQ(ret, 0);
 
@@ -1321,9 +1317,11 @@ static void snap_dma_q_rw_iov2v(struct snap_dma_q_create_attr *dma_q_attr,
 		g_comp_count = 0;
 
 		if (j == 0) { /* readv2v: iov1 -> iov0 */
-			ret = snap_dma_q_readv2v(q, mkey0, iov0, IOV_CNT * 4, mkey1, iov1, IOV_CNT * 2, &comp);
+			ret = snap_dma_q_readv2v(q, mkey0, iov0, IOV_CNT * 4,
+						mkey1, iov1, IOV_CNT * 2, false, false, &comp);
 		} else { /* writev2v: iov0 -> iov2 */
-			ret = snap_dma_q_writev2v(q, mkey0, iov0, IOV_CNT * 4, mkey2, iov2, IOV_CNT, &comp);
+			ret = snap_dma_q_writev2v(q, mkey0, iov0, IOV_CNT * 4,
+						mkey2, iov2, IOV_CNT, false, false, &comp);
 		}
 		ASSERT_EQ(ret, 0);
 

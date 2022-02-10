@@ -199,12 +199,20 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 /**
  * snap_dma_q_writev2v() - DMA write to the host memory
  * @q:              dma queue
- * @lkey:           lmkey for local sgl memory
+ * @src_mkey:        lmkey for local sgl memory
  * @src_iov:        local memory in scatter gather list format
  * @src_iovcnt:     local sge count
- * @rkey:           lmkey for remote sgl memory
+ * @dst_mkey:        lmkey for remote sgl memory
  * @dst_iov:        remote memory in scatter gather list format
  * @dst_iovcnt:     remote sge count
+ * @share_src_mkey: flag to indicate all src_iov use same @src_mkey.
+ *                  if this flag is true, @src_mkey is a pointer
+ *                  point to a uint32_t memory, otherwise it is a
+ *                  pointer point to a array of uint32_t memory.
+ * @share_dst_mkey: flag to indicate all dst_iov use same @dst_mkey.
+ *                  if this flag is true, then @dst_mkey is a pointer
+ *                  point to a uint32_t memory, otherwise they are a
+ *                  pointer point to a array of uint32_t memory.
  * @comp:           dma completion structure
  *
  * The function starts non blocking memory transfer to the host memory,
@@ -224,18 +232,35 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
  *     some other error has occured. Return value is -errno
  */
 int snap_dma_q_writev2v(struct snap_dma_q *q,
-				uint32_t *lkey, struct iovec *src_iov, int src_iovcnt,
-				uint32_t *rkey, struct iovec *dst_iov, int dst_iovcnt,
+				uint32_t *src_mkey, struct iovec *src_iov, int src_iovcnt,
+				uint32_t *dst_mkey, struct iovec *dst_iov, int dst_iovcnt,
+				bool share_src_mkey, bool share_dst_mkey,
 				struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t lkey[src_iovcnt];
+	uint32_t rkey[dst_iovcnt];
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	if (share_src_mkey) {
+		for (i = 0; i < src_iovcnt; i++)
+			lkey[i] = *src_mkey;
+		io_attr.lkey = lkey;
+	} else {
+		io_attr.lkey = src_mkey;
+	}
+
+	if (share_dst_mkey) {
+		for (i = 0; i < dst_iovcnt; i++)
+			rkey[i] = *dst_mkey;
+		io_attr.rkey = rkey;
+	} else {
+		io_attr.rkey = dst_mkey;
+	}
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lkey = lkey;
 	io_attr.liov = src_iov;
 	io_attr.liov_cnt = src_iovcnt;
-	io_attr.rkey = rkey;
 	io_attr.riov = dst_iov;
 	io_attr.riov_cnt = dst_iovcnt;
 
@@ -392,12 +417,20 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 /**
  * snap_dma_q_readv2v() - DMA read from the host memory
  * @q:              dma queue
- * @lkey:           lmkey for local sgl memory
+ * @dst_mkey:        lmkey for local sgl memory
  * @dst_iov:        local memory in scatter gather list format
  * @dst_iovcnt:     local sge count
- * @rkey:           lmkey for remote sgl memory
+ * @src_mkey:        lmkey for remote sgl memory
  * @src_iov:        remote memory in scatter gather list format
  * @src_iovcnt:     remote sge count
+ * @share_dst_mkey: flag to indicate all dst_iov use same @dst_mkey.
+ *                  if this flag is true, then @dst_mkey is a pointer
+ *                  point to a uint32_t memory, otherwise they are a
+ *                  pointer point to a array of uint32_t memory.
+ * @share_src_mkey: flag to indicate all src_iov use same @src_mkey.
+ *                  if this flag is true, @src_mkey is a pointer
+ *                  point to a uint32_t memory, otherwise it is a
+ *                  pointer point to a array of uint32_t memory.
  * @comp:           dma completion structure
  *
  * The function starts non blocking memory transfer from the host memory,
@@ -417,18 +450,35 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
  *     some other error has occured. Return value is -errno
  */
 int snap_dma_q_readv2v(struct snap_dma_q *q,
-				uint32_t *lkey, struct iovec *dst_iov, int dst_iovcnt,
-				uint32_t *rkey, struct iovec *src_iov, int src_iovcnt,
+				uint32_t *dst_mkey, struct iovec *dst_iov, int dst_iovcnt,
+				uint32_t *src_mkey, struct iovec *src_iov, int src_iovcnt,
+				bool share_dst_mkey, bool share_src_mkey,
 				struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t lkey[dst_iovcnt];
+	uint32_t rkey[src_iovcnt];
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	if (share_dst_mkey) {
+		for (i = 0; i < dst_iovcnt; i++)
+			lkey[i] = *dst_mkey;
+		io_attr.lkey = lkey;
+	} else {
+		io_attr.lkey = dst_mkey;
+	}
+
+	if (share_src_mkey) {
+		for (i = 0; i < src_iovcnt; i++)
+			rkey[i] = *src_mkey;
+		io_attr.rkey = rkey;
+	} else {
+		io_attr.rkey = src_mkey;
+	}
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lkey = lkey;
 	io_attr.liov = dst_iov;
 	io_attr.liov_cnt = dst_iovcnt;
-	io_attr.rkey = rkey;
 	io_attr.riov = src_iov;
 	io_attr.riov_cnt = src_iovcnt;
 
