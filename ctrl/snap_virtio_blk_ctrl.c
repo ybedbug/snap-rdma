@@ -228,7 +228,8 @@ static struct snap_virtio_ctrl_bar_ops snap_virtio_blk_ctrl_bar_ops = {
 
 static bool
 snap_virtio_blk_ctrl_bar_is_setup_valid(const struct snap_virtio_blk_device_attr *bar,
-					const struct snap_virtio_blk_registers *regs)
+					const struct snap_virtio_blk_registers *regs,
+					bool recover)
 {
 	bool ret = true;
 
@@ -255,7 +256,7 @@ snap_virtio_blk_ctrl_bar_is_setup_valid(const struct snap_virtio_blk_device_attr
 	}
 
 	/* virtio_blk_config registers */
-	if (regs->capacity != bar->capacity) {
+	if (recover && regs->capacity != bar->capacity) {
 		snap_error("Cant change capacity, host driver is up - conf.capacity: %ld bar.capacity: %ld\n",
 			   regs->capacity, bar->capacity);
 		ret = false;
@@ -304,7 +305,7 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	if (snap_virtio_ctrl_is_configurable(&ctrl->common))
 		return true;
 
-	return snap_virtio_blk_ctrl_bar_is_setup_valid(bar, regs);
+	return snap_virtio_blk_ctrl_bar_is_setup_valid(bar, regs, false);
 }
 
 /**
@@ -738,7 +739,7 @@ static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
 		goto err;
 	}
 
-	if (!snap_virtio_blk_ctrl_bar_is_setup_valid(&blk_attr, &attr->regs)) {
+	if (!snap_virtio_blk_ctrl_bar_is_setup_valid(&blk_attr, &attr->regs, true)) {
 		snap_error("The configured parameters don't fit bar data\n");
 		ret = -EINVAL;
 		goto err;
@@ -901,6 +902,30 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
 	free(ctrl);
 }
 
+static void snap_virtio_blk_ctrl_bdev_detach_check(struct snap_virtio_ctrl *ctrl)
+{
+	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(ctrl);
+	struct snap_virtio_blk_ctrl_queue *vbq;
+	struct virtq_priv *priv;
+	int i;
+
+	if (!blk_ctrl->pending_bdev_detach || !blk_ctrl->bdev_detach_cb)
+		return;
+
+	for (i = 0; i < ctrl->max_queues; i++) {
+		if (!ctrl->queues[i])
+			continue;
+		vbq = to_blk_ctrl_q(ctrl->queues[i]);
+		if (!vbq->q_impl)
+			continue;
+		priv = to_blk_ctx(vbq->q_impl)->common_ctx.priv;
+		if (to_blk_queue(priv->snap_vbq)->uncomp_bdev_cmds != 0)
+			return;
+	}
+	blk_ctrl->bdev_detach_cb(blk_ctrl->bdev_detach_cb_arg);
+	blk_ctrl->bdev_detach_cb = NULL;
+}
+
 /**
  * snap_virtio_blk_ctrl_progress() - Handles control path changes in
  *				   virtio-blk controller
@@ -912,9 +937,11 @@ void snap_virtio_blk_ctrl_close(struct snap_virtio_blk_ctrl *ctrl)
  */
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl)
 {
+	/*Check if we need to detach bdev */
+	snap_virtio_blk_ctrl_bdev_detach_check(&ctrl->common);
+
 	snap_virtio_ctrl_progress(&ctrl->common);
 }
-
 
 /**
  * snap_virtio_blk_ctrl_io_progress() - single-threaded IO requests handling

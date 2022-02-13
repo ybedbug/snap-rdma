@@ -44,6 +44,7 @@ enum snap_virtio_blk_queue_modify {
 struct snap_virtio_blk_queue {
 	struct snap_virtio_queue	virtq;
 	struct snap_virtio_blk_device	*vbdev;
+	uint32_t uncomp_bdev_cmds; // For bdev detach
 };
 
 struct snap_virtio_blk_device_attr {

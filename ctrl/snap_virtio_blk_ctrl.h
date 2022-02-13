@@ -56,6 +56,9 @@ struct snap_virtio_blk_ctrl {
 	void *bdev;
 	uint32_t network_error;
 	uint32_t internal_error;
+	bool pending_bdev_detach;
+	void (*bdev_detach_cb)(void *arg);
+	void *bdev_detach_cb_arg;
 };
 
 struct snap_virtio_blk_ctrl *

@@ -394,7 +394,8 @@ def main():
             params['size_max'] = args.size_max
         if args.seg_max:
             params['seg_max'] = args.seg_max
-        args.client.call('controller_virtio_blk_bdev_attach', params)
+        result = args.client.call('controller_virtio_blk_bdev_attach', params)
+        print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_bdev_attach',
                               help='Attach bdev to VirtIO BLK controller')
     p.add_argument('name', help='Controller Name', type=str)
@@ -409,7 +410,8 @@ def main():
         params = {
             'name': args.name,
         }
-        args.client.call('controller_virtio_blk_bdev_detach', params)
+        result = args.client.call('controller_virtio_blk_bdev_detach', params)
+        print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_virtio_blk_bdev_detach',
                               help='Detach bdev from VirtIO BLK controller')
     p.add_argument('name', help='Controller Name', type=str)

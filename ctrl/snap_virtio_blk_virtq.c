@@ -56,6 +56,7 @@ struct blk_virtq_cmd {
 	struct snap_blk_mempool_ctx dma_pool_ctx;
 	uint64_t offset_blocks;
 	uint64_t num_blocks;
+	bool in_bdev_detach;
 };
 
 static inline struct snap_bdev_ops *to_blk_bdev_ops(struct virtq_bdev *bdev)
@@ -812,6 +813,15 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 		return true;
 	}
 
+	/* If we are in the process of detaching bdev, fail all incoming commands */
+	if (to_blk_ctrl(cmd->vq_priv->vbq->ctrl)->pending_bdev_detach) {
+		/* Mark new commands sent during bdev detach */
+		to_blk_virtq_cmd(cmd)->in_bdev_detach = true;
+		snap_debug("Started to detach bdev - failing all incoming commands\n");
+		goto err;
+	} else
+		to_blk_virtq_cmd(cmd)->in_bdev_detach = false;
+
 	cmd->io_cmd_stat = NULL;
 	switch (cmd_type) {
 	case VIRTIO_BLK_T_OUT:
@@ -910,20 +920,25 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 			cmd->io_cmd_stat->long_desc_chain++;
 	}
 
-	if (ret) {
+	if (ret)
+		goto err;
+
+	if (snap_unlikely(cmd_type == VIRTIO_BLK_T_GET_ID))
+		++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
+	else {
+		++cmd->vq_priv->cmd_cntrs.outstanding_in_bdev;
+		++to_blk_queue(cmd->vq_priv->snap_vbq)->uncomp_bdev_cmds;
+	}
+
+	return false;
+
+err:
 		ERR_ON_CMD(cmd, "failed while executing command %d\n",
 			to_blk_cmd_aux(cmd->aux)->header.type);
 		to_blk_cmd_ftr(cmd->ftr)->status = VIRTIO_BLK_S_IOERR;
 		cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 		return true;
-	}
 
-	if (snap_unlikely(cmd_type == VIRTIO_BLK_T_GET_ID))
-		++cmd->vq_priv->cmd_cntrs.outstanding_to_host;
-	else
-		++cmd->vq_priv->cmd_cntrs.outstanding_in_bdev;
-
-	return false;
 }
 
 /**
@@ -1050,6 +1065,24 @@ static int blk_progress_suspend(struct snap_virtio_queue *snap_vbq,
 					    qattr);
 }
 
+bool blk_virtq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
+{
+	struct virtq_priv *vq_priv = cmd->vq_priv;
+	uint32_t cmd_type = to_blk_cmd_aux(cmd->aux)->header.type;
+
+	/*
+	 * Count uncompleted commands sent to bdev remaining for bdev detach.
+	 * Only count completion of commands sent before starting bdev detach
+	 */
+	if (!to_blk_virtq_cmd(cmd)->in_bdev_detach && cmd_type != VIRTIO_BLK_T_GET_ID) {
+		if (to_blk_queue(vq_priv->snap_vbq)->uncomp_bdev_cmds > 0)
+			--to_blk_queue(vq_priv->snap_vbq)->uncomp_bdev_cmds;
+	}
+
+	return virtq_sm_release(cmd, status);
+
+}
+
 static struct virtq_impl_ops blk_impl_ops = {
 	.get_descs	   = blk_virtq_get_descs,
 	.error_status  = blk_virtq_error_status,
@@ -1078,7 +1111,7 @@ static struct virtq_sm_state blk_sm_arr[] = {
 /*VIRTQ_CMD_STATE_WRITE_STATUS			*/	{virtq_sm_write_status},
 /*VIRTQ_CMD_STATE_SEND_COMP				*/	{virtq_sm_send_completion},
 /*VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP	*/	{virtq_sm_send_completion},
-/*VIRTQ_CMD_STATE_RELEASE				*/	{virtq_sm_release},
+/*VIRTQ_CMD_STATE_RELEASE				*/	{blk_virtq_sm_release},
 /*VIRTQ_CMD_STATE_FATAL_ERR				*/	{virtq_sm_fatal_error},
 											};
 struct virtq_state_machine blk_sm  = { blk_sm_arr, sizeof(blk_sm_arr) / sizeof(struct virtq_sm_state) };
