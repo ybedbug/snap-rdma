@@ -99,6 +99,30 @@ TEST_F(SnapDpaTest, create_thread) {
 	snap_dpa_process_destroy(dpa_ctx);
 }
 
+TEST_F(SnapDpaTest, dpa_memcpy) {
+	struct snap_dpa_ctx *dpa_ctx;
+	size_t i;
+	int ret;
+	char buf[4096];
+	struct snap_dpa_memh *dpa_mem;
+
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_mem = snap_dpa_mem_alloc(dpa_ctx, sizeof(buf));
+	ASSERT_TRUE(dpa_mem);
+
+	for (i = 0; i < sizeof(buf); i++) {
+		ret = snap_dpa_memcpy(dpa_ctx, snap_dpa_mem_addr(dpa_mem), buf, i);
+		if (ret)
+			printf("Failed to copy %lu bytes\n", i);
+		ASSERT_EQ(0, ret);
+	};
+
+	snap_dpa_mem_free(dpa_mem);
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
 TEST_F(SnapDpaTest, create_rt)
 {
 	struct snap_dpa_rt_attr attr = {};
