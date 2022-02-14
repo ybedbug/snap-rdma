@@ -191,6 +191,32 @@ static inline void snap_dv_post_recv(struct snap_dv_qp *dv_qp, void *addr,
 	dv_qp->hw_qp.rq.ci++;
 }
 
+static inline void snap_dv_arm_cq(struct snap_hw_cq *cq)
+{
+#if !__DPA
+	/* adopted from the uct_ib_mlx5dv_arm_cq() */
+	uint32_t *dbrec = (uint32_t *)cq->dbr_addr;
+	uint64_t sn_ci_cmd, doorbell;
+	uint32_t sn, ci;
+
+	sn = cq->cq_sn & 3;
+	ci = cq->ci & 0xffffff;
+	sn_ci_cmd = (sn << 28) | ci;
+
+	/* we want any events */
+	dbrec[SNAP_MLX5_CQ_ARM_DB] = htobe32(sn_ci_cmd);
+	snap_memory_cpu_fence();
+
+	doorbell = (sn_ci_cmd << 32) | cq->cq_num;
+	*(uint64_t *)((uint8_t *)cq->uar_addr + MLX5_CQ_DOORBELL) = htobe64(doorbell);
+	snap_memory_bus_store_fence();
+	cq->cq_sn++;
+#else
+	snap_memory_cpu_fence();
+	dpa_dma_q_arm_cq(cq->cq_num, cq->ci);
+#endif
+}
+
 extern struct snap_dma_q_ops verb_ops;
 extern struct snap_dma_q_ops dv_ops;
 extern struct snap_dma_q_ops gga_ops;

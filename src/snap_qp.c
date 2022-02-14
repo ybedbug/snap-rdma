@@ -228,9 +228,13 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	hw_cq->ci = 0;
 	hw_cq->cqe_cnt = devx_cq->cqe_cnt;
 	hw_cq->cqe_size = devx_cq->cqe_size;
+	hw_cq->dbr_addr = hw_cq->cq_addr + hw_cq->cqe_cnt * hw_cq->cqe_size;
+	hw_cq->cq_num = devx_cq->devx.id;
+	hw_cq->uar_addr = (uintptr_t)devx_cq->devx.uar->uar->base_addr;
+	hw_cq->cq_sn = 0;
 
-	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d\n",
-		   devx_cq->devx.id, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt);
+	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d dbr_addr = 0x%lx\n",
+		   devx_cq->devx.id, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt, hw_cq->dbr_addr);
 	return 0;
 }
 
@@ -308,9 +312,13 @@ int dv_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	hw_cq->ci = 0;
 	hw_cq->cqe_cnt = mlx5_cq.cqe_cnt;
 	hw_cq->cqe_size = mlx5_cq.cqe_size;
+	hw_cq->dbr_addr = (uintptr_t)mlx5_cq.dbrec;
+	hw_cq->cq_num = mlx5_cq.cqn;
+	hw_cq->uar_addr = (uintptr_t)mlx5_cq.cq_uar;
+	hw_cq->cq_sn = 0;
 
-	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d\n",
-		   mlx5_cq.cqn, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt);
+	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d, dbr_addr = 0x%lx\n",
+		   mlx5_cq.cqn, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt, hw_cq->dbr_addr);
 	return 0;
 }
 

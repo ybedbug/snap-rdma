@@ -747,23 +747,14 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 
 static int dv_dma_q_arm(struct snap_dma_q *q)
 {
-#if !defined(__DPA)
-	int rc;
-
 	/* ring doorbells, disable batch mode.
 	 * TODO: better interaction of batch and event modes
 	 */
 	snap_dv_tx_complete(&q->sw_qp.dv_qp);
 	q->sw_qp.dv_qp.db_flag = SNAP_DB_RING_IMM;
-
-	rc = ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.tx_cq), 0);
-	if (rc)
-		return rc;
-
-	return ibv_req_notify_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), 0);
-#else
-	return -ENOTSUP;
-#endif
+	snap_dv_arm_cq(&q->sw_qp.dv_tx_cq);
+	snap_dv_arm_cq(&q->sw_qp.dv_rx_cq);
+	return 0;
 }
 
 static int dv_dma_q_flush(struct snap_dma_q *q)

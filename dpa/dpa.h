@@ -115,6 +115,14 @@ static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
 	flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
 }
 
+static inline void dpa_dma_q_arm_cq(uint16_t cqnum, uint16_t ci)
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	ctx = flexio_os_get_thread_ctx();
+	flexio_dev_cq_arm((struct flexio_dev_thread_ctx *)ctx, ci, cqnum);
+}
+
 /**
  * dpa_init() - initialize thread
  * @tcb: thread control block

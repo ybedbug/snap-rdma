@@ -42,6 +42,9 @@
 #define SNAP_MLX5_L2_CACHE_SIZE 64
 #define SNAP_MLX5_DBR_SIZE SNAP_MLX5_L2_CACHE_SIZE
 
+#define SNAP_MLX5_CQ_SET_CI 0
+#define SNAP_MLX5_CQ_ARM_DB 1
+
 enum {
 	SNAP_OBJ_VERBS = 0x1,
 	SNAP_OBJ_DV = 0x2,
@@ -95,6 +98,10 @@ struct snap_hw_cq {
 	uint32_t cqe_size;
 	uint16_t rsvd1;
 	uint16_t ci;
+	uint64_t dbr_addr;
+	uint64_t uar_addr;
+	uint32_t cq_num;
+	uint32_t cq_sn;
 };
 
 struct snap_cq;
