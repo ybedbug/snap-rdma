@@ -186,7 +186,7 @@ static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, int
 static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		struct ibv_comp_channel *comp_channel, int comp_vector,
 		struct snap_qp_attr *attr, struct snap_dma_ibv_qp *qp,
-		int mode)
+		int mode, bool use_devx)
 {
 	struct snap_cq_attr cq_attr = {
 		.cq_context = cq_context,
@@ -203,8 +203,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		cq_attr.cq_type = SNAP_OBJ_VERBS;
 	else
-		/* SNAP_OBJ_DEVX is also supported - enable manually */
-		cq_attr.cq_type = SNAP_OBJ_DV;
+		cq_attr.cq_type = use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
 
 	/* force cq creation on the dpa */
 	if (attr->qp_on_dpa) {
@@ -389,7 +388,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	qp_init_attr.rq_max_sge = 1;
 
 	rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,
-			attr->comp_vector, &qp_init_attr, &q->sw_qp, attr->mode);
+			attr->comp_vector, &qp_init_attr, &q->sw_qp, attr->mode, attr->use_devx);
 	if (rc)
 		return rc;
 
@@ -459,7 +458,7 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	/* the qp 'resources' are going to be replaced by the fw. We do not
 	 * need use DV or GGA here
 	 **/
-	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &qp_init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS);
+	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &qp_init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS, false);
 	return rc;
 }
 

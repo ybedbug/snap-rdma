@@ -300,6 +300,8 @@ enum {
  * @comp_vector:  completion vector
  * @comp_context: completion context that will be returned by the
  *                ibv_get_cq_event(). See man ibv_get_cq_event
+ * @use_devx:     use DEVX to create CQs and QP instead of mlx5dv/verbs api. Works
+ *                only if @mode is dv or gga
  * @on_dpa:       create dma queue on the DPA. Valid only with snap_dma_ep_create()
  * @dpa_proc:     snap dpa process context. Must be valid if @on_dpa is true
  */
@@ -318,6 +320,7 @@ struct snap_dma_q_create_attr {
 	int                      comp_vector;
 	void                    *comp_context;
 
+	bool use_devx;
 	bool on_dpa;
 	struct snap_dpa_ctx *dpa_proc;
 };
