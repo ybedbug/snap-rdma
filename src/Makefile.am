@@ -4,7 +4,7 @@ lib_LTLIBRARIES = libsnap.la
 
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
 		 snap_dpa.h snap_dpa_virtq.h snap_dma_internal.h \
-		 snap_sw_virtio_blk.h snap_dpa_p2p.h snap_dpa_rt.h
+		 snap_sw_virtio_blk.h snap_dpa_p2p.h snap_dpa_rt.h snap_mb.h
 
 #snap lib
 libsnap_ladir = $(includedir)/

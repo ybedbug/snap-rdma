@@ -14,6 +14,8 @@
 #define _SNAP_DPA_COMMON_H
 
 #include <string.h>
+
+#include "snap_mb.h"
 /*
  * This file contains definitions and inline functions that are common
  * between DPA and DPU
@@ -117,8 +119,10 @@ static inline struct snap_dpa_cmd *snap_dpa_mbox_to_cmd(void *mbox)
 static inline void snap_dpa_cmd_send(struct snap_dpa_cmd *cmd, uint32_t type)
 {
 	cmd->cmd = type;
-	/* TODO: barriers */
+	/* TODO: check if weaker barriers can be used */
+	snap_memory_cpu_fence();
 	cmd->sn++;
+	snap_memory_bus_fence();
 }
 
 static inline struct snap_dpa_rsp *snap_dpa_mbox_to_rsp(void *mbox)
@@ -136,22 +140,25 @@ static inline void snap_dpa_rsp_send(void *mbox, int type)
 	rsp = snap_dpa_mbox_to_rsp(mbox);
 
 	rsp->status = type;
-	/* TODO: barriers */
+	/* TODO: check if weaker barriers can be used */
+	snap_memory_cpu_fence();
 	rsp->sn = cmd->sn;
+	snap_memory_bus_fence();
 }
 
 struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox);
 
 static inline struct snap_dpa_cmd *snap_dpa_cmd_recv(void *mbox, uint32_t type)
 {
-	struct snap_dpa_cmd *cmd;
+	volatile struct snap_dpa_cmd *cmd;
 
 	/* wait for report back from the thread. TODO: timeout */
 	do {
 		cmd = snap_dpa_mbox_to_cmd(mbox);
+		snap_memory_bus_fence();
 	} while (cmd->cmd != type);
 
-	return cmd;
+	return (struct snap_dpa_cmd *)cmd;
 }
 
 /**
@@ -198,7 +205,8 @@ static inline void snap_dpa_log_add(struct snap_dpa_log *log, uint64_t ts, const
 	n = log->avail_idx % log->n_entries;
 	strncpy(log->entries[n].msg, msg, sizeof(log->entries[n].msg));
 	log->entries[n].timestamp = ts;
-	/* todo: barrier */
+
+	snap_memory_cpu_store_fence();
 	log->avail_idx++;
 }
 #endif

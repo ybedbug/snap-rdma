@@ -832,6 +832,7 @@ struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
 	/* wait for report back from the thread */
 	do {
 		rsp = snap_dpa_mbox_to_rsp(mbox);
+		snap_memory_cpu_load_fence();
 		if (rsp->sn == cmd->sn)
 			break;
 

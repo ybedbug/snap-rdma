@@ -49,7 +49,10 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
 	/* this is based on flexio rpc entry_point.c */
 	ctx = flexio_os_get_thread_ctx();
 	window_u_cfg = (uint32_t *)ctx->window_config_base;
+	/* consider weaker barrier */
+	snap_memory_bus_fence();
 	*window_u_cfg = mkey;
+	snap_memory_bus_fence();
 }
 
 /**
