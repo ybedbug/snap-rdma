@@ -14,6 +14,7 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "snap_macros.h"
 
 #if HAVE_FLEXIO
 #include <libflexio/flexio_elf.h>
@@ -329,7 +330,9 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_thread;
 	}
 
-	mbox_size = SNAP_DPA_THREAD_MBOX_LEN + snap_dpa_log_size(SNAP_DPA_THREAD_N_LOG_ENTRIES);
+	/* window size must be a multiple of 64 bytes */
+	mbox_size = SNAP_ALIGN_CEIL(SNAP_DPA_THREAD_MBOX_LEN +
+			snap_dpa_log_size(SNAP_DPA_THREAD_N_LOG_ENTRIES), 64);
 	ret = posix_memalign(&thr->cmd_mbox, SNAP_DPA_THREAD_MBOX_ALIGN, mbox_size);
 	if (ret < 0) {
 		snap_error("Failed to allocate DPA thread mailbox\n");
@@ -342,7 +345,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	 */
 	thr->dpa_log = thr->cmd_mbox + SNAP_DPA_THREAD_MBOX_LEN;
 	snap_dpa_log_init(thr->dpa_log, SNAP_DPA_THREAD_N_LOG_ENTRIES);
-	thr->cmd_mr = ibv_reg_mr(thr->dctx->pd, thr->cmd_mbox, mbox_size, 0);
+	thr->cmd_mr = snap_reg_mr(thr->dctx->pd, thr->cmd_mbox, mbox_size);
 	if (!thr->cmd_mr) {
 		snap_error("Failed to allocate DPA thread mailbox mr\n");
 		goto free_mbox;
@@ -363,7 +366,8 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
-	snap_debug("tcb mailbox lkey 0x%x addr %p mem_base at 0x%lx\n", thr->cmd_mr->lkey, thr->cmd_mbox, tcb.data_address);
+	snap_debug("tcb mailbox lkey 0x%x addr %p size(mbox+log) %lu mem_base at 0x%lx\n",
+			thr->cmd_mr->lkey, thr->cmd_mbox, mbox_size, tcb.data_address);
 
 	st = flexio_copy_from_host(thr->dctx->dpa_proc, (uintptr_t)&tcb, sizeof(tcb), &dpa_tcb_addr);
 	if (st != FLEXIO_STATUS_SUCCESS) {
