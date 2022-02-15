@@ -1367,6 +1367,38 @@ TEST_F(SnapDmaTest, attach_crypto_bsf_and_mtt_to_mkey_no_wait_complete) {
 	post_umr_modify_mkey(m_pd, &m_dma_q_attr, true, true, false);
 }
 
+TEST_F(SnapDmaTest, devx_dma_only_q) {
+	struct snap_dma_q *dma_q;
+	struct snap_dma_q *dummy_q;
+	int ret;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = true;
+	m_dma_q_attr.tx_qsize = 16;
+	m_dma_q_attr.tx_elem_size = 0;
+	m_dma_q_attr.rx_qsize = 0;
+
+	dma_q = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dma_q);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = true;
+	m_dma_q_attr.tx_qsize = 0;
+	m_dma_q_attr.rx_qsize = 0;
+
+	dummy_q = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dummy_q);
+
+	ret = snap_dma_ep_connect(dma_q, dummy_q);
+	EXPECT_EQ(0, ret);
+
+	dma_xfer_test(dma_q, true, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+	dma_xfer_test(dma_q, false, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	snap_dma_ep_destroy(dma_q);
+	snap_dma_ep_destroy(dummy_q);
+}
+
 /* DPA section */
 TEST_F(SnapDmaTest, dpa_ep_create) {
 	struct snap_dma_q *dpu_qp;

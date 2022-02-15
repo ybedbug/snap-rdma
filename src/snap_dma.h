@@ -257,6 +257,7 @@ struct snap_dma_q {
 	TAILQ_HEAD(, snap_dma_q_io_ctx) free_iov_ctx;
 
 	TAILQ_HEAD(, snap_dma_q_io_ctx) free_crypto_ctx;
+	int custom_ops;
 
 	/* public: */
 	/** @uctx:  user supplied context */

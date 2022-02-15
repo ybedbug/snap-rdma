@@ -153,12 +153,16 @@ static void snap_destroy_qp_helper(struct snap_dma_ibv_qp *qp)
 	}
 
 	snap_qp_destroy(qp->qp);
-	snap_cq_destroy(qp->rx_cq);
-	snap_cq_destroy(qp->tx_cq);
+	if (qp->rx_cq)
+		snap_cq_destroy(qp->rx_cq);
+	if (qp->tx_cq)
+		snap_cq_destroy(qp->tx_cq);
 }
 
 static void snap_free_rx_wqes(struct snap_dma_ibv_qp *qp)
 {
+	if (!qp->rx_buf)
+		return;
 	ibv_dereg_mr(qp->rx_mr);
 	free(qp->rx_buf);
 }
@@ -167,6 +171,11 @@ static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, int
 		int rx_elem_size)
 {
 	int rc;
+
+	if (rx_qsize == 0) {
+		qp->rx_buf = 0;
+		return 0;
+	}
 
 	rc = posix_memalign((void **)&qp->rx_buf, SNAP_DMA_RX_BUF_ALIGN,
 			rx_qsize * rx_elem_size);
@@ -180,6 +189,11 @@ static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, int
 		return -ENOMEM;
 	}
 
+	return 0;
+}
+
+static int dummy_progress(struct snap_dma_q *q)
+{
 	return 0;
 }
 
@@ -213,19 +227,25 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		cq_attr.dpa_proc = attr->dpa_proc;
 	}
 
-	qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
-	if (!qp->tx_cq)
-		return -EINVAL;
+	if (attr->sq_size) {
+		qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
+		if (!qp->tx_cq)
+			return -EINVAL;
+	} else
+		qp->tx_cq = NULL;
 
-	cq_attr.cqe_cnt = attr->rq_size;
-	/* Use 128 bytes cqes in order to allow scatter to cqe on receive
-	 * This is relevant for NVMe sqe and for virtio queues when number of
-	 * tunneled descr is less then three.
-	 */
-	cq_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
-	qp->rx_cq = snap_cq_create(pd->context, &cq_attr);
-	if (!qp->rx_cq)
-		goto free_tx_cq;
+	if (attr->rq_size) {
+		cq_attr.cqe_cnt = attr->rq_size;
+		/* Use 128 bytes cqes in order to allow scatter to cqe on receive
+		 * This is relevant for NVMe sqe and for virtio queues when number of
+		 * tunneled descr is less then three.
+		 */
+		cq_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
+		qp->rx_cq = snap_cq_create(pd->context, &cq_attr);
+		if (!qp->rx_cq)
+			goto free_tx_cq;
+	} else
+		qp->rx_cq = NULL;
 
 	attr->qp_type = cq_attr.cq_type;
 	attr->sq_cq = qp->tx_cq;
@@ -242,13 +262,17 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		return 0;
 
-	rc = snap_cq_to_hw_cq(qp->tx_cq, &qp->dv_tx_cq);
-	if (rc)
-		goto free_qp;
+	if (qp->tx_cq) {
+		rc = snap_cq_to_hw_cq(qp->tx_cq, &qp->dv_tx_cq);
+		if (rc)
+			goto free_qp;
+	}
 
-	rc = snap_cq_to_hw_cq(qp->rx_cq, &qp->dv_rx_cq);
-	if (rc)
-		goto free_qp;
+	if (qp->rx_cq) {
+		rc = snap_cq_to_hw_cq(qp->rx_cq, &qp->dv_rx_cq);
+		if (rc)
+			goto free_qp;
+	}
 
 	if (!attr->qp_on_dpa) {
 		rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
@@ -304,9 +328,11 @@ free_comps:
 free_qp:
 	snap_qp_destroy(qp->qp);
 free_rx_cq:
-	snap_cq_destroy(qp->rx_cq);
+	if (qp->rx_cq)
+		snap_cq_destroy(qp->rx_cq);
 free_tx_cq:
-	snap_cq_destroy(qp->tx_cq);
+	if (qp->tx_cq)
+		snap_cq_destroy(qp->tx_cq);
 	return -EINVAL;
 }
 
@@ -315,7 +341,28 @@ static void snap_destroy_sw_qp(struct snap_dma_q *q)
 	if (!snap_qp_on_dpa(q->sw_qp.qp))
 		snap_free_rx_wqes(&q->sw_qp);
 
+	if (q->custom_ops)
+		free(q->ops);
+
 	snap_destroy_qp_helper(&q->sw_qp);
+}
+
+static int clone_ops(struct snap_dma_q *q)
+{
+	struct snap_dma_q_ops *new_ops;
+
+	if (q->custom_ops)
+		return 0;
+
+	new_ops = malloc(sizeof(*new_ops));
+	if (!new_ops)
+		return -1;
+
+	memcpy(new_ops, q->ops, sizeof(*new_ops));
+	q->ops = new_ops;
+	q->custom_ops = true;
+
+	return 0;
 }
 
 static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
@@ -354,6 +401,24 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		snap_error("Invalid SNAP_DMA_Q_OPMODE %d\n", attr->mode);
 		return -EINVAL;
 	}
+
+	/* our ops point to the global struct, we need to clone it before
+	 * making a private change
+	 *
+	 * it is better to have a dummy progress than another if statement
+	 */
+	if (attr->rx_qsize == 0) {
+		if (clone_ops(q))
+			return -EINVAL;
+		q->ops->progress_rx = dummy_progress;
+	}
+
+	if (attr->tx_qsize == 0) {
+		if (clone_ops(q))
+			return -EINVAL;
+		q->ops->progress_tx = dummy_progress;
+	}
+
 	snap_debug("Opening dma_q of type %d on_dpa %d\n", attr->mode, attr->on_dpa);
 	if (attr->on_dpa) {
 		if (attr->mode != SNAP_DMA_Q_MODE_DV)
@@ -370,7 +435,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	/* make sure that the completion is requested at least once */
 	if (attr->mode != SNAP_DMA_Q_MODE_VERBS &&
-	    attr->tx_qsize <= SNAP_DMA_Q_TX_MOD_COUNT)
+	    attr->tx_qsize <= SNAP_DMA_Q_TX_MOD_COUNT && attr->tx_qsize > 0)
 		q->tx_qsize = SNAP_DMA_Q_TX_MOD_COUNT + 8;
 	else
 		q->tx_qsize = attr->tx_qsize;
