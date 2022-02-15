@@ -24,6 +24,7 @@
 
 #include "snap_dpa.h"
 #include "mlx5_ifc.h"
+#include "snap_dma.h"
 
 #if HAVE_FLEXIO
 /**
@@ -142,6 +143,55 @@ void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
 	free(h);
 }
 
+static void dummy_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len, uint32_t imm_data)
+{
+	snap_error("OOPS: rx cb called\n");
+}
+
+static int dma_q_create(struct snap_dpa_ctx *ctx)
+{
+	struct snap_dma_q_create_attr dma_q_attr = {0};
+	int ret;
+
+	dma_q_attr.rx_cb = dummy_rx_cb;
+	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	dma_q_attr.use_devx = true;
+	dma_q_attr.tx_qsize = 16;
+	dma_q_attr.rx_qsize = 0;
+
+	ctx->dma_q = snap_dma_ep_create(ctx->pd, &dma_q_attr);
+	if (!ctx->dma_q)
+		return -1;
+
+	dma_q_attr.tx_qsize = 0;
+	ctx->dummy_q = snap_dma_ep_create(ctx->pd, &dma_q_attr);
+	if (!ctx->dummy_q)
+		goto dma_q_destroy;
+
+	ret = snap_dma_ep_connect(ctx->dma_q, ctx->dummy_q);
+	if (ret)
+		goto dummy_q_destroy;
+
+	ctx->dma_mkeyh = snap_dpa_mkey_alloc(ctx, ctx->pd);
+	if (!ctx->dma_mkeyh)
+		goto dummy_q_destroy;
+
+	return 0;
+
+dma_q_destroy:
+	snap_dma_q_destroy(ctx->dma_q);
+dummy_q_destroy:
+	snap_dma_q_destroy(ctx->dummy_q);
+	return -1;
+}
+
+static void dma_q_destroy(struct snap_dpa_ctx *ctx)
+{
+	snap_dpa_mkey_free(ctx->dma_mkeyh);
+	snap_dma_q_destroy(ctx->dma_q);
+	snap_dma_q_destroy(ctx->dummy_q);
+}
+
 /**
  * snap_dpa_process_create() - create DPA application process
  * @ctx:         snap context
@@ -225,8 +275,13 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 		goto free_dpa_outbox;
 	}
 
+	if (dma_q_create(dpa_ctx))
+		goto free_dpa_eq;
+
 	return dpa_ctx;
 
+free_dpa_eq:
+	flexio_eq_destroy(dpa_ctx->dpa_eq);
 free_dpa_outbox:
 	flexio_outbox_destroy(dpa_ctx->dpa_uar);
 deref_uar:
@@ -248,6 +303,7 @@ free_dpa_ctx:
  */
 void snap_dpa_process_destroy(struct snap_dpa_ctx *ctx)
 {
+	dma_q_destroy(ctx);
 	flexio_eq_destroy(ctx->dpa_eq);
 	flexio_outbox_destroy(ctx->dpa_uar);
 	snap_uar_put(ctx->uar);
@@ -667,10 +723,36 @@ bool snap_dpa_enabled(struct ibv_context *ctx)
  */
 int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t n)
 {
-	flexio_status st;
+	/* use our rc qp to copy things because flexio transpose
+	 * (flexio_host2dev_memcpy() is buggy
+	 */
+	int ret = -EINVAL;
+	void *tmp_buf;
+	struct ibv_mr *mr;
 
-	st = flexio_host2dev_memcpy(ctx->dpa_proc, (uintptr_t)src, n, dpa_va);
-	return st != FLEXIO_STATUS_SUCCESS ? -EINVAL : 0;
+	if (n == 0)
+		return 0;
+
+	tmp_buf = malloc(n);
+	if (!tmp_buf)
+		return -EINVAL;
+
+	mr = snap_reg_mr(ctx->pd, tmp_buf, n);
+	if (!mr)
+		goto free_buf;
+
+	memcpy(tmp_buf, src, n);
+	ret = snap_dma_q_write(ctx->dma_q, tmp_buf, n, mr->lkey, dpa_va,
+			snap_dpa_mkey_id(ctx->dma_mkeyh), NULL);
+	if (ret)
+		goto free_mr;
+
+	snap_dma_q_flush(ctx->dma_q);
+free_mr:
+	ibv_dereg_mr(mr);
+free_buf:
+	free(tmp_buf);
+	return ret;
 }
 #else
 
