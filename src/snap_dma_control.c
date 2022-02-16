@@ -505,7 +505,8 @@ free_qp:
 
 static void snap_destroy_fw_qp(struct snap_dma_q *q)
 {
-	snap_destroy_qp_helper(&q->fw_qp);
+	if (q->fw_qp.qp)
+		snap_destroy_qp_helper(&q->fw_qp);
 }
 
 static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
