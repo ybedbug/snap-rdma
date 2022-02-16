@@ -292,6 +292,8 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 
 	/* If only capacity is asked to be changed, allow it */
 	regs_whitelist.capacity = regs->capacity;
+	/* snap_virtio_blk_ctrl_bar_setup changes max queues 0 to default */
+	regs_whitelist.max_queues = bar->max_blk_queues;
 	if (!memcmp(regs, &regs_whitelist, sizeof(regs_whitelist)))
 		return true;
 
