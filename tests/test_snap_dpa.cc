@@ -156,6 +156,8 @@ TEST_F(SnapDpaTest, create_rt_thread_single_polling)
 
 	thr = snap_dpa_rt_thread_get(rt, &f);
 	ASSERT_TRUE(thr);
+	sleep(1);
+	snap_dpa_log_print(thr->thread->dpa_log);
 	snap_dpa_rt_thread_put(thr);
 	snap_dpa_rt_put(rt);
 }
