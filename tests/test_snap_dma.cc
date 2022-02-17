@@ -1440,6 +1440,70 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpu) {
 	snap_dpa_process_destroy(dpa_ctx);
 }
 
+static void fill_pattern(char *buf, int n)
+{
+	int i;
+
+	/* todo: random pattern */
+	for (i = 0; i < n; i++)
+		buf[i] = (uint8_t)((uint64_t)buf + n) & 0xff;
+}
+
+TEST_F(SnapDmaTest, dpa_memcpy_stress) {
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	int ret, i;
+	struct snap_dpa_memh *dpa_mem;
+	struct snap_dpa_mkeyh *dpa_mkey;
+	char tmp_buf[m_bsize];
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_proc = dpa_ctx;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	ASSERT_EQ(0, ret);
+
+	dpa_mem = snap_dpa_mem_alloc(dpa_ctx, m_bsize);
+	ASSERT_TRUE(dpa_mem);
+
+	dpa_mkey = snap_dpa_mkey_alloc(dpa_ctx, m_pd);
+	ASSERT_TRUE(dpa_mkey);
+
+	for (i = 1; i < m_bsize; i++) {
+		memset(m_lbuf, 0, i);
+		fill_pattern(tmp_buf, i);
+		ret = snap_dpa_memcpy(dpa_ctx, snap_dpa_mem_addr(dpa_mem), tmp_buf, i);
+		if (ret)
+			printf("Failed to copy %d bytes\n", i);
+		ASSERT_EQ(0, ret);
+		ret = snap_dma_q_read(dpu_qp, m_lbuf, i, m_lmr->lkey,
+				snap_dpa_mem_addr(dpa_mem), snap_dpa_mkey_id(dpa_mkey), NULL);
+		ASSERT_EQ(0, ret);
+		snap_dma_q_flush(dpu_qp);
+		ASSERT_EQ(0, memcmp(m_lbuf, tmp_buf, i));
+	}
+
+	snap_dpa_mkey_free(dpa_mkey);
+	snap_dpa_mem_free(dpa_mem);
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
 /*
  * Check that DPA can do basic dma operations
  * See dpa/dpa_dma_test.c
