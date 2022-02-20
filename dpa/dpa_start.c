@@ -53,6 +53,7 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	 * - init should be run only once
 	 * - start barrier should be run only once
 	 */
+	snap_memory_bus_fence();
 	dpa_init();
 
 	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
