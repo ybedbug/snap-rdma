@@ -209,8 +209,10 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 	if (ret)
 		goto free_db_cq;
 
-	ret = snap_dpa_memcpy(rt->dpa_proc, snap_dpa_mem_addr(rt_thr->thread->mem) +
-			offsetof(struct dpa_rt_context, db_cq), &hw_cq, sizeof(hw_cq));
+	/* note that rt context is at the beginning of the thread heap */
+	ret = snap_dpa_memcpy(rt->dpa_proc,
+			snap_dpa_thread_heap_base(rt_thr->thread) + offsetof(struct dpa_rt_context, db_cq),
+			&hw_cq, sizeof(hw_cq));
 	if (ret)
 		goto free_db_cq;
 

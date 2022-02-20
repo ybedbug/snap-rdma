@@ -55,9 +55,12 @@
 struct snap_dpa_tcb {
 	uint64_t mbox_address;
 	uint32_t mbox_lkey;
+	uint32_t pad1;
 	uint64_t data_address;
 	uint64_t data_used;
 	uint64_t heap_size;
+
+	uint64_t pad[3];
 };
 
 struct snap_dpa_attr {

@@ -30,6 +30,9 @@
 #include "mlx5_ifc.h"
 #include "snap_dma.h"
 
+SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_tcb) == SNAP_MLX5_L2_CACHE_SIZE,
+		"Thread control block must be padded to the cache line");
+
 #if HAVE_FLEXIO
 /**
  * snap_dpa_mem_alloc() - allocate memory on DPA
@@ -370,7 +373,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	struct snap_dpa_thread *thr;
 	int ret;
 	flexio_status st;
-	flexio_uintptr_t *dpa_tcb_addr;
+	uint64_t dpa_tcb_addr;
 	struct snap_dpa_rsp *rsp;
 	size_t mbox_size;
 
@@ -418,19 +421,20 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	}
 
 	tcb.heap_size = snap_max(attr->heap_size, SNAP_DPA_THREAD_MIN_HEAP_SIZE);
-	thr->mem = snap_dpa_mem_alloc(dctx, tcb.heap_size);
+	thr->mem = snap_dpa_mem_alloc(dctx, sizeof(tcb) + tcb.heap_size);
 	if (!thr->mem)
 		goto free_window;
 
-	tcb.data_address = snap_dpa_mem_addr(thr->mem);
+	dpa_tcb_addr = snap_dpa_mem_addr(thr->mem);
+	tcb.data_address = snap_dpa_thread_heap_base(thr);
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
-	snap_debug("tcb mailbox lkey 0x%x addr %p size(mbox+log) %lu mem_base at 0x%lx\n",
-			thr->cmd_mr->lkey, thr->cmd_mbox, mbox_size, tcb.data_address);
+	snap_debug("tcb 0x%lx tcb_size %ld mailbox lkey 0x%x addr %p size(mbox+log) %lu mem_base at 0x%lx\n",
+			dpa_tcb_addr, sizeof(tcb), thr->cmd_mr->lkey, thr->cmd_mbox, mbox_size, tcb.data_address);
 
-	st = flexio_copy_from_host(thr->dctx->dpa_proc, (uintptr_t)&tcb, sizeof(tcb), &dpa_tcb_addr);
-	if (st != FLEXIO_STATUS_SUCCESS) {
+	ret = snap_dpa_memcpy(dctx, dpa_tcb_addr, &tcb, sizeof(tcb));
+	if (ret) {
 		snap_error("Failed to prepare DPA thread control block: %d\n", st);
 		goto free_mem;
 	}
@@ -440,11 +444,11 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	 * In the future we can decide what type of thread to create based on
 	 * the attributes.
 	 */
-	st = flexio_thread_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, *dpa_tcb_addr,
+	st = flexio_thread_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, dpa_tcb_addr,
 			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
-		goto free_tcb;
+		goto free_mem;
 	}
 
 	/* wait for report back from the thread */
@@ -454,15 +458,11 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		snap_error("DPA thread failed to start\n");
 		snap_dpa_log_print(thr->dpa_log);
 		snap_dpa_thread_destroy_force(thr);
-		flexio_buf_dev_free(dpa_tcb_addr);
 		return NULL;
 	}
 
-	flexio_buf_dev_free(dpa_tcb_addr);
 	return thr;
 
-free_tcb:
-	flexio_buf_dev_free(dpa_tcb_addr);
 free_mem:
 	snap_dpa_mem_free(thr->mem);
 free_window:
@@ -557,8 +557,6 @@ struct snap_dpa_ctx *snap_dpa_thread_proc(struct snap_dpa_thread *thr)
 }
 
 /**
- * snap_dpa_thread_mbox_acquire() - get thread mailbox
- * @thr: DPA thread
  *
  * Get DPA thread mailbox address in the MT safe way. The mailbox must be
  * released with the snap_dpa_thread_mbox_release()
@@ -882,6 +880,11 @@ void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr)
 
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
 {
+}
+
+uint64_t snap_dpa_thread_heap_base(struct snap_dpa_thread *thr)
+{
+	return 0;
 }
 #endif
 
