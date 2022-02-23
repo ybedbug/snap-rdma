@@ -226,15 +226,27 @@ int snap_dma_q_writev(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 				struct iovec *iov, int iov_cnt, uint32_t rmkey,
 				struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t rkey[iov_cnt];
+	size_t len;
+	struct iovec liov;
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	for (i = 0, len = 0; i < iov_cnt; i++) {
+		rkey[i] = rmkey;
+		len += iov[i].iov_len;
+	}
+
+	liov.iov_base = src_buf;
+	liov.iov_len = len;
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lbuf = src_buf;
-	io_attr.lkey = lkey;
-	io_attr.rkey = rmkey;
-	io_attr.iov = iov;
-	io_attr.iov_cnt = iov_cnt;
+	io_attr.lkey = &lkey;
+	io_attr.liov = &liov;
+	io_attr.liov_cnt = 1;
+	io_attr.rkey = rkey;
+	io_attr.riov = iov;
+	io_attr.riov_cnt = iov_cnt;
 
 	rc = q->ops->writev(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
@@ -274,15 +286,27 @@ int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
 			uint32_t dek_obj_id, struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t rkey[iov_cnt];
+	size_t len;
+	struct iovec liov;
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	for (i = 0, len = 0; i < iov_cnt; i++) {
+		rkey[i] = rmkey;
+		len += iov[i].iov_len;
+	}
+
+	liov.iov_base = src_buf;
+	liov.iov_len = len;
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV | SNAP_DMA_Q_IO_TYPE_ENCRYPTO;
-	io_attr.lbuf = src_buf;
-	io_attr.lkey = lkey;
-	io_attr.rkey = rmkey;
-	io_attr.iov = iov;
-	io_attr.iov_cnt = iov_cnt;
+	io_attr.lkey = &lkey;
+	io_attr.liov = &liov;
+	io_attr.liov_cnt = 1;
+	io_attr.rkey = rkey;
+	io_attr.riov = iov;
+	io_attr.riov_cnt = iov_cnt;
 	io_attr.dek_obj_id = dek_obj_id;
 
 	rc = q->ops->writec(q, &io_attr, comp, &n_bb);
@@ -404,15 +428,27 @@ int snap_dma_q_readv(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 				struct iovec *iov, int iov_cnt, uint32_t rmkey,
 				struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t rkey[iov_cnt];
+	size_t len;
+	struct iovec liov;
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	for (i = 0, len = 0; i < iov_cnt; i++) {
+		rkey[i] = rmkey;
+		len += iov[i].iov_len;
+	}
+
+	liov.iov_base = dst_buf;
+	liov.iov_len = len;
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.lbuf = dst_buf;
-	io_attr.lkey = lkey;
-	io_attr.rkey = rmkey;
-	io_attr.iov = iov;
-	io_attr.iov_cnt = iov_cnt;
+	io_attr.lkey = &lkey;
+	io_attr.liov = &liov;
+	io_attr.liov_cnt = 1;
+	io_attr.rkey = rkey;
+	io_attr.riov = iov;
+	io_attr.riov_cnt = iov_cnt;
 
 	rc = q->ops->readv(q, &io_attr, comp, &n_bb);
 	if (snap_unlikely(rc))
@@ -452,15 +488,27 @@ int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
 		    uint32_t dek_obj_id, struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int i, rc, n_bb;
+	uint32_t rkey[iov_cnt];
+	size_t len;
+	struct iovec liov;
 	struct snap_dma_q_io_attr io_attr = {0};
 
+	for (i = 0, len = 0; i < iov_cnt; i++) {
+		rkey[i] = rmkey;
+		len += iov[i].iov_len;
+	}
+
+	liov.iov_base = dst_buf;
+	liov.iov_len = len;
+
 	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV | SNAP_DMA_Q_IO_TYPE_ENCRYPTO;
-	io_attr.lbuf = dst_buf;
-	io_attr.lkey = lkey;
-	io_attr.rkey = rmkey;
-	io_attr.iov = iov;
-	io_attr.iov_cnt = iov_cnt;
+	io_attr.lkey = &lkey;
+	io_attr.liov = &liov;
+	io_attr.liov_cnt = 1;
+	io_attr.rkey = rkey;
+	io_attr.riov = iov;
+	io_attr.riov_cnt = iov_cnt;
 	io_attr.dek_obj_id = dek_obj_id;
 
 	rc = q->ops->readc(q, &io_attr, comp, &n_bb);

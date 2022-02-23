@@ -160,15 +160,15 @@ enum {
 
 struct snap_dma_q_io_attr {
 	int io_type;
-
-	void *lbuf;
-	uint32_t lkey;
-	uint32_t rkey;
 	size_t len;
 
 	/* for IOV TYPE IO */
-	struct iovec *iov;
-	int iov_cnt;
+	uint32_t *lkey;
+	struct iovec *liov;
+	int liov_cnt;
+	uint32_t *rkey;
+	struct iovec *riov;
+	int riov_cnt;
 
 	/* for ENCRYPTO IO */
 	uint32_t dek_obj_id;

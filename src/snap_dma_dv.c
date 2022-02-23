@@ -107,7 +107,7 @@ snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
 }
 
 static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
-			uint32_t mkey, struct mlx5_klm *klm_mtt, size_t *len)
+			uint32_t *mkey, struct mlx5_klm *klm_mtt, size_t *len)
 {
 	int i;
 
@@ -121,7 +121,7 @@ static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
 	*len = 0;
 	for (i = 0; i < iov_cnt; i++) {
 		klm_mtt[i].byte_count = iov[i].iov_len;
-		klm_mtt[i].mkey = mkey;
+		klm_mtt[i].mkey = mkey[i];
 		klm_mtt[i].address = (uintptr_t)iov[i].iov_base;
 
 		*len += iov[i].iov_len;
@@ -166,7 +166,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 	io_ctx->io_type = io_attr->io_type;
 
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_IOV) {
-		ret = snap_iov_to_klm_mtt(io_attr->iov, io_attr->iov_cnt,
+		ret = snap_iov_to_klm_mtt(io_attr->riov, io_attr->riov_cnt,
 					io_attr->rkey, io_ctx->klm_mtt, &io_attr->len);
 			if (ret)
 				goto insert_back;
@@ -174,7 +174,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
 		umr_attr.klm_mkey = io_ctx->klm_mkey;
 		umr_attr.klm_mtt = io_ctx->klm_mtt;
-		umr_attr.klm_entries = io_attr->iov_cnt;
+		umr_attr.klm_entries = io_attr->riov_cnt;
 	}
 
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_ENCRYPTO) {
@@ -224,8 +224,8 @@ int snap_prepare_dma_xfer_ctx(struct snap_dma_q *q,
 
 	klm_mkey = io_ctx->klm_mkey;
 
-	dx_ctx->lbuf = io_attr->lbuf;
-	dx_ctx->lkey = io_attr->lkey;
+	dx_ctx->lbuf = io_attr->liov[0].iov_base;
+	dx_ctx->lkey = io_attr->lkey[0];
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_ENCRYPTO)
 		dx_ctx->raddr = 0; /* use zero based rdma if use bsf enabled mkey */
 	else
