@@ -172,7 +172,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 				goto insert_back;
 
 		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
-		umr_attr.klm_mkey = io_ctx->klm_mkey;
+		umr_attr.klm_mkey = io_ctx->r_klm_mkey;
 		umr_attr.klm_mtt = io_ctx->klm_mtt;
 		umr_attr.klm_entries = io_attr->riov_cnt;
 	}
@@ -222,7 +222,7 @@ int snap_prepare_dma_xfer_ctx(struct snap_dma_q *q,
 	if (!io_ctx)
 		return errno;
 
-	klm_mkey = io_ctx->klm_mkey;
+	klm_mkey = io_ctx->r_klm_mkey;
 
 	dx_ctx->lbuf = io_attr->liov[0].iov_base;
 	dx_ctx->lkey = io_attr->lkey[0];

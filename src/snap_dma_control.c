@@ -982,9 +982,16 @@ static int snap_alloc_io_ctx(struct snap_dma_q *q,
 		}
 
 		for (i = 0; i < io_ctx_cnt; i++) {
-			io_ctx[i].klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
-			if (!io_ctx[i].klm_mkey) {
-				snap_error("create klm mkey for io_ctx[%d] failed\n", i);
+			io_ctx[i].r_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+			if (!io_ctx[i].r_klm_mkey) {
+				snap_error("create remote klm mkey for io_ctx[%d] failed\n", i);
+				goto destroy_mkeys;
+			}
+
+			io_ctx[i].l_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+			if (!io_ctx[i].l_klm_mkey) {
+				snap_error("create local klm mkey for io_ctx[%d] failed\n", i);
+				snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
 				goto destroy_mkeys;
 			}
 		}
@@ -1007,8 +1014,10 @@ static int snap_alloc_io_ctx(struct snap_dma_q *q,
 	return 0;
 
 destroy_mkeys:
-	for (i--; i >= 0; i--)
-		snap_destroy_indirect_mkey(io_ctx[i].klm_mkey);
+	for (i--; i >= 0; i--) {
+		snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
+		snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
+	}
 
 	free(io_ctx);
 
@@ -1024,13 +1033,16 @@ static void snap_free_io_ctx(struct snap_dma_q *q,
 	if (crypto) {
 		for (i = 0; i < io_ctx_cnt; i++) {
 			TAILQ_REMOVE(&q->free_crypto_ctx, &io_ctx[i], entry);
-			snap_destroy_indirect_mkey(io_ctx[i].klm_mkey);
+			snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
+			snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
 		}
 	} else {
 		for (i = 0; i < io_ctx_cnt; i++) {
 			TAILQ_REMOVE(&q->free_iov_ctx, &io_ctx[i], entry);
-			if (q->sw_qp.mode != SNAP_DMA_Q_MODE_VERBS)
-				snap_destroy_indirect_mkey(io_ctx[i].klm_mkey);
+			if (q->sw_qp.mode != SNAP_DMA_Q_MODE_VERBS) {
+				snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
+				snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
+			}
 		}
 	}
 

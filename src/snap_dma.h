@@ -215,8 +215,11 @@ struct snap_dma_q_ops {
 
 struct snap_dma_q_io_ctx {
 	struct snap_dma_q *q;
-	struct snap_indirect_mkey *klm_mkey;
+
+	struct snap_indirect_mkey *l_klm_mkey;
+	struct snap_indirect_mkey *r_klm_mkey;
 	struct mlx5_klm klm_mtt[SNAP_DMA_Q_MAX_IOV_CNT];
+
 	struct snap_dma_completion comp;
 	void *uctx;
 	int io_type;
