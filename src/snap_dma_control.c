@@ -449,7 +449,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	/* we must be able to send CQEs inline */
 	qp_init_attr.sq_max_inline_size = attr->tx_elem_size;
 
-	qp_init_attr.sq_max_sge = 1;
+	qp_init_attr.sq_max_sge = SNAP_DMA_Q_MAX_SGE_NUM;
 	qp_init_attr.rq_max_sge = 1;
 
 	rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,

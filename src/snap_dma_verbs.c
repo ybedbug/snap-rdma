@@ -176,6 +176,90 @@ static inline int verbs_dma_q_writec(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
+static inline int verbs_dma_q_writev2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	int i, j, sge_cnt, num_sge[io_attr->riov_cnt];
+	size_t len_to_handle, left, offset;
+	struct ibv_send_wr wr[io_attr->riov_cnt];
+	struct ibv_sge l_sge[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
+	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	*n_bb = 0;
+	left = 0;
+	offset = 0;
+	memset(num_sge, 0, sizeof(int) * io_attr->riov_cnt);
+
+	for (i = 0, j = 0; i < io_attr->riov_cnt; i++) {
+		len_to_handle = io_attr->riov[i].iov_len;
+		sge_cnt = 0;
+
+		while (j < io_attr->liov_cnt && len_to_handle > 0) {
+			if (left != 0) {
+				if (len_to_handle >= left) {
+					len_to_handle -= left;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = left;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					j++;
+					left = 0;
+					offset = 0;
+				} else {
+					left -= len_to_handle;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = len_to_handle;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					offset += len_to_handle;
+					len_to_handle = 0;
+				}
+			} else if (len_to_handle >= io_attr->liov[j].iov_len) {
+				len_to_handle -= io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				j++;
+			} else {
+				left = io_attr->liov[j].iov_len - len_to_handle;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = len_to_handle;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				offset = len_to_handle;
+				len_to_handle = 0;
+			}
+
+			sge_cnt++;
+			if (sge_cnt >= SNAP_DMA_Q_MAX_SGE_NUM) {
+				snap_error("sge number exceed the max supported(30)\n");
+				return -EINVAL;
+			}
+		}
+
+		l_sgl[i] = l_sge[i];
+		num_sge[i] = sge_cnt;
+
+		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
+		r_sgl[i].length = io_attr->riov[i].iov_len;
+		r_sgl[i].lkey = io_attr->rkey[i];
+
+		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+	}
+
+	/* after for loop, j should equal to io_attr->liov_cnt,
+	 *  and, left should be 0.
+	 */
+
+	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
+	if (!io_ctx)
+		return errno;
+
+	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
+			IBV_WR_RDMA_WRITE, 0, &io_ctx->comp);
+
+	return do_verbs_dma_xfer(q, wr);
+}
+
 static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
 					  size_t len, uint64_t dstaddr,
 					  uint32_t rmkey, int *n_bb)
@@ -283,6 +367,90 @@ static int verbs_dma_q_readc(struct snap_dma_q *q,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 	return -ENOTSUP;
+}
+
+static inline int verbs_dma_q_readv2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	int i, j, sge_cnt, num_sge[io_attr->riov_cnt];
+	size_t len_to_handle, left, offset;
+	struct ibv_send_wr wr[io_attr->riov_cnt];
+	struct ibv_sge l_sge[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
+	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct snap_dma_q_io_ctx *io_ctx;
+
+	*n_bb = 0;
+	left = 0;
+	offset = 0;
+	memset(num_sge, 0, sizeof(int) * io_attr->riov_cnt);
+
+	for (i = 0, j = 0; i < io_attr->riov_cnt; i++) {
+		len_to_handle = io_attr->riov[i].iov_len;
+		sge_cnt = 0;
+
+		while (j < io_attr->liov_cnt && len_to_handle > 0) {
+			if (left != 0) {
+				if (len_to_handle >= left) {
+					len_to_handle -= left;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = left;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					j++;
+					left = 0;
+					offset = 0;
+				} else {
+					left -= len_to_handle;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = len_to_handle;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					offset += len_to_handle;
+					len_to_handle = 0;
+				}
+			} else if (len_to_handle >= io_attr->liov[j].iov_len) {
+				len_to_handle -= io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				j++;
+			} else {
+				left = io_attr->liov[j].iov_len - len_to_handle;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = len_to_handle;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				offset = len_to_handle;
+				len_to_handle = 0;
+			}
+
+			sge_cnt++;
+			if (sge_cnt >= SNAP_DMA_Q_MAX_SGE_NUM) {
+				snap_error("sge number exceed the max supported(30)\n");
+				return -EINVAL;
+			}
+		}
+
+		l_sgl[i] = l_sge[i];
+		num_sge[i] = sge_cnt;
+
+		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
+		r_sgl[i].length = io_attr->riov[i].iov_len;
+		r_sgl[i].lkey = io_attr->rkey[i];
+
+		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+	}
+
+	/* after for loop, j should equal to io_attr->liov_cnt,
+	 *  and, left should be 0.
+	 */
+
+	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
+	if (!io_ctx)
+		return errno;
+
+	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
+			IBV_WR_RDMA_READ, 0, &io_ctx->comp);
+
+	return do_verbs_dma_xfer(q, wr);
 }
 
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
@@ -546,10 +714,12 @@ static bool verbs_dma_q_empty(struct snap_dma_q *q)
 struct snap_dma_q_ops verb_ops = {
 	.write           = verbs_dma_q_write,
 	.writev           = verbs_dma_q_writev,
+	.writev2v         = verbs_dma_q_writev2v,
 	.writec           = verbs_dma_q_writec,
 	.write_short     = verbs_dma_q_write_short,
 	.read            = verbs_dma_q_read,
 	.readv            = verbs_dma_q_readv,
+	.readv2v          = verbs_dma_q_readv2v,
 	.readc            = verbs_dma_q_readc,
 	.send_completion = verbs_dma_q_send_completion,
 	.send            = verbs_dma_q_send,
