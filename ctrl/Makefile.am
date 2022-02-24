@@ -47,12 +47,18 @@ libsnap_virtio_fs_ctrl_ladir = $(includedir)/
 libsnap_virtio_fs_ctrl_la_HEADERS = snap_virtio_fs_ctrl.h \
 				     snap_virtio_common_ctrl.h \
 				     snap_virtio_fs_virtq.h \
+				     snap_vq.h \
+				     snap_vq_adm.h \
+				     snap_virtio_adm_spec.h \
 				     $(top_srcdir)/fs/snap_fs_ops.h \
 				     snap_poll_groups.h
 libsnap_virtio_fs_ctrl_la_SOURCES = snap_virtio_fs_ctrl.c \
 				     snap_virtio_common_ctrl.c \
 				     snap_virtio_fs_virtq.c \
+				     snap_vq.c \
+				     snap_vq_adm.c \
 				     snap_poll_groups.c \
+				     snap_buf.c \
 				     virtq_common.c
 libsnap_virtio_fs_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE) \
 				    $(FS_INCLUDE)
