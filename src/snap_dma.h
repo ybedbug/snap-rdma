@@ -319,6 +319,13 @@ struct snap_dma_q {
 	int                   rx_qsize;
 };
 
+enum {
+	SNAP_DMA_Q_DPA_MODE_NONE = 0,
+	SNAP_DMA_Q_DPA_MODE_POLLING,
+	SNAP_DMA_Q_DPA_MODE_EVENT,
+	SNAP_DMA_Q_DPA_MODE_TRIGGER
+};
+
 /**
  * struct snap_dma_q_create_attr - DMA queue creation attributes
  * @tx_qsize:     send queue size of the software qp
@@ -348,12 +355,26 @@ struct snap_dma_q {
  *                ibv_get_cq_event(). See man ibv_get_cq_event
  * @use_devx:     use DEVX to create CQs and QP instead of mlx5dv/verbs api. Works
  *                only if @mode is dv or gga
- * @on_dpa:       create dma queue on the DPA. Valid only with snap_dma_ep_create()
- * @dpa_proc:     snap dpa process context. Must be valid if @on_dpa is true
- *
  * @wk:           if not NULL, the dma_queue will be attached to the given
  *                worker. In such case worker progress/polling functions must
  *                be used instead of queue progress/polling functions.
+ * @dpa_mode:     if non zero, create dma queue on the DPA. Valid only with snap_dma_ep_create()
+ *                Possible values are:
+ *                SNAP_DMA_Q_DPA_MODE_NONE or 0 - regular queue is created
+ *                SNAP_DMA_Q_DPA_MODE_POLLING   - QP and CQ are in dpa memory.
+ *                                                CQs are bound to dummy dpa EQ
+ *                SMAP_DMA_Q_DPA_MODE_EVENT     - QP and CQ are in dpa memory.
+ *                                                CQs are bound to the @dpa_thread
+ *                SMAP_DMA_Q_DPA_MODE_TRIGGER   - QP is in host memory, CQs are in dpa memory
+ *                                                CQs are bound to the @dpa_thread.
+ *                In all DPA modes, CQs have doorbell records on host memory. It means
+ *                that they can be also armed from host.
+ *                Basically polling mode is for polling dpa application, event
+ *                mode is used to wake up and schedule dpa thread, trigger mode
+ *                is used to wake up and schedule dpa thread from the dpu side.
+ * @dpa_proc:     snap dpa process context. Must be valid if @dpa_mode is SNAP_DMA_Q_DPA_MODE_POLLING
+ * @dpa_thread:   snap dpa thread context. Must be valid if @dpa_mode is
+ *                SNAP_DMA_Q_DPA_MODE_EVENT or SMAP_DMA_Q_DPA_MODE_TRIGGER
  */
 struct snap_dma_q_create_attr {
 	uint32_t tx_qsize;
@@ -371,9 +392,13 @@ struct snap_dma_q_create_attr {
 	void                    *comp_context;
 
 	bool use_devx;
-	bool on_dpa;
-	struct snap_dpa_ctx *dpa_proc;
 	struct snap_dma_worker *wk;
+
+	int  dpa_mode;
+	union {
+		struct snap_dpa_ctx *dpa_proc;
+		struct snap_dpa_thread *dpa_thread;
+	};
 };
 
 /* TODO add support for worker mode single and SRQ*/

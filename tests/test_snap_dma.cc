@@ -1381,7 +1381,7 @@ TEST_F(SnapDmaTest, dpa_ep_create) {
 	ASSERT_TRUE(dpu_qp);
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
-	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
 	m_dma_q_attr.dpa_proc = dpa_ctx;
 
 	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
@@ -1414,7 +1414,7 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpu) {
 	ASSERT_TRUE(dpu_qp);
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
-	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
 	m_dma_q_attr.dpa_proc = dpa_ctx;
 
 	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
@@ -1471,7 +1471,7 @@ TEST_F(SnapDmaTest, dpa_memcpy_stress) {
 	ASSERT_TRUE(dpu_qp);
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
-	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
 	m_dma_q_attr.dpa_proc = dpa_ctx;
 
 	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
@@ -1530,7 +1530,7 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpa) {
 	ASSERT_TRUE(dpu_qp);
 
 	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
-	m_dma_q_attr.on_dpa = true;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
 	m_dma_q_attr.dpa_proc = dpa_ctx;
 
 	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);

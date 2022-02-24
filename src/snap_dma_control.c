@@ -556,17 +556,16 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->custom_ops->progress_tx = dummy_progress;
 	}
 
-	snap_debug("Opening dma_q of type %d on_dpa %d\n", q->ops->mode, attr->on_dpa);
-	if (attr->on_dpa) {
+	snap_debug("Opening dma_q of type %d dpa_mode %d\n", attr->mode, attr->dpa_mode);
+	if (attr->dpa_mode) {
 		if (snap_dpa_enabled(pd->context)) {
 			if (q->ops->mode != SNAP_DMA_Q_MODE_DV)
 				return -EINVAL;
 			q->no_events = true;
 			qp_init_attr->qp_on_dpa = true;
 			qp_init_attr->dpa_proc = attr->dpa_proc;
-		} else {
+		} else
 			return -ENOTSUP;
-		}
 	}
 
 	/*
@@ -684,8 +683,7 @@ static int snap_sw_qp_rx_wqe_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (q->ops->mode == SNAP_DMA_Q_MODE_DV || q->ops->mode == SNAP_DMA_Q_MODE_GGA)
 		q->sw_qp.dv_qp.db_flag = (enum snap_db_ring_flag)snap_env_getenv(SNAP_DMA_Q_DBMODE);
 
-	if (attr->on_dpa)
-		/* TODO: alloc rx buffer on dpa memory */
+	if (attr->dpa_mode)
 		return 0;
 
 	rc = snap_alloc_rx_wqes(pd, &q->sw_qp, 2 * attr->rx_qsize, attr->rx_elem_size);
