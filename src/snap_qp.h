@@ -56,10 +56,9 @@ struct snap_devx_common {
 	uint32_t id;
 	struct mlx5dv_devx_obj *devx_obj;
 	struct snap_uar *uar;
-	union {
-		struct snap_umem umem;
-		struct snap_dpa_memh *dpa_mem;
-	};
+	struct snap_umem umem;
+	struct snap_dpa_memh *dpa_mem;
+
 	union {
 		struct ibv_pd *pd;
 		struct ibv_context *ctx;
