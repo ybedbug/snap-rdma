@@ -267,6 +267,8 @@ void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
 
 	if (cmd->common_cmd.vq_priv->zcopy)
 		free(cmd->iov);
+
+	free(cmd->common_cmd.ftr);
 }
 
 /**
