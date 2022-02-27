@@ -35,10 +35,16 @@ libsnap_virtio_net_ctrl_ladir = $(includedir)/
 libsnap_virtio_net_ctrl_la_HEADERS = snap_virtio_net_ctrl.h \
 				     snap_virtio_common_ctrl.h \
 				     snap_virtio_blk_virtq.h \
+				     snap_vq.h \
+				     snap_vq_adm.h \
+				     snap_virtio_adm_spec.h \
 				     snap_poll_groups.h
 libsnap_virtio_net_ctrl_la_SOURCES = snap_virtio_net_ctrl.c \
 				     snap_virtio_common_ctrl.c \
-				     snap_poll_groups.c
+				     snap_vq.c \
+				     snap_vq_adm.c \
+				     snap_poll_groups.c\
+				     snap_buf.c
 libsnap_virtio_net_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE)
 libsnap_virtio_net_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread
 
