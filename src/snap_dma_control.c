@@ -25,7 +25,7 @@
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_OPMODE, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_IOV_SUPP, 0);
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_CRYPTO_SUPP, 0);
-SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_DBMODE, 0);
+SNAP_ENV_REG_ENV_VARIABLE(SNAP_DMA_Q_DBMODE, SNAP_DB_RING_BATCH);
 
 struct snap_roce_caps {
 	bool resources_on_nvme_emulation_manager;
@@ -463,7 +463,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	q->tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 
 	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA)
-		q->sw_qp.dv_qp.db_flag = snap_env_getenv(SNAP_DMA_Q_DBMODE);
+		q->sw_qp.dv_qp.db_flag = (enum snap_db_ring_flag)snap_env_getenv(SNAP_DMA_Q_DBMODE);
 
 	if (attr->on_dpa)
 		/* TODO: alloc rx buffer on dpa memory */
