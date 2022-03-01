@@ -190,7 +190,7 @@ static enum virtq_fetch_desc_status fetch_next_desc(struct virtq_cmd *cmd)
 
 	if (snap_unlikely(cmd->is_indirect)) {
 		/*IN_ORDER is not support now, so we need to sort indirect table*/
-		struct vring_desc *descs_tmp = malloc(cmd->indirect_len);
+		struct vring_desc *descs_tmp = calloc(1, cmd->indirect_len);
 		struct vring_desc *descs_indrect = &descs[cmd->indirect_pos];
 		uint16_t indirect_num = cmd->indirect_len/sizeof(struct vring_desc);
 		int i = 0, j = 0;

@@ -336,7 +336,7 @@ static int virtq_alloc_desc_buf(struct virtq_cmd *cmd, size_t old_len, size_t le
 {
 	int aux_size = len * sizeof(struct vring_desc) + sizeof(struct virtio_blk_outhdr);
 	struct ibv_mr *new_aux_mr;
-	struct blk_virtq_cmd_aux *new_aux  = malloc(aux_size);
+	struct blk_virtq_cmd_aux *new_aux  = calloc(1, aux_size);
 
 	if (!new_aux) {
 		snap_error("failed to dynamically allocate %lu bytes for command %d request\n",

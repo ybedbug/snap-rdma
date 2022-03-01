@@ -56,7 +56,7 @@ static struct snap_virtio_queue *
 snap_virtio_blk_create_sw_queue(struct snap_device *sdev,
 				struct snap_virtio_common_queue_attr *attr)
 {
-	struct snap_virtio_blk_sw_queue *swq = malloc(sizeof(struct snap_virtio_blk_sw_queue));
+	struct snap_virtio_blk_sw_queue *swq = calloc(1, sizeof(struct snap_virtio_blk_sw_queue));
 
 	if (!swq)
 		goto out;
