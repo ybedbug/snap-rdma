@@ -386,11 +386,23 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 	if (op == MLX5_OPCODE_RDMA_WRITE)
 		to_end -= sizeof(*rseg);
 
-	if (snap_unlikely(len > to_end)) {
-		memcpy(pdata, src_buf, to_end);
-		memcpy((void *)dv_qp->hw_qp.sq.addr, src_buf + to_end, len - to_end);
-	} else {
-		memcpy(pdata, src_buf, len);
+	/*
+	 * flush_comp can be tested in compilation time, while src_buf isn't,
+	 * so we better use it in fastpath. We rely on the fact that we always
+	 * use this function either with src_buf or with flush_comp, but never
+	 * with both.
+	 */
+#ifdef __COVERITY__
+	if (src_buf) {
+#else
+	if (!flush_comp) {
+#endif
+		if (snap_unlikely(len > to_end)) {
+			memcpy(pdata, src_buf, to_end);
+			memcpy((void *)dv_qp->hw_qp.sq.addr, src_buf + to_end, len - to_end);
+		} else {
+			memcpy(pdata, src_buf, len);
+		}
 	}
 
 	dv_qp->hw_qp.sq.pi += (*n_bb - 1);
@@ -806,7 +818,7 @@ static int dv_dma_q_flush(struct snap_dma_q *q)
 	n_out = q->sw_qp.dv_qp.n_outstanding;
 	if (n_out) {
 		comp.count = 2;
-		do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
+		do_dv_xfer_inline(q, NULL, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
 		q->tx_available -= n_bb;
 		n--;
 	}
@@ -820,7 +832,7 @@ static int dv_dma_q_flush(struct snap_dma_q *q)
 
 static int dv_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp, int *n_bb)
 {
-	return do_dv_xfer_inline(q, 0, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, comp, n_bb);
+	return do_dv_xfer_inline(q, NULL, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, comp, n_bb);
 }
 
 static bool dv_dma_q_empty(struct snap_dma_q *q)
