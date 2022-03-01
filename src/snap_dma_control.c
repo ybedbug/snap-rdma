@@ -1056,7 +1056,7 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 			struct snap_dma_q_create_attr *attr)
 {
 	int ret, io_ctx_cnt;
-	struct snap_relaxed_ordering_caps caps;
+	struct snap_relaxed_ordering_caps caps = {};
 
 	q->iov_support = false;
 	q->crypto_support = false;
