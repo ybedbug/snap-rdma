@@ -94,7 +94,7 @@ static int check_port(struct ibv_context *ctx, int port_num, bool *roce_en,
 	uint8_t in[DEVX_ST_SZ_BYTES(query_nic_vport_context_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(query_nic_vport_context_out)] = {0};
 	uint8_t devx_v;
-	struct ibv_port_attr port_attr;
+	struct ibv_port_attr port_attr = {};
 	int ret;
 
 	*roce_en = false;
