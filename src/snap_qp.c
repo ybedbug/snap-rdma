@@ -421,12 +421,8 @@ int snap_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
  */
 struct ibv_cq *snap_cq_to_verbs_cq(struct snap_cq *cq)
 {
-	if (cq->type == SNAP_OBJ_DEVX)
-		return NULL;
-	if (cq->type == SNAP_OBJ_VERBS || cq->type == SNAP_OBJ_DV)
-		return cq->verbs_cq;
-
-	return NULL;
+	assert_debug(cq->type == SNAP_OBJ_VERBS || cq->type == SNAP_OBJ_DV);
+	return cq->verbs_cq;
 }
 
 /* QP creation */
@@ -818,12 +814,8 @@ int snap_qp_to_hw_qp(struct snap_qp *qp, struct snap_hw_qp *hw_qp)
  */
 struct ibv_qp *snap_qp_to_verbs_qp(struct snap_qp *qp)
 {
-	if (qp->type == SNAP_OBJ_DEVX)
-		return NULL;
-	if (qp->type == SNAP_OBJ_VERBS || qp->type == SNAP_OBJ_DV)
-		return qp->verbs_qp;
-
-	return NULL;
+	assert_debug(qp->type == SNAP_OBJ_VERBS || qp->type == SNAP_OBJ_DV);
+	return qp->verbs_qp;
 }
 
 /**
