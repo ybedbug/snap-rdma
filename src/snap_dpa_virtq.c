@@ -264,7 +264,11 @@ static int snap_virtio_blk_progress_dpa_queue(struct snap_virtio_queue *vq)
 {
 	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
 	int n, i;
+#ifdef __COVERITY__
+	struct snap_dpa_p2p_msg msgs[64] = {};
+#else
 	struct snap_dpa_p2p_msg msgs[64];
+#endif
 
 	n = snap_dpa_p2p_recv_msg(dpa_q->q, msgs, 64);
 	for (i = 0; i < n; i++) {
