@@ -129,10 +129,7 @@ TEST_P(SnapQpTest, create_qp) {
 	ASSERT_TRUE(qp);
 
 	ret = snap_qp_to_hw_qp(qp, &hw_qp);
-	if (cq_attr.cq_type == SNAP_OBJ_VERBS)
-		EXPECT_EQ(-ENOTSUP, ret);
-	else
-		EXPECT_EQ(0, ret);
+	EXPECT_EQ(0, ret);
 
 	snap_qp_destroy(qp);
 	snap_cq_destroy(rx_cq);
