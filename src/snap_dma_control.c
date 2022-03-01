@@ -1293,6 +1293,10 @@ int snap_dma_ep_dpa_copy_sync(struct snap_dpa_thread *thr, struct snap_dma_q *q)
 	mbox = snap_dpa_thread_mbox_acquire(thr);
 
 	cmd = (struct snap_dma_ep_copy_cmd *)snap_dpa_mbox_to_cmd(mbox);
+	if (snap_unlikely(!cmd)) {
+		ret = -EINVAL;
+		goto out;
+	}
 	memcpy(&cmd->q, q, sizeof(*q));
 	snap_dpa_cmd_send(&cmd->base, SNAP_DPA_CMD_DMA_EP_COPY);
 
@@ -1302,6 +1306,7 @@ int snap_dma_ep_dpa_copy_sync(struct snap_dpa_thread *thr, struct snap_dma_q *q)
 		ret = -EINVAL;
 	}
 
+out:
 	snap_dpa_thread_mbox_release(thr);
 	return ret;
 }
