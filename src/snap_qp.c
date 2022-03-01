@@ -228,7 +228,7 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	hw_cq->ci = 0;
 	hw_cq->cqe_cnt = devx_cq->cqe_cnt;
 	hw_cq->cqe_size = devx_cq->cqe_size;
-	hw_cq->dbr_addr = hw_cq->cq_addr + hw_cq->cqe_cnt * hw_cq->cqe_size;
+	hw_cq->dbr_addr = hw_cq->cq_addr + hw_cq->cqe_cnt * (uint64_t)hw_cq->cqe_size;
 	hw_cq->cq_num = devx_cq->devx.id;
 	hw_cq->uar_addr = (uintptr_t)devx_cq->devx.uar->uar->base_addr;
 	hw_cq->cq_sn = 0;
@@ -465,7 +465,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	 * TODO: guard buffer between sq and rq
 	 * TODO: adjust sq and rq sizes according to num_sge and perhaps umrs
 	 */
-	qp_buf_len = SNAP_ALIGN_CEIL(MLX5_SEND_WQE_BB * devx_qp->sq_size +
+	qp_buf_len = SNAP_ALIGN_CEIL(MLX5_SEND_WQE_BB * (size_t)devx_qp->sq_size +
 				     SNAP_MLX5_RECV_WQE_BB * devx_qp->rq_size,
 				     SNAP_MLX5_L2_CACHE_SIZE);
 

@@ -32,7 +32,7 @@
  * - or get ibv_cq/ibv_qp and use basic verbs api
  */
 
-#define SNAP_MLX5_RECV_WQE_BB   16
+#define SNAP_MLX5_RECV_WQE_BB   16ULL
 #define SNAP_MLX5_LOG_RQ_STRIDE_SHIFT 4
 
 /*

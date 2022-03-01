@@ -496,7 +496,7 @@ static inline struct mlx5_cqe64 *snap_dv_get_cqe(struct snap_hw_cq *dv_cq, int c
 	 * compile time during inlining
 	 **/
 	cqe = (struct mlx5_cqe64 *)(dv_cq->cq_addr + (dv_cq->ci & (dv_cq->cqe_cnt - 1)) *
-				    cqe_size);
+				    (uint64_t)cqe_size);
 	return cqe_size == 64 ? cqe : cqe + 1;
 }
 
