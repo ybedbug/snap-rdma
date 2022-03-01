@@ -19,13 +19,13 @@ static inline int do_verbs_dma_xfer(struct snap_dma_q *q,
 			struct ibv_send_wr *wr)
 {
 	int rc;
-	struct ibv_send_wr *bad_wr;
+	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_qp *qp = snap_qp_to_verbs_qp(q->sw_qp.qp);
 
 	rc = ibv_post_send(qp, wr, &bad_wr);
 	if (snap_unlikely(rc))
 		snap_error("DMA queue: %p failed to post opcode 0x%x\n",
-			   q, bad_wr->opcode);
+			   q, bad_wr ? bad_wr->opcode : 0);
 
 	return rc;
 }
