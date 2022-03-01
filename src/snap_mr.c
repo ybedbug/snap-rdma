@@ -104,7 +104,7 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 	void *mkc = DEVX_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
 	struct ibv_context *ctx = pd->context;
 	struct snap_cross_mkey *cmkey;
-	uint32_t pd_id;
+	uint32_t pd_id = 0;
 
 	cmkey = calloc(1, sizeof(*cmkey));
 	if (!cmkey) {
@@ -206,7 +206,7 @@ snap_create_indirect_mkey(struct ibv_pd *pd,
 	uint32_t translation_size = 0;
 	struct snap_indirect_mkey *cmkey;
 	struct ibv_context *ctx = pd->context;
-	uint32_t pd_id;
+	uint32_t pd_id = 0;
 	int i = 0;
 	uint8_t *klm;
 
