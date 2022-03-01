@@ -167,8 +167,8 @@ static void snap_free_rx_wqes(struct snap_dma_ibv_qp *qp)
 	free(qp->rx_buf);
 }
 
-static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, int rx_qsize,
-		int rx_elem_size)
+static int snap_alloc_rx_wqes(struct ibv_pd *pd, struct snap_dma_ibv_qp *qp, size_t rx_qsize,
+		size_t rx_elem_size)
 {
 	int rc;
 

@@ -311,10 +311,10 @@ enum {
  * @dpa_proc:     snap dpa process context. Must be valid if @on_dpa is true
  */
 struct snap_dma_q_create_attr {
-	int   tx_qsize;
-	int   tx_elem_size;
-	int   rx_qsize;
-	int   rx_elem_size;
+	uint32_t tx_qsize;
+	uint32_t tx_elem_size;
+	uint32_t rx_qsize;
+	uint32_t rx_elem_size;
 	void  *uctx;
 	int   mode;
 	bool  iov_enable;
