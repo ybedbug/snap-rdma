@@ -131,7 +131,7 @@ int snap_dma_q_flush(struct snap_dma_q *q)
  */
 int snap_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp)
 {
-	int rc, n_bb;
+	int rc, n_bb = 0;
 
 	rc = q->ops->flush_nowait(q, comp, &n_bb);
 	if (snap_unlikely(rc))
@@ -237,7 +237,7 @@ int snap_dma_q_writev2v(struct snap_dma_q *q,
 				bool share_src_mkey, bool share_dst_mkey,
 				struct snap_dma_completion *comp)
 {
-	int i, rc, n_bb;
+	int i, rc, n_bb = 0;
 	uint32_t lkey[src_iovcnt];
 	uint32_t rkey[dst_iovcnt];
 	struct snap_dma_q_io_attr io_attr = {0};
@@ -302,7 +302,7 @@ int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
 			uint32_t dek_obj_id, struct snap_dma_completion *comp)
 {
-	int i, rc, n_bb;
+	int i, rc, n_bb = 0;
 	uint32_t rkey[iov_cnt];
 	size_t len;
 	struct iovec liov;
@@ -361,7 +361,7 @@ int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey)
 {
-	int rc, n_bb;
+	int rc, n_bb = 0;
 
 	if (snap_unlikely(len > q->tx_elem_size))
 		return -EINVAL;
@@ -455,7 +455,7 @@ int snap_dma_q_readv2v(struct snap_dma_q *q,
 				bool share_dst_mkey, bool share_src_mkey,
 				struct snap_dma_completion *comp)
 {
-	int i, rc, n_bb;
+	int i, rc, n_bb = 0;
 	uint32_t lkey[dst_iovcnt];
 	uint32_t rkey[src_iovcnt];
 	struct snap_dma_q_io_attr io_attr = {0};
@@ -520,7 +520,7 @@ int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
 		    uint32_t dek_obj_id, struct snap_dma_completion *comp)
 {
-	int i, rc, n_bb;
+	int i, rc, n_bb = 0;
 	uint32_t rkey[iov_cnt];
 	size_t len;
 	struct iovec liov;
@@ -579,7 +579,7 @@ int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
  */
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
 {
-	int rc, n_bb;
+	int rc, n_bb = 0;
 
 	if (snap_unlikely(len > q->tx_elem_size))
 		return -EINVAL;
@@ -639,7 +639,7 @@ struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key)
 {
-	int n_bb, rc;
+	int n_bb = 0, rc;
 
 	rc = q->ops->send(q, in_buf, in_len, addr, len, key, &n_bb);
 	if (snap_unlikely(rc))
