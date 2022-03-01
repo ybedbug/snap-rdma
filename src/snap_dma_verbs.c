@@ -388,7 +388,11 @@ static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_bu
 
 static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 {
+#ifdef __COVERITY__
+	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS] = {};
+#else
 	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS];
+#endif
 	int i, n;
 	int rc;
 	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
@@ -436,7 +440,11 @@ static inline int verbs_dma_q_progress_rx(struct snap_dma_q *q)
 
 static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 {
+#ifdef __COVERITY__
+	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS] = {};
+#else
 	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS];
+#endif
 	struct snap_dma_completion *comp;
 	int i, n;
 
@@ -473,12 +481,17 @@ static inline int verbs_dma_q_progress_tx(struct snap_dma_q *q)
 static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
 		struct snap_rx_completion *rx_completions, int max_completions)
 {
-	struct ibv_wc wcs[max_completions];
+#ifdef __COVERITY__
+	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS] = {};
+#else
+	struct ibv_wc wcs[SNAP_DMA_MAX_RX_COMPLETIONS];
+#endif
 	int i, n;
 	int rc;
 	struct ibv_recv_wr rx_wr[SNAP_DMA_MAX_RX_COMPLETIONS + 1], *bad_wr;
 	struct ibv_sge rx_sge[SNAP_DMA_MAX_RX_COMPLETIONS + 1];
 
+	max_completions = snap_min(max_completions, SNAP_DMA_MAX_RX_COMPLETIONS);
 	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.rx_cq), max_completions, wcs);
 	if (n == 0)
 		return 0;
@@ -523,10 +536,15 @@ static inline int verbs_dma_q_poll_rx(struct snap_dma_q *q,
 
 static inline int verbs_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions)
 {
-	struct ibv_wc wcs[max_completions];
+#ifdef __COVERITY__
+	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS] = {};
+#else
+	struct ibv_wc wcs[SNAP_DMA_MAX_TX_COMPLETIONS];
+#endif
 	int i, n;
 	struct snap_dma_completion *dma_comp;
 
+	max_completions = snap_min(max_completions, SNAP_DMA_MAX_TX_COMPLETIONS);
 	n = ibv_poll_cq(snap_cq_to_verbs_cq(q->sw_qp.tx_cq), max_completions, wcs);
 	if (n == 0)
 		return 0;
