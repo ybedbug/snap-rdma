@@ -72,7 +72,7 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	devx_cq->cqe_cnt = SNAP_ROUNDUP_POW2(attr->cqe_cnt);
 	devx_cq->cqe_size = attr->cqe_size;
 	devx_cq->devx.on_dpa = attr->cq_on_dpa;
-	cq_mem_size = attr->cqe_size * devx_cq->cqe_cnt + SNAP_MLX5_DBR_SIZE;
+	cq_mem_size = (size_t)attr->cqe_size * devx_cq->cqe_cnt + SNAP_MLX5_DBR_SIZE;
 
 	if (!attr->cq_on_dpa) {
 		/* get eqn
@@ -131,7 +131,7 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 
 	DEVX_SET(cqc, cqctx, dbr_umem_valid, 1);
 	DEVX_SET(cqc, cqctx, dbr_umem_id, umem_id);
-	DEVX_SET64(cqc, cqctx, dbr_addr, umem_offset + attr->cqe_size * devx_cq->cqe_cnt);
+	DEVX_SET64(cqc, cqctx, dbr_addr, umem_offset + (size_t)attr->cqe_size * devx_cq->cqe_cnt);
 
 	DEVX_SET(cqc, cqctx, cqe_sz, attr->cqe_size == 128 ?  MLX5_CQE_SIZE_128B : MLX5_CQE_SIZE_64B);
 
@@ -185,7 +185,7 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	/* TODO: notification support */
 
 	devx_cq->devx.id = DEVX_GET(create_cq_out, out, cqn);
-	snap_debug("created devx cq 0x%x cqe_size %d nelems %d memsize %lu\n",
+	snap_debug("created devx cq 0x%x cqe_size %u nelems %d memsize %lu\n",
 		   devx_cq->devx.id, devx_cq->cqe_size, devx_cq->cqe_cnt, cq_mem_size);
 	return 0;
 
@@ -233,7 +233,7 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	hw_cq->uar_addr = (uintptr_t)devx_cq->devx.uar->uar->base_addr;
 	hw_cq->cq_sn = 0;
 
-	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d dbr_addr = 0x%lx\n",
+	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %u, cqe_count = %d dbr_addr = 0x%lx\n",
 		   devx_cq->devx.id, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt, hw_cq->dbr_addr);
 	return 0;
 }
@@ -317,7 +317,7 @@ int dv_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	hw_cq->uar_addr = (uintptr_t)mlx5_cq.cq_uar;
 	hw_cq->cq_sn = 0;
 
-	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %d, cqe_count = %d, dbr_addr = 0x%lx\n",
+	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %u, cqe_count = %d, dbr_addr = 0x%lx\n",
 		   mlx5_cq.cqn, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt, hw_cq->dbr_addr);
 	return 0;
 }
@@ -527,7 +527,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 		}
 
 		if (attr->rq_cq->devx_cq.cqe_size != 128) {
-			snap_error("RX CQE size %d must be 128\n", attr->rq_cq->devx_cq.cqe_size);
+			snap_error("RX CQE size %u must be 128\n", attr->rq_cq->devx_cq.cqe_size);
 			ret = -EINVAL;
 			goto reset_qp_umem;
 		}
@@ -558,7 +558,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	}
 
 	devx_qp->devx.id = DEVX_GET(create_qp_out, out, qpn);
-	snap_debug("created devx qp 0x%x sq_size %d rq_size %d memsize %lu\n", devx_qp->devx.id,
+	snap_debug("created devx qp 0x%x sq_size %u rq_size %u memsize %lu\n", devx_qp->devx.id,
 		   devx_qp->sq_size, devx_qp->rq_size, qp_buf_len + SNAP_MLX5_DBR_SIZE);
 	return 0;
 
