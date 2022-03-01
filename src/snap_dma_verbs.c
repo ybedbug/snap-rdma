@@ -73,7 +73,7 @@ verbs_prepare_io_ctx(struct snap_dma_q *q, int n_bb,
 
 static inline void verbs_dma_q_prepare_wr(struct ibv_send_wr *wr,
 			int num_wr,	struct ibv_sge **l_sgl, int *num_sge,
-			struct ibv_sge *r_sgl, int op, int flags,
+			struct ibv_sge *r_sgl, enum ibv_wr_opcode op, int flags,
 			struct snap_dma_completion *comp)
 {
 	int i;
