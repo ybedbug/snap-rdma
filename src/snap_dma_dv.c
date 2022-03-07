@@ -645,6 +645,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	struct snap_dma_completion *comp[SNAP_DMA_MAX_TX_COMPLETIONS];
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
 	int n, i;
+	uint8_t opcode;
 
 	n = 0;
 	do {
@@ -660,8 +661,18 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
 
 	for (i = 0; i < n; i++) {
+		opcode = mlx5dv_get_cqe_opcode(cqe[i]);
+
+		/*
+		 * opcode is good anyway, no need to check return status,
+		 * but coverity doesn't recognize it
+		 */
+#ifdef __COVERITY__
+		if (opcode != MLX5_CQE_REQ)
+			continue;
+#endif
 		if (comp[i] && --comp[i]->count == 0)
-			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
+			comp[i]->func(comp[i], opcode);
 	}
 
 	snap_dv_tx_complete(dv_qp);
