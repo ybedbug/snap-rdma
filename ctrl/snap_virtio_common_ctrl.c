@@ -1228,6 +1228,35 @@ static int snap_virtio_ctrl_save_dev_state(struct snap_virtio_ctrl *ctrl,
 	return ret;
 }
 
+static int snap_virtio_ctrl_save_all_queues(struct snap_virtio_ctrl *ctrl,
+					    struct snap_virtio_ctrl_queue_state *queue_state)
+{
+	int i;
+	int ret = 0;
+
+	snap_pgs_suspend(&ctrl->pg_ctx);
+	for (i = 0; i < ctrl->max_queues; i++) {
+		struct snap_virtio_queue_attr *vq;
+
+		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
+		snap_virtio_ctrl_save_queue_state(&queue_state[i], vq);
+
+		/* if enabled, call specific queue impl to get
+		 * hw_avail and used
+		 **/
+		if (vq->enable && ctrl->q_ops->get_state) {
+			ret = ctrl->q_ops->get_state(ctrl->queues[i], &queue_state[i]);
+			if (ret) {
+				snap_pgs_resume(&ctrl->pg_ctx);
+				return -EINVAL;
+			}
+		}
+	}
+	snap_pgs_resume(&ctrl->pg_ctx);
+
+	return ret;
+}
+
 /**
  * snap_virtio_ctrl_state_save() - Save virtio controller state
  * @ctrl:     virtio controller
@@ -1254,7 +1283,7 @@ static int snap_virtio_ctrl_save_dev_state(struct snap_virtio_ctrl *ctrl,
 int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len)
 {
 	int total_len;
-	int i, ret;
+	int ret;
 	struct snap_virtio_ctrl_common_state *common_state;
 	struct snap_virtio_ctrl_queue_state *queue_state;
 	void *device_state;
@@ -1270,26 +1299,13 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t
 
 	/* save queue state for every queue */
 	queue_state = section_hdr_to_data(state_hdrs.queues_state_hdr);
+	if (!queue_state)
+		return -EINVAL;
 
-	snap_pgs_suspend(&ctrl->pg_ctx);
-	for (i = 0; i < ctrl->max_queues; i++) {
-		struct snap_virtio_queue_attr *vq;
-
-		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
-		snap_virtio_ctrl_save_queue_state(&queue_state[i], vq);
-
-		/* if enabled, call specific queue impl to get
-		 * hw_avail and used
-		 **/
-		if (vq->enable && ctrl->q_ops->get_state) {
-			ret = ctrl->q_ops->get_state(ctrl->queues[i], &queue_state[i]);
-			if (ret) {
-				snap_pgs_resume(&ctrl->pg_ctx);
-				return -EINVAL;
-			}
-		}
-	}
-	snap_pgs_resume(&ctrl->pg_ctx);
+	/* save queue state for every queue */
+	ret = snap_virtio_ctrl_save_all_queues(ctrl, queue_state);
+	if (ret < 0)
+		return ret;
 
 	device_state = section_hdr_to_data(state_hdrs.dev_state_hdr);
 	if (device_state) {
