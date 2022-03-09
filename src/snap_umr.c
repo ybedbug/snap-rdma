@@ -208,7 +208,7 @@ static void snap_set_umr_ctrl_seg(struct mlx5_wqe_umr_ctrl_seg *umr_ctrl,
 static int snap_build_umr_wqe(struct snap_dma_q *q,
 			struct mlx5_wqe_ctrl_seg *ctrl, uint8_t fm_ce_se,
 			uint32_t to_end, struct snap_post_umr_attr *attr,
-			uint32_t *umr_wqe_n_bb)
+			uint32_t *umr_wqe_n_bb, int n_bb)
 {
 	struct snap_dv_qp *dv_qp;
 	struct mlx5_wqe_ctrl_seg *gen_ctrl;
@@ -261,7 +261,7 @@ static int snap_build_umr_wqe(struct snap_dma_q *q,
 	 * of tx available resource to post followed DMA WQE
 	 * case, use umr_wqe_n_bb + 1 to do the can_tx check.
 	 */
-	if (snap_unlikely(!qp_can_tx(q, *umr_wqe_n_bb + 1))) {
+	if (snap_unlikely(!qp_can_tx(q, *umr_wqe_n_bb + 1 + n_bb))) {
 		snap_error("Lack of tx_available resource!\n");
 		return -EAGAIN;
 	}
@@ -329,7 +329,7 @@ int snap_umr_post_wqe(struct snap_dma_q *q, struct snap_post_umr_attr *attr,
 	pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
 	to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
 
-	ret = snap_build_umr_wqe(q, ctrl, fm_ce_se, to_end, attr, &umr_wqe_n_bb);
+	ret = snap_build_umr_wqe(q, ctrl, fm_ce_se, to_end, attr, &umr_wqe_n_bb, *n_bb);
 	if (ret) {
 		snap_error("Failed to build umr wqe for purpose:%s\n",
 			attr->purpose == SNAP_UMR_MKEY_MODIFY_ATTACH_MTT ? "attach_mtt" : "attach_bsf");
