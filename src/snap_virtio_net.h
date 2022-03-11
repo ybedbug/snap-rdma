@@ -39,10 +39,13 @@
 struct snap_virtio_net_device;
 
 enum snap_virtio_net_queue_modify {
-	SNAP_VIRTIO_NET_QUEUE_MOD_STATE	= 1 << 0,
-	SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM = 1 << 3,
+	SNAP_VIRTIO_NET_QUEUE_MOD_STATE	           = 1 << 0,
+	SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM  = 1 << 3,
 	SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE = 1 << 4,
-	SNAP_VIRTIO_NET_QUEUE_PERIOD = 1 << 5,
+	SNAP_VIRTIO_NET_QUEUE_PERIOD               = 1 << 5,
+	SNAP_VIRTIO_NET_QUEUE_DESC_USED_AVAIL_ADDR = 1 << 6,
+	SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX         = 1 << 7,
+	SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX          = 1 << 8,
 };
 
 struct snap_virtio_net_queue_attr {

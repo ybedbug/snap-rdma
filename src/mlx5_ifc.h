@@ -1500,14 +1500,16 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8	 virtio_queue_type[0x8];
 
 	u8	 max_tunnel_desc[0x10];
-	u8	 reserved_at_30[0x1];
+	u8	 dirty_byte_map[0x1];
 	u8	 queue_period_upon_cqe[0x1];
 	u8	 queue_period_upon_event[0x1];
 	u8	 log_doorbell_stride[0x5];
-	u8	 reserved_at_38[0x3];
+	u8	 vnet_modify_ext[0x1];
+	u8	 virtio_net_q_addr_modify[0x1];
+	u8	 virtio_q_index_modify[0x1];
 	u8	 log_doorbell_bar_size[0x5];
 
-	u8	   doorbell_bar_offset[0x40];
+	u8	 doorbell_bar_offset[0x40];
 
 	u8	 max_emulated_devices[0x8];
 	u8	 max_num_virtio_queues[0x18];

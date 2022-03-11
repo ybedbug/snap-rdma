@@ -997,7 +997,6 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 			DEVX_SET(virtio_q, virtq_ctx, queue_period, vattr->queue_period);
 			DEVX_SET(virtio_q, virtq_ctx, queue_max_count,
 				 vattr->queue_max_count);
-
 		}
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_PARAM) {
@@ -1011,6 +1010,23 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 		if (mask & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE) {
 			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE;
 			DEVX_SET(virtio_net_q,  virtq_in, dirty_map_dump_enable, vattr->dirty_map_dump_enable);
+		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX;
+			DEVX_SET(virtio_net_q,  virtq_in, hw_available_index, vattr->hw_available_index);
+		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX;
+			DEVX_SET(virtio_net_q,  virtq_in, hw_used_index, vattr->hw_used_index);
+		}
+
+		if (mask & SNAP_VIRTIO_NET_QUEUE_DESC_USED_AVAIL_ADDR) {
+			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_DESC_USED_AVAIL_ADDR;
+			DEVX_SET64(virtio_q,  virtq_ctx, desc_addr, vattr->desc);
+			DEVX_SET64(virtio_q,  virtq_ctx, used_addr, vattr->device);
+			DEVX_SET64(virtio_q,  virtq_ctx, available_addr, vattr->driver);
 		}
 		DEVX_SET64(virtio_net_q, virtq_in, modify_field_select,
 			   fields_to_modify);
@@ -1140,6 +1156,14 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 
 		if (dev_allowed & SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE)
 			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_MOD_DIRTY_MAP_ENABLE;
+
+		if (sdev->sctx->virtio_net_caps.virtio_net_q_addr_modify)
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_DESC_USED_AVAIL_ADDR;
+
+		if (sdev->sctx->virtio_net_caps.virtio_q_index_modify) {
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX;
+			attr->modifiable_fields |= SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX;
+		}
 
 		vattr->dirty_map_dump_enable = DEVX_GET(virtio_net_q, virtq_out, dirty_map_dump_enable);
 		vattr->dirty_map_mkey = DEVX_GET(virtio_net_q, virtq_out, dirty_map_mkey);

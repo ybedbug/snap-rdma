@@ -754,6 +754,15 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 	virtio->max_num_vf_dynamic_msix = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_num_vf_dynamic_msix);
 
+	virtio->virtio_q_index_modify = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.virtio_q_index_modify);
+	virtio->virtio_net_q_addr_modify = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.virtio_net_q_addr_modify);
+	virtio->dirty_byte_map = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.dirty_byte_map);
+	virtio->vnet_modify_ext = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.vnet_modify_ext);
+
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
 	    MLX5_VIRTIO_QUEUE_CAP_TYPE_SPLIT)

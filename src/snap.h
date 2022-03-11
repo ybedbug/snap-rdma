@@ -315,6 +315,10 @@ struct snap_virtio_caps {
 	bool		crossing_vhca_mkey;
 	bool		queue_period_upon_cqe;
 	bool		queue_period_upon_event;
+	bool		virtio_q_index_modify;
+	bool		virtio_net_q_addr_modify;
+	bool		vnet_modify_ext;
+	bool		dirty_byte_map;
 
 	/*
 	 * According to PRM for each created virtq, one must provide 3 UMEMs:
