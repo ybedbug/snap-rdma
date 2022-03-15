@@ -198,16 +198,19 @@ static int dummy_progress(struct snap_dma_q *q)
 	return 0;
 }
 
-static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
-		struct ibv_comp_channel *comp_channel, int comp_vector,
-		struct snap_qp_attr *attr, struct snap_dma_ibv_qp *qp,
-		int mode, bool use_devx)
+/* NOTE: we cannot take mode from the dma_q_attr because it can be 'autoselect'
+ * and then it is replaced by the real mode in dma_q->ops
+ *
+ * This is done to keep creation attribute 'const'
+ */
+static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_create_attr *dma_q_attr,
+		struct snap_qp_attr *qp_init_attr, struct snap_dma_ibv_qp *qp, int mode)
 {
 	struct snap_cq_attr cq_attr = {
-		.cq_context = cq_context,
-		.comp_channel = comp_channel,
-		.comp_vector = comp_vector,
-		.cqe_cnt = attr->sq_size,
+		.cq_context = dma_q_attr->comp_context,
+		.comp_channel = dma_q_attr->comp_channel,
+		.comp_vector = dma_q_attr->comp_vector,
+		.cqe_cnt = qp_init_attr->sq_size,
 		.cqe_size = SNAP_DMA_Q_TX_CQE_SIZE
 	};
 	int rc;
@@ -218,25 +221,25 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		cq_attr.cq_type = SNAP_OBJ_VERBS;
 	else
-		cq_attr.cq_type = use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
+		cq_attr.cq_type = dma_q_attr->use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
 
 	/* force cq creation on the dpa */
-	if (attr->qp_on_dpa) {
+	if (qp_init_attr->qp_on_dpa) {
 		cq_attr.cq_type = SNAP_OBJ_DEVX;
 		cq_attr.cq_on_dpa = true;
 		cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
-		cq_attr.dpa_proc = attr->dpa_proc;
+		cq_attr.dpa_proc = qp_init_attr->dpa_proc;
 	}
 
-	if (attr->sq_size) {
+	if (qp_init_attr->sq_size) {
 		qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
 		if (!qp->tx_cq)
 			return -EINVAL;
 	} else
 		qp->tx_cq = NULL;
 
-	if (attr->rq_size) {
-		cq_attr.cqe_cnt = attr->rq_size;
+	if (qp_init_attr->rq_size) {
+		cq_attr.cqe_cnt = qp_init_attr->rq_size;
 		/* Use 128 bytes cqes in order to allow scatter to cqe on receive
 		 * This is relevant for NVMe sqe and for virtio queues when number of
 		 * tunneled descr is less then three.
@@ -248,11 +251,11 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 	} else
 		qp->rx_cq = NULL;
 
-	attr->qp_type = cq_attr.cq_type;
-	attr->sq_cq = qp->tx_cq;
-	attr->rq_cq = qp->rx_cq;
+	qp_init_attr->qp_type = cq_attr.cq_type;
+	qp_init_attr->sq_cq = qp->tx_cq;
+	qp_init_attr->rq_cq = qp->rx_cq;
 
-	qp->qp = snap_qp_create(pd, attr);
+	qp->qp = snap_qp_create(pd, qp_init_attr);
 	if (!qp->qp)
 		goto free_rx_cq;
 
@@ -275,7 +278,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 			goto free_qp;
 	}
 
-	if (!attr->qp_on_dpa) {
+	if (!qp_init_attr->qp_on_dpa) {
 		rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 		if (rc)
@@ -284,7 +287,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 		memset(qp->dv_qp.comps, 0,
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 	} else {
-		qp->dpa.mkey = snap_dpa_mkey_alloc(attr->dpa_proc, pd);
+		qp->dpa.mkey = snap_dpa_mkey_alloc(qp_init_attr->dpa_proc, pd);
 		if (!qp->dpa.mkey)
 			goto free_qp;
 		qp->dv_qp.dpa_mkey = snap_dpa_mkey_id(qp->dpa.mkey);
@@ -322,7 +325,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, void *cq_context,
 free_opaque:
 	free(qp->dv_qp.opaque_buf);
 free_comps:
-	if (!attr->qp_on_dpa)
+	if (!qp_init_attr->qp_on_dpa)
 		free(qp->dv_qp.comps);
 	else
 		snap_dpa_mkey_free(qp->dpa.mkey);
@@ -715,9 +718,8 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		rc = snap_create_worker_qp_helper(pd, &qp_init_attr, &q->sw_qp,
 				q->ops->mode);
 	else
-		rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,
-				attr->comp_vector, &qp_init_attr, &q->sw_qp, q->ops->mode,
-				attr->use_devx);
+		rc = snap_create_qp_helper(pd, attr, &qp_init_attr, &q->sw_qp,
+				q->ops->mode);
 	if (rc)
 		return rc;
 
@@ -734,7 +736,17 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 			     const struct snap_dma_q_create_attr *attr)
 {
 	struct snap_qp_attr qp_init_attr = {};
+	struct snap_dma_q_create_attr fw_dma_q_attr;
 	int rc;
+
+	/* refactor fw qp creation code */
+	memcpy(&fw_dma_q_attr, attr, sizeof(*attr));
+	fw_dma_q_attr.mode = SNAP_DMA_Q_MODE_VERBS;
+	fw_dma_q_attr.use_devx = false;
+	fw_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_NONE;
+	fw_dma_q_attr.comp_channel = NULL;
+	fw_dma_q_attr.comp_context = NULL;
+	fw_dma_q_attr.comp_context = NULL;
 
 	/* cannot create empty cq or a qp without one */
 	qp_init_attr.sq_size = snap_max(attr->tx_qsize / 4, SNAP_DMA_FW_QP_MIN_SEND_WR);
@@ -745,7 +757,7 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	/* the qp 'resources' are going to be replaced by the fw. We do not
 	 * need use DV or GGA here
 	 **/
-	rc = snap_create_qp_helper(pd, NULL, NULL, 0, &qp_init_attr, &q->fw_qp, SNAP_DMA_Q_MODE_VERBS, false);
+	rc = snap_create_qp_helper(pd, &fw_dma_q_attr, &qp_init_attr, &q->fw_qp, fw_dma_q_attr.mode);
 	return rc;
 }
 
