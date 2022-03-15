@@ -875,8 +875,11 @@ int snap_virtio_create_hw_queue(struct snap_device *sdev,
 		vattr->ctrs_obj_id = vq->ctrs_obj->obj_id;
 
 	vq->virtq = snap_virtio_create_queue(sdev, vattr, vq->umem);
-	if (!vq->virtq)
+	if (!vq->virtq) {
+		snap_error();
+		ret = -1;
 		goto out_umem;
+	}
 
 	vq->idx = vattr->idx;
 
