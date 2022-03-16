@@ -151,6 +151,8 @@ struct snap_pci {
 	char				pci_number[16];
 
 	int				num_vfs;
+	uint16_t			max_num_vfs;
+	bool				max_num_vfs_valid;
 	struct snap_pci			*vfs;// VFs array for PF
 	struct snap_pci			*parent;//parent PF for VFs
 

@@ -1678,7 +1678,10 @@ struct mlx5_ifc_emulated_function_info_bits {
 	u8	 vhca_id[0x10];
 
 	u8	 hotplug_function[0x1];
-	u8	 reserved_at_21[0x1f];
+	u8	 max_num_vfs_valid[0x1];
+	u8	 vf_exist[0x1];
+	u8	 reserved_at_23[0xd];
+	u8	 max_num_vfs[0x10];
 };
 
 struct mlx5_ifc_query_emulated_functions_info_out_bits {

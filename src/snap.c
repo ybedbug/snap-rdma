@@ -463,6 +463,16 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 					emulated_info_out,
 					emulated_function_info[idx].hotplug_function) ? true : false;
 	pf->num_vfs = 0;
+	pf->max_num_vfs_valid =
+		!!DEVX_GET(query_emulated_functions_info_out, emulated_info_out,
+			   emulated_function_info[idx].max_num_vfs_valid);
+
+	if (pf->max_num_vfs_valid)
+		pf->max_num_vfs =
+			DEVX_GET(query_emulated_functions_info_out,
+				 emulated_info_out,
+				 emulated_function_info[idx].max_num_vfs);
+
 
 	snap_query_pci_vuid(pf);
 
