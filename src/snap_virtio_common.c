@@ -876,7 +876,6 @@ int snap_virtio_create_hw_queue(struct snap_device *sdev,
 
 	vq->virtq = snap_virtio_create_queue(sdev, vattr, vq->umem);
 	if (!vq->virtq) {
-		snap_error();
 		ret = -1;
 		goto out_umem;
 	}
