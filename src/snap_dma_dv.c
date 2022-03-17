@@ -875,8 +875,10 @@ static int dv_dma_q_arm(struct snap_dma_q *q)
 	 */
 	snap_dv_tx_complete(&q->sw_qp.dv_qp);
 	q->sw_qp.dv_qp.db_flag = SNAP_DB_RING_IMM;
-	snap_dv_arm_cq(&q->sw_qp.dv_tx_cq);
-	snap_dv_arm_cq(&q->sw_qp.dv_rx_cq);
+	if (q->sw_qp.dv_tx_cq.cqe_cnt)
+		snap_dv_arm_cq(&q->sw_qp.dv_tx_cq);
+	if (q->sw_qp.dv_rx_cq.cqe_cnt)
+		snap_dv_arm_cq(&q->sw_qp.dv_rx_cq);
 	return 0;
 }
 
