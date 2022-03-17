@@ -90,7 +90,7 @@ struct snap_dpa_thread_attr {
 
 struct snap_dpa_thread {
 	struct snap_dpa_ctx   *dctx;
-	struct flexio_thread  *dpa_thread;
+	struct flexio_event_handler *dpa_thread;
 	struct flexio_window  *cmd_window;
 	void                  *cmd_mbox;
 	pthread_mutex_t       cmd_lock;
@@ -110,6 +110,8 @@ struct snap_dpa_ctx *snap_dpa_thread_proc(struct snap_dpa_thread *thr);
 
 void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);
+
+int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr);
 
 int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey);
 #endif

@@ -481,37 +481,40 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mem;
 	}
 
-	/*
-	 * NOTE: here we use modified flexio API to create a 'polling' thread.
-	 * In the future we can decide what type of thread to create based on
-	 * the attributes.
-	 */
-	st = flexio_thread_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, dpa_tcb_addr,
+	st = flexio_event_handler_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, dpa_tcb_addr,
 			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
 		goto free_mem;
 	}
 
+	/* w/a flexio bug */
+	st = flexio_event_handler_run(thr->dpa_thread, 0 /*dpa_tcb_addr*/);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		snap_error("Failed to run DPA thread: %d\n", st);
+		goto destroy_thread;
+	}
+
 	ret = trigger_q_create(thr);
 	if (ret)
 		goto destroy_thread;
 
-	/* wake thread up */
-
 	/* wait for report back from the thread */
 	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
+	snap_dpa_thread_wakeup(thr);
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_error("DPA thread failed to start\n");
 		snap_dpa_log_print(thr->dpa_log);
-		goto destroy_thread;
+		goto destroy_trigger;
 	}
 
 	return thr;
 
+destroy_trigger:
+	trigger_q_destroy(thr);
 destroy_thread:
-	snap_dpa_thread_destroy_force(thr);
+	flexio_event_handler_destroy(thr->dpa_thread);
 free_mem:
 	snap_dpa_mem_free(thr->mem);
 free_window:
@@ -534,7 +537,7 @@ static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
 	sleep(1); /* WA over simx bug */
 #endif
 	trigger_q_destroy(thr);
-	flexio_thread_destroy(thr->dpa_thread);
+	flexio_event_handler_destroy(thr->dpa_thread);
 	snap_dpa_mem_free(thr->mem);
 	flexio_window_destroy(thr->cmd_window);
 	ibv_dereg_mr(thr->cmd_mr);
@@ -575,7 +578,7 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
  */
 uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 {
-	return flexio_thread_get_id(thr->dpa_thread);
+	return *flexio_event_handler_get_thread_id_ptr(thr->dpa_thread);
 }
 
 /**
@@ -669,6 +672,49 @@ int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint6
 	}
 
 	snap_dpa_thread_mbox_release(thr);
+	return ret;
+}
+
+/**
+ * snap_dpa_thread_wakeup() - wake up dpa thread
+ * @thr: thread to wake up
+ *
+ * The function sends and 'event' to the dpa thread. If the thread
+ * is not running it will wake up and run. The behaviour is similar
+ * to that of pthread_cond_signal().
+ *
+ * If the thread is already running the event will be ignored.
+ */
+int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr)
+{
+	int ret;
+	struct snap_dma_completion comp = {0};
+
+	ret = snap_dma_q_arm(thr->trigger_q);
+	if (ret) {
+		snap_error("thr %p: Failed to arm trigger\n", thr);
+		return ret;
+	}
+
+	/* NOTE: flush_nowait always does zero length rdma write
+	 * with completion. Actually this is a bug in the flush_nowait ;)
+	 *
+	 * Also note that the cq buffer of this qp is in the DPA memory.
+	 * So we cannot call anything that will touch it. E.x. flush() or poll()
+	 */
+	ret = snap_dma_q_flush_nowait(thr->trigger_q, &comp);
+	if (ret) {
+		snap_error("thr %p: Failed to arm trigger\n", thr);
+		return ret;
+	}
+
+	/* TODO: need a way to get number of wakeup from the thread,
+	 * but for now it is safe to assume that it was processed.
+	 * Our wake up usage is for the sync command channel only
+	 */
+	thr->trigger_q->tx_available++;
+
+	snap_debug("thr %p: wakeup sent\n", thr);
 	return ret;
 }
 
@@ -845,6 +891,11 @@ void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr)
 uint64_t snap_dpa_thread_heap_base(struct snap_dpa_thread *thr)
 {
 	return 0;
+}
+
+int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr)
+{
+	return -ENOTSUP;
 }
 #endif
 
