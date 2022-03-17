@@ -97,7 +97,7 @@ struct snap_dpa_thread {
 	struct ibv_mr         *cmd_mr;
 	struct snap_dpa_memh  *mem;
 	struct snap_dpa_log   *dpa_log;
-	struct snap_dma_q     *command_q;
+	struct snap_dma_q     *trigger_q;
 	struct snap_dma_q     *dummy_q;
 };
 

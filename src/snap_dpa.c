@@ -354,6 +354,48 @@ uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx)
 
 static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr);
 
+static int trigger_q_create(struct snap_dpa_thread *thr)
+{
+	struct snap_dma_q_create_attr dma_q_attr = {0};
+	int ret;
+
+	dma_q_attr.rx_cb = dummy_rx_cb;
+	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	dma_q_attr.use_devx = true;
+	dma_q_attr.tx_qsize = 16;
+	dma_q_attr.rx_qsize = 0;
+	dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_TRIGGER;
+	dma_q_attr.dpa_thread = thr;
+
+	thr->trigger_q = snap_dma_ep_create(thr->dctx->pd, &dma_q_attr);
+	if (!thr->trigger_q)
+		return -1;
+
+	dma_q_attr.tx_qsize = 0;
+	dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_NONE;
+
+	thr->dummy_q = snap_dma_ep_create(thr->dctx->pd, &dma_q_attr);
+	if (!thr->dummy_q)
+		goto trigger_q_destroy;
+
+	ret = snap_dma_ep_connect(thr->trigger_q, thr->dummy_q);
+	if (ret)
+		goto dummy_q_destroy;
+	return ret;
+
+trigger_q_destroy:
+	snap_dma_q_destroy(thr->trigger_q);
+dummy_q_destroy:
+	snap_dma_q_destroy(thr->dummy_q);
+	return -1;
+}
+
+static void trigger_q_destroy(struct snap_dpa_thread *thr)
+{
+	snap_dma_q_destroy(thr->trigger_q);
+	snap_dma_q_destroy(thr->dummy_q);
+}
+
 /**
  * snap_dpa_thread_create() - create DPA thread
  * @dctx:  DPA application context
@@ -451,18 +493,25 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mem;
 	}
 
+	ret = trigger_q_create(thr);
+	if (ret)
+		goto destroy_thread;
+
+	/* wake thread up */
+
 	/* wait for report back from the thread */
 	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_error("DPA thread failed to start\n");
 		snap_dpa_log_print(thr->dpa_log);
-		snap_dpa_thread_destroy_force(thr);
-		return NULL;
+		goto destroy_thread;
 	}
 
 	return thr;
 
+destroy_thread:
+	snap_dpa_thread_destroy_force(thr);
 free_mem:
 	snap_dpa_mem_free(thr->mem);
 free_window:
@@ -484,6 +533,7 @@ static void snap_dpa_thread_destroy_force(struct snap_dpa_thread *thr)
 	snap_debug("WA simx thread destroy bug: 1s sleep\n");
 	sleep(1); /* WA over simx bug */
 #endif
+	trigger_q_destroy(thr);
 	flexio_thread_destroy(thr->dpa_thread);
 	snap_dpa_mem_free(thr->mem);
 	flexio_window_destroy(thr->cmd_window);
