@@ -105,6 +105,8 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		struct snap_dpa_thread_attr *attr);
 void snap_dpa_thread_destroy(struct snap_dpa_thread *thr);
 uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr);
+uint64_t snap_dpa_thread_heap_base(struct snap_dpa_thread *thr);
+struct snap_dpa_ctx *snap_dpa_thread_proc(struct snap_dpa_thread *thr);
 
 void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);

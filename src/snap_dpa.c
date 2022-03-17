@@ -529,6 +529,34 @@ uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 }
 
 /**
+ * snap_dpa_thread_heap_addr() - get thread heap address
+ * @thr: dpa thread
+ *
+ * The function returns base address of the thread heap memory
+ *
+ * Return:
+ * base heap address
+ */
+uint64_t snap_dpa_thread_heap_base(struct snap_dpa_thread *thr)
+{
+	return sizeof(struct snap_dpa_tcb) + snap_dpa_mem_addr(thr->mem);
+}
+
+/**
+ * snap_dpa_thread_proc() - get thread process context
+ * @thr: dpa thread
+ *
+ * The function returns thread process context
+ *
+ * Return:
+ * thread process context
+ */
+struct snap_dpa_ctx *snap_dpa_thread_proc(struct snap_dpa_thread *thr)
+{
+	return thr->dctx;
+}
+
+/**
  * snap_dpa_thread_mbox_acquire() - get thread mailbox
  * @thr: DPA thread
  *
@@ -782,6 +810,11 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 {
 	return 0;
+}
+
+struct snap_dpa_ctx *snap_dpa_thread_proc(struct snap_dpa_thread *thr)
+{
+	return NULL;
 }
 
 int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey)

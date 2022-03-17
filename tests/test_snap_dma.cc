@@ -1365,7 +1365,7 @@ TEST_F(SnapDmaTest, devx_dma_only_q) {
 }
 
 /* DPA section */
-TEST_F(SnapDmaTest, dpa_ep_create) {
+TEST_F(SnapDmaTest, dpa_ep_create_polling) {
 	struct snap_dma_q *dpu_qp;
 	struct snap_dma_q *dpa_qp;
 	struct snap_dpa_ctx *dpa_ctx;
@@ -1392,6 +1392,76 @@ TEST_F(SnapDmaTest, dpa_ep_create) {
 
 	snap_dma_ep_destroy(dpa_qp);
 	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDmaTest, dpa_ep_create_event) {
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+	int ret;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_EVENT;
+	m_dma_q_attr.dpa_thread = dpa_thr;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	EXPECT_EQ(0, ret);
+
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_thread_destroy(dpa_thr);
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDmaTest, dpa_ep_create_trigger) {
+	struct snap_dma_q *dpu_qp;
+	struct snap_dma_q *dpa_qp;
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+	int ret;
+
+	if (!snap_dpa_enabled(m_pd->context))
+		SKIP_TEST_R("DPA is not available");
+
+	dpa_ctx = snap_dpa_process_create(m_pd->context, "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+
+	dpu_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpu_qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_TRIGGER;
+	m_dma_q_attr.dpa_thread = dpa_thr;
+
+	dpa_qp = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dpa_qp);
+
+	ret = snap_dma_ep_connect(dpu_qp, dpa_qp);
+	EXPECT_EQ(0, ret);
+
+	snap_dma_ep_destroy(dpa_qp);
+	snap_dma_ep_destroy(dpu_qp);
+	snap_dpa_thread_destroy(dpa_thr);
 	snap_dpa_process_destroy(dpa_ctx);
 }
 

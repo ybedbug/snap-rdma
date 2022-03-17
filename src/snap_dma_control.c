@@ -223,12 +223,41 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 	else
 		cq_attr.cq_type = dma_q_attr->use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
 
-	/* force cq creation on the dpa */
-	if (qp_init_attr->qp_on_dpa) {
+	switch (dma_q_attr->dpa_mode) {
+	case SNAP_DMA_Q_DPA_MODE_POLLING:
+		qp_init_attr->qp_on_dpa = true;
+		qp_init_attr->dpa_proc = dma_q_attr->dpa_proc;
+
 		cq_attr.cq_type = SNAP_OBJ_DEVX;
 		cq_attr.cq_on_dpa = true;
 		cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
-		cq_attr.dpa_proc = qp_init_attr->dpa_proc;
+		cq_attr.dpa_proc = dma_q_attr->dpa_proc;
+		break;
+
+	case SNAP_DMA_Q_DPA_MODE_EVENT:
+		qp_init_attr->qp_on_dpa = true;
+		qp_init_attr->dpa_proc = snap_dpa_thread_proc(dma_q_attr->dpa_thread);
+
+		cq_attr.cq_type = SNAP_OBJ_DEVX;
+		cq_attr.cq_on_dpa = true;
+		cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_THREAD;
+		cq_attr.dpa_thread = dma_q_attr->dpa_thread;
+		break;
+
+	case SNAP_DMA_Q_DPA_MODE_TRIGGER:
+		qp_init_attr->qp_on_dpa = false;
+
+		cq_attr.cq_type = SNAP_OBJ_DEVX;
+		cq_attr.cq_on_dpa = true;
+		cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_THREAD;
+		cq_attr.dpa_thread = dma_q_attr->dpa_thread;
+		break;
+
+	case SNAP_DMA_Q_DPA_MODE_NONE:
+		break;
+	default:
+		snap_error("unsupported dpa mode %d\n", dma_q_attr->dpa_mode);
+		return -EINVAL;
 	}
 
 	if (qp_init_attr->sq_size) {
@@ -560,13 +589,11 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	}
 
 	snap_debug("Opening dma_q of type %d dpa_mode %d\n", attr->mode, attr->dpa_mode);
-	if (attr->dpa_mode) {
+	if (attr->dpa_mode != SNAP_DMA_Q_DPA_MODE_NONE) {
 		if (snap_dpa_enabled(pd->context)) {
 			if (q->ops->mode != SNAP_DMA_Q_MODE_DV)
 				return -EINVAL;
 			q->no_events = true;
-			qp_init_attr->qp_on_dpa = true;
-			qp_init_attr->dpa_proc = attr->dpa_proc;
 		} else
 			return -ENOTSUP;
 	}
