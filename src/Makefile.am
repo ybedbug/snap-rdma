@@ -20,7 +20,6 @@ libsnap_la_HEADERS = snap.h \
 		     snap_dma.h \
 		     snap_umr.h \
 		     snap_env.h \
-		     snap_sw_virtio_blk.h \
 		     snap_crypto.h \
 		     snap_macros.h \
 		     snap_qp.h \
