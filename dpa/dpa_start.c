@@ -11,6 +11,7 @@
  */
 
 #include "dpa.h"
+#include "snap_dma_internal.h"
 
 // hack to force creation of the data section
 void *mbox_base __attribute__((section (".data"))); // per thread
@@ -39,6 +40,7 @@ static void dpa_thread_config(struct snap_dpa_tcb *tcb)
 void __snap_dpa_thread_start(uint64_t tcb_addr)
 {
 	struct snap_dpa_tcb *tcb = (struct snap_dpa_tcb *)tcb_addr;
+	struct snap_dpa_cmd_start *cmd_start;
 
 	dpa_thread_config(tcb);
 
@@ -56,7 +58,11 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 	snap_memory_bus_fence();
 	dpa_init();
 
-	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
+	cmd_start = (struct snap_dpa_cmd_start *)snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_START);
+	memcpy(&tcb->cmd_cq, &cmd_start->cmd_cq, sizeof(tcb->cmd_cq));
+	dpa_debug("Command cq  : 0x%x addr=0x%lx, cqe_cnt=%d cqe_size=%d\n",
+			tcb->cmd_cq.cq_num, tcb->cmd_cq.cq_addr, tcb->cmd_cq.cqe_cnt, tcb->cmd_cq.cqe_size);
+	snap_dv_poll_cq(&tcb->cmd_cq, 64);
 	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	dpa_run();
 

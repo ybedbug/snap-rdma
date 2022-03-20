@@ -52,6 +52,20 @@ enum {
 	SNAP_OBJ_DEVX = 0x3
 };
 
+/* low level cq view, suitable for the direct polling, adapted from struct mlx5dv_cq */
+struct snap_hw_cq {
+	uint64_t cq_addr;
+	uint32_t cqe_cnt;
+	uint32_t cqe_size;
+	uint16_t rsvd1;
+	uint16_t ci;
+	uint64_t dbr_addr;
+	uint64_t uar_addr;
+	uint32_t cq_num;
+	uint32_t cq_sn;
+};
+
+#if !__DPA
 struct snap_devx_common {
 	uint32_t id;
 	struct mlx5dv_devx_obj *devx_obj;
@@ -92,19 +106,6 @@ struct snap_cq_attr {
 
 	uint32_t eqn;
 	bool use_eqn;
-};
-
-/* low level cq view, suitable for the direct polling, adapted from struct mlx5dv_cq */
-struct snap_hw_cq {
-	uint64_t cq_addr;
-	uint32_t cqe_cnt;
-	uint32_t cqe_size;
-	uint16_t rsvd1;
-	uint16_t ci;
-	uint64_t dbr_addr;
-	uint64_t uar_addr;
-	uint32_t cq_num;
-	uint32_t cq_sn;
 };
 
 struct snap_cq;
@@ -150,6 +151,7 @@ struct snap_qp_attr {
 	bool qp_on_dpa;
 	struct snap_dpa_ctx *dpa_proc;
 };
+#endif /* !__DPA */
 
 struct snap_hw_qp {
 	uint64_t dbr_addr;
@@ -173,6 +175,7 @@ struct snap_hw_qp {
 SNAP_STATIC_ASSERT(sizeof(struct snap_hw_qp) <= SNAP_MLX5_L2_CACHE_SIZE,
 		"Oops snap_hw_qp does not fit into cache line!!!!");
 
+#if !__DPA
 struct snap_devx_qp {
 	struct snap_devx_common devx;
 	uint32_t rq_size;
@@ -210,4 +213,5 @@ static inline bool snap_qp_on_dpa(struct snap_qp *qp)
 {
 	return qp->type == SNAP_OBJ_DEVX && qp->devx_qp.devx.on_dpa;
 }
+#endif
 #endif

@@ -16,6 +16,8 @@
 #include <string.h>
 
 #include "snap_mb.h"
+#include "snap_qp.h"
+
 /*
  * This file contains definitions and inline functions that are common
  * between DPA and DPU
@@ -66,6 +68,9 @@ struct snap_dpa_tcb {
 	uint32_t pad1;
 
 	uint64_t pad[2];
+
+	struct snap_hw_cq cmd_cq;
+	uint8_t pad2[12];
 };
 
 struct snap_dpa_attr {
@@ -109,6 +114,11 @@ enum {
 struct snap_dpa_rsp {
 	volatile uint32_t sn;
 	volatile uint32_t status;
+};
+
+struct snap_dpa_cmd_start {
+    struct snap_dpa_cmd base;
+    struct snap_hw_cq cmd_cq;
 };
 
 struct snap_dpa_cmd_mr {

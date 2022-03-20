@@ -30,7 +30,7 @@
 #include "mlx5_ifc.h"
 #include "snap_dma.h"
 
-SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_tcb) == SNAP_MLX5_L2_CACHE_SIZE,
+SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_tcb) % SNAP_MLX5_L2_CACHE_SIZE == 0,
 		"Thread control block must be padded to the cache line");
 
 #if HAVE_FLEXIO
@@ -418,6 +418,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	uint64_t dpa_tcb_addr;
 	struct snap_dpa_rsp *rsp;
 	size_t mbox_size;
+	struct snap_dpa_cmd_start *cmd_start;
 
 	thr = calloc(1, sizeof(*thr));
 	if (!thr) {
@@ -499,9 +500,14 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	if (ret)
 		goto destroy_thread;
 
-	/* wait for report back from the thread */
+	cmd_start = (struct snap_dpa_cmd_start *)thr->cmd_mbox;
+	memcpy(&cmd_start->cmd_cq, &thr->trigger_q->sw_qp.dv_tx_cq, sizeof(cmd_start->cmd_cq));
+	snap_debug("Command cq  : 0x%x addr=0x%lx, cqe_cnt=%d cqe_size=%d\n",
+			cmd_start->cmd_cq.cq_num, cmd_start->cmd_cq.cq_addr, cmd_start->cmd_cq.cqe_cnt, cmd_start->cmd_cq.cqe_size);
 	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
 	snap_dpa_thread_wakeup(thr);
+
+	/* wait for report back from the thread */
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_error("DPA thread failed to start\n");
