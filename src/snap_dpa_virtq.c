@@ -116,7 +116,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	}
 
 	cmd->cmd_create.vq.host_mkey = vq->host_driver_mr->lkey;
-	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_CREATE);
+	snap_dpa_cmd_send(vq->rt_thr->thread, &cmd->base, DPA_VIRTQ_CMD_CREATE);
 
 	rsp = snap_dpa_rsp_wait(mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
@@ -152,7 +152,7 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
 
 	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
-	snap_dpa_cmd_send(&cmd->base, DPA_VIRTQ_CMD_DESTROY);
+	snap_dpa_cmd_send(vq->rt_thr->thread, &cmd->base, DPA_VIRTQ_CMD_DESTROY);
 
 	rsp = snap_dpa_rsp_wait(mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {

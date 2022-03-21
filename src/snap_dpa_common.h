@@ -134,15 +134,6 @@ static inline struct snap_dpa_cmd *snap_dpa_mbox_to_cmd(void *mbox)
 	return (struct snap_dpa_cmd *)((char *)mbox + SNAP_DPA_THREAD_MBOX_CMD_OFFSET);
 }
 
-static inline void snap_dpa_cmd_send(struct snap_dpa_cmd *cmd, uint32_t type)
-{
-	cmd->cmd = type;
-	/* TODO: check if weaker barriers can be used */
-	snap_memory_cpu_fence();
-	cmd->sn++;
-	snap_memory_bus_fence();
-}
-
 static inline struct snap_dpa_rsp *snap_dpa_mbox_to_rsp(void *mbox)
 {
 	/* casting is needed for the c++ code */

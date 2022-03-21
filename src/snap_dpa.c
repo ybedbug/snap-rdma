@@ -504,8 +504,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	memcpy(&cmd_start->cmd_cq, &thr->trigger_q->sw_qp.dv_tx_cq, sizeof(cmd_start->cmd_cq));
 	snap_debug("Command cq  : 0x%x addr=0x%lx, cqe_cnt=%d cqe_size=%d\n",
 			cmd_start->cmd_cq.cq_num, cmd_start->cmd_cq.cq_addr, cmd_start->cmd_cq.cqe_cnt, cmd_start->cmd_cq.cqe_size);
-	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_START);
-	snap_dpa_thread_wakeup(thr);
+	snap_dpa_cmd_send(thr, thr->cmd_mbox, SNAP_DPA_CMD_START);
 
 	/* wait for report back from the thread */
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
@@ -566,7 +565,7 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
 {
 	struct snap_dpa_rsp *rsp;
 
-	snap_dpa_cmd_send(thr->cmd_mbox, SNAP_DPA_CMD_STOP);
+	snap_dpa_cmd_send(thr, thr->cmd_mbox, SNAP_DPA_CMD_STOP);
 	rsp = snap_dpa_rsp_wait(thr->cmd_mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_warn("DPA thread was not properly stopped\n");
@@ -669,7 +668,7 @@ int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint6
 	cmd->va = va;
 	cmd->mkey = mkey;
 	cmd->len = len;
-	snap_dpa_cmd_send(&cmd->base, SNAP_DPA_CMD_MR);
+	snap_dpa_cmd_send(thr, &cmd->base, SNAP_DPA_CMD_MR);
 
 	rsp = snap_dpa_rsp_wait(mbox);
 	if (rsp->status != SNAP_DPA_RSP_OK) {
@@ -989,4 +988,21 @@ struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
 	} while (1);
 
 	return rsp;
+}
+
+/**
+ * snap_dpa_cmd_send() - send 'command' to the dpa thread
+ *
+ * The function send slow path 'command' to the thread. It will also send
+ * a wakeup event to the thread. That way it is guaranteed that thread will
+ * be scheduled and it will process the command.
+ */
+void snap_dpa_cmd_send(struct snap_dpa_thread *thr, struct snap_dpa_cmd *cmd, uint32_t type)
+{
+	cmd->cmd = type;
+	/* TODO: check if weaker barriers can be used */
+	snap_memory_cpu_fence();
+	cmd->sn++;
+	snap_memory_bus_fence();
+	snap_dpa_thread_wakeup(thr);
 }
