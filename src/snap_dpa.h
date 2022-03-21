@@ -112,6 +112,7 @@ void *snap_dpa_thread_mbox_acquire(struct snap_dpa_thread *thr);
 void snap_dpa_thread_mbox_release(struct snap_dpa_thread *thr);
 
 void snap_dpa_cmd_send(struct snap_dpa_thread *thr, struct snap_dpa_cmd *cmd, uint32_t type);
+struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox);
 
 int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr);
 

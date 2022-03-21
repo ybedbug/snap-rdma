@@ -155,8 +155,6 @@ static inline void snap_dpa_rsp_send(void *mbox, int type)
 	snap_memory_bus_fence();
 }
 
-struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox);
-
 static inline struct snap_dpa_cmd *snap_dpa_cmd_recv(void *mbox, uint32_t type)
 {
 	volatile struct snap_dpa_cmd *cmd;
