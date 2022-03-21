@@ -127,14 +127,6 @@ union snap_pci_bdf {
 	} bdf;
 };
 
-struct snap_relaxed_ordering_caps {
-	bool relaxed_ordering_write_pci_enabled;
-	bool relaxed_ordering_write;
-	bool relaxed_ordering_read;
-	bool relaxed_ordering_write_umr;
-	bool relaxed_ordering_read_umr;
-};
-
 enum snap_pci_hotunplug_state {
 	snap_pci_no_hotunplug			= 0,
 	snap_pci_needs_controller_hotunplug	= 1,
@@ -407,8 +399,5 @@ int snap_rescan_vfs(struct snap_pci *pf, size_t num_vfs);
 int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
-
-int snap_query_relaxed_ordering_caps(struct ibv_context *context,
-				     struct snap_relaxed_ordering_caps *caps);
 
 #endif

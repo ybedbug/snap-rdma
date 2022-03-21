@@ -89,4 +89,16 @@ struct snap_uar {
 
 struct snap_uar *snap_uar_get(struct ibv_context *ctx);
 void snap_uar_put(struct snap_uar *uar);
+
+struct snap_relaxed_ordering_caps {
+	bool relaxed_ordering_write_pci_enabled;
+	bool relaxed_ordering_write;
+	bool relaxed_ordering_read;
+	bool relaxed_ordering_write_umr;
+	bool relaxed_ordering_read_umr;
+};
+
+int snap_query_relaxed_ordering_caps(struct ibv_context *context,
+				     struct snap_relaxed_ordering_caps *caps);
+
 #endif

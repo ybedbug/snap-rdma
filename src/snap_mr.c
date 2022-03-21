@@ -434,3 +434,54 @@ void snap_uar_put(struct snap_uar *uar)
 	mlx5dv_devx_free_uar(uar->uar);
 	free(uar);
 }
+
+/**
+ *snap_query_relaxed_ordering_caps() - Query for Relaxed-Ordering
+ *				       capabilities.
+ * @context: ibv_context to query.
+ * @caps: relaxed-ordering capabilities (output)
+ *
+ * Relaxed Ordering is a feature that improves performance by disabling the
+ * strict order imposed on PCIe writes/reads. Applications that can handle
+ * this lack of strict ordering can benefit from it and improve performance.
+ *
+ * The function queries for the below capabilities:
+ * - relaxed_ordering_write_pci_enabled: relaxed_ordering_write is supported by
+ *     the device and also enabled in PCI.
+ * - relaxed_ordering_write: relaxed_ordering_write is supported by the device
+ *     and can be set in Mkey Context when creating Mkey.
+ * - relaxed_ordering_read: relaxed_ordering_read can be set in Mkey Context
+ *     when creating Mkey.
+ * - relaxed_ordering_write_umr: relaxed_ordering_write can be modified by UMR.
+ * - relaxed_ordering_read_umr: relaxed_ordering_read can be modified by UMR.
+ *
+ * Return:
+ * 0 or -errno on error
+ */
+int snap_query_relaxed_ordering_caps(struct ibv_context *context,
+				     struct snap_relaxed_ordering_caps *caps)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
+				      out, sizeof(out));
+	if (ret)
+		return ret;
+
+	caps->relaxed_ordering_write_pci_enabled = DEVX_GET(query_hca_cap_out,
+		out, capability.cmd_hca_cap.relaxed_ordering_write_pci_enabled);
+	caps->relaxed_ordering_write = DEVX_GET(query_hca_cap_out, out,
+			       capability.cmd_hca_cap.relaxed_ordering_write);
+	caps->relaxed_ordering_read = DEVX_GET(query_hca_cap_out, out,
+			       capability.cmd_hca_cap.relaxed_ordering_read);
+	caps->relaxed_ordering_write_umr = DEVX_GET(query_hca_cap_out,
+		out, capability.cmd_hca_cap.relaxed_ordering_write_umr);
+	caps->relaxed_ordering_read_umr = DEVX_GET(query_hca_cap_out,
+		out, capability.cmd_hca_cap.relaxed_ordering_read_umr);
+	return 0;
+}
