@@ -365,6 +365,105 @@ static int clone_ops(struct snap_dma_q *q)
 	return 0;
 }
 
+struct snap_mmo_caps_dma {
+	bool qp_support;
+	bool sq_support;
+	uint8_t log_max_size : 5;
+};
+
+struct snap_mmo_caps_regexp {
+	bool qp_support;
+	bool sq_support;
+	uint8_t log_sg_size : 5;
+};
+
+struct snap_mmo_caps_compress {
+	bool qp_support;
+	bool sq_support;
+	uint8_t log_max_size : 5;
+	uint8_t min_block_size : 4;
+};
+
+struct snap_mmo_caps_decompress {
+	bool qp_support;
+	bool sq_support;
+	uint8_t log_max_size : 5;
+	bool snappy;
+	bool lz4_data_only;
+	bool lz4_no_checksum;
+	bool lz4_checksum;
+};
+
+/*
+ * struct snap_mmo_caps - compression and HW accelaration capabilities
+ * @dma: GGA engine support
+ * @regexp: regexp support
+ * @compress: compression support
+ * @decompress: decompression support
+ */
+struct snap_mmo_caps {
+	struct snap_mmo_caps_dma dma;
+	struct snap_mmo_caps_regexp regexp;
+	struct snap_mmo_caps_compress compress;
+	struct snap_mmo_caps_decompress decompress;
+};
+
+static int query_mmo_caps(struct ibv_context *context,
+				struct snap_mmo_caps *caps)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(query_hca_cap_out)] = {0};
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret)
+		return ret;
+
+	caps->dma.qp_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.dma_mmo_qp);
+	caps->dma.sq_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.dma_mmo_sq);
+	caps->dma.log_max_size = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.log_dma_mmo_max_size);
+
+	caps->regexp.qp_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.regexp_mmo_qp);
+	caps->regexp.sq_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.regexp_mmo_sq);
+	caps->regexp.log_sg_size = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.log_regexp_scatter_gather_size);
+
+	caps->compress.qp_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.compress_mmo_qp);
+	caps->compress.sq_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.compress_mmo_sq);
+	caps->compress.log_max_size = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.log_compress_max_size);
+	caps->compress.min_block_size = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.compress_min_block_size);
+
+	caps->decompress.qp_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_mmo_qp);
+	caps->decompress.sq_support = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_mmo_sq);
+	caps->decompress.log_max_size = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.log_decompress_max_size);
+	caps->decompress.snappy = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_snappy);
+	caps->decompress.lz4_data_only = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_lz4_data_only);
+	caps->decompress.lz4_no_checksum = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_lz4_no_checksum);
+	caps->decompress.lz4_checksum = DEVX_GET(query_hca_cap_out, out,
+					capability.cmd_hca_cap.decompress_lz4_checksum);
+
+	return 0;
+}
+
 static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr)
 {
@@ -376,7 +475,7 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	switch (attr->mode) {
 	case SNAP_DMA_Q_MODE_AUTOSELECT:
-		rc = snap_query_mmo_caps(pd->context, &mmo_caps);
+		rc = query_mmo_caps(pd->context, &mmo_caps);
 		if (rc)
 			return rc;
 
