@@ -1022,7 +1022,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
 	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
 
-	ctrl->xmkey = snap_create_cross_mkey(attr->pd, &cm_attr);
+	ctrl->xmkey = snap_create_cross_mkey_by_attr(attr->pd, &cm_attr);
 	if (!ctrl->xmkey)
 		goto free_pgs;
 

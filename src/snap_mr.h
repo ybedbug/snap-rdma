@@ -75,7 +75,7 @@ int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id);
 
 struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length);
 
-struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
+struct snap_cross_mkey *snap_create_cross_mkey_by_attr(struct ibv_pd *pd,
 					       struct snap_cross_mkey_attr *attr);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 

@@ -555,7 +555,7 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
 	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
 
-	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, &cm_attr);
+	ctrl->mkey = snap_create_cross_mkey_by_attr(ctrl->pd, &cm_attr);
 	if (!ctrl->mkey) {
 		printf("failed to create crossing mkey\n");
 		goto sq_to_err;

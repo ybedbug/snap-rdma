@@ -402,4 +402,6 @@ int snap_device_get_fd(struct snap_device *sdev);
 int snap_device_get_events(struct snap_device *sdev, int num_events,
 			   struct snap_event *events);
 
+struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
+					       struct snap_device *target_device);
 #endif

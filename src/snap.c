@@ -3810,3 +3810,47 @@ void snap_destroy_alias_object(struct snap_alias_object *alias)
 	free(alias);
 }
 
+/**
+ * snap_create_cross_mkey() - Creates a cross mkey
+ * @pd:           a protection domain that will be used to access remote memory
+ * @target_sdev:  an emulation device
+ *
+ * The function creates a special 'cross' memory key that must be used to
+ * access host memory via RDMA operations.
+ *
+ * For QPs that use 'cross' mkey there is no need to be attached to the snap
+ * emulation object.
+ *
+ * Sample usage pattern:
+ *   sctx = snap_open();
+ *   sdev = snap_open_device(sctx, attrs);
+ *
+ *   // Create protection domain:
+ *   ib_ctx = ibv_open_device();
+ *   pd = ibv_alloc_pd(ib_ctx);
+ *
+ *   // create mkey:
+ *   mkey = snap_create_cross_mkey(pd, sdev);
+ *
+ *   // create qp using dma layer or directly with ibv_create_qp()
+ *   dma_q = snap_dma_q_create(pd, attr);
+ *
+ *   // use mkey->mkey to access host memory
+ *   rc = snap_dma_q_write(dma_q, ldata, len, lkey, host_paddr, mkey->mkey, comp);
+ *
+ * Return:
+ * A memory key or NULL on error
+ */
+struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
+					       struct snap_device *target_sdev)
+{
+	struct snap_cross_mkey_attr cm_attr = {};
+
+	cm_attr.vtunnel = target_sdev->mdev.vtunnel;
+	cm_attr.dma_rkey = target_sdev->dma_rkey;
+	cm_attr.vhca_id = snap_get_vhca_id(target_sdev);
+	cm_attr.crossed_vhca_mkey = target_sdev->crossed_vhca_mkey;
+
+	return snap_create_cross_mkey_by_attr(pd, &cm_attr);
+}
+

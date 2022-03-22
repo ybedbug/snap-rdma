@@ -66,39 +66,14 @@ struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length)
 }
 
 /**
- * snap_create_cross_mkey() - Creates a new mkey
+ * snap_create_cross_mkey_by_attr() - Creates cross mkey use provided @attr
  * @pd:           a protection domain that will be used to access remote memory
  * @attr:         attributes used to create this cross meky
- *
- * The function creates a special 'cross' memory key that must be used to
- * access host memory via RDMA operations.
- *
- * For QPs that use 'cross' mkey there is no need to be attached to the snap
- * emulation object.
- *
- * Sample usage pattern:
- *   sctx = snap_open();
- *   sdev = snap_open_device(sctx, attrs);
- *
- *   // Create protection domain:
- *   ib_ctx = ibv_open_device();
- *   pd = ibv_alloc_pd(ib_ctx);
- *
- *   // prepare snap_cross_mkey_attr
- *
- *   // create mkey:
- *   mkey = snap_create_cross_mkey(pd, attr);
- *
- *   // create qp using dma layer or directly with ibv_create_qp()
- *   dma_q = snap_dma_q_create(pd, attr);
- *
- *   // use mkey->mkey to access host memory
- *   rc = snap_dma_q_write(dma_q, ldata, len, lkey, host_paddr, mkey->mkey, comp);
  *
  * Return:
  * A memory key or NULL on error
  */
-struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
+struct snap_cross_mkey *snap_create_cross_mkey_by_attr(struct ibv_pd *pd,
 					       struct snap_cross_mkey_attr *attr)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_mkey_in)] = {0};

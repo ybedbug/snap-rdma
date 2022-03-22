@@ -794,7 +794,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	cm_attr.vhca_id = snap_get_vhca_id(sdev);
 	cm_attr.crossed_vhca_mkey = sdev->crossed_vhca_mkey;
 
-	mkey = snap_create_cross_mkey(m_pd, &cm_attr);
+	mkey = snap_create_cross_mkey_by_attr(m_pd, &cm_attr);
 	ASSERT_TRUE(mkey);
 
 	xgvmi_rkey = mkey->mkey;
