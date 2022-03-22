@@ -730,6 +730,7 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 	uint32_t xgvmi_rkey;
 	struct snap_cross_mkey *mkey;
 	struct snap_nvme_device_attr nvme_device_attr = {};
+	struct snap_cross_mkey_attr cm_attr = {};
 
 	/* TODO: check that test is actually working and limit it to
 	 * the CX6 DX
@@ -787,7 +788,13 @@ TEST_F(SnapDmaTest, xgvmi_mkey) {
 				&sq_attr));
 
 	ASSERT_EQ(0, snap_nvme_query_device(sdev, &nvme_device_attr));
-	mkey = snap_create_cross_mkey(m_pd, sdev);
+
+	cm_attr.vtunnel = sdev->mdev.vtunnel;
+	cm_attr.dma_rkey = sdev->dma_rkey;
+	cm_attr.vhca_id = snap_get_vhca_id(sdev);
+	cm_attr.crossed_vhca_mkey = sdev->crossed_vhca_mkey;
+
+	mkey = snap_create_cross_mkey(m_pd, &cm_attr);
 	ASSERT_TRUE(mkey);
 
 	xgvmi_rkey = mkey->mkey;

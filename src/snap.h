@@ -387,6 +387,8 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 struct snap_context *snap_open(struct ibv_device *ibdev);
 void snap_close(struct snap_context *sctx);
 
+uint16_t snap_get_vhca_id(struct snap_device *sdev);
+
 int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		struct snap_pci **pfs);
 

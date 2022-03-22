@@ -30,6 +30,16 @@ struct snap_umem {
 	struct mlx5dv_devx_umem *devx_umem;
 };
 
+struct snap_cross_mkey_attr {
+	/* for BF1 */
+	void *vtunnel; /* actually is a `struct mlx5_snap_devx_obj` pointer */
+	uint32_t dma_rkey;
+
+	/* for BF2 */
+	int vhca_id;
+	uint32_t crossed_vhca_mkey;
+};
+
 struct snap_cross_mkey {
 	struct mlx5dv_devx_obj *devx_obj;
 	uint32_t mkey;
@@ -66,7 +76,7 @@ int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id);
 struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length);
 
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
-					       struct snap_device *target_sdev);
+					       struct snap_cross_mkey_attr *attr);
 int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey);
 
 struct snap_indirect_mkey *

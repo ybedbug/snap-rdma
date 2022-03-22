@@ -68,7 +68,7 @@ struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length)
 /**
  * snap_create_cross_mkey() - Creates a new mkey
  * @pd:           a protection domain that will be used to access remote memory
- * @target_sdev:  an emulation device
+ * @attr:         attributes used to create this cross meky
  *
  * The function creates a special 'cross' memory key that must be used to
  * access host memory via RDMA operations.
@@ -84,8 +84,10 @@ struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length)
  *   ib_ctx = ibv_open_device();
  *   pd = ibv_alloc_pd(ib_ctx);
  *
+ *   // prepare snap_cross_mkey_attr
+ *
  *   // create mkey:
- *   mkey = snap_create_cross_mkey(pd, sdev);
+ *   mkey = snap_create_cross_mkey(pd, attr);
  *
  *   // create qp using dma layer or directly with ibv_create_qp()
  *   dma_q = snap_dma_q_create(pd, attr);
@@ -97,7 +99,7 @@ struct ibv_mr *snap_reg_mr(struct ibv_pd *pd, void *addr, size_t length)
  * A memory key or NULL on error
  */
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
-					       struct snap_device *target_sdev)
+					       struct snap_cross_mkey_attr *attr)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(create_mkey_in)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(create_mkey_out)] = {0};
@@ -117,9 +119,9 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 	 * For BF-1, we don't support cross-gvmi mkey devx object,
 	 * instead we have the special context rkey
 	 */
-	if (target_sdev->mdev.vtunnel) {
+	if (attr->vtunnel) {
 		cmkey->devx_obj = NULL;
-		cmkey->mkey = target_sdev->dma_rkey;
+		cmkey->mkey = attr->dma_rkey;
 		return cmkey;
 	};
 
@@ -140,9 +142,9 @@ struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 	DEVX_SET(mkc, mkc, length64, 1);
 	/* TODO: change mkey_7_0 to increasing counter */
 	DEVX_SET(mkc, mkc, mkey_7_0, 0x42);
-	DEVX_SET(mkc, mkc, crossing_target_vhca_id, snap_get_vhca_id(target_sdev));
+	DEVX_SET(mkc, mkc, crossing_target_vhca_id, attr->vhca_id);
 	DEVX_SET(mkc, mkc, translations_octword_size_crossing_target_mkey,
-		 target_sdev->crossed_vhca_mkey);
+		 attr->crossed_vhca_mkey);
 
 	cmkey->devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out,
 						 sizeof(out));

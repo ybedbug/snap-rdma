@@ -461,6 +461,7 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 	struct snap_nvme_cq_attr cq_attr = {};
 	struct snap_nvme_sq_attr sq_attr = {};
 	struct snap_dma_q_create_attr dma_q_attr = {};
+	struct snap_cross_mkey_attr cm_attr = {};
 	uint64_t cq_base, sq_base;
 	int rc;
 
@@ -549,7 +550,12 @@ static int ctrl_cmd_start(struct sample_controller *ctrl)
 		goto free_dma_q;
 	}
 
-	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, ctrl->sdev);
+	cm_attr.vtunnel = ctrl->sdev->mdev.vtunnel;
+	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
+	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
+	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
+
+	ctrl->mkey = snap_create_cross_mkey(ctrl->pd, &cm_attr);
 	if (!ctrl->mkey) {
 		printf("failed to create crossing mkey\n");
 		goto sq_to_err;

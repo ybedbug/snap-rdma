@@ -949,6 +949,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 {
 	int ret = 0;
 	uint32_t npgs;
+	struct snap_cross_mkey_attr cm_attr = {};
 
 	if (!sctx) {
 		ret = -ENODEV;
@@ -1016,7 +1017,12 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		goto free_queues;
 	}
 
-	ctrl->xmkey = snap_create_cross_mkey(attr->pd, ctrl->sdev);
+	cm_attr.vtunnel = ctrl->sdev->mdev.vtunnel;
+	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
+	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
+	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
+
+	ctrl->xmkey = snap_create_cross_mkey(attr->pd, &cm_attr);
 	if (!ctrl->xmkey)
 		goto free_pgs;
 
