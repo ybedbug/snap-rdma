@@ -361,6 +361,9 @@ int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cf
 int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
 int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
 				   const void *buf, size_t len);
+int snap_virtio_ctrl_provision_queue(struct snap_virtio_ctrl *ctrl,
+				     struct snap_virtio_ctrl_queue_state *qst,
+				     uint32_t vq_index);
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 
 int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);
