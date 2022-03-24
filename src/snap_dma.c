@@ -10,6 +10,7 @@
  * provided with the software product.
  */
 #include <stdint.h>
+#include <errno.h>
 
 #include "config.h"
 #include "snap_dma_internal.h"

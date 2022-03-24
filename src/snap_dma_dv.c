@@ -11,6 +11,7 @@
  */
 
 #include <stdint.h>
+#include <errno.h>
 
 #if !defined(__DPA)
 #include <arpa/inet.h>

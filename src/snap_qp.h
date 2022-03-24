@@ -13,6 +13,7 @@
 #ifndef SNAP_QP_H
 #define SNAP_QP_H
 
+#include "snap_mr.h"
 #include "snap_macros.h"
 
 /**

@@ -13,6 +13,7 @@
 #ifndef _SNAP_MACROS_H_
 #define _SNAP_MACROS_H_
 
+#include <stdio.h>
 #include <limits.h>
 #include <assert.h>
 
@@ -84,6 +85,18 @@
 #else
 #define assert_debug(_expr)
 #endif
+
+#define PFX "snap: "
+
+#define snap_debug(fmt, ...) \
+	do { if (SNAP_DEBUG) \
+		printf("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
+	} while (0)
+
+// TODO: Add formal logger
+#define snap_error printf
+#define snap_warn  printf
+#define snap_info  printf
 
 static inline int snap_ref_safe(int *refcnt)
 {

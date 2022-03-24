@@ -33,18 +33,6 @@
 #include "mlx5_snap.h"
 #include "snap_macros.h"
 
-#define PFX "snap: "
-
-#define snap_debug(fmt, ...) \
-	do { if (SNAP_DEBUG) \
-		printf("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
-	} while (0)
-
-// TODO: Add formal logger
-#define snap_error printf
-#define snap_warn  printf
-#define snap_info  printf
-
 enum snap_pci_type {
 	SNAP_NONE_PF		= 0,
 	SNAP_NVME_PF		= 1 << 0,
@@ -377,8 +365,6 @@ enum  mlx5_emulation_hotplug_state {
 	MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF = 3,
 	MLX5_EMULATION_HOTPLUG_STATE_POWER_ON = 4,
 };
-
-#define SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM   128
 
 void snap_close_device(struct snap_device *sdev);
 struct snap_device *snap_open_device(struct snap_context *sctx,

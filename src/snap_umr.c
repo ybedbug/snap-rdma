@@ -10,10 +10,8 @@
  * provided with the software product.
  */
 
-#include "snap_umr.h"
-#include "snap.h"
 #include "snap_dma_internal.h"
-#include "snap_mr.h"
+#include "snap_umr.h"
 
 static inline void set_umr_inline_klm_seg(union mlx5_wqe_umr_inline_seg *klm,
 					struct mlx5_klm *mtt)

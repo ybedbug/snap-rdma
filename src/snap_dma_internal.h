@@ -14,7 +14,6 @@
 #define SNAP_DMA_INTERNAL_H
 
 #include "snap_dma.h"
-#include "snap.h"
 #include "snap_mb.h"
 
 #if __DPA

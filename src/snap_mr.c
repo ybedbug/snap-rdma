@@ -10,12 +10,14 @@
  * provided with the software product.
  */
 
+#include <stdlib.h>
 #include <limits.h>
+#include <infiniband/mlx5dv.h>
 
 #include "config.h"
-#include "snap.h"
-#include "snap_mr.h"
 #include "mlx5_ifc.h"
+#include "snap_macros.h"
+#include "snap_mr.h"
 
 int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 {

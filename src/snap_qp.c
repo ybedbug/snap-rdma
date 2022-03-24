@@ -17,14 +17,10 @@
 
 #include "config.h"
 
-#include "snap.h"
-#include "snap_mr.h"
 #include "snap_qp.h"
 #include "snap_dpa.h"
 
-#include "mlx5_snap.h"
 #include "mlx5_ifc.h"
-
 
 static bool cq_validate_attr(const struct snap_cq_attr *attr)
 {

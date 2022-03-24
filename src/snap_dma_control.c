@@ -16,7 +16,6 @@
 #include "snap_dma_internal.h"
 #include "snap_env.h"
 #include "mlx5_ifc.h"
-#include "snap_internal.h"
 #include "snap_umr.h"
 #include "snap_dpa.h"
 

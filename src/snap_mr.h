@@ -24,6 +24,8 @@ struct snap_device;
 
 #define SNAP_VIRTIO_UMEM_ALIGN 4096
 
+#define SNAP_KLM_MAX_TRANSLATION_ENTRIES_NUM   128
+
 struct snap_umem {
 	void *buf;
 	int size;
