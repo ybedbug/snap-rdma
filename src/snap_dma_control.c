@@ -520,11 +520,15 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	snap_debug("Opening dma_q of type %d on_dpa %d\n", attr->mode, attr->on_dpa);
 	if (attr->on_dpa) {
-		if (attr->mode != SNAP_DMA_Q_MODE_DV)
-			return -EINVAL;
-		q->no_events = true;
-		qp_init_attr.qp_on_dpa = true;
-		qp_init_attr.dpa_proc = attr->dpa_proc;
+		if (snap_dpa_enabled(pd->context)) {
+			if (attr->mode != SNAP_DMA_Q_MODE_DV)
+				return -EINVAL;
+			q->no_events = true;
+			qp_init_attr.qp_on_dpa = true;
+			qp_init_attr.dpa_proc = attr->dpa_proc;
+		} else {
+			return -ENOTSUP;
+		}
 	}
 
 	/*
