@@ -66,7 +66,7 @@ snap_create_destroy_virtio_queue_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/lib
 
 snap_dpa_p2p_test_CFLAGS = $(LOCAL_CFLAGS)
 snap_dpa_p2p_test_SOURCES = $(SNAP_TEST_FILES) snap_dpa_p2p_test.c
-snap_dpa_p2p_test_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
+snap_dpa_p2p_test_LDADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap-mr.la $(top_builddir)/src/libsnap-dma.la $(top_builddir)/src/libsnap.la
 
 snap_open_close_channel_CFLAGS = $(LOCAL_CFLAGS)
 snap_open_close_channel_SOURCES = $(SNAP_TEST_FILES) snap_open_close_channel.c
@@ -122,6 +122,7 @@ snap_sample_device_CFLAGS = $(LOCAL_CFLAGS)
 snap_sample_device_SOURCES = snap_sample_device.c \
 			     snap_sample_device.h
 snap_sample_device_LDADD  = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la
+snap_sample_device_LDFLAGS = -Wl,--copy-dt-needed-entries
 
 snap_sample_uio_driver_CFLAGS = $(LOCAL_CFLAGS)
 snap_sample_uio_driver_SOURCES = snap_sample_uio_driver.c \
