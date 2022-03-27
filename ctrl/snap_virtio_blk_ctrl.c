@@ -1091,6 +1091,7 @@ static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
 {
 	int ret;
 	struct snap_virtio_blk_device_attr blk_attr = {};
+	bool check_cap;
 
 	snap_info("create controller in recover mode - ctrl=%p max_queues=%ld enabled_queues=%ld\n",
 		   ctrl, ctrl->common.max_queues, ctrl->common.enabled_queues);
@@ -1110,7 +1111,9 @@ static int snap_virtio_blk_ctrl_recover(struct snap_virtio_blk_ctrl *ctrl,
 		goto err;
 	}
 
-	if (!snap_virtio_blk_ctrl_bar_is_setup_valid(&blk_attr, &attr->regs, true)) {
+	/* Allow capacity to change while driver is up if we are forcing recover */
+	check_cap = !attr->common.force_recover;
+	if (!snap_virtio_blk_ctrl_bar_is_setup_valid(&blk_attr, &attr->regs, check_cap)) {
 		snap_error("The configured parameters don't fit bar data\n");
 		ret = -EINVAL;
 		goto err;
