@@ -1462,13 +1462,35 @@ int snap_virtio_ctrl_provision_queue(struct snap_virtio_ctrl *ctrl,
 
 	vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, vq_index);
 
-	vq->size = qst[vq_index].queue_size;
+	vq->size        = qst[vq_index].queue_size;
 	vq->msix_vector = qst[vq_index].queue_msix_vector;
-	vq->enable = qst[vq_index].queue_enable;
-	vq->notify_off = qst[vq_index].queue_notify_off;
-	vq->desc = qst[vq_index].queue_desc;
-	vq->driver = qst[vq_index].queue_driver;
-	vq->device = qst[vq_index].queue_device;
+	vq->enable      = qst[vq_index].queue_enable;
+	vq->notify_off  = qst[vq_index].queue_notify_off;
+	vq->desc        = qst[vq_index].queue_desc;
+	vq->driver      = qst[vq_index].queue_driver;
+	vq->device      = qst[vq_index].queue_device;
+
+	return 0;
+}
+
+int snap_virtio_ctrl_query_queue(struct snap_virtio_ctrl *ctrl,
+				struct snap_virtio_ctrl_queue_state *qst,
+				uint32_t vq_index)
+{
+	struct snap_virtio_queue_attr *vq;
+
+	if (vq_index > ctrl->max_queues)
+		return -EINVAL;
+
+	vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, vq_index);
+
+	qst[vq_index].queue_size        = vq->size;
+	qst[vq_index].queue_msix_vector = vq->msix_vector;
+	qst[vq_index].queue_enable      = vq->enable;
+	qst[vq_index].queue_notify_off  = vq->notify_off;
+	qst[vq_index].queue_desc        = vq->desc;
+	qst[vq_index].queue_driver      = vq->driver;
+	qst[vq_index].queue_device      = vq->device;
 
 	return 0;
 }

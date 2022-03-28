@@ -364,6 +364,9 @@ int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
 int snap_virtio_ctrl_provision_queue(struct snap_virtio_ctrl *ctrl,
 				     struct snap_virtio_ctrl_queue_state *qst,
 				     uint32_t vq_index);
+int snap_virtio_ctrl_query_queue(struct snap_virtio_ctrl *ctrl,
+				     struct snap_virtio_ctrl_queue_state *qst,
+				     uint32_t vq_index);
 void snap_virtio_ctrl_log_writes(struct snap_virtio_ctrl *ctrl, bool enable);
 
 int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name);
