@@ -180,10 +180,21 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 	if (!rt_thr->dpu_cmd_chan.dma_q)
 		goto free_dpa_thread;
 
-
 	q_attr.mode = SNAP_DMA_Q_MODE_DV;
-	q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
-	q_attr.dpa_proc = rt->dpa_proc;
+
+	if (rt_thr->mode == SNAP_DPA_RT_THR_POLLING) {
+		q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_POLLING;
+		q_attr.dpa_proc = rt->dpa_proc;
+		db_cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
+		db_cq_attr.dpa_proc = rt->dpa_proc;
+	} else if (rt_thr->mode == SNAP_DPA_RT_THR_EVENT) {
+		q_attr.dpa_mode = SNAP_DMA_Q_DPA_MODE_EVENT;
+		q_attr.dpa_thread = rt_thr->thread;
+		db_cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_THREAD;
+		db_cq_attr.dpa_thread = rt_thr->thread;
+	} else
+		goto free_dpu_qp;
+
 	rt_thr->dpa_cmd_chan.dma_q = snap_dma_ep_create(pd, &q_attr);
 	if (!rt_thr->dpa_cmd_chan.dma_q)
 		goto free_dpu_qp;
@@ -195,14 +206,9 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 	rt_thr->dpu_cmd_chan.q_size = SNAP_DPA_RT_QP_RX_SIZE;
 	rt_thr->dpu_cmd_chan.credit_count = SNAP_DPA_RT_QP_RX_SIZE;
 
-	/* simx bug: change to the thread */
-	db_cq_attr.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EQ;
-	db_cq_attr.dpa_proc = rt->dpa_proc;
 	rt_thr->db_cq = snap_cq_create(pd->context, &db_cq_attr);
 	if (!rt_thr->db_cq)
 		goto free_dpa_qp;
-
-	/* in event mode also create a trigger cq/qp */
 
 	/* TODO: create EQ/MSIX cq */
 	ret = snap_cq_to_hw_cq(rt_thr->db_cq, &hw_cq);
@@ -258,7 +264,7 @@ struct snap_dpa_rt_thread *snap_dpa_rt_thread_get(struct snap_dpa_rt *rt, struct
 	struct snap_dpa_rt_thread *rt_thr;
 	int ret;
 
-	if (filter->mode != SNAP_DPA_RT_THR_POLLING)
+	if (filter->mode != SNAP_DPA_RT_THR_POLLING && filter->mode != SNAP_DPA_RT_THR_EVENT)
 		return NULL;
 
 	if (filter->queue_mux_mode != SNAP_DPA_RT_THR_SINGLE)

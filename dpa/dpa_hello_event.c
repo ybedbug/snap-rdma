@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "dpa.h"
+#include "snap_dma_internal.h"
 
 int dpa_init()
 {
@@ -22,11 +23,17 @@ int dpa_init()
 
 int dpa_run()
 {
-	printf("HELLO [POLLING], i am dummy dpa code\n");
+	struct snap_dpa_tcb *tcb = dpa_tcb();
+	struct mlx5_cqe64 *cqe;
 
 	printf("thread_ctx@%p size %ld\n", flexio_os_get_thread_ctx(), sizeof(struct flexio_os_thread_ctx));
+	printf("HELLO [EVENT], i am dummy dpa code tcb %p\n", tcb);
 
-	printf("WAIT4 exit command\n");
+	cqe = snap_dv_poll_cq(&tcb->cmd_cq, 64);
+	if (!cqe)
+		return 0;
+
+	printf("new command\n");
 	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
 	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	printf("All done. Exiting\n");

@@ -21,18 +21,29 @@ AM_CFLAGS = $(BASE_CFLAGS) \
 AM_LDFLAGS = -fPIE -fpie -flto -pie -static -nostartfiles \
 	     -T $(srcdir)/flexio_linker.ld -L$(FLEXIO_DIR)/lib/
 
-noinst_PROGRAMS += dpa_hello dpa_dma_test dpa_virtq_split dpa_rt_test_polling
+noinst_PROGRAMS += dpa_hello \
+		   dpa_hello_event \
+		   dpa_dma_test \
+		   dpa_virtq_split \
+		   dpa_rt_test_polling \
+		   dpa_rt_test_event
 
 noinst_LIBRARIES = libdpa.a
 
 dpa_hello_SOURCES = dpa_hello.c
 dpa_hello_LDADD = libdpa.a
 
+dpa_hello_event_SOURCES = dpa_hello_event.c
+dpa_hello_event_LDADD = libdpa.a
+
 dpa_dma_test_SOURCES = dpa_dma_test.c
 dpa_dma_test_LDADD = libdpa.a
 
 dpa_rt_test_polling_SOURCES = dpa_rt_test_polling.c
 dpa_rt_test_polling_LDADD = libdpa.a
+
+dpa_rt_test_event_SOURCES = dpa_rt_test_event.c
+dpa_rt_test_event_LDADD = libdpa.a
 
 # copy snap_dma datapath sources, we need to compile them both on host and on
 # the DPA

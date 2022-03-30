@@ -140,6 +140,9 @@ void dpa_rt_start(void)
 	ctx->dpa_cmd_chan.q_size = SNAP_DPA_RT_QP_RX_SIZE;
 	ctx->dpa_cmd_chan.credit_count = SNAP_DPA_RT_QP_RX_SIZE;
 
+	/* drain command cq */
+	snap_dv_poll_cq(&dpa_tcb()->cmd_cq, 64);
+
 	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	dpa_debug("dma q at %p db_cq at %p\n", ctx->dpa_cmd_chan.dma_q, (void *)ctx->db_cq.cq_addr);
 }
