@@ -24,6 +24,8 @@ class SnapDmaTest : public ::testing::Test {
 			void *rvaddr, void *rpaddr, uint32_t rkey, int len);
 	void poll_rx(int mode);
 	void poll_tx(int mode);
+	void worker_poll_rx();
+	void worker_poll_tx();
 	void empty(int mode);
 	void flush_async(int mode);
 	struct snap_dma_q *create_queue();

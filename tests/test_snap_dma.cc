@@ -1757,3 +1757,106 @@ TEST_F(SnapDmaTest, dpa_rdma_from_dpa) {
 	snap_dma_ep_destroy(dpu_qp);
 	snap_dpa_process_destroy(dpa_ctx);
 }
+
+void SnapDmaTest::worker_poll_rx()
+{
+	struct snap_dma_worker *wk;
+	char *sqe = m_rbuf;
+	int rc, i;
+	int rx_reqs = 16;
+	snap_dma_worker_create_attr wk_attr;
+	struct snap_dma_q *q[2];
+
+	wk_attr.mode = SNAP_DMA_WORKER_MODE_CQ_POOL;
+	wk_attr.exp_queue_num = 2;
+	wk_attr.exp_queue_rx_size = 64;
+
+	wk = snap_dma_worker_create(m_pd, &wk_attr);
+	ASSERT_TRUE(wk);
+
+	m_dma_q_attr.wk = wk;
+	for(i = 0; i < 2; i++) {
+		q[i] = snap_dma_q_create(m_pd, &m_dma_q_attr);
+		ASSERT_TRUE(q[i]);
+	}
+
+	memset(sqe, 0xDA, wk_attr.exp_queue_rx_size);
+
+	g_rx_count = 0;
+	for(i = 0; i < rx_reqs; i++) {
+		rc = snap_dma_q_fw_send(&wk->dma_queues[0], sqe, wk_attr.exp_queue_rx_size,
+				m_rmr->lkey);
+		rc = snap_dma_q_fw_send(&wk->dma_queues[1], sqe, wk_attr.exp_queue_rx_size,
+				m_rmr->lkey);
+		ASSERT_EQ(0, rc);
+	}
+	sleep(1);
+
+	snap_dma_worker_progress_rx(wk);
+	ASSERT_EQ(rx_reqs * 2, g_rx_count);
+	ASSERT_EQ(0, memcmp(g_last_rx, sqe, m_dma_q_attr.rx_elem_size));
+	snap_dma_q_destroy(q[0]);
+	snap_dma_q_destroy(q[1]);
+	snap_dma_worker_destroy(wk);
+}
+
+TEST_F(SnapDmaTest, poll_rx_worker)
+{
+	worker_poll_rx();
+}
+
+void SnapDmaTest::worker_poll_tx()
+{
+	struct snap_dma_worker *wk;
+	int rc, i;
+	int tx_reqs = 64;
+	struct snap_dma_completion *write_comp[tx_reqs];
+	int n = 0;
+	struct snap_dma_q *q;
+	snap_dma_worker_create_attr wk_attr;
+
+	wk_attr.mode = SNAP_DMA_WORKER_MODE_CQ_POOL;
+	wk_attr.exp_queue_num = 1;
+	wk_attr.exp_queue_rx_size = 64;
+
+	wk = snap_dma_worker_create(m_pd, &wk_attr);
+	ASSERT_TRUE(wk);
+
+	m_dma_q_attr.wk = wk;
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	g_comp_count = 0;
+	for(i = 0; i < tx_reqs; i++) {
+		write_comp[i] =(struct snap_dma_completion *) malloc(sizeof(struct snap_dma_completion));
+		write_comp[i]->count = 1;
+		write_comp[i]->func = dma_completion;
+		memset(m_rbuf, 0, m_bsize);
+		memset(m_lbuf, 0xED, m_bsize);
+		rc = snap_dma_q_write(&wk->dma_queues[0], m_lbuf, m_bsize, m_lmr->lkey,
+				(uintptr_t)m_rbuf, m_rmr->lkey, write_comp[i]);
+		ASSERT_EQ(0, rc);
+	}
+
+	int k = 0;
+	int retry = 1;
+again:
+	while ((n = snap_dma_worker_progress_tx(wk)) > 0) {
+	}
+	/* if batching enabled the op will only go out at first poll, so
+	 * give additional time for things to complete
+	 */
+	if (retry-- && k == 0) {
+		sleep(1);
+		goto again;
+	}
+
+	ASSERT_EQ(tx_reqs, g_comp_count);
+	snap_dma_q_destroy(q);
+	snap_dma_worker_destroy(wk);
+}
+
+TEST_F(SnapDmaTest, poll_tx_worker)
+{
+	worker_poll_tx();
+}

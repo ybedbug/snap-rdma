@@ -497,10 +497,8 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	DEVX_SET(qpc, qpc, pd, pd_id);
 	DEVX_SET(qpc, qpc, pm_state, MLX5_QPC_PM_STATE_MIGRATED);
 	DEVX_SET(qpc, qpc, uar_page, qp_uar->uar->page_id);
-	/* TODO: use user index to speed up qp lookup when we have
-	 * multiple qps per cq:
-	 * DEVX_SET(qpc, qpc, user_index, attr->uidx);
-	 */
+	//user index to speed up qp lookup when we have multiple qps per cq:
+	DEVX_SET(qpc, qpc, user_index, attr->uidx);
 	if (log_page_size > MLX5_ADAPTER_PAGE_SHIFT)
 		DEVX_SET(qpc, qpc, log_page_size, log_page_size - MLX5_ADAPTER_PAGE_SHIFT);
 

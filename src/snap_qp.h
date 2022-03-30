@@ -143,6 +143,7 @@ struct snap_qp_attr {
 	uint32_t rq_size;
 	uint32_t rq_max_sge;
 	struct snap_cq *rq_cq;
+	uint32_t uidx;
 
 	bool qp_on_dpa;
 	struct snap_dpa_ctx *dpa_proc;

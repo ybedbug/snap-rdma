@@ -35,7 +35,9 @@ struct mlx5_dma_opaque {
 	uint32_t scattered_length;
 	uint32_t gathered_length;
 	uint8_t  reserved2[240];
-};
+} __attribute__((packed));
+
+SNAP_STATIC_ASSERT(sizeof(struct mlx5_dma_opaque) == 256, "Bad mlx5_dma_opaque size");
 
 struct mlx5_dma_wqe {
 	uint32_t opcode;
@@ -60,6 +62,17 @@ static inline bool qp_can_tx(struct snap_dma_q *q, int bb_needed)
 	return q->tx_available >= bb_needed;
 }
 
+static inline bool worker_qps_can_tx(struct snap_dma_worker *wk, int bb_needed)
+{
+	int i;
+
+	for (i = 0; i < wk->num_queues; i++) {
+		if (wk->dma_queues[i].tx_available < bb_needed)
+			return false;
+	}
+
+	return true;
+}
 /* DV implementation */
 static inline int snap_dv_get_cq_update(struct snap_dv_qp *dv_qp, struct snap_dma_completion *comp)
 {
@@ -215,6 +228,10 @@ static inline void snap_dv_arm_cq(struct snap_hw_cq *cq)
 	dpa_dma_q_arm_cq(cq->cq_num, cq->ci);
 #endif
 }
+
+int dv_worker_progress_rx(struct snap_dma_worker *wk);
+int dv_worker_progress_tx(struct snap_dma_worker *wk);
+int dv_worker_flush(struct snap_dma_worker *wk);
 
 extern struct snap_dma_q_ops verb_ops;
 extern struct snap_dma_q_ops dv_ops;

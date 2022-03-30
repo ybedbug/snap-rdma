@@ -271,6 +271,7 @@ struct snap_dma_q {
 
 	TAILQ_HEAD(, snap_dma_q_crypto_ctx) free_crypto_ctx;
 	int custom_ops;
+	struct snap_dma_worker *worker;
 
 	/* public: */
 	/** @uctx:  user supplied context */
@@ -319,6 +320,10 @@ enum {
  *                only if @mode is dv or gga
  * @on_dpa:       create dma queue on the DPA. Valid only with snap_dma_ep_create()
  * @dpa_proc:     snap dpa process context. Must be valid if @on_dpa is true
+ *
+ * @wk:           if not NULL, the dma_queue will be attached to the given
+ *                worker. In such case worker progress/polling functions must
+ *                be used instead of queue progress/polling functions.
  */
 struct snap_dma_q_create_attr {
 	uint32_t tx_qsize;
@@ -338,7 +343,43 @@ struct snap_dma_q_create_attr {
 	bool use_devx;
 	bool on_dpa;
 	struct snap_dpa_ctx *dpa_proc;
+	struct snap_dma_worker *wk;
 };
+
+/* TODO add support for worker mode single and SRQ*/
+enum snap_dma_worker_mode {
+	SNAP_DMA_WORKER_MODE_SINGLE, /* cq per qp, suitable for small numbers of qps */
+	SNAP_DMA_WORKER_MODE_CQ_POOL, /* cq pool, rx cq size is exp_queue_num * exp_queue_rx_size */
+	SNAP_DMA_WORKER_MODE_SRQ /* use to receive */
+};
+
+struct snap_dma_worker_create_attr {
+	enum snap_dma_worker_mode mode;
+	int exp_queue_num; /* hint to the worker: how many queues it is going to serve */
+	int exp_queue_rx_size; /* hint to the worker: queue rx size */
+	int id;
+};
+
+struct snap_dma_worker {
+	/* used when working in devx mode */
+	struct snap_hw_cq dv_tx_cq;
+	struct snap_hw_cq dv_rx_cq;
+
+	struct snap_cq *rx_cq;
+	struct snap_cq *tx_cq;
+	int num_queues;
+	enum snap_dma_worker_mode mode;
+	struct snap_dma_q dma_queues[0];
+};
+struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
+		struct snap_dma_worker_create_attr *attr);
+void snap_dma_worker_destroy(struct snap_dma_worker *wk);
+int snap_dma_worker_flush(struct snap_dma_worker *wk);
+
+/* progress receives, dma_q rx callbacks will be called */
+int snap_dma_worker_progress_rx(struct snap_dma_worker *wk);
+/* progress tx, dma_q tx completion callbacks will be called */
+int snap_dma_worker_progress_tx(struct snap_dma_worker *wk);
 
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr);
@@ -380,10 +421,8 @@ struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
 struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	struct snap_dma_q_create_attr *attr);
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
-
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key);
-
 struct snap_dma_ep_copy_cmd {
 	struct snap_dpa_cmd base;
 	struct snap_dma_q q;
@@ -408,8 +447,8 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 }
 
 /* how many tx and rx completions to process during a signle progress call */
-#define SNAP_DMA_MAX_TX_COMPLETIONS  32
-#define SNAP_DMA_MAX_RX_COMPLETIONS  16
+#define SNAP_DMA_MAX_TX_COMPLETIONS  128
+#define SNAP_DMA_MAX_RX_COMPLETIONS  128
 
 /* align start of the receive buffer on 4k boundary */
 #define SNAP_DMA_RX_BUF_ALIGN    4096

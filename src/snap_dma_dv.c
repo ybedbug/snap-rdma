@@ -17,6 +17,8 @@
 #include <arpa/inet.h>
 #endif
 
+#include "snap_virtio_common.h"
+
 #include "snap_dma_internal.h"
 #include "snap_umr.h"
 
@@ -1028,3 +1030,116 @@ struct snap_dma_q_ops gga_ops = {
 	.flush_nowait    = dv_dma_q_flush_nowait,
 	.empty		 = dv_dma_q_empty,
 };
+
+int dv_worker_progress_rx(struct snap_dma_worker *wk)
+{
+	struct mlx5_cqe64 *cqe[SNAP_DMA_MAX_RX_COMPLETIONS];
+	int n, i, cqe_id;
+	int op;
+	struct snap_rx_completion rx_comp[SNAP_DMA_MAX_RX_COMPLETIONS];
+	struct snap_dma_q *q;
+
+	n = 0;
+	do {
+		cqe[n] = snap_dv_poll_cq(&wk->dv_rx_cq, SNAP_DMA_Q_RX_CQE_SIZE);
+		if (!cqe[n])
+			break;
+		op = mlx5dv_get_cqe_opcode(cqe[n]);
+		if (snap_unlikely(op != MLX5_CQE_RESP_SEND &&
+				  op != MLX5_CQE_RESP_SEND_IMM)) {
+			snap_dv_cqe_err(cqe[n]);
+			return n;
+		}
+		cqe_id = be32toh(cqe[n]->srqn_uidx);
+		q = &wk->dma_queues[cqe_id];
+		dv_dma_q_get_rx_comp(q, cqe[n], &rx_comp[n]);
+		n++;
+	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
+	snap_memory_cpu_load_fence();
+
+	for (i = 0; i < n; i++) {
+		cqe_id = be32toh(cqe[i]->srqn_uidx);
+		q = &wk->dma_queues[cqe_id];
+		wk->dma_queues[cqe_id].rx_cb(q, rx_comp[i].data, rx_comp[i].byte_len, rx_comp[i].imm_data);
+		wk->dma_queues[cqe_id].sw_qp.dv_qp.hw_qp.rq.ci++;
+		snap_dv_ring_rx_db(&wk->dma_queues[cqe_id].sw_qp.dv_qp);
+	}
+
+	return n;
+}
+
+int dv_worker_progress_tx(struct snap_dma_worker *wk)
+{
+	struct mlx5_cqe64 *cqe[SNAP_DMA_MAX_TX_COMPLETIONS];
+	struct snap_dma_completion *comp[SNAP_DMA_MAX_TX_COMPLETIONS];
+	struct snap_dma_q *q;
+	int n, i, cqe_id;
+
+	if (!wk->num_queues)
+		return 0;
+	n = 0;
+
+	do {
+		cqe[n] = snap_dv_poll_cq(&wk->dv_tx_cq, SNAP_DMA_Q_TX_CQE_SIZE);
+		if (!cqe[n])
+			break;
+
+		if (snap_unlikely(mlx5dv_get_cqe_opcode(cqe[n]) != MLX5_CQE_REQ))
+			snap_dv_cqe_err(cqe[n]);
+
+		cqe_id = be32toh(cqe[n]->srqn_uidx);
+		q = &wk->dma_queues[cqe_id];
+
+		comp[n] = dv_dma_q_get_comp(q, cqe[n]);
+		n++;
+	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
+
+	for (i = 0; i < n; i++) {
+		if (comp[i] && --comp[i]->count == 0)
+			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
+	}
+	for (i = 0; i < wk->num_queues; i++)
+		snap_dv_tx_complete(&wk->dma_queues[i].sw_qp.dv_qp);
+
+	return n;
+}
+
+static int worker_flush_helper(struct snap_dma_q *q)
+{
+	struct snap_dma_completion comp;
+	int n_bb, n_out;
+
+	/* flush all outstanding ops by issuing a zero length inline rdma write */
+	n_out = q->sw_qp.dv_qp.n_outstanding;
+	if (n_out) {
+		comp.count = 2;
+		do_dv_xfer_inline(q, NULL, 0, MLX5_OPCODE_RDMA_WRITE, 0, 0, &comp, &n_bb);
+		q->tx_available -= n_bb;
+		n_out--;
+	}
+
+	return n_out;
+}
+
+int dv_worker_flush(struct snap_dma_worker *wk)
+{
+	int n, tx_available, i;
+	struct snap_dma_q *q;
+
+	n = 0;
+	/* in case we have tx moderation we need at least one
+	 * available to be able to send a flush command
+	 */
+	while (!worker_qps_can_tx(wk, 1))
+		n += dv_worker_progress_tx(wk);
+	for (i = 0 ; i < wk->num_queues; i++) {
+		q = &wk->dma_queues[i];
+		n += worker_flush_helper(q);
+	}
+	for (i = 0 ; i < wk->num_queues; i++) {
+		tx_available = wk->dma_queues[i].sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+		while (wk->dma_queues[i].tx_available < tx_available)
+			n += dv_worker_progress_tx(wk);
+	}
+	return n;
+}
