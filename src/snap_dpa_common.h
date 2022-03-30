@@ -65,9 +65,12 @@ struct snap_dpa_tcb {
 	uint64_t heap_size;
 
 	uint32_t counter;
-	uint32_t pad1;
+	uint8_t init_done;
+	uint8_t user_flag;
+	uint8_t pad1[2];
 
-	uint64_t pad[2];
+	uint64_t pad[1];
+	uint64_t user_arg;
 
 	struct snap_hw_cq cmd_cq;
 	uint8_t pad2[12];
