@@ -202,6 +202,9 @@ static inline int verbs_dma_q_writev2v(struct snap_dma_q *q,
 	 *  and, left should be 0.
 	 */
 
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
 	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
 	if (!io_ctx)
 		return errno;
@@ -346,6 +349,9 @@ static inline int verbs_dma_q_readv2v(struct snap_dma_q *q,
 	/* after for loop, j should equal to io_attr->liov_cnt,
 	 *  and, left should be 0.
 	 */
+
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
 
 	io_ctx = verbs_prepare_io_ctx(q, *n_bb, comp);
 	if (!io_ctx)
