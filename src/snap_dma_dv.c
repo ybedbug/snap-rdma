@@ -89,19 +89,16 @@ static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 __attribute__((unused)) static void
 snap_use_klm_mkey_done(struct snap_dma_completion *comp, int status)
 {
-	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_dma_q_crypto_ctx *crypto_ctx;
 	struct snap_dma_q *q;
 	struct snap_dma_completion *orig_comp;
 
-	io_ctx = container_of(comp, struct snap_dma_q_io_ctx, comp);
+	crypto_ctx = container_of(comp, struct snap_dma_q_crypto_ctx, comp);
 
-	q = io_ctx->q;
-	orig_comp = (struct snap_dma_completion *)io_ctx->uctx;
+	q = crypto_ctx->q;
+	orig_comp = (struct snap_dma_completion *)crypto_ctx->uctx;
 
-	if (io_ctx->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
-		TAILQ_INSERT_HEAD(&q->free_iov_ctx, io_ctx, entry);
-	else
-		TAILQ_INSERT_HEAD(&q->free_crypto_ctx, io_ctx, entry);
+	TAILQ_INSERT_HEAD(&q->free_crypto_ctx, crypto_ctx, entry);
 
 	if (orig_comp && --orig_comp->count == 0)
 		orig_comp->func(orig_comp, status);
@@ -131,52 +128,45 @@ static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
 	return 0;
 }
 
-/* return NULL if prepare io_ctx failed in any reason,
+/* return NULL if prepare crypto_ctx failed in any reason,
  * and use 'errno' to pass the actually failure reason.
  */
-static struct snap_dma_q_io_ctx*
-snap_prepare_io_ctx(struct snap_dma_q *q,
+static struct snap_dma_q_crypto_ctx*
+snap_prepare_crypto_ctx(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 #if !defined(__DPA)
 	int ret;
 	size_t llen, rlen;
-	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_dma_q_crypto_ctx *crypto_ctx;
 	struct snap_post_umr_attr umr_attr = {0};
 
-	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
-		io_ctx = TAILQ_FIRST(&q->free_iov_ctx);
-	else
-		io_ctx = TAILQ_FIRST(&q->free_crypto_ctx);
-	if (!io_ctx) {
+	crypto_ctx = TAILQ_FIRST(&q->free_crypto_ctx);
+	if (!crypto_ctx) {
 		errno = -ENOMEM;
-		snap_error("dma_q:%p Out of io_ctx from pool\n", q);
+		snap_error("dma_q:%p Out of crypto_ctx from pool\n", q);
 		return NULL;
 	}
 
-	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
-		TAILQ_REMOVE(&q->free_iov_ctx, io_ctx, entry);
-	else
-		TAILQ_REMOVE(&q->free_crypto_ctx, io_ctx, entry);
+	TAILQ_REMOVE(&q->free_crypto_ctx, crypto_ctx, entry);
 
 	*n_bb = 0;
 
-	io_ctx->uctx = comp;
-	io_ctx->comp.func = snap_use_klm_mkey_done;
-	io_ctx->comp.count = 1;
-	io_ctx->io_type = io_attr->io_type;
+	crypto_ctx->uctx = comp;
+	crypto_ctx->comp.func = snap_use_klm_mkey_done;
+	crypto_ctx->comp.count = 1;
 
 	if (io_attr->liov_cnt > 1) {
 		/* post UMR WQE for local IOV memory */
 		ret = snap_iov_to_klm_mtt(io_attr->liov, io_attr->liov_cnt,
-					io_attr->lkey, io_ctx->klm_mtt, &llen);
+					io_attr->lkey, crypto_ctx->klm_mtt, &llen);
 		if (ret)
 			goto insert_back;
 
 		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
-		umr_attr.klm_mkey = io_ctx->l_klm_mkey;
-		umr_attr.klm_mtt = io_ctx->klm_mtt;
+		umr_attr.klm_mkey = crypto_ctx->l_klm_mkey;
+		umr_attr.klm_mtt = crypto_ctx->klm_mtt;
 		umr_attr.klm_entries = io_attr->liov_cnt;
 
 		ret = snap_umr_post_wqe(q, &umr_attr, NULL, n_bb);
@@ -191,7 +181,7 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 	/* post UMR WQE for remote klm mkey */
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_IOV) {
 		ret = snap_iov_to_klm_mtt(io_attr->riov, io_attr->riov_cnt,
-					io_attr->rkey, io_ctx->klm_mtt, &rlen);
+					io_attr->rkey, crypto_ctx->klm_mtt, &rlen);
 		if (ret)
 			goto insert_back;
 
@@ -200,8 +190,8 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 			snap_error("lIOV(total len:%lu) cannot fit rIOV(total len:%lu)\n", llen, rlen);
 
 		umr_attr.purpose |= SNAP_UMR_MKEY_MODIFY_ATTACH_MTT;
-		umr_attr.klm_mkey = io_ctx->r_klm_mkey;
-		umr_attr.klm_mtt = io_ctx->klm_mtt;
+		umr_attr.klm_mkey = crypto_ctx->r_klm_mkey;
+		umr_attr.klm_mtt = crypto_ctx->klm_mtt;
 		umr_attr.klm_entries = io_attr->riov_cnt;
 	}
 
@@ -227,13 +217,10 @@ snap_prepare_io_ctx(struct snap_dma_q *q,
 
 	*n_bb += 1; /* +1 for DMA WQE */
 
-	return io_ctx;
+	return crypto_ctx;
 
 insert_back:
-	if (io_attr->io_type == SNAP_DMA_Q_IO_TYPE_IOV)
-		TAILQ_INSERT_TAIL(&q->free_iov_ctx, io_ctx, entry);
-	else
-		TAILQ_INSERT_TAIL(&q->free_crypto_ctx, io_ctx, entry);
+	TAILQ_INSERT_TAIL(&q->free_crypto_ctx, crypto_ctx, entry);
 
 	errno = ret;
 #endif
@@ -245,46 +232,30 @@ int snap_prepare_dma_xfer_ctx(struct snap_dma_q *q,
 				struct snap_dma_completion *comp,
 				int *n_bb, struct snap_dma_xfer_ctx *dx_ctx)
 {
-	struct snap_dma_q_io_ctx *io_ctx;
+	struct snap_dma_q_crypto_ctx *crypto_ctx;
 
-	io_ctx = snap_prepare_io_ctx(q, io_attr, comp, n_bb);
-	if (!io_ctx)
+	crypto_ctx = snap_prepare_crypto_ctx(q, io_attr, comp, n_bb);
+	if (!crypto_ctx)
 		return errno;
 
 	if (io_attr->liov_cnt == 1) {
 		dx_ctx->lbuf = io_attr->liov[0].iov_base;
 		dx_ctx->lkey = io_attr->lkey[0];
 	} else {
-		dx_ctx->lbuf = (void *)io_ctx->l_klm_mkey->addr;
-		dx_ctx->lkey = io_ctx->l_klm_mkey->mkey;
+		dx_ctx->lbuf = (void *)crypto_ctx->l_klm_mkey->addr;
+		dx_ctx->lkey = crypto_ctx->l_klm_mkey->mkey;
 	}
 
 	if (io_attr->io_type & SNAP_DMA_Q_IO_TYPE_ENCRYPTO)
 		dx_ctx->raddr = 0; /* use zero based rdma if use bsf enabled mkey */
 	else
-		dx_ctx->raddr = io_ctx->r_klm_mkey->addr;
-	dx_ctx->rkey = io_ctx->r_klm_mkey->mkey;
+		dx_ctx->raddr = crypto_ctx->r_klm_mkey->addr;
+	dx_ctx->rkey = crypto_ctx->r_klm_mkey->mkey;
 	dx_ctx->len = io_attr->len;
-	dx_ctx->comp = &io_ctx->comp;
+	dx_ctx->comp = &crypto_ctx->comp;
 	dx_ctx->use_fence = true;
 
 	return 0;
-}
-
-static int dv_dma_q_writev2v(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int ret;
-	struct snap_dma_xfer_ctx dx_ctx = {0};
-
-	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
-	if (ret)
-		return ret;
-
-	return do_dv_dma_xfer(q, dx_ctx.lbuf, dx_ctx.len, dx_ctx.lkey,
-			dx_ctx.raddr, dx_ctx.rkey, MLX5_OPCODE_RDMA_WRITE, 0,
-			dx_ctx.comp, dx_ctx.use_fence);
 }
 
 static int dv_dma_q_writec(struct snap_dma_q *q,
@@ -303,7 +274,7 @@ static int dv_dma_q_writec(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
-static int dv_dma_q_readv2v(struct snap_dma_q *q,
+static int dv_dma_q_readc(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
@@ -319,20 +290,100 @@ static int dv_dma_q_readv2v(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
-static int dv_dma_q_readc(struct snap_dma_q *q,
+static int do_dv_dma_xfer_v2v(struct snap_dma_q *q,
+				int wqe_cnt, int op, int *num_sge,
+				struct ibv_sge **l_sgl, struct ibv_sge *r_sgl,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct mlx5_wqe_raddr_seg *rseg;
+	struct mlx5_wqe_data_seg *dseg;
+	uint8_t fm_ce_se = 0;
+	uint32_t pi, to_end, wqe_bb;
+	int i, j;
+	struct snap_dma_completion *c_comp;
+
+	for (i = 0; i < wqe_cnt; i++) {
+		if (i < wqe_cnt - 1)
+			c_comp = NULL;
+		else
+			c_comp = comp;
+
+		fm_ce_se = snap_dv_get_cq_update(dv_qp, c_comp);
+
+		pi = dv_qp->hw_qp.sq.pi & (dv_qp->hw_qp.sq.wqe_cnt - 1);
+		to_end = (dv_qp->hw_qp.sq.wqe_cnt - pi) * MLX5_SEND_WQE_BB;
+
+		ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
+		snap_set_ctrl_seg(ctrl, dv_qp->hw_qp.sq.pi, op, 0, dv_qp->hw_qp.qp_num,
+				    fm_ce_se, 2 + num_sge[i], 0, 0);
+
+		rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
+		rseg->raddr = htobe64((uintptr_t)r_sgl[i].addr);
+		rseg->rkey  = htobe32(r_sgl[i].lkey);
+		rseg->reserved = 0;
+
+		dseg = (struct mlx5_wqe_data_seg *)(rseg + 1);
+		for (j = 0; j < num_sge[i]; j++) {
+			dseg->byte_count = htobe32(l_sgl[i][j].length);
+			dseg->lkey = htobe32(l_sgl[i][j].lkey);
+			dseg->addr = htobe64((uintptr_t)l_sgl[i][j].addr);
+
+			to_end -= sizeof(struct mlx5_wqe_data_seg);
+			if (to_end != 0) {
+				dseg = dseg + 1;
+			} else {
+				dseg = (struct mlx5_wqe_data_seg *)(dv_qp->hw_qp.sq.addr);
+				to_end = dv_qp->hw_qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;
+			}
+		}
+
+		wqe_bb = (num_sge[i] <= 2) ? 1 : 1 + round_up((num_sge[i] - 2), 4);
+
+		dv_qp->hw_qp.sq.pi += (wqe_bb - 1);
+		snap_dv_wqe_submit(dv_qp, ctrl);
+
+		snap_dv_set_comp(dv_qp, pi, c_comp, fm_ce_se, wqe_bb);
+	}
+
+	return 0;
+}
+
+static int dv_dma_q_writev2v(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
-	int ret;
-	struct snap_dma_xfer_ctx dx_ctx = {0};
+	int num_sge[io_attr->riov_cnt];
+	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
 
-	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
-	if (ret)
-		return ret;
+	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
+		return -EINVAL;
 
-	return do_dv_dma_xfer(q, dx_ctx.lbuf, dx_ctx.len, dx_ctx.lkey,
-			dx_ctx.raddr, dx_ctx.rkey, MLX5_OPCODE_RDMA_READ, 0,
-			dx_ctx.comp, dx_ctx.use_fence);
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
+	return do_dv_dma_xfer_v2v(q, io_attr->riov_cnt,
+				MLX5_OPCODE_RDMA_WRITE, num_sge,
+				l_sgl, r_sgl, comp, n_bb);
+}
+
+static int dv_dma_q_readv2v(struct snap_dma_q *q,
+				struct snap_dma_q_io_attr *io_attr,
+				struct snap_dma_completion *comp, int *n_bb)
+{
+	int num_sge[io_attr->riov_cnt];
+	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+
+	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
+		return -EINVAL;
+
+	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+		return -EAGAIN;
+
+	return do_dv_dma_xfer_v2v(q, io_attr->riov_cnt,
+				MLX5_OPCODE_RDMA_READ, num_sge,
+				l_sgl, r_sgl, comp, n_bb);
 }
 
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
@@ -942,43 +993,11 @@ static int gga_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 			(uint64_t)dst_buf, lkey, comp, false);
 }
 
-static int gga_dma_q_writev2v(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int ret;
-	struct snap_dma_xfer_ctx dx_ctx = {0};
-
-	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
-	if (ret)
-		return ret;
-
-	return do_gga_dma_xfer(q, (uint64_t)dx_ctx.lbuf, dx_ctx.len,
-			dx_ctx.lkey, dx_ctx.raddr, dx_ctx.rkey,
-			dx_ctx.comp, dx_ctx.use_fence);
-}
-
 static int gga_dma_q_writec(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 	return -ENOTSUP;
-}
-
-static int gga_dma_q_readv2v(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int ret;
-	struct snap_dma_xfer_ctx dx_ctx = {0};
-
-	ret = snap_prepare_dma_xfer_ctx(q, io_attr, comp, n_bb, &dx_ctx);
-	if (ret)
-		return ret;
-
-	return do_gga_dma_xfer(q, dx_ctx.raddr, dx_ctx.len,
-			dx_ctx.rkey, (uint64_t)dx_ctx.lbuf, dx_ctx.lkey,
-			dx_ctx.comp, dx_ctx.use_fence);
 }
 
 static int gga_dma_q_readc(struct snap_dma_q *q,
@@ -990,11 +1009,11 @@ static int gga_dma_q_readc(struct snap_dma_q *q,
 
 struct snap_dma_q_ops gga_ops = {
 	.write           = gga_dma_q_write,
-	.writev2v        = gga_dma_q_writev2v,
+	.writev2v        = dv_dma_q_writev2v,
 	.writec          = gga_dma_q_writec,
 	.write_short     = dv_dma_q_write_short,
 	.read            = gga_dma_q_read,
-	.readv2v         = gga_dma_q_readv2v,
+	.readv2v         = dv_dma_q_readv2v,
 	.readc           = gga_dma_q_readc,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,

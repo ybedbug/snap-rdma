@@ -219,4 +219,79 @@ static inline void snap_dv_arm_cq(struct snap_hw_cq *cq)
 extern struct snap_dma_q_ops verb_ops;
 extern struct snap_dma_q_ops dv_ops;
 extern struct snap_dma_q_ops gga_ops;
+
+/* `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
+static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
+		int *n_bb, int *num_sge, struct ibv_sge **l_sgl, struct ibv_sge *r_sgl)
+{
+	int i, j, sge_cnt;
+	size_t len_to_handle, left, offset;
+	struct ibv_sge l_sge[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
+
+	*n_bb = 0;
+	left = 0;
+	offset = 0;
+	memset(num_sge, 0, sizeof(int) * io_attr->riov_cnt);
+
+	for (i = 0, j = 0; i < io_attr->riov_cnt; i++) {
+		len_to_handle = io_attr->riov[i].iov_len;
+		sge_cnt = 0;
+
+		while (j < io_attr->liov_cnt && len_to_handle > 0) {
+			if (left != 0) {
+				if (len_to_handle >= left) {
+					len_to_handle -= left;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = left;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					j++;
+					left = 0;
+					offset = 0;
+				} else {
+					left -= len_to_handle;
+					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[i][sge_cnt].length = len_to_handle;
+					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					offset += len_to_handle;
+					len_to_handle = 0;
+				}
+			} else if (len_to_handle >= io_attr->liov[j].iov_len) {
+				len_to_handle -= io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = io_attr->liov[j].iov_len;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				j++;
+			} else {
+				left = io_attr->liov[j].iov_len - len_to_handle;
+				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[i][sge_cnt].length = len_to_handle;
+				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				offset = len_to_handle;
+				len_to_handle = 0;
+			}
+
+			sge_cnt++;
+			if (sge_cnt >= SNAP_DMA_Q_MAX_SGE_NUM) {
+				snap_error("sge number exceed the max supported(30)\n");
+				return -EINVAL;
+			}
+		}
+
+		l_sgl[i] = l_sge[i];
+		/* num_sge[i] is the sge cnt in l_sgl[i] for wr[i] */
+		num_sge[i] = sge_cnt;
+
+		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
+		r_sgl[i].length = io_attr->riov[i].iov_len;
+		r_sgl[i].lkey = io_attr->rkey[i];
+
+		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+	}
+
+	/* after for loop, j should equal to io_attr->liov_cnt,
+	 *  and, left should be 0.
+	 */
+
+	return 0;
+}
 #endif /* SNAP_DMA_INTERNAL_H */

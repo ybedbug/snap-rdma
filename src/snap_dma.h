@@ -209,7 +209,18 @@ struct snap_dma_q_ops {
 	int (*poll_tx)(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions);
 };
 
-struct snap_dma_q_io_ctx {
+struct snap_dma_q_iov_ctx {
+	struct snap_dma_q *q;
+
+	int n_bb;
+
+	struct snap_dma_completion comp;
+	void *uctx;
+
+	TAILQ_ENTRY(snap_dma_q_iov_ctx) entry;
+};
+
+struct snap_dma_q_crypto_ctx {
 	struct snap_dma_q *q;
 
 	struct snap_indirect_mkey *l_klm_mkey;
@@ -218,10 +229,8 @@ struct snap_dma_q_io_ctx {
 
 	struct snap_dma_completion comp;
 	void *uctx;
-	int io_type;
-	int n_bb;
 
-	TAILQ_ENTRY(snap_dma_q_io_ctx) entry;
+	TAILQ_ENTRY(snap_dma_q_crypto_ctx) entry;
 };
 
 /**
@@ -255,12 +264,12 @@ struct snap_dma_q {
 	struct snap_dma_ibv_qp fw_qp;
 	struct snap_dma_q_ops  *ops;
 
-	struct snap_dma_q_io_ctx *iov_ctx;
-	struct snap_dma_q_io_ctx *crypto_ctx;
+	struct snap_dma_q_iov_ctx *iov_ctx;
+	struct snap_dma_q_crypto_ctx *crypto_ctx;
 
-	TAILQ_HEAD(, snap_dma_q_io_ctx) free_iov_ctx;
+	TAILQ_HEAD(, snap_dma_q_iov_ctx) free_iov_ctx;
 
-	TAILQ_HEAD(, snap_dma_q_io_ctx) free_crypto_ctx;
+	TAILQ_HEAD(, snap_dma_q_crypto_ctx) free_crypto_ctx;
 	int custom_ops;
 
 	/* public: */

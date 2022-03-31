@@ -1050,149 +1050,162 @@ static int snap_dma_ep_connect_helper(struct snap_dma_ibv_qp *qp1,
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
 }
 
-static int snap_alloc_io_ctx(struct snap_dma_q *q,
-					struct ibv_pd *pd, int io_ctx_cnt, bool crypto,
-					struct snap_relaxed_ordering_caps *caps)
+static int snap_alloc_iov_ctx(struct snap_dma_q *q)
 {
-	int i, ret;
-	struct snap_dma_q_io_ctx *io_ctx;
+	int i, ret, io_ctx_cnt;
+	struct snap_dma_q_iov_ctx *iov_ctx;
 
-	ret = posix_memalign((void **)&io_ctx, SNAP_DMA_BUF_ALIGN,
-			io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	ret = posix_memalign((void **)&iov_ctx, SNAP_DMA_BUF_ALIGN,
+			io_ctx_cnt * sizeof(struct snap_dma_q_iov_ctx));
 	if (ret) {
-		snap_error("alloc dma_q io_ctx array failed");
+		snap_error("alloc dma_q iov_ctx array failed");
 		return -ENOMEM;
 	}
 
-	memset(io_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_io_ctx));
+	memset(iov_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_iov_ctx));
 
-	if (crypto)
-		TAILQ_INIT(&q->free_crypto_ctx);
-	else
-		TAILQ_INIT(&q->free_iov_ctx);
+	TAILQ_INIT(&q->free_iov_ctx);
 
-	if (q->sw_qp.mode != SNAP_DMA_Q_MODE_VERBS) {
-		struct mlx5_devx_mkey_attr mkey_attr = {0};
+	for (i = 0; i < io_ctx_cnt; i++) {
+		iov_ctx[i].q = q;
+		TAILQ_INSERT_TAIL(&q->free_iov_ctx, &iov_ctx[i], entry);
+	}
 
-		mkey_attr.addr = 0;
-		mkey_attr.size = 0;
-		mkey_attr.log_entity_size = 0;
-		mkey_attr.relaxed_ordering_write = caps->relaxed_ordering_write;
-		mkey_attr.relaxed_ordering_read = caps->relaxed_ordering_read;
-		mkey_attr.klm_num = 0;
-		mkey_attr.klm_array = NULL;
-		if (crypto) {
-			mkey_attr.crypto_en = true;
-			mkey_attr.bsf_en = true;
+	q->iov_ctx = iov_ctx;
+
+	return 0;
+}
+
+static void snap_free_iov_ctx(struct snap_dma_q *q)
+{
+	int i, io_ctx_cnt;
+	struct snap_dma_q_iov_ctx *iov_ctx = q->iov_ctx;
+
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	for (i = 0; i < io_ctx_cnt; i++)
+		TAILQ_REMOVE(&q->free_iov_ctx, &iov_ctx[i], entry);
+
+	free(iov_ctx);
+	q->iov_ctx = NULL;
+}
+
+static int snap_alloc_crypto_ctx(struct snap_dma_q *q, struct ibv_pd *pd)
+{
+	int i, ret, io_ctx_cnt;
+	struct snap_dma_q_crypto_ctx *crypto_ctx;
+	struct mlx5_devx_mkey_attr mkey_attr = {};
+	struct snap_relaxed_ordering_caps caps = {};
+
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	ret = posix_memalign((void **)&crypto_ctx, SNAP_DMA_BUF_ALIGN,
+			io_ctx_cnt * sizeof(struct snap_dma_q_crypto_ctx));
+	if (ret) {
+		snap_error("alloc dma_q crypto_ctx array failed");
+		return -ENOMEM;
+	}
+
+	ret = snap_query_relaxed_ordering_caps(pd->context, &caps);
+	if (ret) {
+		snap_error("query relaxed_ordering_caps failed, ret:%d\n", ret);
+		goto free_crypto_ctx;
+	}
+
+	memset(crypto_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_crypto_ctx));
+
+	TAILQ_INIT(&q->free_crypto_ctx);
+
+	mkey_attr.addr = 0;
+	mkey_attr.size = 0;
+	mkey_attr.log_entity_size = 0;
+	mkey_attr.relaxed_ordering_write = caps.relaxed_ordering_write;
+	mkey_attr.relaxed_ordering_read = caps.relaxed_ordering_read;
+	mkey_attr.klm_num = 0;
+	mkey_attr.klm_array = NULL;
+	mkey_attr.crypto_en = true;
+	mkey_attr.bsf_en = true;
+
+	for (i = 0; i < io_ctx_cnt; i++) {
+		crypto_ctx[i].r_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+		if (!crypto_ctx[i].r_klm_mkey) {
+			snap_error("create remote klm mkey for crypto_ctx[%d] failed\n", i);
+			goto destroy_mkeys;
 		}
 
-		for (i = 0; i < io_ctx_cnt; i++) {
-			io_ctx[i].r_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
-			if (!io_ctx[i].r_klm_mkey) {
-				snap_error("create remote klm mkey for io_ctx[%d] failed\n", i);
-				goto destroy_mkeys;
-			}
-
-			io_ctx[i].l_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
-			if (!io_ctx[i].l_klm_mkey) {
-				snap_error("create local klm mkey for io_ctx[%d] failed\n", i);
-				snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
-				goto destroy_mkeys;
-			}
+		crypto_ctx[i].l_klm_mkey = snap_create_indirect_mkey(pd, &mkey_attr);
+		if (!crypto_ctx[i].l_klm_mkey) {
+			snap_error("create local klm mkey for crypto_ctx[%d] failed\n", i);
+			snap_destroy_indirect_mkey(crypto_ctx[i].r_klm_mkey);
+			goto destroy_mkeys;
 		}
 	}
 
-	if (crypto) {
-		for (i = 0; i < io_ctx_cnt; i++) {
-			io_ctx[i].q = q;
-			TAILQ_INSERT_TAIL(&q->free_crypto_ctx, &io_ctx[i], entry);
-		}
-		q->crypto_ctx = io_ctx;
-	} else {
-		for (i = 0; i < io_ctx_cnt; i++) {
-			io_ctx[i].q = q;
-			TAILQ_INSERT_TAIL(&q->free_iov_ctx, &io_ctx[i], entry);
-		}
-		q->iov_ctx = io_ctx;
+	for (i = 0; i < io_ctx_cnt; i++) {
+		crypto_ctx[i].q = q;
+		TAILQ_INSERT_TAIL(&q->free_crypto_ctx, &crypto_ctx[i], entry);
 	}
+
+	q->crypto_ctx = crypto_ctx;
 
 	return 0;
 
 destroy_mkeys:
 	for (i--; i >= 0; i--) {
-		snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
-		snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
+		snap_destroy_indirect_mkey(crypto_ctx[i].l_klm_mkey);
+		snap_destroy_indirect_mkey(crypto_ctx[i].r_klm_mkey);
 	}
 
-	free(io_ctx);
+free_crypto_ctx:
+	free(crypto_ctx);
 
 	return 1;
 }
 
-static void snap_free_io_ctx(struct snap_dma_q *q,
-				int io_ctx_cnt, bool crypto,
-				struct snap_dma_q_io_ctx *io_ctx)
+static void snap_free_crypto_ctx(struct snap_dma_q *q)
 {
-	int i;
+	int i, io_ctx_cnt;
+	struct snap_dma_q_crypto_ctx *crypto_ctx = q->crypto_ctx;
 
-	if (crypto) {
-		for (i = 0; i < io_ctx_cnt; i++) {
-			TAILQ_REMOVE(&q->free_crypto_ctx, &io_ctx[i], entry);
-			snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
-			snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
-		}
-	} else {
-		for (i = 0; i < io_ctx_cnt; i++) {
-			TAILQ_REMOVE(&q->free_iov_ctx, &io_ctx[i], entry);
-			if (q->sw_qp.mode != SNAP_DMA_Q_MODE_VERBS) {
-				snap_destroy_indirect_mkey(io_ctx[i].l_klm_mkey);
-				snap_destroy_indirect_mkey(io_ctx[i].r_klm_mkey);
-			}
-		}
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	for (i = 0; i < io_ctx_cnt; i++) {
+		TAILQ_REMOVE(&q->free_crypto_ctx, &crypto_ctx[i], entry);
+		snap_destroy_indirect_mkey(crypto_ctx[i].l_klm_mkey);
+		snap_destroy_indirect_mkey(crypto_ctx[i].r_klm_mkey);
 	}
 
-	free(io_ctx);
+	free(crypto_ctx);
+	q->crypto_ctx = NULL;
 }
 
 static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 			struct snap_dma_q_create_attr *attr)
 {
-	int ret, io_ctx_cnt;
-	struct snap_relaxed_ordering_caps caps = {};
+	int ret;
 
 	q->iov_support = false;
 	q->crypto_support = false;
 
-	ret = snap_query_relaxed_ordering_caps(pd->context, &caps);
-	if (ret) {
-		snap_error("query relaxed_ordering_caps failed, ret:%d\n", ret);
-		goto out;
-	}
-
-	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-
 	if (attr->iov_enable) {
-		ret = snap_alloc_io_ctx(q, pd, io_ctx_cnt, false, &caps);
-		if (ret) {
-			snap_error("Allocate io_ctx to support IOV failed\n");
-			goto out;
+		/* DV/GGA mode donot need iov_ctx */
+		if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS) {
+			ret = snap_alloc_iov_ctx(q);
+			if (ret) {
+				snap_error("Allocate iov_ctx failed\n");
+				goto out;
+			}
 		}
-
 		q->iov_support = true;
 	}
 
-	/*
-	 * crypto io_ctx needed only when post UMR WQE involved,
-	 * and post UMR WQE is not support on stardard verbs mode.
-	 */
-	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
-		return 0;
-
-	if (attr->crypto_enable) {
-		ret = snap_alloc_io_ctx(q, pd, io_ctx_cnt, true, &caps);
+	if (attr->crypto_enable && q->sw_qp.mode == SNAP_DMA_Q_MODE_DV) {
+		ret = snap_alloc_crypto_ctx(q, pd);
 		if (ret) {
-			snap_error("Allocate io_ctx to support CRYPTO failed\n");
-			goto free_iov_io_ctx;
+			snap_error("Allocate crypto_ctx failed\n");
+			goto free_iov_ctx;
 		}
 
 		q->crypto_support = true;
@@ -1200,9 +1213,9 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	return 0;
 
-free_iov_io_ctx:
-	snap_free_io_ctx(q, io_ctx_cnt, false, q->iov_ctx);
-	q->iov_ctx = NULL;
+free_iov_ctx:
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+		snap_free_iov_ctx(q);
 	q->iov_support = false;
 
 out:
@@ -1211,22 +1224,14 @@ out:
 
 static void snap_destroy_io_ctx(struct snap_dma_q *q)
 {
-	int io_ctx_cnt;
-
-	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-
 	if (q->iov_support) {
-		snap_free_io_ctx(q, io_ctx_cnt, false, q->iov_ctx);
-		q->iov_ctx = NULL;
+		if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+			snap_free_iov_ctx(q);
 		q->iov_support = false;
 	}
 
-	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
-		return;
-
 	if (q->crypto_support) {
-		snap_free_io_ctx(q, io_ctx_cnt, true, q->crypto_ctx);
-		q->crypto_ctx = NULL;
+		snap_free_crypto_ctx(q);
 		q->crypto_support = false;
 	}
 }
