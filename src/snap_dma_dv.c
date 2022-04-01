@@ -318,11 +318,13 @@ static int do_dv_dma_xfer_v2v(struct snap_dma_q *q,
 		ctrl = (struct mlx5_wqe_ctrl_seg *)snap_dv_get_wqe_bb(dv_qp);
 		snap_set_ctrl_seg(ctrl, dv_qp->hw_qp.sq.pi, op, 0, dv_qp->hw_qp.qp_num,
 				    fm_ce_se, 2 + num_sge[i], 0, 0);
+		to_end -= sizeof(struct mlx5_wqe_ctrl_seg);
 
 		rseg = (struct mlx5_wqe_raddr_seg *)(ctrl + 1);
 		rseg->raddr = htobe64((uintptr_t)r_sgl[i].addr);
 		rseg->rkey  = htobe32(r_sgl[i].lkey);
 		rseg->reserved = 0;
+		to_end -= sizeof(struct mlx5_wqe_raddr_seg);
 
 		dseg = (struct mlx5_wqe_data_seg *)(rseg + 1);
 		for (j = 0; j < num_sge[i]; j++) {
