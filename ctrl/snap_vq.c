@@ -186,7 +186,7 @@ int snap_vq_cmd_descs_rw(struct snap_vq_cmd *cmd,
 	int ret = 0;
 	char *laddr;
 	const struct snap_vq_cmd_desc *desc;
-	size_t offset, len;
+	size_t offset, len, desc_len;
 	uint64_t raddr;
 
 	cmd->done_cb = done_cb;
@@ -196,7 +196,8 @@ int snap_vq_cmd_descs_rw(struct snap_vq_cmd *cmd,
 	offset = first_offset;
 	laddr = lbuf;
 	while (total_len > 0) {
-		len = snap_min(total_len, desc->desc.len);
+		desc_len = desc->desc.len - offset;
+		len = snap_min(total_len, desc_len);
 		raddr = desc->desc.addr + offset;
 
 		/*
