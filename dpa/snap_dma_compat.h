@@ -31,6 +31,12 @@ struct iovec {
 struct ibv_context;
 struct ibv_device;
 
+struct ibv_sge {
+	uint64_t		addr;
+	uint32_t		length;
+	uint32_t		lkey;
+};
+
 /* prereqs for infiniband/mlx5dv.h */
 typedef uint16_t __be16;
 typedef uint32_t __be32;

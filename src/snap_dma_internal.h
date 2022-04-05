@@ -228,6 +228,7 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 	size_t len_to_handle, left, offset;
 	struct ibv_sge l_sge[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
 
+	/* TODO: this function should not be inline and should be moved to .c file */
 	*n_bb = 0;
 	left = 0;
 	offset = 0;
@@ -273,7 +274,7 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 			sge_cnt++;
 			if (sge_cnt >= SNAP_DMA_Q_MAX_SGE_NUM) {
 				snap_error("sge number exceed the max supported(30)\n");
-				return -EINVAL;
+				return -1;
 			}
 		}
 
