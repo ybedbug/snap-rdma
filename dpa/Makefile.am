@@ -26,7 +26,8 @@ noinst_PROGRAMS += dpa_hello \
 		   dpa_dma_test \
 		   dpa_virtq_split \
 		   dpa_rt_test_polling \
-		   dpa_rt_test_event
+		   dpa_rt_test_event \
+		   dpa_cmd_lat_bench
 
 noinst_LIBRARIES = libdpa.a
 
@@ -44,6 +45,9 @@ dpa_rt_test_polling_LDADD = libdpa.a
 
 dpa_rt_test_event_SOURCES = dpa_rt_test_event.c
 dpa_rt_test_event_LDADD = libdpa.a
+
+dpa_cmd_lat_bench_SOURCES = dpa_cmd_lat_bench.c
+dpa_cmd_lat_bench_LDADD = libdpa.a
 
 # copy snap_dma datapath sources, we need to compile them both on host and on
 # the DPA

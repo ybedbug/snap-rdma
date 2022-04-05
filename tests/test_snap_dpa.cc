@@ -1,4 +1,6 @@
 #include <limits.h>
+#include <sys/time.h>
+
 #include "gtest/gtest.h"
 
 extern "C" {
@@ -197,6 +199,48 @@ TEST_F(SnapDpaTest, create_rt_thread_single_event)
 	snap_dpa_log_print(thr->thread->dpa_log);
 	snap_dpa_rt_thread_put(thr);
 	snap_dpa_rt_put(rt);
+}
+
+TEST_F(SnapDpaTest, cmd_lat_bench_polling) {
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr;
+	void *mbox;
+	struct snap_dpa_cmd *cmd;
+	struct snap_dpa_rsp *rsp;
+	int i;
+	struct timeval t_s, t_e, t_r;
+	double t;
+	int N;
+
+	N = SNAP_DEBUG ? 10 : 1000000;
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_cmd_lat_bench");
+	ASSERT_TRUE(dpa_ctx);
+
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	ASSERT_TRUE(dpa_thr);
+	printf("benchmark is running now...\n");
+
+	mbox = snap_dpa_thread_mbox_acquire(dpa_thr);
+	cmd = snap_dpa_mbox_to_cmd(mbox);
+
+	gettimeofday(&t_s, 0);
+	for (i = 0; i < N; i++) {
+		snap_dpa_cmd_send(dpa_thr, cmd, SNAP_DPA_CMD_APP_FIRST);
+		rsp = snap_dpa_rsp_wait(mbox);
+		if (rsp->status != SNAP_DPA_RSP_OK) {
+			printf("%d: Failed to copy DMA queue: %d\n", i, rsp->status);
+			break;
+		}
+	}
+	gettimeofday(&t_e, 0);
+	timersub(&t_e, &t_s, &t_r);
+	t = t_r.tv_sec + t_r.tv_usec/1000000.0;
+	printf("CMD latency %1.9lf seconds, %d iters\n", t/N, N);
+
+	snap_dpa_thread_mbox_release(dpa_thr);
+	snap_dpa_log_print(dpa_thr->dpa_log);
+	snap_dpa_thread_destroy(dpa_thr);
+	snap_dpa_process_destroy(dpa_ctx);
 }
 
 extern "C" {

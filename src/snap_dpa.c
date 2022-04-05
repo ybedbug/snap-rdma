@@ -967,16 +967,22 @@ void snap_dpa_log_print(struct snap_dpa_log *log)
 struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
 {
 	int n = 0;
+	const int count = 100000;
+	int i;
 	struct snap_dpa_rsp *rsp;
 	struct snap_dpa_cmd *cmd;
 
 	cmd = snap_dpa_mbox_to_cmd(mbox);
 	/* wait for report back from the thread */
 	do {
-		rsp = snap_dpa_mbox_to_rsp(mbox);
-		snap_memory_cpu_load_fence();
-		if (rsp->sn == cmd->sn)
-			break;
+		i = 0;
+		do {
+			rsp = snap_dpa_mbox_to_rsp(mbox);
+			snap_memory_cpu_load_fence();
+			if (rsp->sn == cmd->sn)
+				goto done;
+			i++;
+		} while (i < count);
 
 		usleep(1000 * SNAP_DPA_THREAD_MBOX_POLL_INTERVAL_MSEC);
 		n += SNAP_DPA_THREAD_MBOX_POLL_INTERVAL_MSEC;
@@ -986,7 +992,9 @@ struct snap_dpa_rsp *snap_dpa_rsp_wait(void *mbox)
 			break;
 		}
 	} while (1);
-
+done:
+	if (SNAP_DEBUG && n)
+		snap_debug("slow wait... %d ms total\n", n);
 	return rsp;
 }
 

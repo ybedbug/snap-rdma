@@ -152,7 +152,8 @@ static inline void snap_dpa_rsp_send(void *mbox, int type)
 	rsp = snap_dpa_mbox_to_rsp(mbox);
 
 	rsp->status = type;
-	/* TODO: check if weaker barriers can be used */
+	/* TODO: check if weaker barriers can be used -
+	 * single io fence may be enough here. Check with AdiM NitzanA */
 	snap_memory_cpu_fence();
 	rsp->sn = cmd->sn;
 	snap_memory_bus_fence();
