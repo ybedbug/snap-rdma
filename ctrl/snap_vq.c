@@ -24,6 +24,10 @@
 
 #define SNAP_VQ_NO_MSIX (0xffff)
 
+enum snap_vq_hwq_modify {
+	SNAP_VQ_HWQ_MOD_STATE	= 1 << 0,
+};
+
 static void snap_vq_cmd_process(struct snap_vq_cmd *cmd);
 
 static void snap_vq_cmd_prefetch_header(struct snap_vq_cmd *cmd)
@@ -395,6 +399,36 @@ static void snap_vq_descs_destroy(struct snap_vq_desc_pool *pool)
 	snap_buf_free(pool->entries);
 }
 
+static int snap_vq_hwq_modify_state(struct snap_vq *q, enum snap_virtq_state state)
+{
+	struct snap_virtio_queue *hw_q = q->hw_q;
+	struct snap_virtio_common_queue_attr attr = {};
+	int ret;
+
+	if (!hw_q->mod_allowed_mask) {
+		ret = snap_virtio_query_queue(hw_q, &attr.vattr);
+		if (ret) {
+			snap_error("Failed to query snap_vq hw_q\n");
+			return ret;
+		}
+		hw_q->mod_allowed_mask = attr.modifiable_fields;
+	}
+
+	attr.vattr.state = state;
+	/* The mask we are using is set as a generic mask for modifying state
+	 * instead of using the existing masks SNAP_VIRTIO_BLK/NET/FS_QUEUE_MOD_STATE
+	 * for each type. We can use this mask because the typed MOD_STATE have
+	 * the same value.
+	 */
+	ret = snap_virtio_modify_queue(hw_q, SNAP_VQ_HWQ_MOD_STATE, &attr.vattr);
+	if (ret) {
+		snap_error("Failed to modify snap_vq hw_q\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 				const struct snap_vq_create_attr *qattr)
 {
@@ -439,6 +473,10 @@ static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 		goto free_hwq;
 
 	q->hw_q = hw_q;
+	ret = snap_vq_hwq_modify_state(q, SNAP_VIRTQ_STATE_RDY);
+	if (ret)
+		goto free_hwq;
+
 	return 0;
 
 free_hwq:
