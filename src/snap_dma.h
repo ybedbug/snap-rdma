@@ -278,6 +278,7 @@ struct snap_dma_q {
 	bool                  iov_support;
 	bool                  crypto_support;
 	bool                  no_events;
+	int                   rx_qsize;
 };
 
 enum {

@@ -463,14 +463,49 @@ static int query_mmo_caps(struct ibv_context *context,
 	return 0;
 }
 
+static int snap_post_recv(struct snap_dma_q *q)
+{
+	int i;
+	int rc;
+	struct ibv_recv_wr rx_wr, *bad_wr;
+	struct ibv_sge rx_sge;
+
+	if (snap_qp_on_dpa(q->sw_qp.qp))
+		return 0;
+
+	for (i = 0; i < 2 * q->rx_qsize; i++) {
+		if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS) {
+			rx_sge.addr = (uint64_t)(q->sw_qp.rx_buf +
+					i * q->rx_elem_size);
+			rx_sge.length = q->rx_elem_size;
+			rx_sge.lkey = q->sw_qp.rx_mr->lkey;
+
+			rx_wr.wr_id = rx_sge.addr;
+			rx_wr.next = NULL;
+			rx_wr.sg_list = &rx_sge;
+			rx_wr.num_sge = 1;
+
+			rc = ibv_post_recv(snap_qp_to_verbs_qp(q->sw_qp.qp), &rx_wr, &bad_wr);
+			if (rc)
+				return rc;
+		} else {
+			snap_dv_post_recv(&q->sw_qp.dv_qp,
+					  q->sw_qp.rx_buf + i * q->rx_elem_size,
+					  q->rx_elem_size,
+					  q->sw_qp.rx_mr->lkey);
+			snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+		}
+	}
+
+	return 0;
+}
+
 static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 		struct snap_dma_q_create_attr *attr)
 {
 	struct snap_qp_attr qp_init_attr = {};
-	struct ibv_recv_wr rx_wr, *bad_wr;
-	struct ibv_sge rx_sge;
 	struct snap_mmo_caps mmo_caps = {{0}};
-	int i, rc;
+	int rc;
 
 	switch (attr->mode) {
 	case SNAP_DMA_Q_MODE_AUTOSELECT:
@@ -575,34 +610,9 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (rc)
 		goto free_qp;
 
-	for (i = 0; i < 2 * attr->rx_qsize; i++) {
-		if (attr->mode == SNAP_DMA_Q_MODE_VERBS) {
-			rx_sge.addr = (uint64_t)(q->sw_qp.rx_buf +
-					i * attr->rx_elem_size);
-			rx_sge.length = attr->rx_elem_size;
-			rx_sge.lkey = q->sw_qp.rx_mr->lkey;
-
-			rx_wr.wr_id = rx_sge.addr;
-			rx_wr.next = NULL;
-			rx_wr.sg_list = &rx_sge;
-			rx_wr.num_sge = 1;
-
-			rc = ibv_post_recv(snap_qp_to_verbs_qp(q->sw_qp.qp), &rx_wr, &bad_wr);
-			if (rc)
-				goto free_rx_resources;
-		} else {
-			snap_dv_post_recv(&q->sw_qp.dv_qp,
-					  q->sw_qp.rx_buf + i * attr->rx_elem_size,
-					  attr->rx_elem_size,
-					  q->sw_qp.rx_mr->lkey);
-			snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
-		}
-	}
-
+	q->rx_qsize = attr->rx_qsize;
 	return 0;
 
-free_rx_resources:
-	snap_free_rx_wqes(&q->sw_qp);
 free_qp:
 	snap_destroy_qp_helper(&q->sw_qp);
 	return rc;
@@ -1247,6 +1257,7 @@ static void snap_destroy_io_ctx(struct snap_dma_q *q)
  */
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 {
+	int ret;
 	struct ibv_pd *pd;
 
 	if (!q1 || !q2)
@@ -1256,7 +1267,23 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 	if (!pd)
 		return -1;
 
-	return snap_dma_ep_connect_helper(&q1->sw_qp, &q2->sw_qp, pd);
+	ret = snap_dma_ep_connect_helper(&q1->sw_qp, &q2->sw_qp, pd);
+	if (ret)
+		return ret;
+
+	/* In general one must post recvs before qp is moved to the RTR.
+	 * However in our case we control both sides and there is no trafic
+	 * until this function completes.
+	 */
+	ret = snap_post_recv(q1);
+	if (ret)
+		return ret;
+
+	ret = snap_post_recv(q2);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 /**
@@ -1337,6 +1364,14 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 		goto free_sw_qp;
 
 	rc = snap_dma_ep_connect_helper(&q->sw_qp, &q->fw_qp, pd);
+	if (rc)
+		goto free_fw_qp;
+
+	/* In general one must post recvs before qp is moved to the RTR.
+	 * However in our case we control both sides and there is no trafic
+	 * until fw qp is passed to the FW
+	 */
+	rc = snap_post_recv(q);
 	if (rc)
 		goto free_fw_qp;
 
