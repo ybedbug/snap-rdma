@@ -397,6 +397,10 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 		bar.capacity = regs->capacity;
 		bar.blk_size = regs->blk_size ? : bar.blk_size;
 		bar.size_max = regs->size_max ? : bar.size_max;
+		if (regs->seg_max > bar.vattr.max_queue_size - 2) {
+			regs->seg_max = bar.vattr.max_queue_size - 2;
+			snap_warn("Seg_max cannot be larger than queue depth - 2. Changed seg_max to %d.\n", regs->seg_max);
+		}
 		bar.seg_max = regs->seg_max ? : bar.seg_max;
 	}
 
