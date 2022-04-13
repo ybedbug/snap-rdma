@@ -150,7 +150,7 @@ int main(int argc, char **argv)
 	if(!ib_ctx)
 		goto end;
 
-	dpu_vq.vq.q_ops = get_dpa_ops();
+	dpu_vq.vq.q_ops = get_dpa_queue_ops();
 
 	/* TODO: make loopback runtime */
 	dpu_vq.rt_thr = &g_dpu_rt_thr;

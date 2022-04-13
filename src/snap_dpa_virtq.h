@@ -50,8 +50,7 @@ struct snap_dpa_virtq {
 	struct ibv_mr *desc_shadow_mr;
 	struct virtq_desc *desc_shadow;
 
-	/* hack to do window copy without xgvmi mkey */
-	struct ibv_mr *host_driver_mr;
+	struct snap_cross_mkey *cross_mkey;
 
 	struct snap_dpa_virtq_common common;
 };
@@ -74,6 +73,8 @@ struct dpa_virtq {
 	uint32_t host_mkey; /* todo: should be part of the rt thread */
 	uint32_t dpu_desc_shadow_mkey;
 	uint64_t dpu_desc_shadow_addr;
+
+	uint32_t enabled;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd_create {
@@ -88,8 +89,8 @@ struct __attribute__((packed)) dpa_virtq_cmd {
 };
 
 extern struct virtq_q_ops snap_virtq_blk_dpa_ops;
-struct virtq_q_ops *get_dpa_ops(void);
+struct virtq_q_ops *get_dpa_queue_ops(void);
 
-#define SNAP_DPA_VIRTQ_APP "snap_dpa_virtq_split"
+#define SNAP_DPA_VIRTQ_APP "dpa_virtq_split"
 
 #endif

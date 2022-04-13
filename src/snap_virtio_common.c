@@ -22,6 +22,7 @@
 #include "snap_virtio_fs.h"
 #include "snap_virtio_common.h"
 #include "snap_sw_virtio_blk.h"
+#include "snap_dpa_virtq.h"
 
 #define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
@@ -1557,7 +1558,7 @@ struct virtq_q_ops *snap_virtio_queue_provider(void)
 		queue_provider_ops = get_sw_queue_ops();
 		break;
 	case SNAP_DPA_Q_PROVIDER:
-		queue_provider_ops = NULL;
+		queue_provider_ops = get_dpa_queue_ops();
 		break;
 	default:
 		snap_error("Invalid Queue provider received %d\n", q_provider);
