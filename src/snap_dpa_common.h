@@ -218,7 +218,8 @@ static inline void snap_dpa_log_add(struct snap_dpa_log *log, uint64_t ts, const
 	strncpy(log->entries[n].msg, msg, sizeof(log->entries[n].msg));
 	log->entries[n].timestamp = ts;
 
-	snap_memory_cpu_store_fence();
+	/* bus store fence (o) may be enough here */
+	snap_memory_bus_fence();
 	log->avail_idx++;
 }
 #endif
