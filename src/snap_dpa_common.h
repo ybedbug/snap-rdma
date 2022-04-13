@@ -73,7 +73,8 @@ struct snap_dpa_tcb {
 	uint64_t user_arg;
 
 	struct snap_hw_cq cmd_cq;
-	uint8_t pad2[12];
+	uint32_t active_lkey;
+	uint8_t pad2[8];
 };
 
 struct snap_dpa_attr {

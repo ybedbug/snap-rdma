@@ -115,8 +115,12 @@ void dpa_thread_free(void *addr)
 static void __attribute__((unused)) dpa_log_add(const char *msg)
 {
 	struct snap_dpa_log *log = dpa_mbox() + SNAP_DPA_THREAD_MBOX_LEN;
+	struct snap_dpa_tcb *tcb = dpa_tcb();
 
 	snap_dpa_log_add(log, 0, msg);
+
+	if (tcb->mbox_lkey != tcb->active_lkey)
+		dpa_window_set_mkey(tcb->active_lkey);
 }
 
 void dpa_rt_init(void)

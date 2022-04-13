@@ -85,6 +85,22 @@ static inline struct snap_dpa_tcb *dpa_tcb(void)
 }
 
 /**
+ * dpa_window_set_active_mkey() - set window memory key
+ * @mkey:  memory key
+ *
+ * The function is the same as dpa_window_set_mkey(). In addition the mkey
+ * is also stored in the thread control block (tcb).
+ *
+ * Some function (currently all logger functions) switch to the mailbox window
+ * and once they are done active mkey mapping is restoreed.
+ */
+static inline void dpa_window_set_active_mkey(uint32_t mkey)
+{
+	dpa_tcb()->active_lkey = mkey;
+	dpa_window_set_mkey(mkey);
+}
+
+/**
  * dpa_mbox() - get mailbox address
  *
  * Return:
@@ -95,7 +111,8 @@ static inline void *dpa_mbox(void)
 
 	struct snap_dpa_tcb *tcb = dpa_tcb();
 
-	dpa_window_set_mkey(tcb->mbox_lkey);
+	if (tcb->mbox_lkey != tcb->active_lkey)
+		dpa_window_set_mkey(tcb->mbox_lkey);
 	return (void *)tcb->mbox_address;
 }
 
