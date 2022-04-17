@@ -90,6 +90,9 @@ struct snap_cq_attr {
 		struct snap_dpa_ctx *dpa_proc;
 		struct snap_dpa_thread *dpa_thread;
 	};
+
+	uint32_t eqn;
+	bool use_eqn;
 };
 
 /* low level cq view, suitable for the direct polling, adapted from struct mlx5dv_cq */

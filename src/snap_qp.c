@@ -75,9 +75,13 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 		/* get eqn
 		 * TODO: support non - polling mode
 		 */
-		ret = mlx5dv_devx_query_eqn(ctx, 0, &devx_cq->eqn_or_dpa_element);
-		if (ret)
-			goto deref_uar;
+		if (attr->use_eqn)
+			devx_cq->eqn_or_dpa_element = attr->eqn;
+		else {
+			ret = mlx5dv_devx_query_eqn(ctx, 0, &devx_cq->eqn_or_dpa_element);
+			if (ret)
+				goto deref_uar;
+		}
 
 		devx_cq->devx.umem.size = cq_mem_size;
 		ret = snap_umem_init(ctx, &devx_cq->devx.umem);
@@ -99,7 +103,11 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 				ret = -EINVAL;
 				goto deref_uar;
 			}
-			devx_cq->eqn_or_dpa_element = snap_dpa_process_eq_id(dpa_proc);
+
+			if (attr->use_eqn)
+				devx_cq->eqn_or_dpa_element = attr->eqn;
+			else
+				devx_cq->eqn_or_dpa_element = snap_dpa_process_eq_id(dpa_proc);
 		} else {
 			snap_debug("bad dpa cq type %d\n", attr->dpa_element_type);
 			ret = -EINVAL;
