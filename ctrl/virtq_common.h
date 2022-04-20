@@ -247,6 +247,8 @@ struct virtq_priv {
 	struct snap_virtio_queue_attr *vattr;
 	struct snap_dma_q *dma_q;
 	struct virtq_cmd *cmd_arr;
+	uint8_t *data;
+	struct ibv_mr *data_mr;
 	struct snap_virtio_ctrl_queue_out_counter cmd_cntrs;
 	int seg_max;
 	int size_max;

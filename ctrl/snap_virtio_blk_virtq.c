@@ -24,9 +24,6 @@
 #define BDEV_SECTOR_SIZE 512
 #define VIRTIO_NUM_DESC(seg_max) ((seg_max) + NUM_HDR_FTR_DESCS)
 
-#define VIRTIO_BLK_SNAP_MERGE_DESCS "VIRTIO_BLK_SNAP_MERGE_DESCS"
-SNAP_ENV_REG_ENV_VARIABLE(VIRTIO_BLK_SNAP_MERGE_DESCS, 1);
-
 /**
  * struct virtio_blk_outftr - footer of request, written to host memory
  */
@@ -50,14 +47,17 @@ struct blk_virtq_cmd {
 	struct virtq_cmd common_cmd;
 	struct snap_bdev_io_done_ctx bdev_op_ctx;
 	bool zcopy;
-	int max_iov_cnt;
-	struct iovec *iov;
-	int iov_cnt;
 	struct snap_blk_mempool_ctx dma_pool_ctx;
 	uint64_t offset_blocks;
 	uint64_t num_blocks;
 	bool in_bdev_detach;
+	struct virtio_blk_outftr ftr;
+	int max_iov_cnt;
+	int iov_cnt;
+	struct iovec iov[];
 };
+
+static struct virtq_cmd *blk_virtq_get_avail_cmd(struct virtq_cmd *cmd_arr, uint16_t idx);
 
 static inline struct snap_bdev_ops *to_blk_bdev_ops(struct virtq_bdev *bdev)
 {
@@ -172,15 +172,12 @@ static int alloc_aux(struct virtq_cmd *cmd, uint32_t seg_max)
 	return 0;
 }
 
-static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
+static void init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 			      uint32_t size_max, uint32_t seg_max,
-			      struct virtq_priv *vq_priv)
+			      struct virtq_priv *vq_priv, uint8_t *req_buf,
+			      struct ibv_mr *req_mr, uint8_t *aux_buf,
+			      struct ibv_mr *aux_mr)
 {
-	int ret;
-	const size_t req_size = size_max * seg_max;
-	const size_t descs_size = VIRTIO_NUM_DESC(seg_max) * sizeof(struct vring_desc);
-	const size_t aux_size = sizeof(struct blk_virtq_cmd_aux) + descs_size;
-
 	cmd->common_cmd.idx = idx;
 	cmd->common_cmd.vq_priv = vq_priv;
 	cmd->common_cmd.dma_comp.func = sm_dma_cb;
@@ -188,87 +185,22 @@ static int init_blk_virtq_cmd(struct blk_virtq_cmd *cmd, int idx,
 	cmd->bdev_op_ctx.cb = bdev_io_comp_cb;
 	cmd->common_cmd.io_cmd_stat = NULL;
 	cmd->common_cmd.cmd_available_index = 0;
-	cmd->common_cmd.vq_priv->merge_descs = snap_env_getenv(VIRTIO_BLK_SNAP_MERGE_DESCS);
-	cmd->common_cmd.ftr = calloc(1, sizeof(struct virtio_blk_outftr));
-	if (!cmd->common_cmd.ftr) {
-		snap_error("failed to allocate footer for virtq %d cmd %d\n",
-			   vq_priv->vq_ctx->idx, idx);
-		return -ENOMEM;
-	}
-	if (vq_priv->zcopy) {
-		if (req_size > VIRTIO_BLK_MAX_REQ_DATA) {
-			snap_error("reached max command data size (%zu/%d)\n",
-				   req_size, VIRTIO_BLK_MAX_REQ_DATA);
-			return -ENOMEM;
-		}
+	cmd->common_cmd.vq_priv->merge_descs = true;
+	cmd->common_cmd.ftr = &cmd->ftr;
+	cmd->max_iov_cnt = seg_max;
 
-		cmd->iov = calloc(seg_max, sizeof(struct iovec));
-		if (!cmd->iov) {
-			snap_error("failed to allocate iov for virtq %d cmd %d\n",
-				   vq_priv->vq_ctx->idx, idx);
-			return -ENOMEM;
-		}
 
-		cmd->max_iov_cnt = seg_max;
-	}
-
+	cmd->common_cmd.aux = aux_buf;
+	cmd->common_cmd.aux_mr = aux_mr;
 	if (cmd->common_cmd.vq_priv->use_mem_pool) {
-		ret = alloc_aux(&cmd->common_cmd, seg_max);
-		if (ret)
-			goto free_iov;
-
 		cmd->dma_pool_ctx.ctx = vq_priv->virtq_dev.ctx;
 		cmd->dma_pool_ctx.user = cmd;
 		cmd->dma_pool_ctx.callback = virtq_mem_ready;
 	} else {
-		cmd->common_cmd.req_size = req_size;
-		cmd->common_cmd.buf = to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_malloc(req_size + aux_size);
-		if (!cmd->common_cmd.buf) {
-			snap_error("failed to allocate memory for virtq %d cmd %d\n",
-				   vq_priv->vq_ctx->idx, idx);
-			ret = -ENOMEM;
-			goto free_iov;
-		}
-		cmd->common_cmd.mr = ibv_reg_mr(vq_priv->pd, cmd->common_cmd.buf, req_size + aux_size,
-						IBV_ACCESS_REMOTE_READ |
-						IBV_ACCESS_REMOTE_WRITE |
-						IBV_ACCESS_LOCAL_WRITE);
-		if (!cmd->common_cmd.mr) {
-			snap_error("failed to register mr for virtq %d cmd %d\n",
-				   vq_priv->vq_ctx->idx, idx);
-			ret = -1;
-			goto free_cmd_buf;
-		}
-
-		cmd->common_cmd.aux = (struct blk_virtq_cmd_aux *)((uint8_t *)cmd->common_cmd.buf + req_size);
-		cmd->common_cmd.aux_mr = cmd->common_cmd.mr;
+		cmd->common_cmd.req_size = size_max * seg_max;
+		cmd->common_cmd.buf = req_buf;
+		cmd->common_cmd.mr = req_mr;
 	}
-
-	return 0;
-
-free_cmd_buf:
-	to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
-free_iov:
-	if (vq_priv->zcopy)
-		free(cmd->iov);
-	return ret;
-}
-
-void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
-{
-	if (cmd->common_cmd.vq_priv->use_mem_pool) {
-		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->virtq_dev)->dma_pool_cancel(&cmd->dma_pool_ctx);
-		ibv_dereg_mr(cmd->common_cmd.aux_mr);
-		free(cmd->common_cmd.aux);
-	} else {
-		ibv_dereg_mr(cmd->common_cmd.mr);
-		to_blk_bdev_ops(&cmd->common_cmd.vq_priv->virtq_dev)->dma_free(cmd->common_cmd.buf);
-	}
-
-	if (cmd->common_cmd.vq_priv->zcopy)
-		free(cmd->iov);
-
-	free(cmd->common_cmd.ftr);
 }
 
 /**
@@ -293,26 +225,72 @@ static struct blk_virtq_cmd *
 alloc_blk_virtq_cmd_arr(uint32_t size_max, uint32_t seg_max,
 			struct virtq_priv *vq_priv)
 {
-	int i, k, ret, num = vq_priv->vattr->size;
+	int i, num = vq_priv->vattr->size;
 	struct blk_virtq_cmd *cmd_arr;
+	const size_t req_size = size_max * seg_max;
+	const size_t descs_size = VIRTIO_NUM_DESC(seg_max) * sizeof(struct vring_desc);
+	const size_t aux_size = sizeof(struct blk_virtq_cmd_aux) + descs_size;
+	size_t data_size;
+	uint8_t *cmd_data, *cmd_aux;
 
-	cmd_arr = calloc(num, sizeof(struct blk_virtq_cmd));
+	if (vq_priv->zcopy) {
+		if (req_size > VIRTIO_BLK_MAX_REQ_DATA) {
+			snap_error("reached max command data size (%zu/%d)\n",
+				   req_size, VIRTIO_BLK_MAX_REQ_DATA);
+			goto out;
+		}
+	}
+
+	cmd_arr = calloc(num, sizeof(struct blk_virtq_cmd) + seg_max * sizeof(struct iovec));
 	if (!cmd_arr) {
 		snap_error("failed to allocate memory for blk_virtq commands\n");
 		goto out;
 	}
 
-	for (i = 0; i < num; i++) {
-		ret = init_blk_virtq_cmd(&cmd_arr[i], i, size_max, seg_max, vq_priv);
-		if (ret) {
-			for (k = 0; k < i; k++)
-				free_blk_virtq_cmds(&cmd_arr[k]);
-			goto free_mem;
+	data_size = aux_size;
+	if (!vq_priv->use_mem_pool)
+		data_size += req_size;
+	vq_priv->data = to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_malloc(data_size * num);
+	if (!vq_priv->data) {
+		snap_error("failed to allocate memory for virtq %d\n",
+			vq_priv->vq_ctx->idx);
+			goto free_cmd_arr;
+	}
+
+	vq_priv->data_mr = ibv_reg_mr(vq_priv->pd, vq_priv->data, data_size * num,
+						IBV_ACCESS_REMOTE_READ |
+						IBV_ACCESS_REMOTE_WRITE |
+						IBV_ACCESS_LOCAL_WRITE |
+						IBV_ACCESS_RELAXED_ORDERING);
+	if (!vq_priv->data_mr) {
+		snap_error("failed to register mr for virtq %d\n",
+			   vq_priv->vq_ctx->idx);
+		goto free_data;
+	}
+
+	if (vq_priv->use_mem_pool) {
+		for (i = 0; i < num; i++) {
+			cmd_data = NULL;
+			cmd_aux = vq_priv->data + i * data_size;
+			init_blk_virtq_cmd(to_blk_virtq_cmd(blk_virtq_get_avail_cmd((struct virtq_cmd *)cmd_arr, i)),
+						i, size_max, seg_max, vq_priv, cmd_data,
+					vq_priv->data_mr, cmd_aux, vq_priv->data_mr);
+		}
+	} else {
+		for (i = 0; i < num; i++) {
+			cmd_data = vq_priv->data + i * data_size;
+			cmd_aux = cmd_data + req_size;
+			init_blk_virtq_cmd(to_blk_virtq_cmd(blk_virtq_get_avail_cmd((struct virtq_cmd *)cmd_arr, i)),
+						i, size_max, seg_max, vq_priv, cmd_data,
+					vq_priv->data_mr, cmd_aux, vq_priv->data_mr);
 		}
 	}
+
 	return cmd_arr;
 
-free_mem:
+free_data:
+	to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_free(vq_priv->data);
+free_cmd_arr:
 	free(cmd_arr);
 	snap_error("failed allocating commands for queue %d\n",
 			  vq_priv->vq_ctx->idx);
@@ -322,13 +300,8 @@ out:
 
 static void free_blk_virtq_cmd_arr(struct virtq_priv *vq_priv)
 {
-	const size_t num_cmds = vq_priv->vattr->size;
-	size_t i;
-	struct blk_virtq_cmd *cmd_arr = to_blk_cmd_arr(vq_priv->cmd_arr);
-
-	for (i = 0; i < num_cmds; i++)
-		free_blk_virtq_cmds(&cmd_arr[i]);
-
+	ibv_dereg_mr(vq_priv->data_mr);
+	to_blk_bdev_ops(&vq_priv->virtq_dev)->dma_free(vq_priv->data);
 	free(vq_priv->cmd_arr);
 }
 
@@ -1041,8 +1014,15 @@ static void blk_virtq_rx_cb(struct snap_dma_q *q, const void *data,
 static struct virtq_cmd *blk_virtq_get_avail_cmd(struct virtq_cmd *cmd_arr, uint16_t idx)
 {
 	struct blk_virtq_cmd *blk_cmd_arr = to_blk_cmd_arr(cmd_arr);
+	// Assume seg_max is equal on all commands, so use first one's
+	// max_iov_cnt value
+	const size_t cmd_size = sizeof(blk_cmd_arr[0]) +
+		blk_cmd_arr[0].max_iov_cnt * sizeof(struct iovec);
+	struct blk_virtq_cmd *cmd;
 
-	return &blk_cmd_arr[idx].common_cmd;
+	cmd = (struct blk_virtq_cmd *)(((char *)blk_cmd_arr) + idx * cmd_size);
+
+	return &cmd->common_cmd;
 }
 
 static int blk_progress_suspend(struct snap_virtio_queue *snap_vbq,
