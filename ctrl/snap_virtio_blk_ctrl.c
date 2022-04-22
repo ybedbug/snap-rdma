@@ -828,8 +828,6 @@ static int blk_adm_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.common.desc_pa = vbq->attr->vattr.desc;
 	attr.common.driver_pa = vbq->attr->vattr.driver;
 	attr.common.device_pa = vbq->attr->vattr.device;
-	attr.common.hw_avail_index = vbq->attr->hw_available_index;
-	attr.common.hw_used_index = vbq->attr->hw_used_index;
 	attr.common.msix_vector = vbq->attr->vattr.msix_vector;
 	attr.common.op_flags = SNAP_VQ_OP_FLAGS_IN_ORDER_COMPLETIONS;
 	attr.common.xmkey = vctrl->xmkey->mkey;
@@ -875,8 +873,6 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
 	attr.force_in_order = blk_ctrl->common.force_in_order;
 
-	attr.hw_available_index = vbq->attr->hw_available_index;
-	attr.hw_used_index = vbq->attr->hw_used_index;
 	attr.xmkey = vctrl->xmkey->mkey;
 
 	vbq->common.ctrl = vctrl;
@@ -888,6 +884,9 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 		snap_error("controller failed to create blk virtq\n");
 		return -EINVAL;
 	}
+
+	dev_attr->q_attrs[index].hw_available_index = attr.hw_available_index;
+	dev_attr->q_attrs[index].hw_used_index = attr.hw_used_index;
 
 	return 0;
 }

@@ -1247,6 +1247,43 @@ static void get_vring_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
 		   q, data_len);
 }
 
+int snap_virtio_get_used_index_from_host(struct snap_dma_q *dma_q,
+		struct ibv_pd *pd, uint64_t dev_addr, uint32_t dma_mkey, int *hw_used)
+{
+	struct vring_used vru;
+	struct ibv_mr *vru_mr;
+	int ret;
+
+	vru_mr = ibv_reg_mr(pd, &vru, sizeof(vru),
+			    IBV_ACCESS_LOCAL_WRITE);
+	if (!vru_mr) {
+		snap_error("failed to register vring_used mr for dev: 0x%lx\n", dev_addr);
+		goto err;
+	}
+
+	ret = snap_dma_q_read(dma_q, &vru, sizeof(struct vring_used),
+			      vru_mr->lkey, dev_addr, dma_mkey, NULL);
+	if (ret) {
+		snap_error("failed DMA read vring_used for dev: 0x%lx\n", dev_addr);
+		goto dereg_vru_mr;
+	}
+
+	ret = snap_dma_q_flush(dma_q);
+	if (ret != 1)
+		snap_error("failed flush, ret %d\n", ret);
+
+	ibv_dereg_mr(vru_mr);
+
+	*hw_used = vru.idx;
+
+	return 0;
+
+dereg_vru_mr:
+	ibv_dereg_mr(vru_mr);
+err:
+	return -EINVAL;
+}
+
 /**
  * snap_virtio_get_vring_indexes_from_host() - read vring indexes from host memory
  * @pd:		protection domain used for dma q creation

@@ -87,7 +87,7 @@ struct snap_vq {
 	struct snap_vq_desc_pool desc_pool;
 };
 
-int snap_vq_create(struct snap_vq *q, const struct snap_vq_create_attr *attr,
+int snap_vq_create(struct snap_vq *q, struct snap_vq_create_attr *attr,
 			const struct snap_vq_cmd_ops *cmd_ops);
 void snap_vq_destroy(struct snap_vq *queue);
 

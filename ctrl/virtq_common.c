@@ -80,6 +80,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 {
 	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
 	struct ibv_qp *fw_qp;
+	int hw_used;
 
 	if (!vq_priv)
 		goto err;
@@ -98,8 +99,6 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	vq_priv->swq_state = SW_VIRTQ_RUNNING;
 	vq_priv->vbq = ctxt_attr->vq;
 	memset(&vq_priv->cmd_cntrs, 0, sizeof(vq_priv->cmd_cntrs));
-	vq_priv->ctrl_available_index = attr->hw_available_index;
-	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
 	vq_priv->force_in_order = attr->force_in_order;
 	vq_priv->dma_q = virtq_rdma_qp_init(attr, vq_priv,
 					    ctxt_attr->tx_elem_size,
@@ -109,6 +108,17 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 		snap_error("failed creating rdma qp loop\n");
 		goto destroy_attr;
 	}
+
+	if (snap_virtio_get_used_index_from_host(vq_priv->dma_q, attr->pd,
+			attr->device, attr->xmkey, &hw_used))
+		goto destroy_dma_q;
+
+	attr->hw_available_index = hw_used;
+	attr->hw_used_index = hw_used;
+
+	vq_priv->ctrl_available_index = attr->hw_available_index;
+	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
+
 	snap_virtio_common_queue_config(snap_attr,
 			attr->hw_available_index, attr->hw_used_index, vq_priv->dma_q);
 	fw_qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
@@ -121,6 +131,8 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 
 	return true;
 
+destroy_dma_q:
+	snap_dma_q_destroy(vq_priv->dma_q);
 destroy_attr:
 	free(snap_attr);
 release_priv:

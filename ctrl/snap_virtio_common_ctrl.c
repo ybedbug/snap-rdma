@@ -1775,27 +1775,6 @@ void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl)
 	ctrl->lm_channel = NULL;
 }
 
-static int snap_virtio_ctrl_queue_recover_indexes(struct snap_virtio_ctrl *ctrl,
-						  struct snap_virtio_ctrl_queue_state *q_state)
-{
-	struct vring_avail vra;
-	struct vring_used vru;
-	int ret;
-
-	/* Get available & used indexes of virtio ctrl queue (vring) from host memory */
-
-	ret = snap_virtio_get_vring_indexes_from_host(ctrl->lb_pd,
-						      q_state->queue_driver,
-						      q_state->queue_device,
-						      ctrl->xmkey->mkey, &vra, &vru);
-	if (!ret) {
-		q_state->hw_available_index = vra.idx;
-		q_state->hw_used_index = vru.idx;
-	}
-
-	return ret;
-}
-
 /**
  * snap_virtio_ctrl_recover() - Recover virtio controller
  * @ctrl:     virtio controller
@@ -1828,7 +1807,6 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	struct snap_virtio_ctrl_queue_state *queue_state;
 	void *device_state;
 	int i, ret, total_len;
-	int outstanding = 0;
 
 	snap_debug("recover the virtio ctrl\n");
 
@@ -1864,26 +1842,8 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	for (i = 0; i < ctrl->max_queues; ++i) {
 		vq = to_virtio_queue_attr(ctrl, attr, i);
 		snap_virtio_ctrl_save_queue_state(&queue_state[i], vq);
-
-		/* if enabled, read hw_avail and used from host memory*/
-		if (vq->enable) {
-			ret = snap_virtio_ctrl_queue_recover_indexes(ctrl, &queue_state[i]);
-			snap_info("q: %d avail: %d used: %d\n", i,
-				  queue_state[i].hw_available_index,
-				  queue_state[i].hw_used_index);
-			if (ret != 0)
-				goto free_buf;
-
-			/* will cause re-send all requests between available & used again */
-			if (queue_state[i].hw_available_index != queue_state[i].hw_used_index) {
-				++outstanding;
-				queue_state[i].hw_available_index = queue_state[i].hw_used_index;
-			}
-		}
 	}
 
-	if (outstanding)
-		snap_warn("Outstanding requests are detected on queue(s). If the previous controller was not run in ordered mode the recovery may not work correctly.\n");
 	device_state = section_hdr_to_data(state_hdrs.dev_state_hdr);
 	if (device_state) {
 		ret = snap_virtio_ctrl_save_dev_state(ctrl, attr, device_state,
