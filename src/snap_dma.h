@@ -33,7 +33,7 @@
 #define SNAP_DMA_Q_DBMODE        "SNAP_DMA_Q_DBMODE"
 
 #define SNAP_DMA_Q_MAX_IOV_CNT		128
-#define SNAP_DMA_Q_MAX_SGE_NUM		30
+#define SNAP_DMA_Q_MAX_SGE_NUM		20
 #define SNAP_DMA_Q_MAX_WR_CNT		128
 
 #define SNAP_CRYPTO_KEYTAG_SIZE              8

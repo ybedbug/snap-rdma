@@ -357,7 +357,8 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr, int *wr
 
 			sge_cnt++;
 			if (sge_cnt == SNAP_DMA_Q_MAX_SGE_NUM && len_to_handle > 0) {
-				snap_warn("sge cnt reach to max supported(30), open a new WR for this iov.\n");
+				snap_debug("sge cnt reach to max number(%d) supported, open a new WR(%d) for this iov[%d].\n",
+					SNAP_DMA_Q_MAX_SGE_NUM, k + 1, i);
 
 				/* num_sge[k] is the sge cnt in l_sgl[k] for wr[k] */
 				num_sge[k] = sge_cnt;
@@ -366,13 +367,14 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr, int *wr
 				r_sgl[k].length = sge_total_len;
 				r_sgl[k].lkey = io_attr->rkey[i];
 
+				*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+
 				k++;
 				if (k >= SNAP_DMA_Q_MAX_WR_CNT) {
 					snap_error("wr cnt reach to max number(%d) supported.\n", SNAP_DMA_Q_MAX_WR_CNT);
 					return -1;
 				}
 				wr_consumed_len += sge_total_len;
-				*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
 
 				sge_cnt = 0;
 				sge_total_len = 0;
@@ -386,12 +388,13 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr, int *wr
 		r_sgl[k].length = sge_total_len;
 		r_sgl[k].lkey = io_attr->rkey[i];
 
+		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+
 		k++;
 		if (k >= SNAP_DMA_Q_MAX_WR_CNT) {
 			snap_error("wr cnt reach to max number(%d) supported.\n", SNAP_DMA_Q_MAX_WR_CNT);
 			return -1;
 		}
-		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
 	}
 
 	/* after for loop, j should equal to io_attr->liov_cnt,
