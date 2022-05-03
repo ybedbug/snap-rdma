@@ -795,6 +795,66 @@ free_buf:
 	free(tmp_buf);
 	return ret;
 }
+
+/**
+ * snap_dpa_duar_create() - create emulation doorbell mapping
+ * @dctx:      dpa context
+ * @vhca_id:   emuation device vhca id
+ * @queue_id:  queue number (virtio/nvme)
+ * @cq_num:    completion queue (cq) number to use
+ *
+ * The function creates a new doorbell context of (vhca_id, queue_id) and
+ * attaches it CQ @cq_num.
+ *
+ * Doing NVMe or virtio doorbell will put a new CQE on the CQ.
+ *
+ * The CQ must be created on the DPA. If the cq is attached to DPA thread it
+ * must also be armed in order to trigger thread wakeup.
+ *
+ * Return:
+ * New doorbell context or NULL on error.
+ */
+struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num)
+{
+	struct snap_dpa_duar *duar;
+	flexio_status st;
+
+	duar = calloc(1, sizeof(*duar));
+	if (!duar)
+		return NULL;
+
+	st = flexio_emu_db_to_cqid_map(dctx->pd->context, vhca_id, queue_id, cq_num, &duar->map_entry);
+	if (st != FLEXIO_STATUS_SUCCESS) {
+		free(duar);
+		return NULL;
+	}
+
+	return duar;
+}
+
+/**
+ * snap_dpa_duar_destroy() - destroy emulation doorbell mapping
+ *
+ */
+void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
+{
+	flexio_emu_db_to_cq_unmap(duar->map_entry);
+	free(duar);
+}
+
+/**
+ * snap_dpa_duar_id() - get doorbell id
+ * @duar: doorbell mapping
+ *
+ * The function returns doorbell id. The id should be passed to the DPA along
+ * with the mapping cq number. Then dpa_duar_arm() should be used to enable
+ * doorbells
+ */
+uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
+{
+	return flexio_emu_db_to_cq_id(duar->map_entry);
+}
+
 #else
 
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
@@ -901,6 +961,20 @@ uint64_t snap_dpa_thread_heap_base(struct snap_dpa_thread *thr)
 int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr)
 {
 	return -ENOTSUP;
+}
+
+struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num)
+{
+	return NULL;
+}
+
+void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
+{
+}
+
+uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
+{
+	return 0xDEADBEEF;
 }
 #endif
 

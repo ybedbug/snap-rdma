@@ -140,6 +140,14 @@ static inline void dpa_dma_q_arm_cq(uint16_t cqnum, uint16_t ci)
 	flexio_dev_cq_arm((struct flexio_dev_thread_ctx *)ctx, ci, cqnum);
 }
 
+static inline void dpa_duar_arm(uint32_t duar_id, uint32_t cq_num)
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	ctx = flexio_os_get_thread_ctx();
+	flexio_dev_db_ctx_arm((struct flexio_dev_thread_ctx *)ctx, cq_num, duar_id);
+}
+
 /**
  * dpa_init() - initialize thread
  * @tcb: thread control block
