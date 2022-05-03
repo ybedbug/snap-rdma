@@ -49,8 +49,8 @@ struct snap_dpa_virtq {
 
 	struct ibv_mr *desc_shadow_mr;
 	struct virtq_desc *desc_shadow;
-
 	struct snap_cross_mkey *cross_mkey;
+	struct snap_dpa_duar *duar;
 
 	struct snap_dpa_virtq_common common;
 };
@@ -74,6 +74,7 @@ struct dpa_virtq {
 	uint32_t dpu_desc_shadow_mkey;
 	uint64_t dpu_desc_shadow_addr;
 
+	uint32_t duar_id;
 	uint32_t enabled;
 };
 

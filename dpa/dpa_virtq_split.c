@@ -46,6 +46,7 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
 	uint16_t idx;
 	uint16_t vhca_id;
 
@@ -53,12 +54,15 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 
 	idx = vcmd->cmd_create.vq.common.idx;
 	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
-	dpa_info("0x%0x virtq create: %d host_mkey 0x%x\n", vhca_id, idx, vq->host_mkey);
+	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d host_mkey 0x%x\n",
+			vhca_id, vq->duar_id, idx, vq->host_mkey);
 	//dpa_window_set_active_mkey(vq->host_mkey);
 	//dpa_debug("set active mkey 0x%x\n", vq->host_mkey);
 
 	/* TODO: input validation/sanity check */
+	/* TODO: enable in 'modify' */
 	vq->enabled = 1;
+	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -156,9 +160,12 @@ static inline int process_commands(int *done)
 
 static inline void virtq_progress()
 {
-	uint16_t host_avail_idx;
 	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx;
 	struct virtq_device_ring *avail_ring;
+	uint16_t host_avail_idx;
+	struct mlx5_cqe64 *cqe;
+	int n;
 
 	// hack to slow thing down on simx
 #if SIMX_BUILD
@@ -170,6 +177,21 @@ static inline void virtq_progress()
 	if (!vq->enabled)
 		return;
 
+	rt_ctx = dpa_rt_ctx();
+	/* we can collapse doorbells and just pick up last avail index,
+	 * todo use 1 entry cq
+	 */
+	for (n = 0; n < 64; n++) {
+		cqe = snap_dv_poll_cq(&rt_ctx->db_cq, 64);
+		if (!cqe)
+			break;
+		n++;
+	}
+
+	if (n == 0)
+		return;
+
+	/* todo: consider keeping window adjusted 'driver' address */
 	avail_ring = (void *)dpa_window_get_base() + vq->common.driver;
 	/* use load fence (i) ? */
 	snap_memory_bus_fence();
@@ -193,6 +215,9 @@ static inline void virtq_progress()
 
 	/* add actual processing logic */
 	vq->hw_available_index = host_avail_idx;
+
+	//snap_dv_arm_cq(&rt_ctx->db_cq); - only need in the event mode
+	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
 }
 
 int dpa_init()

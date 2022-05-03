@@ -19,7 +19,6 @@
 #include "snap_dma.h"
 #include "mlx5_ifc.h"
 
-
 static struct snap_dpa_rt *snap_dpa_rt_create(struct ibv_context *ctx, const char *name,
 		struct snap_dpa_rt_attr *attr)
 {
@@ -222,13 +221,20 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 	if (ret)
 		goto free_db_cq;
 
+	/* todo: attribute, copy to rt context */
+	rt_thr->msix_cq = snap_cq_create(pd->context, &db_cq_attr);
+	if (!rt_thr->msix_cq)
+		goto free_db_cq;
+
 	/* must be last because it acts as an init barrier */
 	ret = snap_dma_ep_dpa_copy_sync(rt_thr->thread, rt_thr->dpa_cmd_chan.dma_q);
 	if (ret)
-		goto free_db_cq;
+		goto free_msix_cq;
 
 	return 0;
 
+free_msix_cq:
+	snap_cq_destroy(rt_thr->msix_cq);
 free_db_cq:
 	snap_cq_destroy(rt_thr->db_cq);
 free_dpa_qp:
@@ -242,6 +248,7 @@ free_dpa_thread:
 
 static void rt_thread_reset(struct snap_dpa_rt_thread *rt_thr)
 {
+	snap_cq_destroy(rt_thr->msix_cq);
 	snap_cq_destroy(rt_thr->db_cq);
 	snap_dma_ep_destroy(rt_thr->dpa_cmd_chan.dma_q);
 	snap_dma_ep_destroy(rt_thr->dpu_cmd_chan.dma_q);

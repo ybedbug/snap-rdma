@@ -86,7 +86,9 @@ struct snap_dpa_rt_thread {
 	struct snap_dpa_p2p_q dpa_cmd_chan;
 	struct snap_dpa_p2p_q dpu_cmd_chan;
 	struct snap_cq *db_cq;
-	/* TODO: QUERY_EMULATION_DEVICE_EQ_MSIX_MAPPING is not available yet */
+	/* in manyq per thread, we should have array of msix, for now use
+	 * one msix cq */
+	struct snap_cq *msix_cq;
 	struct snap_msix_map *msix_vector;
 	int n_msix;
 };

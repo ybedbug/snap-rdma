@@ -49,6 +49,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	struct dpa_virtq_cmd *cmd;
 	struct snap_dpa_rsp *rsp;
 	size_t desc_shadow_size;
+	struct snap_hw_cq db_hw_cq;
 	int ret;
 
 	snap_debug("create dpa virtq\n");
@@ -78,6 +79,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	vq->common.desc = vq_attr->vattr.desc;
 	vq->common.driver = vq_attr->vattr.driver;
 	vq->common.device = vq_attr->vattr.device;
+	vq->common.vhca_id = snap_get_vhca_id(sdev);
 
 	/* register mr for the avail staging buffer */
 	desc_shadow_size = vq->common.size * sizeof(struct virtq_desc);
@@ -104,10 +106,27 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	cmd->cmd_create.vq.dpu_desc_shadow_mkey = vq->desc_shadow_mr->lkey;
 	cmd->cmd_create.vq.dpu_desc_shadow_addr = (uint64_t)vq->desc_shadow;
 
+	ret = snap_cq_to_hw_cq(vq->rt_thr->db_cq, &db_hw_cq);
+	if (ret)
+		goto free_dpa_window_mr;
+
+	vq->duar = snap_dpa_duar_create(vq->rt->dpa_proc, snap_get_vhca_id(sdev),
+			vq_attr->vattr.idx, db_hw_cq.cq_num);
+	if (!vq->duar) {
+		snap_error("Failed to create virt duar mapping: vhca_id %d queue_id %d cq_num 0x%x\n",
+				snap_get_vhca_id(sdev), vq_attr->vattr.idx, db_hw_cq.cq_num);
+		goto free_dpa_window_mr;
+	}
+
+	snap_debug("virtq duar 0x%x mapping: vhca_id %d queue_id %d cq_num 0x%x\n",
+			snap_dpa_duar_id(vq->duar), snap_get_vhca_id(sdev),
+			vq_attr->vattr.idx, db_hw_cq.cq_num);
+	//printf("duar mapping created\n");getchar();
+
 	vq->cross_mkey = snap_create_cross_mkey(vq->rt->dpa_proc->pd, sdev);
 	if (!vq->cross_mkey) {
-		printf("Failed to create virtq cross mkey\n");
-		goto free_dpa_window_mr;
+		snap_error("Failed to create virtq cross mkey\n");
+		goto free_dpa_duar;
 	}
 
 	//sleep(1);
@@ -121,12 +140,17 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	if (rsp->status != SNAP_DPA_RSP_OK) {
 		snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 		snap_error("Failed to create DPA virtio queue: %d\n", rsp->status);
-		goto free_dpa_window_mr;
+		goto free_cross_mkey;
 	}
 
 	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
+	//printf("virtq mapping created\n");getchar();
 	return vq;
 
+free_cross_mkey:
+	snap_destroy_cross_mkey(vq->cross_mkey);
+free_dpa_duar:
+	snap_dpa_duar_destroy(vq->duar);
 free_dpa_window_mr:
 	ibv_dereg_mr(vq->desc_shadow_mr);
 free_dpa_window:
@@ -162,6 +186,7 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
 	snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 	//printf("wait... a4 destroy command\n");getchar();
+	snap_dpa_duar_destroy(vq->duar);
 	snap_dpa_rt_thread_put(vq->rt_thr);
 	snap_dpa_rt_put(vq->rt);
 	snap_destroy_cross_mkey(vq->cross_mkey);
