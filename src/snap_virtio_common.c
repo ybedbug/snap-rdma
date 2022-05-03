@@ -11,6 +11,7 @@
  */
 #include <stdint.h>
 
+#include "snap_macros.h"
 #include "mlx5_ifc.h"
 #include "snap_env.h"
 #include "snap_mr.h"

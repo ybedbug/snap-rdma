@@ -13,12 +13,12 @@
 #ifndef _SNAP_DPA_H
 #define _SNAP_DPA_H
 
+#include <stdint.h>
+#include <stdbool.h>
+#include <infiniband/verbs.h>
 #if HAVE_FLEXIO
 #include <libflexio/flexio.h>
 #endif
-
-#include "snap.h"
-#include "snap_dpa_common.h"
 
 bool snap_dpa_enabled(struct ibv_context *ctx);
 
