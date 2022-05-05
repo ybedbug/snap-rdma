@@ -4,9 +4,6 @@ if [ "$CCACHE_ENABLE" = true ]; then
     export PATH="/usr/lib/ccache:/usr/lib64/ccache:$PATH"
 fi
 
-topdir=$(git rev-parse --show-toplevel)
-cd $topdir
-
 if [ ! -d .git ]; then
     echo "Error: should be run from project root"
     exit 1

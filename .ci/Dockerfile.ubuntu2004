@@ -33,13 +33,19 @@ RUN apt-get update && \
         ethtool libnl-route-3-dev python libnl-3-dev lsof pciutils kmod pkg-config libmnl0 \
         chrpath flex gfortran graphviz dpatch libgfortran5 tcl bison tk swig \
         ccache \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+        python3-pip
 
 RUN wget -qO - https://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | \
     sudo apt-key add - && \
     cd /etc/apt/sources.list.d && \
-    wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/ubuntu20.04/mellanox_mlnx_ofed.list
+    echo "deb [trusted=yes] http://webrepo.mtr.labs.mlnx/mswg/release/MLNX_OFED/MLNX_OFED_LINUX-${MOFED_VER}/MLNX_OFED_LINUX-${MOFED_VER}-ubuntu20.04-$(dpkg-architecture -qDEB_HOST_GNU_CPU)/DEBS/ ./" > /etc/apt/sources.list.d/mellanox_mlnx_ofed.list
 RUN apt update && apt install -y mlnx-ofed-basic-user-only
+RUN pip3 -qq install gitlint codespell
+RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/checkpatch.pl && chmod +x checkpatch.pl
+RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/spelling.txt
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
 RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN mkdir -p $_HOME
