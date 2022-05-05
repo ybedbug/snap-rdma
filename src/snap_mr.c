@@ -37,7 +37,7 @@ int snap_get_pd_id(struct ibv_pd *pd, uint32_t *pd_id)
 }
 
 /**
- *snap_reg_mr() - Register memort region with Relaxed-Ordering acess mode
+ *snap_reg_mr() - Register memort region with Relaxed-Ordering access mode
  *
  * @pd:     ibv_pd to register with.
  * @addr:   pointer to a memory region
@@ -165,7 +165,7 @@ int snap_destroy_cross_mkey(struct snap_cross_mkey *mkey)
  *
  * The function creates a klm type mkey (if @attr->log_entity_size == 0)
  *  or a ksm type mkey (if @attr->log_entity_size != 0, must >= 12). The
- *  Memory Transation Table is provided by @attr->klm_array, create mkey
+ *  Memory Translation Table is provided by @attr->klm_array, create mkey
  *  without MTT is allowed.
  *
  * Return:

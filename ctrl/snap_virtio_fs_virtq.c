@@ -224,7 +224,7 @@ void free_fs_virtq_cmd(struct fs_virtq_cmd *cmd)
  * @vq_priv:	FS virtq private context
  *
  * Memory is allocated for command metadata, descriptors and request data.
- * Request data memory should be allocated such that it can be transfered
+ * Request data memory should be allocated such that it can be transferred
  * via RDMA queues and written/read to block device. Descriptors memory should
  * be allocated such that it can be written to by RDMA. Instead of registering
  * another memory region for completion allocate memory for completion mem at
@@ -660,7 +660,7 @@ static bool sm_handle_in_iov_done(struct virtq_cmd *cmd,
 	cmd->dma_comp.count = cmd->num_desc - (fs_cmd->pos_f_write + 1);
 	if (snap_likely(cmd->dma_comp.count > 0)) {
 
-		/* Note: the desc at position cmd->pos_f_write is desciptor for
+		/* Note: the desc at position cmd->pos_f_write is descriptor for
 		 * fuse_out_header status.
 		 */
 		for (i = fs_cmd->pos_f_write + 1; i < cmd->num_desc; ++i) {
@@ -753,11 +753,11 @@ static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
 	 * 0 - hiprio
 	 * 5.11.6.2 Device Operation: High Priority Queue
 	 * for hiprio queue, the fuse format of requests is different.
-	 * There are no writable desciptors !
+	 * There are no writable descriptors !
 	 */
 	if (cmd->common_cmd.vq_priv->vq_ctx->idx > 0) {
 		if (cmd->pos_f_write == cmd->common_cmd.num_desc) {
-			ERR_ON_CMD(&cmd->common_cmd, "No writable desciptor found !\n");
+			ERR_ON_CMD(&cmd->common_cmd, "No writable descriptor found !\n");
 			return false;
 		}
 
@@ -775,7 +775,7 @@ static bool fs_virtq_check_fs_req_format(const struct fs_virtq_cmd *cmd)
 			return false;
 		}
 		if (snap_unlikely(cmd->pos_f_write != 0)) {
-			ERR_ON_CMD(&cmd->common_cmd, "Writable desciptor found !\n");
+			ERR_ON_CMD(&cmd->common_cmd, "Writable descriptor found !\n");
 			return false;
 		}
 	}
@@ -975,7 +975,7 @@ struct fs_virtq_ctx *fs_virtq_create(struct snap_virtio_fs_ctrl_queue *vfsq,
 	}
 
 	vq_priv->force_in_order = attr->force_in_order;
-	snap_debug("created VIRTQ %d succesfully in_order %d\n", attr->idx,
+	snap_debug("created VIRTQ %d successfully in_order %d\n", attr->idx,
 		   attr->force_in_order);
 	return vq_ctx;
 
@@ -993,8 +993,8 @@ err:
 }
 
 /**
- * fs_virtq_destroy() - Destroyes fs virtq object
- * @q: queue to be destryoed
+ * fs_virtq_destroy() - Destroys fs virtq object
+ * @q: queue to be destroyed
  *
  * Context: 1. Destroy should be called only when queue is in suspended state.
  *	    2. virtq_progress() should not be called during destruction.

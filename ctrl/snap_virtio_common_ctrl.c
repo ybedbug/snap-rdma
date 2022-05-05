@@ -771,7 +771,7 @@ static int snap_virtio_ctrl_change_num_vfs(const struct snap_virtio_ctrl *ctrl)
 static void snap_virtio_ctrl_quiesce_adm_done(struct snap_virtio_ctrl *ctrl)
 {
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
-	snap_info("%p: queisce: new state %s\n", ctrl,
+	snap_info("%p: quiesce: new state %s\n", ctrl,
 		   lm_state2str(ctrl->lm_state));
 	ctrl->is_quiesce = false;
 
@@ -1275,7 +1275,7 @@ static int snap_virtio_ctrl_save_all_queues(struct snap_virtio_ctrl *ctrl,
  *
  * The function stops all queue polling groups while saving the state. As the
  * result it must be called from the admin thread context. If called from another
- * context, the caller is repsonsible for locking admin polling thread.
+ * context, the caller is responsible for locking admin polling thread.
  *
  * NOTES:
  *  - since function stops all queues, calling it freaquently will impact
@@ -1337,7 +1337,7 @@ int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t
  * to find the minimum required buffer size.
  *
  * The function should be called from the admin thread context. If called from
- * another context, the caller is repsonsible for locking admin polling thread.
+ * another context, the caller is responsible for locking admin polling thread.
  *
  * The internal controller state must be either SNAP_VIRTIO_CTRL_STOPPED or
  * SNAP_VIRTIO_CTRL_SUSPENDED. Otherwise the function will fail.
@@ -1525,7 +1525,7 @@ done:
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: queisce: new state %s ret %d\n", ctrl,
+	snap_info("%p: quiesce: new state %s ret %d\n", ctrl,
 		  lm_state2str(ctrl->lm_state), ret);
 
 	/* Complete modify internal state to quiesce command */
@@ -1566,7 +1566,7 @@ done:
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: queisce: new state %s ret %d\n", ctrl,
+	snap_info("%p: quiesce: new state %s ret %d\n", ctrl,
 		  lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
@@ -1778,7 +1778,7 @@ void snap_virtio_ctrl_lm_disable(struct snap_virtio_ctrl *ctrl)
 /**
  * snap_virtio_ctrl_recover() - Recover virtio controller
  * @ctrl:     virtio controller
- * @attr:     virtio device atttribute
+ * @attr:     virtio device attribute
  *
  * This function will recover the virtio controller:
  *
@@ -1870,7 +1870,7 @@ free_buf:
  *
  * Query the status fields of the virtio bar (reset/enable/status).
  * Check if recovery should be applied based on the values
- * of the fileds.
+ * of the fields.
  *
  * Return: -errno in case of error, otherwise if recovery
  * mode should be applied.

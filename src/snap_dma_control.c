@@ -400,7 +400,7 @@ struct snap_mmo_caps_decompress {
 };
 
 /*
- * struct snap_mmo_caps - compression and HW accelaration capabilities
+ * struct snap_mmo_caps - compression and HW acceleration capabilities
  * @dma: GGA engine support
  * @regexp: regexp support
  * @compress: compression support
@@ -1358,7 +1358,7 @@ static void snap_destroy_io_ctx(struct snap_dma_q *q)
  * @q1:  first queue to connect
  * @q2:  second queue to connect
  *
- * connect software qps of 2 seperate snap_dma_q's
+ * connect software qps of 2 separate snap_dma_q's
  *
  * Return: 0 on success, -errno on failure.
  */
@@ -1379,7 +1379,7 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 		return ret;
 
 	/* In general one must post recvs before qp is moved to the RTR.
-	 * However in our case we control both sides and there is no trafic
+	 * However in our case we control both sides and there is no traffic
 	 * until this function completes.
 	 */
 	ret = snap_post_recv(q1);
@@ -1399,7 +1399,7 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
  * @attr:  dma queue creation attributes
  *
  * The function creates only a sw qp.
- * The use is to create 2 seperate sw only snap_dma_q's and connect them
+ * The use is to create 2 separate sw only snap_dma_q's and connect them
  *
  * If the endpoint is created on DPA, dpa_dma_ep_init() must be called by a
  * DPA thread to complete initialization.
@@ -1484,7 +1484,7 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 		goto free_fw_qp;
 
 	/* In general one must post recvs before qp is moved to the RTR.
-	 * However in our case we control both sides and there is no trafic
+	 * However in our case we control both sides and there is no traffic
 	 * until fw qp is passed to the FW
 	 */
 	rc = snap_post_recv(q);

@@ -151,7 +151,7 @@ void virtq_ctx_destroy(struct virtq_priv *vq_priv)
 
 /**
  * virtq_cmd_progress() - command state machine progress handle
- * @cmd:	commad to be processed
+ * @cmd:	command to be processed
  * @status:	status of calling function (can be a callback)
  *
  * Return: 0 (Currently no option to fail)
@@ -347,7 +347,7 @@ inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 	}
 	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
 	if (rc)
-		ERR_ON_CMD(cmd, "mark drity page failed: pa 0x%lx len %u\n", pa, len);
+		ERR_ON_CMD(cmd, "mark dirty page failed: pa 0x%lx len %u\n", pa, len);
 }
 
 /**

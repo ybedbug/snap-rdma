@@ -388,7 +388,7 @@ void snap_virtio_net_ctrl_progress(struct snap_virtio_net_ctrl *ctrl)
  * snap_virtio_net_ctrl_io_progress() - Handles IO requests from host
  * @ctrl:       controller instance
  *
- * Looks for any IO requests from host recieved on QPs, and handles
+ * Looks for any IO requests from host received on QPs, and handles
  * them based on the request's parameters.
  */
 void snap_virtio_net_ctrl_io_progress(struct snap_virtio_net_ctrl *ctrl)

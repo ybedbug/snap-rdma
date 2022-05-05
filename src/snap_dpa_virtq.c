@@ -93,7 +93,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 
 	/* HACK!!! TODO: build cross gvmi mkey
 	 * The hack allows us to run unit test on simx
-	 * TODO: generate cros sgvmi mkey
+	 * TODO: generate cross sgvmi mkey
 	 */
 	//cmd->cmd_create.host_mkey = ;
 	vq->host_driver_mr = ibv_reg_mr(dpa_virtq_app.dctx->pd, (void *)vq_attr->vattr.device, 4096,

@@ -251,7 +251,7 @@ enum {
 	SNAP_DPA_Q_PROVIDER = 2,
 };
 
-//TODO: move struct snap_dpa_virtq to seperate file
+//TODO: move struct snap_dpa_virtq to separate file
 struct snap_dpa_virtq {
 	struct snap_virtio_queue vq;
 	struct snap_dpa_p2p_q *q;

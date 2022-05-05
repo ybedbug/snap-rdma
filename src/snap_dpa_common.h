@@ -83,9 +83,9 @@ enum {
  * - only one outstanding command is possible
  * - DPU sends new command by filling data and changing command serial number
  * - DPA thread should periodically poll mailbox for new command (sn change)
- * - DPA thread must send responce by filling status and setting responce
+ * - DPA thread must send response by filling status and setting response
  *   serial number to command serial number
- * - DPU should poll mailbox for the command responce (sn change)
+ * - DPU should poll mailbox for the command response (sn change)
  */
 struct snap_dpa_cmd {
 	volatile uint32_t sn;

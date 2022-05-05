@@ -83,7 +83,7 @@ struct snap_dpa_thread_attr {
 	size_t heap_size;
 	/* private: */
 	uint32_t thread_attr;
-	uint32_t cpu_mask[16]; // hart, best effort according to PRM
+	uint32_t cpu_mask[16]; // hard, best effort according to PRM
 };
 
 struct snap_dpa_thread {

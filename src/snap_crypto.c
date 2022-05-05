@@ -26,7 +26,7 @@ int snap_query_crypto_caps(struct snap_context *sctx)
 	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
 				      out, sizeof(out));
 	if (ret) {
-		snap_error("Query hca_cap faiedi, ret:%d\n", ret);
+		snap_error("Query hca_cap failed, ret:%d\n", ret);
 		return ret;
 	}
 
@@ -45,7 +45,7 @@ int snap_query_crypto_caps(struct snap_context *sctx)
 	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in),
 				      out, sizeof(out));
 	if (ret) {
-		snap_error("Query crypto_cap faied, ret:%d\n", ret);
+		snap_error("Query crypto_cap failed, ret:%d\n", ret);
 		return ret;
 	}
 

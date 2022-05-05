@@ -56,7 +56,7 @@ struct snap_dma_completion;
  * on the emulated device.  For example, in case of the NVMe emulation queue
  * @data will be a nvme sqe and @imm_data will be undefined.
  *
- * It is safe to initiate data transfers from withing the callback. However
+ * It is safe to initiate data transfers from within the callback. However
  * it is not safe to destroy or modify the dma queue.
  */
 typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
@@ -71,9 +71,9 @@ typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
  *
  * The callback is called when dma operation is completed. It means
  * that either data has been successfully copied to the host memory or
- * an error has occured.
+ * an error has occurred.
  *
- * It is safe to initiate data transfers from withing the callback. However
+ * It is safe to initiate data transfers from within the callback. However
  * it is not safe to destroy or modify the dma queue.
  */
 typedef void (*snap_dma_comp_cb_t)(struct snap_dma_completion *comp, int status);
@@ -306,7 +306,7 @@ enum {
  *                 SNAP_DMA_Q_MODE_DV    - dv, direct hw access, faster than verbs
  *                 SNAP_DMA_Q_MODE_GGA   - dv, plus uses hw dma engine directly to
  *                                         do rdma read or write. Fastest, best bandwidth.
- *                Mode choice can be overriden at runtime by setting SNAP_DMA_Q_OPMODE
+ *                Mode choice can be overridden at runtime by setting SNAP_DMA_Q_OPMODE
  *                environment variable: 0 - autoselect, 1 - verbs, 2 - dv, 3 - gga.
  * @rx_cb:        receive callback. See &typedef snap_dma_rx_cb_t
  * @iov_enable:   enable/disable this dma queue to use readv/writev API
@@ -446,7 +446,7 @@ static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 	return q->uctx;
 }
 
-/* how many tx and rx completions to process during a signle progress call */
+/* how many tx and rx completions to process during a single progress call */
 #define SNAP_DMA_MAX_TX_COMPLETIONS  128
 #define SNAP_DMA_MAX_RX_COMPLETIONS  128
 

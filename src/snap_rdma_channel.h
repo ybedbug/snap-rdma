@@ -136,7 +136,7 @@ struct mlx5_snap_common_command {
 #define snap_channel_max(a, b) (((a) > (b)) ? (a):(b))
 
 /*
- * Inital bitmap size is 1MB (will cover 32GB guest memory in case the page
+ * Initial bitmap size is 1MB (will cover 32GB guest memory in case the page
  * size is 4KB since each bit represents a page
  */
 #define SNAP_CHANNEL_INITIAL_BITMAP_SIZE \

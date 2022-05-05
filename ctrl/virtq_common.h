@@ -137,7 +137,7 @@ enum virtq_cmd_sm_op_status {
 /**
  * enum virtq_sw_state - state of sw virtq
  * @SW_VIRTQ_RUNNING:	Queue receives and operates commands
- * @SW_VIRTQ_FLUSHING:	Queue stops recieving new commands and operates
+ * @SW_VIRTQ_FLUSHING:	Queue stops receiving new commands and operates
  *			commands already received
  * @SW_VIRTQ_SUSPENDED:	Queue doesn't receive new commands and has no
  *			commands to operate

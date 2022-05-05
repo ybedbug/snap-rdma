@@ -100,7 +100,7 @@ static inline void set_umr_ctrl_seg_crypto_bsf(
 	ctrl->bsf_octowords = htobe16(SNAP_ALIGN_CEIL(round_up(bsf_size, 16), 4));
 
 	/*
-	 * Going to modify one propertie of cross mkey:
+	 * Going to modify one property of cross mkey:
 	 *  1. 'bsf_octoword_size' field
 	 **/
 	ctrl->mkey_mask |= htobe64(SNAP_WQE_UMR_CTRL_MKEY_MASK_BSF_OCTOWORD_SIZE);
@@ -130,7 +130,7 @@ static void *snap_build_inline_mtt(uint32_t *to_end,
 
 	translation_size = SNAP_ALIGN_CEIL(attr->klm_entries, 4);
 
-	/* build inline mtt entires */
+	/* build inline mtt entries */
 	if (*to_end == 0) { /* wqe buffer warp around */
 		klm = (union mlx5_wqe_umr_inline_seg *) (dv_qp->hw_qp.sq.addr);
 		*to_end = dv_qp->hw_qp.sq.wqe_cnt * MLX5_SEND_WQE_BB;

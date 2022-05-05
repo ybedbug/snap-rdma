@@ -127,7 +127,7 @@ int snap_dma_q_flush(struct snap_dma_q *q)
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  *
  */
 int snap_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_completion *comp)
@@ -178,7 +178,7 @@ bool snap_dma_q_empty(struct snap_dma_q *q)
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  */
 int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
@@ -230,7 +230,7 @@ int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
  * \--ENOTSUP
  *     queue does not support write by provide a scatter gather list of buffers
  * < 0
- *     some other error has occured. Return value is -errno
+ *     some other error has occurred. Return value is -errno
  */
 int snap_dma_q_writev2v(struct snap_dma_q *q,
 				uint32_t *src_mkey, struct iovec *src_iov, int src_iovcnt,
@@ -297,7 +297,7 @@ int snap_dma_q_writev2v(struct snap_dma_q *q,
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  */
 int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
@@ -357,7 +357,7 @@ int snap_dma_q_writec(struct snap_dma_q *q, void *src_buf, uint32_t lkey,
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  */
 int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
 			   uint64_t dstaddr, uint32_t rmkey)
@@ -396,7 +396,7 @@ int snap_dma_q_write_short(struct snap_dma_q *q, void *src_buf, size_t len,
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  */
 int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 		    uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
@@ -448,7 +448,7 @@ int snap_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
  * \--ENOTSUP
  *     queue does not support write by provide a scatter gather list of buffers
  * < 0
- *     some other error has occured. Return value is -errno
+ *     some other error has occurred. Return value is -errno
  */
 int snap_dma_q_readv2v(struct snap_dma_q *q,
 				uint32_t *dst_mkey, struct iovec *dst_iov, int dst_iovcnt,
@@ -515,7 +515,7 @@ int snap_dma_q_readv2v(struct snap_dma_q *q,
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  */
 int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 			struct iovec *iov, int iov_cnt, uint32_t rmkey,
@@ -575,7 +575,7 @@ int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  *
  */
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len)
@@ -634,7 +634,7 @@ struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q)
  * \-EAGAIN
  *	queue does not have enough resources, must be retried later
  * < 0
- *	some other error has occured. Return value is -errno
+ *	some other error has occurred. Return value is -errno
  *
  */
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,

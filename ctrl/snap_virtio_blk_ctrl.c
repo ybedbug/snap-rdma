@@ -239,46 +239,46 @@ snap_virtio_blk_ctrl_bar_is_setup_valid(const struct snap_virtio_blk_device_attr
 	/* virtio_common_pci_config registers */
 	if ((regs->device_features ^ bar->vattr.device_feature) &
 	    SNAP_VIRTIO_BLK_MODIFIABLE_FTRS) {
-		snap_error("Cant modify device_features, host driver is up - conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
+		snap_error("Can't modify device_features, host driver is up - conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
 			   regs->device_features, bar->vattr.device_feature);
 		ret = false;
 	}
 
 	if (regs->max_queues &&
 	    regs->max_queues != bar->vattr.max_queues) {
-		snap_error("Cant modify max_queues, host driver is up - conf.queues: %d bar.queues: %d\n",
+		snap_error("Can't modify max_queues, host driver is up - conf.queues: %d bar.queues: %d\n",
 			   regs->max_queues, bar->vattr.max_queues);
 		ret = false;
 	}
 
 	if (regs->queue_size &&
 	    regs->queue_size != bar->vattr.max_queue_size) {
-		snap_error("Cant modify queue_size host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
+		snap_error("Can't modify queue_size host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
 			   regs->queue_size, bar->vattr.max_queue_size);
 		ret = false;
 	}
 
 	/* virtio_blk_config registers */
 	if (recover && regs->capacity != bar->capacity) {
-		snap_error("Cant change capacity, host driver is up - conf.capacity: %ld bar.capacity: %ld\n",
+		snap_error("Can't change capacity, host driver is up - conf.capacity: %ld bar.capacity: %ld\n",
 			   regs->capacity, bar->capacity);
 		ret = false;
 	}
 
 	if (regs->blk_size && regs->blk_size != bar->blk_size) {
-		snap_error("Cant modify blk_size, host driver is up - conf.blk_size: %d bar.blk_size: %d\n",
+		snap_error("Can't modify blk_size, host driver is up - conf.blk_size: %d bar.blk_size: %d\n",
 			   regs->blk_size, bar->blk_size);
 		ret = false;
 	}
 
 	if (regs->size_max && regs->size_max != bar->size_max) {
-		snap_error("Cant modify size_max, host driver is up - conf.size_max: %d bar.size_max: %d\n",
+		snap_error("Can't modify size_max, host driver is up - conf.size_max: %d bar.size_max: %d\n",
 			   regs->size_max, bar->size_max);
 		ret = false;
 	}
 
 	if (regs->seg_max && regs->seg_max != bar->seg_max) {
-		snap_error("Cant modify seg_max, host driver is up - conf.seg_max: %d bar.seg_max: %d\n",
+		snap_error("Can't modify seg_max, host driver is up - conf.seg_max: %d bar.seg_max: %d\n",
 			   regs->seg_max, bar->seg_max);
 		ret = false;
 	}
@@ -927,7 +927,7 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
  *
  * Function moves the queue to suspend state before destroying it.
  *
- * Context: Function assumes queue isnt progressed outside of its scope
+ * Context: Function assumes queue isn't progressed outside of its scope
  *
  * Return: void
  */
@@ -1028,7 +1028,7 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 		dev_attr->q_attrs[index].hw_used_index = state.hw_used_index;
 	}
 
-	// The check here is only for when is_adm_vq isnt set because we are before the vq create-
+	// The check here is only for when is_adm_vq isn't set because we are before the vq create-
 	// this should use the new blk vq implementation when its added.
 	if (index == 0 && ctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
 		ctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ))
@@ -1324,7 +1324,7 @@ void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl)
  * snap_virtio_blk_ctrl_io_progress() - single-threaded IO requests handling
  * @ctrl:       controller instance
  *
- * Looks for any IO requests from host recieved on any QPs, and handles
+ * Looks for any IO requests from host received on any QPs, and handles
  * them based on the request's parameters.
  */
 void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
@@ -1337,7 +1337,7 @@ void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
  * @ctrl:       controller instance
  * @thread_id:	id queues belong to
  *
- * Looks for any IO requests from host recieved on QPs which belong to thread
+ * Looks for any IO requests from host received on QPs which belong to thread
  * thread_id, and handles them based on the request's parameters.
  */
 void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,

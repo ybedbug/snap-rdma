@@ -113,7 +113,7 @@ static inline int snap_iov_to_klm_mtt(struct iovec *iov, int iov_cnt,
 
 	/*TODO: dynamically expand klm_mtt array */
 	if (iov_cnt > SNAP_DMA_Q_MAX_IOV_CNT) {
-		snap_error("iov_cnt:%d is larger than max supportted(%d)\n",
+		snap_error("iov_cnt:%d is larger than max supported(%d)\n",
 			iov_cnt, SNAP_DMA_Q_MAX_IOV_CNT);
 		return -EINVAL;
 	}

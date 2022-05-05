@@ -136,7 +136,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 
 #else
 	/* Based on review with Eliav:
-	 * - only need a store fence to ensure that the wqe is commited to the
+	 * - only need a store fence to ensure that the wqe is committed to the
 	 *   memory
 	 * - there is no need to update dbr on DPA
 	 *

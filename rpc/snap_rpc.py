@@ -266,7 +266,7 @@ def main():
         }
 
         if args.save and args.restore:
-            raise JsonRpcSnapException("save and restore cannnot be both configured")
+            raise JsonRpcSnapException("save and restore cannot be both configured")
         if args.save:
             params['save'] = args.save
         if args.restore:
@@ -378,7 +378,7 @@ def main():
     p.add_argument('--force_in_order', help='Force handle I/O completions in-order ',
                    required=False, action='store_true')
     p.add_argument('--suspend', help='Created controller is in the SUSPENDED state. '
-                   'The controller must be explicitely resumed ',
+                   'The controller must be explicitly resumed ',
                    required=False, action='store_true')
     p.add_argument('--new', help='Create a new cotroller. '
                    'If recovery is needed - do not specify this flag. ',

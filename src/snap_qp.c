@@ -157,7 +157,7 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 	 * DMA operation.
 	 *
 	 * So it is either DMA or let DPA initialize cqe memory once hw_cq is
-	 * transfered to dpa thread via mbox.
+	 * transferred to dpa thread via mbox.
 	 */
 	if (!attr->cq_on_dpa) {
 		cq_init_buf(devx_cq, devx_cq->devx.umem.buf);
@@ -653,7 +653,7 @@ static bool uar_memory_is_nc(struct mlx5dv_qp *dv_qp)
 	 * rdma-core is going to allocate NC uar if blue flame is disabled.
 	 * This is a short term solution.
 	 *
-	 * The right solution is to allocate uars exlicitely with the
+	 * The right solution is to allocate uars explicitly with the
 	 * mlx5dv_devx_alloc_uar()
 	 */
 	return dv_qp->bf.size == 0;

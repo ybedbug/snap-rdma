@@ -254,14 +254,14 @@ snap_virtio_fs_ctrl_bar_is_setup_valid(const struct snap_virtio_fs_device_attr *
 	/* virtio_common_pci_config registers */
 	if ((regs->device_features ^ bar->vattr.device_feature) &
 	    SNAP_VIRTIO_FS_MODIFIABLE_FTRS) {
-		snap_error("Cant modify device_features, host driver is up- conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
+		snap_error("Can't modify device_features, host driver is up- conf.device_features: 0x%lx bar.device_features: 0x%lx\n",
 			   regs->device_features, bar->vattr.device_feature);
 		ret = false;
 	}
 
 	if (regs->queue_size &&
 	    regs->queue_size != bar->vattr.max_queue_size) {
-		snap_error("Cant modify queue_size, host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
+		snap_error("Can't modify queue_size, host driver is up - conf.queue_size: %d bar.queue_size: %d\n",
 			   regs->queue_size, bar->vattr.max_queue_size);
 		ret = false;
 	}
@@ -285,14 +285,14 @@ snap_virtio_fs_ctrl_bar_is_setup_valid(const struct snap_virtio_fs_device_attr *
 		memcpy(bar_tag, bar->tag, SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN);
 		bar_tag[SNAP_VIRTIO_FS_DEV_CFG_TAG_LEN] = 0;
 
-		snap_error("Cant modify tag, host driver is up - conf.tag: '%s' bar.tag: '%s'\n",
+		snap_error("Can't modify tag, host driver is up - conf.tag: '%s' bar.tag: '%s'\n",
 			   conf_tag, bar_tag);
 		ret = false;
 	}
 
 	if (regs->num_request_queues &&
 	    (regs->num_request_queues + 1) != bar->vattr.max_queues) {
-		snap_error("Cant modify num_request_queues, host driver is up - conf.request_queues: %d bar.request_queues: %d\n",
+		snap_error("Can't modify num_request_queues, host driver is up - conf.request_queues: %d bar.request_queues: %d\n",
 			   regs->num_request_queues + 1, bar->vattr.max_queues);
 		ret = false;
 	}
@@ -589,7 +589,7 @@ snap_virtio_fs_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
  *
  * Function moves the queue to suspend state before destroying it.
  *
- * Context: Function assumes queue isnt progressed outside of its scope
+ * Context: Function assumes queue isn't progressed outside of its scope
  *
  * Return: void
  */
@@ -901,7 +901,7 @@ void snap_virtio_fs_ctrl_progress(struct snap_virtio_fs_ctrl *ctrl)
  * snap_virtio_fs_ctrl_io_progress() - single-threaded IO requests handling
  * @ctrl:       controller instance
  *
- * Looks for any IO requests from host recieved on any QPs, and handles
+ * Looks for any IO requests from host received on any QPs, and handles
  * them based on the request's parameters.
  */
 void snap_virtio_fs_ctrl_io_progress(struct snap_virtio_fs_ctrl *ctrl)
@@ -914,7 +914,7 @@ void snap_virtio_fs_ctrl_io_progress(struct snap_virtio_fs_ctrl *ctrl)
  * @ctrl:       controller instance
  * @thread_id:	id queues belong to
  *
- * Looks for any IO requests from host recieved on QPs which belong to thread
+ * Looks for any IO requests from host received on QPs which belong to thread
  * thread_id, and handles them based on the request's parameters.
  */
 void snap_virtio_fs_ctrl_io_progress_thread(struct snap_virtio_fs_ctrl *ctrl,

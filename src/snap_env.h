@@ -36,7 +36,7 @@
  * @env_name:	   environment variable name
  * @default_val:	default value
  *
- * Returns: 0 on success, otherwize -EINVAL.
+ * Returns: 0 on success, otherwise -EINVAL.
  */
 int snap_env_add(const char *env_name, int default_val);
 
@@ -72,7 +72,7 @@ typedef void *snap_env_iter_t;
 
 /**
  * snap_env_dump_env_entry - dump one environment entry
- * @iter:       inernal iterator
+ * @iter:       internal iterator
  * @buf:	buffer to save environment data
  * @buf_size:   buffer size
  *

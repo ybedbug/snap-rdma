@@ -1045,7 +1045,7 @@ int snap_nvme_destroy_sq(struct snap_nvme_sq *sq)
 
 	/*
 	 * If hw qp was not destroyed it means that modify failed because of
-	 * the FLR. We have to desrtoy it expicitly in order to avoid leaking
+	 * the FLR. We have to desrtoy it explicitly in order to avoid leaking
 	 * RDMA_FT_RX rdma flow table.
 	 */
 	if (sdev->mdev.vtunnel)

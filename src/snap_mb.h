@@ -44,7 +44,7 @@
  * According to vkleiner@nvidia.com
  * - improvements of around couple-hundreds kIOPS (more or less, depending
  *   on the workload) for 8 active BlueField cores with the following change
- * - improvement to parrallel fraction on 512B test
+ * - improvement to parallel fraction on 512B test
  */
 /* does not seem to compile with all compilers. revert to 'dsb' version */
 //#define snap_memory_bus_fence()        asm volatile("dmb oshsy" ::: "memory")

@@ -129,7 +129,7 @@ static size_t snap_vaq_cmd_out_get_len(struct snap_vaq_cmd *cmd)
  * @lbuf: local buffer to read data into
  * @lbuf_mkey: lkey to access local buffer
  * @done_fn: callback function to be called when finished.
- * @layout_offset: offset bytes from begining of descs to start reading after
+ * @layout_offset: offset bytes from beginning of descs to start reading after
  *
  * The function asynchronously reads data from host memory into
  * a local buffer. When data is ready, done_fn() callback is called.
@@ -187,7 +187,7 @@ int snap_vaq_cmd_layout_data_write(struct snap_vq_cmd *cmd, size_t total_len,
 			break;
 	}
 	/*
-	 * Note first_offset is 0 beacuse we are writing to the first writable desc
+	 * Note first_offset is 0 because we are writing to the first writable desc
 	 * and we dont need to write out more than once for any command.
 	 */
 	return snap_vq_cmd_descs_rw(cmd, desc, 0, lbuf, total_len, lbuf_mkey,

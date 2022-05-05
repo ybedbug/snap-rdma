@@ -278,7 +278,7 @@ void free_blk_virtq_cmds(struct blk_virtq_cmd *cmd)
  * @vq_priv:	Block virtq private context
  *
  * Memory is allocated for command metadata, descriptors and request data.
- * Request data memory should be allocated such that it can be transfered
+ * Request data memory should be allocated such that it can be transferred
  * via RDMA queues and written/read to block device. Descriptors memory should
  * be allocated such that it can be written to by RDMA. Instead of registering
  * another memory region for completion allocate memory for completion mem at
@@ -504,7 +504,7 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
 		return num_desc;
 
 	if (snap_unlikely(descs[0].len != header_len)) {
-		/* header desc contains data, move data and header to seperate desc */
+		/* header desc contains data, move data and header to separate desc */
 		uint32_t i;
 
 		for (i = num_desc; i > 0; i--) {
@@ -520,7 +520,7 @@ static size_t virtq_blk_process_desc(struct vring_desc *descs, size_t num_desc,
 		descs[num_desc].next = 0;
 		num_desc++;
 	} else if (snap_unlikely(descs[num_desc - 1].len != footer_len)) {
-		/* footer desc contains data, move data and footer to seperate desc*/
+		/* footer desc contains data, move data and footer to separate desc*/
 		descs[num_desc - 1].len = descs[num_desc - 1].len - footer_len;
 		descs[num_desc - 1].flags |= VRING_DESC_F_NEXT;
 		descs[num_desc - 1].next = num_desc;
@@ -577,7 +577,7 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 
 	cmd->common_cmd.req_mr = snap_reg_mr(cmd->common_cmd.vq_priv->pd, cmd->common_cmd.req_buf, len);
 	if (!cmd->common_cmd.req_mr) {
-		snap_error("failed to register mr for commmand %d\n", cmd->common_cmd.idx);
+		snap_error("failed to register mr for command %d\n", cmd->common_cmd.idx);
 		goto free_buf;
 	}
 	cmd->common_cmd.use_dmem = true;
@@ -1186,7 +1186,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	}
 	if (to_common_queue_attr(vq_priv->vattr)->q_provider == SNAP_SW_Q_PROVIDER)
 		blk_impl_ops.send_comp = virtq_sw_send_comp;
-	snap_debug("created VIRTQ %d succesfully in_order %d\n", attr->idx,
+	snap_debug("created VIRTQ %d successfully in_order %d\n", attr->idx,
 		   attr->force_in_order);
 	return vq_ctx;
 
@@ -1204,8 +1204,8 @@ err:
 }
 
 /**
- * blk_virtq_destroy() - Destroyes blk virtq object
- * @q: queue to be destryoed
+ * blk_virtq_destroy() - Destroys blk virtq object
+ * @q: queue to be destroyed
  *
  * Context: 1. Destroy should be called only when queue is in suspended state.
  *	    2. blk_virtq_progress() should not be called during destruction.

@@ -172,7 +172,7 @@ void snap_channel_register(const struct snap_channel_ops *ops);
 void snap_channel_unregister(const struct snap_channel_ops *ops);
 
 /*
- * Convinience macro that creates a constructor function that will
+ * Convenience macro that creates a constructor function that will
  * register a snap channel
  */
 #define SNAP_CHANNEL_DECLARE(channel_name, channel_ops)                        \

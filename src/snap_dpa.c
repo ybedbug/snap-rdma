@@ -204,7 +204,7 @@ static void dma_q_destroy(struct snap_dpa_ctx *ctx)
  * or from the current working directory.
  *
  * Return:
- * dpa conxtext on sucess or NULL on failure
+ * dpa conxtext on success or NULL on failure
  */
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
 {
