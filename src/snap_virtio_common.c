@@ -1241,7 +1241,7 @@ static void snap_virtio_teardown_virtq_umem(struct snap_virtio_queue *virtq)
 }
 
 
-static void get_vring_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
+static void get_vring_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len,
 			    uint32_t imm_data)
 {
 	snap_error("Got unexpected completion on DMA queue %p data_len %u\n",

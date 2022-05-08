@@ -690,7 +690,7 @@ bool virtq_is_suspended(struct virtq_common_ctx *q)
  * Return: pointer to virtq_cmd command
  */
 struct virtq_cmd *
-virtq_rx_cb_common_set(struct virtq_priv *vq_priv, void *data)
+virtq_rx_cb_common_set(struct virtq_priv *vq_priv, const void *data)
 {
 	int cmd_idx;
 	struct virtq_cmd *cmd;
@@ -715,7 +715,7 @@ virtq_rx_cb_common_set(struct virtq_priv *vq_priv, void *data)
 	return cmd;
 }
 
-static int arrange_descs(struct vring_desc *descs_table, struct vring_desc *arranged, int header_idx)
+static int arrange_descs(const struct vring_desc *descs_table, struct vring_desc *arranged, int header_idx)
 {
 	struct vring_desc curr = descs_table[header_idx];
 	int i = 0;
@@ -742,11 +742,11 @@ static int arrange_descs(struct vring_desc *descs_table, struct vring_desc *arra
  *
  * Return: True when command sent to sm for processing, False if command was dropped.
  */
-bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
+bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, const void *data,
 			     uint32_t data_len, uint32_t imm_data)
 {
 	enum virtq_cmd_sm_op_status status = VIRTQ_CMD_SM_OP_OK;
-	struct virtq_split_tunnel_req_hdr *split_hdr = (struct virtq_split_tunnel_req_hdr *)data;
+	const struct virtq_split_tunnel_req_hdr *split_hdr = (const struct virtq_split_tunnel_req_hdr *)data;
 
 	/* If new commands are not dropped there is a risk of never
 	 * completing the flush
@@ -758,7 +758,7 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 	}
 
 	if (split_hdr->num_desc) {
-		void *tunn_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
+		const void *tunn_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
 		struct vring_desc *aux_descs = cmd->vq_priv->ops->get_descs(cmd);
 		int len = sizeof(struct vring_desc) * split_hdr->num_desc;
 
@@ -766,7 +766,7 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
 	}
 
 	if (split_hdr->dpa_vq_table_flag == VQ_TABLE_REC) {
-		void *data_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
+		const void *data_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
 		struct vring_desc *aux_descs = cmd->vq_priv->ops->get_descs(cmd);
 
 		cmd->num_desc = arrange_descs(data_descs, aux_descs, split_hdr->descr_head_idx);

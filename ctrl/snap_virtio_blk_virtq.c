@@ -1027,7 +1027,7 @@ static bool virtq_rel_req_desc(struct virtq_cmd *cmd)
  * Received command is assigned to a memory slot in the command array according
  * to descr_head_idx. Function starts the state machine processing for this command
  */
-static void blk_virtq_rx_cb(struct snap_dma_q *q, void *data,
+static void blk_virtq_rx_cb(struct snap_dma_q *q, const void *data,
 			    uint32_t data_len, uint32_t imm_data)
 {
 	struct virtq_priv *priv = (struct virtq_priv *)q->uctx;

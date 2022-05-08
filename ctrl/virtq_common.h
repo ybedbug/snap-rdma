@@ -375,8 +375,8 @@ void virtq_start(struct virtq_common_ctx *q, struct virtq_start_attr *attr);
 int virtq_suspend(struct virtq_common_ctx *q);
 bool virtq_is_suspended(struct virtq_common_ctx *q);
 struct virtq_cmd *
-virtq_rx_cb_common_set(struct virtq_priv *priv, void *data);
-bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, void *data,
+virtq_rx_cb_common_set(struct virtq_priv *priv, const void *data);
+bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, const void *data,
 			     uint32_t data_len, uint32_t imm_data);
 int virtq_tunnel_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
 int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);

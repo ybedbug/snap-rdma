@@ -159,7 +159,7 @@ static inline void snap_vq_cmd_put(struct snap_vq *q, struct snap_vq_cmd *cmd)
 		q->state = SNAP_VQ_STATE_SUSPENDED;
 }
 
-static void snap_vq_cmd_start(struct snap_vq *q, struct snap_vq_header *hdr)
+static void snap_vq_cmd_start(struct snap_vq *q, const struct snap_vq_header *hdr)
 {
 	int i;
 	struct snap_vq_cmd_desc *desc;
@@ -293,11 +293,11 @@ void snap_vq_cmd_destroy(struct snap_vq_cmd *cmd)
 {
 }
 
-static void snap_vq_new_cmd(struct snap_dma_q *dma_q, void *data,
+static void snap_vq_new_cmd(struct snap_dma_q *dma_q, const void *data,
 			uint32_t data_len, uint32_t imm_data)
 {
 	struct snap_vq *q = dma_q->uctx;
-	struct snap_vq_header *hdr = data;
+	const struct snap_vq_header *hdr = data;
 
 	return snap_vq_cmd_start(q, hdr);
 }

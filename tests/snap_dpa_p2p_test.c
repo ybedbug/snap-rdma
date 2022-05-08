@@ -9,7 +9,7 @@ static struct vring vr;
 static struct ibv_mr * vr_mr;
 static bool vq_table_rec = 0;
 
-static void p2p_rx(struct snap_dma_q *dma_q, void *data, uint32_t len,
+static void p2p_rx(struct snap_dma_q *dma_q, const void *data, uint32_t len,
                          uint32_t imm_data)
 {
 	struct virtq_split_tunnel_req *req = (struct virtq_split_tunnel_req*)data;

@@ -59,7 +59,7 @@ struct snap_dma_completion;
  * It is safe to initiate data transfers from within the callback. However
  * it is not safe to destroy or modify the dma queue.
  */
-typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, void *data,
+typedef void (*snap_dma_rx_cb_t)(struct snap_dma_q *q, const void *data,
 		uint32_t data_len, uint32_t imm_data);
 
 /**
