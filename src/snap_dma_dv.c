@@ -905,7 +905,8 @@ static bool dv_dma_q_empty(struct snap_dma_q *q)
 	return q->tx_available == q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 }
 
-struct snap_dma_q_ops dv_ops = {
+const struct snap_dma_q_ops dv_ops = {
+	.mode            = SNAP_DMA_Q_MODE_DV,
 	.write           = dv_dma_q_write,
 	.writev2v        = dv_dma_q_writev2v,
 	.writec          = dv_dma_q_writec,
@@ -1009,7 +1010,8 @@ static int gga_dma_q_readc(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
-struct snap_dma_q_ops gga_ops = {
+const struct snap_dma_q_ops gga_ops = {
+	.mode            = SNAP_DMA_Q_MODE_GGA,
 	.write           = gga_dma_q_write,
 	.writev2v        = dv_dma_q_writev2v,
 	.writec          = gga_dma_q_writec,

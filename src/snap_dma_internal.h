@@ -235,9 +235,9 @@ int dv_worker_progress_rx(struct snap_dma_worker *wk);
 int dv_worker_progress_tx(struct snap_dma_worker *wk);
 int dv_worker_flush(struct snap_dma_worker *wk);
 
-extern struct snap_dma_q_ops verb_ops;
-extern struct snap_dma_q_ops dv_ops;
-extern struct snap_dma_q_ops gga_ops;
+extern const struct snap_dma_q_ops verb_ops;
+extern const struct snap_dma_q_ops dv_ops;
+extern const struct snap_dma_q_ops gga_ops;
 
 /* `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
 static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,

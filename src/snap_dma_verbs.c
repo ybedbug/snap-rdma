@@ -515,7 +515,8 @@ static bool verbs_dma_q_empty(struct snap_dma_q *q)
 	return q->tx_available == q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 }
 
-struct snap_dma_q_ops verb_ops = {
+const struct snap_dma_q_ops verb_ops = {
+	.mode            = SNAP_DMA_Q_MODE_VERBS,
 	.write           = verbs_dma_q_write,
 	.writev2v         = verbs_dma_q_writev2v,
 	.writec           = verbs_dma_q_writec,

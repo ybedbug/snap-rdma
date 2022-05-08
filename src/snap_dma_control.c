@@ -344,8 +344,10 @@ static void snap_destroy_sw_qp(struct snap_dma_q *q)
 	if (!snap_qp_on_dpa(q->sw_qp.qp))
 		snap_free_rx_wqes(&q->sw_qp);
 
-	if (q->custom_ops)
-		free(q->ops);
+	if (q->custom_ops) {
+		free(q->custom_ops);
+		q->custom_ops = NULL;
+	}
 
 	if (q->worker)
 		destroy_cqs = false;
@@ -364,8 +366,8 @@ static int clone_ops(struct snap_dma_q *q)
 		return -1;
 
 	memcpy(new_ops, q->ops, sizeof(*new_ops));
-	q->ops = new_ops;
-	q->custom_ops = true;
+	q->custom_ops = new_ops;
+	q->ops = q->custom_ops;
 
 	return 0;
 }
@@ -507,7 +509,7 @@ static int snap_post_recv(struct snap_dma_q *q)
 }
 
 static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr, struct snap_qp_attr *qp_init_attr)
+		const struct snap_dma_q_create_attr *attr, struct snap_qp_attr *qp_init_attr)
 {
 	struct snap_mmo_caps mmo_caps = {{0}};
 	int rc;
@@ -518,13 +520,10 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 		if (rc)
 			return rc;
 
-		if (mmo_caps.dma.qp_support) {
-			attr->mode = SNAP_DMA_Q_MODE_GGA;
+		if (mmo_caps.dma.qp_support)
 			q->ops = &gga_ops;
-		} else {
-			attr->mode = SNAP_DMA_Q_MODE_DV;
+		else
 			q->ops = &dv_ops;
-		}
 		break;
 	case SNAP_DMA_Q_MODE_VERBS:
 		q->ops = &verb_ops;
@@ -548,19 +547,19 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	if (attr->rx_qsize == 0) {
 		if (clone_ops(q))
 			return -EINVAL;
-		q->ops->progress_rx = dummy_progress;
+		q->custom_ops->progress_rx = dummy_progress;
 	}
 
 	if (attr->tx_qsize == 0) {
 		if (clone_ops(q))
 			return -EINVAL;
-		q->ops->progress_tx = dummy_progress;
+		q->custom_ops->progress_tx = dummy_progress;
 	}
 
-	snap_debug("Opening dma_q of type %d on_dpa %d\n", attr->mode, attr->on_dpa);
+	snap_debug("Opening dma_q of type %d on_dpa %d\n", q->ops->mode, attr->on_dpa);
 	if (attr->on_dpa) {
 		if (snap_dpa_enabled(pd->context)) {
-			if (attr->mode != SNAP_DMA_Q_MODE_DV)
+			if (q->ops->mode != SNAP_DMA_Q_MODE_DV)
 				return -EINVAL;
 			q->no_events = true;
 			qp_init_attr->qp_on_dpa = true;
@@ -576,7 +575,7 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	q->no_events = true;
 
 	/* make sure that the completion is requested at least once */
-	if (attr->mode != SNAP_DMA_Q_MODE_VERBS
+	if (q->ops->mode != SNAP_DMA_Q_MODE_VERBS
 			&& attr->tx_qsize <= SNAP_DMA_Q_TX_MOD_COUNT && attr->tx_qsize > 0)
 		q->tx_qsize = SNAP_DMA_Q_TX_MOD_COUNT + 8;
 	else
@@ -591,7 +590,7 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	/* we must be able to send CQEs inline */
 	qp_init_attr->sq_max_inline_size = attr->tx_elem_size;
 
-	if (attr->mode == SNAP_DMA_Q_MODE_VERBS)
+	if (q->ops->mode == SNAP_DMA_Q_MODE_VERBS)
 		qp_init_attr->sq_max_sge = SNAP_DMA_Q_MAX_SGE_NUM;
 	else
 		qp_init_attr->sq_max_sge = 1;
@@ -675,14 +674,14 @@ free_qp:
 }
 
 static int snap_sw_qp_rx_wqe_helper(struct snap_dma_q *q, struct ibv_pd *pd,
-								struct snap_dma_q_create_attr *attr)
+								const struct snap_dma_q_create_attr *attr)
 {
 	int rc;
 	bool destroy_cqs = true;
 
 	q->tx_available = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 
-	if (attr->mode == SNAP_DMA_Q_MODE_DV || attr->mode == SNAP_DMA_Q_MODE_GGA)
+	if (q->ops->mode == SNAP_DMA_Q_MODE_DV || q->ops->mode == SNAP_DMA_Q_MODE_GGA)
 		q->sw_qp.dv_qp.db_flag = (enum snap_db_ring_flag)snap_env_getenv(SNAP_DMA_Q_DBMODE);
 
 	if (attr->on_dpa)
@@ -705,7 +704,7 @@ free_qp:
 }
 
 static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr)
+		const struct snap_dma_q_create_attr *attr)
 {
 	struct snap_qp_attr qp_init_attr = {};
 	int rc;
@@ -716,10 +715,10 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 
 	if (attr->wk)
 		rc = snap_create_worker_qp_helper(pd, &qp_init_attr, &q->sw_qp,
-				attr->mode);
+				q->ops->mode);
 	else
 		rc = snap_create_qp_helper(pd, attr->comp_context, attr->comp_channel,
-				attr->comp_vector, &qp_init_attr, &q->sw_qp, attr->mode,
+				attr->comp_vector, &qp_init_attr, &q->sw_qp, q->ops->mode,
 				attr->use_devx);
 	if (rc)
 		return rc;
@@ -734,7 +733,7 @@ static void snap_destroy_fw_qp(struct snap_dma_q *q)
 }
 
 static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
-			     struct snap_dma_q_create_attr *attr)
+			     const struct snap_dma_q_create_attr *attr)
 {
 	struct snap_qp_attr qp_init_attr = {};
 	int rc;
@@ -1301,7 +1300,7 @@ static void snap_free_crypto_ctx(struct snap_dma_q *q)
 }
 
 static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
-			struct snap_dma_q_create_attr *attr)
+			const struct snap_dma_q_create_attr *attr)
 {
 	int ret;
 
@@ -1441,7 +1440,7 @@ static void snap_dma_worker_queue_put(struct snap_dma_q *q)
  * Return: dma queue or NULL on error.
  */
 struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr)
+		const struct snap_dma_q_create_attr *attr)
 {
 	int rc;
 	struct snap_dma_q *q;
@@ -1498,7 +1497,7 @@ free_q:
  * Return: dma queue or NULL on error.
  */
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr)
+		const struct snap_dma_q_create_attr *attr)
 {
 	struct snap_dma_q *q;
 	int rc;

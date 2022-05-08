@@ -176,7 +176,16 @@ struct snap_dma_q_io_attr {
 	uint8_t  xts_initial_tweak[SNAP_CRYPTO_XTS_INITIAL_TWEAK_SIZE];
 };
 
+enum snap_dma_q_mode {
+	SNAP_DMA_Q_MODE_AUTOSELECT = 0,
+	SNAP_DMA_Q_MODE_VERBS = 1,
+	SNAP_DMA_Q_MODE_DV = 2,
+	SNAP_DMA_Q_MODE_GGA = 3
+};
+
 struct snap_dma_q_ops {
+	enum snap_dma_q_mode mode;
+
 	int (*write)(struct snap_dma_q *q, void *src_buf, size_t len,
 		     uint32_t lkey, uint64_t dstaddr, uint32_t rmkey,
 		     struct snap_dma_completion *comp);
@@ -262,7 +271,7 @@ struct snap_dma_q {
 	int                    rx_elem_size;
 	snap_dma_rx_cb_t       rx_cb;
 	struct snap_dma_ibv_qp fw_qp;
-	struct snap_dma_q_ops  *ops;
+	const struct snap_dma_q_ops  *ops;
 
 	struct snap_dma_q_iov_ctx *iov_ctx;
 	struct snap_dma_q_crypto_ctx *crypto_ctx;
@@ -270,7 +279,7 @@ struct snap_dma_q {
 	TAILQ_HEAD(, snap_dma_q_iov_ctx) free_iov_ctx;
 
 	TAILQ_HEAD(, snap_dma_q_crypto_ctx) free_crypto_ctx;
-	int custom_ops;
+	struct snap_dma_q_ops  *custom_ops;
 	struct snap_dma_worker *worker;
 
 	/* public: */
@@ -280,13 +289,6 @@ struct snap_dma_q {
 	bool                  crypto_support;
 	bool                  no_events;
 	int                   rx_qsize;
-};
-
-enum {
-	SNAP_DMA_Q_MODE_AUTOSELECT = 0,
-	SNAP_DMA_Q_MODE_VERBS = 1,
-	SNAP_DMA_Q_MODE_DV = 2,
-	SNAP_DMA_Q_MODE_GGA = 3
 };
 
 /**
@@ -392,7 +394,7 @@ int snap_dma_worker_progress_rx(struct snap_dma_worker *wk);
 int snap_dma_worker_progress_tx(struct snap_dma_worker *wk);
 
 struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
-		struct snap_dma_q_create_attr *attr);
+		const struct snap_dma_q_create_attr *attr);
 void snap_dma_q_destroy(struct snap_dma_q *q);
 void snap_dma_ep_destroy(struct snap_dma_q *q);
 int snap_dma_q_write(struct snap_dma_q *q, void *src_buf, size_t len,
@@ -429,7 +431,7 @@ bool snap_dma_q_empty(struct snap_dma_q *q);
 int snap_dma_q_arm(struct snap_dma_q *q);
 struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
 struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
-	struct snap_dma_q_create_attr *attr);
+	const struct snap_dma_q_create_attr *attr);
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key);
