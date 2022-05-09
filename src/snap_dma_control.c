@@ -1610,7 +1610,7 @@ free_tx_cq:
 
 
 struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
-	struct snap_dma_worker_create_attr *attr)
+	const struct snap_dma_worker_create_attr *attr)
 {
 	struct snap_dma_worker *wk = calloc(1, sizeof(*wk) + attr->exp_queue_num * sizeof(struct snap_dma_q));
 	struct snap_cq_attr cq_attr = {

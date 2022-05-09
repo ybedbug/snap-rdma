@@ -372,7 +372,7 @@ struct snap_dma_worker {
 	struct snap_dma_q dma_queues[0];
 };
 struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
-		struct snap_dma_worker_create_attr *attr);
+		const struct snap_dma_worker_create_attr *attr);
 void snap_dma_worker_destroy(struct snap_dma_worker *wk);
 int snap_dma_worker_flush(struct snap_dma_worker *wk);
 
