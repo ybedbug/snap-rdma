@@ -1051,7 +1051,14 @@ int dv_worker_progress_rx(struct snap_dma_worker *wk)
 			return n;
 		}
 		cqe_id = be32toh(cqe[n]->srqn_uidx);
-		q = &wk->dma_queues[cqe_id];
+#if SNAP_DEBUG
+		if (snap_unlikely(!wk->queues[cqe_id].in_use)) {
+			snap_debug("%s: Queue %d is not valid, dropping CQE\n", __func__, cqe_id);
+			continue;
+		}
+#endif
+
+		q = &wk->queues[cqe_id].q;
 		dv_dma_q_get_rx_comp(q, cqe[n], &rx_comp[n]);
 		n++;
 	} while (n < SNAP_DMA_MAX_RX_COMPLETIONS);
@@ -1059,10 +1066,10 @@ int dv_worker_progress_rx(struct snap_dma_worker *wk)
 
 	for (i = 0; i < n; i++) {
 		cqe_id = be32toh(cqe[i]->srqn_uidx);
-		q = &wk->dma_queues[cqe_id];
-		wk->dma_queues[cqe_id].rx_cb(q, rx_comp[i].data, rx_comp[i].byte_len, rx_comp[i].imm_data);
-		wk->dma_queues[cqe_id].sw_qp.dv_qp.hw_qp.rq.ci++;
-		snap_dv_ring_rx_db(&wk->dma_queues[cqe_id].sw_qp.dv_qp);
+		q = &wk->queues[cqe_id].q;
+		q->rx_cb(q, rx_comp[i].data, rx_comp[i].byte_len, rx_comp[i].imm_data);
+		q->sw_qp.dv_qp.hw_qp.rq.ci++;
+		snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
 	}
 
 	return n;
@@ -1075,8 +1082,6 @@ int dv_worker_progress_tx(struct snap_dma_worker *wk)
 	struct snap_dma_q *q;
 	int n, i, cqe_id;
 
-	if (!wk->num_queues)
-		return 0;
 	n = 0;
 
 	do {
@@ -1088,8 +1093,14 @@ int dv_worker_progress_tx(struct snap_dma_worker *wk)
 			snap_dv_cqe_err(cqe[n]);
 
 		cqe_id = be32toh(cqe[n]->srqn_uidx);
-		q = &wk->dma_queues[cqe_id];
+#if SNAP_DEBUG
+		if (snap_unlikely(!wk->queues[cqe_id].in_use)) {
+			snap_debug("%s: Queue %d is not valid, dropping CQE\n", __func__, cqe_id);
+			continue;
+		}
+#endif
 
+		q = &wk->queues[cqe_id].q;
 		comp[n] = dv_dma_q_get_comp(q, cqe[n]);
 		n++;
 	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
@@ -1098,8 +1109,10 @@ int dv_worker_progress_tx(struct snap_dma_worker *wk)
 		if (comp[i] && --comp[i]->count == 0)
 			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
 	}
-	for (i = 0; i < wk->num_queues; i++)
-		snap_dv_tx_complete(&wk->dma_queues[i].sw_qp.dv_qp);
+	for (i = 0; i < wk->max_queues; i++) {
+		if (snap_likely(wk->queues[i].in_use))
+			snap_dv_tx_complete(&wk->queues[i].q.sw_qp.dv_qp);
+	}
 
 	return n;
 }
@@ -1132,14 +1145,21 @@ int dv_worker_flush(struct snap_dma_worker *wk)
 	 */
 	while (!worker_qps_can_tx(wk, 1))
 		n += dv_worker_progress_tx(wk);
-	for (i = 0 ; i < wk->num_queues; i++) {
-		q = &wk->dma_queues[i];
+
+	for (i = 0 ; i < wk->max_queues; i++) {
+		if (snap_unlikely(!wk->queues[i].in_use))
+			continue;
+		q = &wk->queues[i].q;
 		n += worker_flush_helper(q);
 	}
-	for (i = 0 ; i < wk->num_queues; i++) {
-		tx_available = wk->dma_queues[i].sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
-		while (wk->dma_queues[i].tx_available < tx_available)
+
+	for (i = 0 ; i < wk->max_queues; i++) {
+		if (snap_unlikely(!wk->queues[i].in_use))
+			continue;
+		tx_available = wk->queues[i].q.sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+		while (wk->queues[i].q.tx_available < tx_available)
 			n += dv_worker_progress_tx(wk);
 	}
+
 	return n;
 }

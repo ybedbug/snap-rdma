@@ -598,11 +598,13 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	qp_init_attr->rq_max_sge = 1;
 
 	if (attr->wk) {
+		const struct snap_dma_worker_queue *worker_q = container_of(q, struct snap_dma_worker_queue, q);
+
 		qp_init_attr->rq_cq = attr->wk->rx_cq;
 		qp_init_attr->sq_cq = attr->wk->tx_cq;
 		/* TODO add worker support for DV, VERBS */
 		qp_init_attr->qp_type = SNAP_OBJ_DEVX;
-		qp_init_attr->uidx = attr->wk->num_queues;
+		qp_init_attr->uidx = worker_q->index;
 		qp_init_attr->qp_on_dpa = false;
 	}
 
@@ -1393,6 +1395,38 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 	return 0;
 }
 
+static void snap_dma_worker_init_queues(struct snap_dma_worker *wk, size_t exp_queue_num)
+{
+	int i;
+
+	wk->max_queues = exp_queue_num;
+	SLIST_INIT(&wk->free_queues);
+	for (i = exp_queue_num - 1; i >= 0; i--) {
+		wk->queues[i].index = i;
+		SLIST_INSERT_HEAD(&wk->free_queues, &wk->queues[i], entry);
+	}
+}
+
+static struct snap_dma_q *snap_dma_worker_queue_get(struct snap_dma_worker *wk)
+{
+	struct snap_dma_worker_queue *queue = SLIST_FIRST(&wk->free_queues);
+
+	if (!queue)
+		return NULL;
+
+	SLIST_REMOVE_HEAD(&wk->free_queues, entry);
+	queue->in_use = true;
+	return &queue->q;
+}
+
+static void snap_dma_worker_queue_put(struct snap_dma_q *q)
+{
+	struct snap_dma_worker_queue *queue = container_of(q, struct snap_dma_worker_queue, q);
+
+	queue->in_use = false;
+	SLIST_INSERT_HEAD(&queue->q.worker->free_queues, queue, entry);
+}
+
 /**
  * snap_dma_ep_create() - Create sw only DMA queue
  * @pd:    protection domain to create qp
@@ -1421,8 +1455,7 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	if (!attr->wk)
 		q = calloc(1, sizeof(*q));
 	else
-		q = &attr->wk->dma_queues[attr->wk->num_queues];
-
+		q = snap_dma_worker_queue_get(attr->wk);
 	if (!q)
 		return NULL;
 
@@ -1430,17 +1463,16 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	if (rc)
 		goto free_q;
 
+	q->worker = attr->wk;
 	q->uctx = attr->uctx;
 	q->rx_cb = attr->rx_cb;
-	if (attr->wk) {
-		attr->wk->num_queues++;
-		q->worker = attr->wk;
-	}
 	return q;
 
 free_q:
 	if (!attr->wk)
 		free(q);
+	else
+		snap_dma_worker_queue_put(q);
 	return NULL;
 }
 
@@ -1511,9 +1543,10 @@ free_sw_qp:
  */
 void snap_dma_ep_destroy(struct snap_dma_q *q)
 {
+	q->worker = NULL;
 	snap_destroy_sw_qp(q);
 	if (q->worker)
-		q->worker->num_queues--;
+		snap_dma_worker_queue_put(q);
 	else
 		free(q);
 }
@@ -1608,7 +1641,6 @@ free_tx_cq:
 	return -EINVAL;
 }
 
-
 struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
 	const struct snap_dma_worker_create_attr *attr)
 {
@@ -1627,6 +1659,7 @@ struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
 
 	snap_create_worker_cqs_helper(wk, pd, &cq_attr);
 
+	snap_dma_worker_init_queues(wk, attr->exp_queue_num);
 	return wk;
 }
 

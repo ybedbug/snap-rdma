@@ -360,6 +360,14 @@ struct snap_dma_worker_create_attr {
 	int id;
 };
 
+struct snap_dma_worker_queue {
+	struct snap_dma_q q;
+	uint16_t index;
+	bool in_use;
+
+	SLIST_ENTRY(snap_dma_worker_queue) entry;
+};
+
 struct snap_dma_worker {
 	/* used when working in devx mode */
 	struct snap_hw_cq dv_tx_cq;
@@ -367,9 +375,11 @@ struct snap_dma_worker {
 
 	struct snap_cq *rx_cq;
 	struct snap_cq *tx_cq;
-	int num_queues;
 	enum snap_dma_worker_mode mode;
-	struct snap_dma_q dma_queues[0];
+	int max_queues;
+
+	SLIST_HEAD(, snap_dma_worker_queue) free_queues;
+	struct snap_dma_worker_queue queues[0];
 };
 struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
 		const struct snap_dma_worker_create_attr *attr);

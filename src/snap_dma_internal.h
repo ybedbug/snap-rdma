@@ -66,8 +66,10 @@ static inline bool worker_qps_can_tx(struct snap_dma_worker *wk, int bb_needed)
 {
 	int i;
 
-	for (i = 0; i < wk->num_queues; i++) {
-		if (wk->dma_queues[i].tx_available < bb_needed)
+	for (i = 0; i < wk->max_queues; i++) {
+		if (snap_unlikely(!wk->queues[i].in_use))
+			continue;
+		if (wk->queues[i].q.tx_available < bb_needed)
 			return false;
 	}
 
