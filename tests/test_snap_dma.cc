@@ -93,7 +93,7 @@ void SnapDmaTest::free_bufs()
 static int g_rx_count;
 static char g_last_rx[128];
 
-static void dma_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len,
+static void dma_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len,
 		uint32_t imm_data)
 {
 	g_rx_count++;
@@ -1784,9 +1784,9 @@ void SnapDmaTest::worker_poll_rx()
 
 	g_rx_count = 0;
 	for(i = 0; i < rx_reqs; i++) {
-		rc = snap_dma_q_fw_send(&wk->dma_queues[0], sqe, wk_attr.exp_queue_rx_size,
+		rc = snap_dma_q_fw_send(&wk->queues[0].q, sqe, wk_attr.exp_queue_rx_size,
 				m_rmr->lkey);
-		rc = snap_dma_q_fw_send(&wk->dma_queues[1], sqe, wk_attr.exp_queue_rx_size,
+		rc = snap_dma_q_fw_send(&wk->queues[1].q, sqe, wk_attr.exp_queue_rx_size,
 				m_rmr->lkey);
 		ASSERT_EQ(0, rc);
 	}
@@ -1833,7 +1833,7 @@ void SnapDmaTest::worker_poll_tx()
 		write_comp[i]->func = dma_completion;
 		memset(m_rbuf, 0, m_bsize);
 		memset(m_lbuf, 0xED, m_bsize);
-		rc = snap_dma_q_write(&wk->dma_queues[0], m_lbuf, m_bsize, m_lmr->lkey,
+		rc = snap_dma_q_write(&wk->queues[0].q, m_lbuf, m_bsize, m_lmr->lkey,
 				(uintptr_t)m_rbuf, m_rmr->lkey, write_comp[i]);
 		ASSERT_EQ(0, rc);
 	}

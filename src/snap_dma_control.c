@@ -1423,7 +1423,8 @@ static void snap_dma_worker_queue_put(struct snap_dma_q *q)
 	struct snap_dma_worker_queue *queue = container_of(q, struct snap_dma_worker_queue, q);
 
 	queue->in_use = false;
-	SLIST_INSERT_HEAD(&queue->q.worker->free_queues, queue, entry);
+	SLIST_INSERT_HEAD(&q->worker->free_queues, queue, entry);
+	q->worker = NULL;
 }
 
 /**
@@ -1458,11 +1459,11 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	if (!q)
 		return NULL;
 
+	q->worker = attr->wk;
 	rc = snap_create_sw_qp(q, pd, attr);
 	if (rc)
 		goto free_q;
 
-	q->worker = attr->wk;
 	q->uctx = attr->uctx;
 	q->rx_cb = attr->rx_cb;
 	return q;
@@ -1542,7 +1543,6 @@ free_sw_qp:
  */
 void snap_dma_ep_destroy(struct snap_dma_q *q)
 {
-	q->worker = NULL;
 	snap_destroy_sw_qp(q);
 	if (q->worker)
 		snap_dma_worker_queue_put(q);
@@ -1643,7 +1643,7 @@ free_tx_cq:
 struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
 	const struct snap_dma_worker_create_attr *attr)
 {
-	struct snap_dma_worker *wk = calloc(1, sizeof(*wk) + attr->exp_queue_num * sizeof(struct snap_dma_q));
+	struct snap_dma_worker *wk = calloc(1, sizeof(*wk) + attr->exp_queue_num * sizeof(struct snap_dma_worker_queue));
 	struct snap_cq_attr cq_attr = {
 		.cq_context = NULL,
 		.comp_channel = NULL,
