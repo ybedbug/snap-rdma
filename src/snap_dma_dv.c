@@ -17,6 +17,8 @@
 #include <arpa/inet.h>
 #endif
 
+#include "snap_virtio_common.h"
+
 #include "snap_dma_internal.h"
 #include "snap_umr.h"
 

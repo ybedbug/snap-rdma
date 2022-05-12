@@ -15,7 +15,6 @@
 
 #include <stdlib.h>
 #include <pthread.h>
-#include "mlx5_ifc.h"
 
 #if !defined(__DPA)
 #include <infiniband/verbs.h>
@@ -25,6 +24,31 @@
 
 #define SNAP_FT_ROOT_LEVEL 5
 #define SNAP_FT_LOG_SIZE 10
+
+enum {
+	MLX5_QP_PM_ARMED	= 0x0,
+	MLX5_QP_PM_REARM	= 0x1,
+	MLX5_QP_PM_MIGRATED	= 0x3,
+};
+
+enum {
+	MLX5_NON_ZERO_RQ	= 0x0,
+	MLX5_SRQ_RQ		= 0x1,
+	MLX5_CRQ_RQ		= 0x2,
+	MLX5_ZERO_LEN_RQ	= 0x3,
+};
+
+enum {
+	MLX5_RES_SCAT_DATA32_CQE	= 0x1,
+	MLX5_RES_SCAT_DATA64_CQE	= 0x2,
+	MLX5_REQ_SCAT_DATA32_CQE	= 0x11,
+	MLX5_REQ_SCAT_DATA64_CQE	= 0x22,
+};
+
+enum mlx5_snap_flow_group_type {
+	SNAP_FG_MATCH	= 1 << 0,
+	SNAP_FG_MISS	= 1 << 1,
+};
 
 struct snap_event;
 struct snap_pci_attr;
@@ -155,5 +179,14 @@ struct ibv_context *snap_find_get_rdma_dev(struct snap_device *sdev,
 struct mlx5_snap_hw_qp *snap_create_hw_qp(struct snap_device *sdev,
 		struct ibv_qp *qp);
 int snap_destroy_hw_qp(struct mlx5_snap_hw_qp *hw_qp);
+
+static inline uint32_t snap_u32log2(uint32_t x)
+{
+	if (x == 0) {
+		/* log(0) is undefined */
+		return 0;
+	}
+	return 31u - __builtin_clz(x);
+}
 
 #endif

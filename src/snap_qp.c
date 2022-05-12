@@ -11,7 +11,6 @@
  */
 
 #include <unistd.h>
-#include <stdlib.h>
 #include <sys/queue.h>
 #include <infiniband/verbs.h>
 #include <infiniband/mlx5dv.h>

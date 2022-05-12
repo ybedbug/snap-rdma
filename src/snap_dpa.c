@@ -15,7 +15,6 @@
 #endif
 
 #include <stdio.h>
-#include <unistd.h>
 
 #include "config.h"
 #include "snap_macros.h"

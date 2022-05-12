@@ -13,40 +13,12 @@
 #ifndef MLX5_IFC_H
 #define MLX5_IFC_H
 
-#include <stdint.h>
-#include <infiniband/mlx5dv.h>
-
 #define u8 uint8_t
 #define u16 uint16_t
 #define u32 uint32_t
 
 enum mlx5_cap_mode {
 	HCA_CAP_OPMOD_GET_CUR	= 1,
-};
-
-enum {
-	MLX5_RES_SCAT_DATA32_CQE	= 0x1,
-	MLX5_RES_SCAT_DATA64_CQE	= 0x2,
-	MLX5_REQ_SCAT_DATA32_CQE	= 0x11,
-	MLX5_REQ_SCAT_DATA64_CQE	= 0x22,
-};
-
-enum {
-	MLX5_QP_PM_ARMED	= 0x0,
-	MLX5_QP_PM_REARM	= 0x1,
-	MLX5_QP_PM_MIGRATED	= 0x3,
-};
-
-enum {
-	MLX5_NON_ZERO_RQ	= 0x0,
-	MLX5_SRQ_RQ		= 0x1,
-	MLX5_CRQ_RQ		= 0x2,
-	MLX5_ZERO_LEN_RQ	= 0x3,
-};
-
-enum mlx5_snap_flow_group_type {
-	SNAP_FG_MATCH	= 1 << 0,
-	SNAP_FG_MISS	= 1 << 1,
 };
 
 enum {

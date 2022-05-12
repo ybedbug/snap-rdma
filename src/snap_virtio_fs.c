@@ -10,7 +10,6 @@
  * provided with the software product.
  */
 
-#include "snap_macros.h"
 #include "snap_virtio_fs.h"
 #include "snap_internal.h"
 #include "mlx5_ifc.h"

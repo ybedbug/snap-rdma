@@ -11,7 +11,6 @@
  */
 #include <stdlib.h>
 
-#include "snap_macros.h"
 #include "config.h"
 #include "snap_virtio_blk.h"
 #include "snap_dpa_p2p.h"
