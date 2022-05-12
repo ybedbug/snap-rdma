@@ -101,21 +101,32 @@ snap_set_ctrl_seg(struct mlx5_wqe_ctrl_seg *ctrl, uint16_t pi,
 			fm_ce_se, ds, signature, imm);
 }
 
+static inline void snap_dv_update_tx_db(struct snap_dv_qp *dv_qp)
+{
+	/*
+	 * Use cpu barrier to prevent code reordering
+	 */
+	snap_memory_cpu_store_fence();
+
+	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_SND_DBR] = htobe32(dv_qp->hw_qp.sq.pi);
+}
+
+static inline void snap_dv_flush_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
+{
+	*(uint64_t *)(dv_qp->hw_qp.sq.bf_addr) = *(uint64_t *)ctrl;
+}
+
 static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
 #if !__DPA
 	/* 8.9.3.1  Posting a Work Request to Work Queue
 	 * 1. Write WQE to the WQE buffer sequentially to previously-posted
-	 * WQE (on WQEBB granularity)
+	 *    WQE (on WQEBB granularity)
 	 *
-	 * Use cpu barrier to prevent code reordering
-	 */
-	snap_memory_cpu_store_fence();
-
-	/* 2. Update Doorbell Record associated with that queue by writing
+	 * 2. Update Doorbell Record associated with that queue by writing
 	 *    the sq_wqebb_counter or wqe_counter for send and RQ respectively
 	 **/
-	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_SND_DBR] = htobe32(dv_qp->hw_qp.sq.pi);
+	snap_dv_update_tx_db(dv_qp);
 
 	/* Make sure that doorbell record is written before ringing the doorbell
 	 **/
@@ -124,7 +135,7 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	/* 3. For send request ring DoorBell by writing to the Doorbell
 	 *    Register field in the UAR associated with that queue
 	 */
-	*(uint64_t *)(dv_qp->hw_qp.sq.bf_addr) = *(uint64_t *)ctrl;
+	snap_dv_flush_tx_db(dv_qp, ctrl);
 
 	/* If UAR is mapped as WC (write combined) we need another fence to
 	 * force write. Otherwise it may take a long time.
@@ -146,19 +157,22 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	 * syscall
 	 */
 #if SIMX_BUILD
-	snap_memory_cpu_store_fence();
-	/* must for simx */
-	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_SND_DBR] = htobe32(dv_qp->hw_qp.sq.pi);
+	snap_dv_update_tx_db(dv_qp);
 #endif
 	snap_memory_bus_store_fence();
 	dpa_dma_q_ring_tx_db(dv_qp->hw_qp.qp_num, dv_qp->hw_qp.sq.pi);
 #endif
 }
 
-static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)
+static inline void snap_dv_update_rx_db(struct snap_dv_qp *dv_qp)
 {
 	snap_memory_cpu_store_fence();
 	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_RCV_DBR] = htobe32(dv_qp->hw_qp.rq.ci);
+}
+
+static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)
+{
+	snap_dv_update_rx_db(dv_qp);
 	snap_memory_bus_store_fence();
 }
 

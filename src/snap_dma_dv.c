@@ -1069,10 +1069,41 @@ int dv_worker_progress_rx(struct snap_dma_worker *wk)
 		q = &wk->queues[cqe_id].q;
 		q->rx_cb(q, rx_comp[i].data, rx_comp[i].byte_len, rx_comp[i].imm_data);
 		q->sw_qp.dv_qp.hw_qp.rq.ci++;
-		snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+		snap_dv_update_rx_db(&q->sw_qp.dv_qp);
 	}
+	snap_memory_bus_store_fence();
 
 	return n;
+}
+
+static inline void dv_worker_ring_all_doorbells(struct snap_dma_worker *wk)
+{
+	int i;
+	struct snap_dv_qp *dv_qp;
+
+	for (i = 0; i < wk->max_queues; i++) {
+		dv_qp = &wk->queues[i].q.sw_qp.dv_qp;
+		if (snap_likely(wk->queues[i].in_use)) {
+			if (dv_qp->tx_need_ring_db)
+				snap_dv_update_tx_db(dv_qp);
+		}
+	}
+
+	snap_memory_bus_store_fence();
+
+	for (i = 0; i < wk->max_queues; i++) {
+		dv_qp = &wk->queues[i].q.sw_qp.dv_qp;
+		if (snap_likely(wk->queues[i].in_use)) {
+			if (dv_qp->tx_need_ring_db) {
+				dv_qp->tx_need_ring_db = false;
+				snap_dv_flush_tx_db(dv_qp, dv_qp->ctrl);
+#if !defined(__aarch64__)
+				if (!dv_qp->hw_qp.sq.tx_db_nc)
+					snap_memory_bus_store_fence();
+#endif
+			}
+		}
+	}
 }
 
 int dv_worker_progress_tx(struct snap_dma_worker *wk)
@@ -1109,10 +1140,8 @@ int dv_worker_progress_tx(struct snap_dma_worker *wk)
 		if (comp[i] && --comp[i]->count == 0)
 			comp[i]->func(comp[i], mlx5dv_get_cqe_opcode(cqe[i]));
 	}
-	for (i = 0; i < wk->max_queues; i++) {
-		if (snap_likely(wk->queues[i].in_use))
-			snap_dv_tx_complete(&wk->queues[i].q.sw_qp.dv_qp);
-	}
+
+	dv_worker_ring_all_doorbells(wk);
 
 	return n;
 }
