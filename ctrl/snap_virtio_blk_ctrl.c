@@ -295,7 +295,8 @@ snap_virtio_blk_ctrl_bar_is_setup_valid(const struct snap_virtio_blk_device_attr
 static bool
 snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 				     const struct snap_virtio_blk_device_attr *bar,
-				     const struct snap_virtio_blk_registers *regs)
+				     const struct snap_virtio_blk_registers *regs,
+				     bool ctrl_configurable)
 {
 	struct snap_virtio_blk_registers regs_whitelist = {};
 
@@ -313,7 +314,7 @@ snap_virtio_blk_ctrl_bar_setup_valid(struct snap_virtio_blk_ctrl *ctrl,
 	}
 
 	/* Everything is configurable as long as driver is still down */
-	if (snap_virtio_ctrl_is_configurable(&ctrl->common))
+	if (ctrl_configurable)
 		return true;
 
 	return snap_virtio_blk_ctrl_bar_is_setup_valid(bar, regs, false);
@@ -335,13 +336,17 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 	uint16_t extra_flags = 0;
 	int ret;
 	uint64_t new_ftrs;
+	struct snap_device *sdev = ctrl->common.sdev;
+	bool ctrl_configurable;
 
 	/* Get last bar values as a reference */
-	ret = snap_virtio_blk_query_device(ctrl->common.sdev, &bar);
+	ret = snap_virtio_blk_query_device(sdev, &bar);
 	if (ret) {
 		snap_error("Failed to query bar\n");
 		return -EINVAL;
 	}
+
+	ctrl_configurable = snap_virtio_ctrl_is_configurable(&ctrl->common);
 
 	if (regs->max_queues > 0) {
 		/*
@@ -355,7 +360,7 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 			return -EINVAL;
 		}
 	} else {
-		if (snap_virtio_ctrl_is_configurable(&ctrl->common)) {
+		if (ctrl_configurable) {
 			/*
 			 * Default configuration is optimized to kernel driver case,
 			 * which assumes num_queues+1 <= num_msix equation for
@@ -371,9 +376,38 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 	if (regs->device_features & 1ULL << VIRTIO_F_ADMIN_VQ && regs->max_queues == 1)
 		regs->max_queues++;
 
-	if (!snap_virtio_blk_ctrl_bar_setup_valid(ctrl, &bar, regs)) {
+	if (!snap_virtio_blk_ctrl_bar_setup_valid(ctrl, &bar, regs, ctrl_configurable)) {
 		snap_error("Setup is not valid\n");
 		return -EINVAL;
+	}
+
+	/* for transitional device, only allow to update capacity if driver is up */
+	if (sdev->transitional_device && !ctrl_configurable) {
+		if (!(regs_mask & SNAP_VIRTIO_MOD_DEV_CFG))
+			return 0;
+
+		if (bar.vattr.reset) {
+			/*
+			 * FW will disable gvmi if reset bit is set, need to
+			 * clear reset bit to let FW enable gvmi, because modify
+			 * capacity will need FW to send interrupt to tell host
+			 * capacity change, if gvmi is disabled, this interrupt
+			 * cannot reach to host, then host will not update capacity.
+			 **/
+			snap_virtio_ctrl_clear_reset(&ctrl->common);
+		}
+
+		/* only allow to modify `capacity` for transitional device */
+		bar.capacity = regs->capacity;
+
+		ret = snap_virtio_blk_modify_device(sdev, SNAP_VIRTIO_MOD_DEV_CFG, &bar);
+		if (ret) {
+			snap_error("Failed to update `capacity` attribute for device %s, ret:%d\n",
+				sdev->pci->pci_number, ret);
+			return ret;
+		}
+
+		return 0;
 	}
 
 	if (regs_mask & SNAP_VIRTIO_MOD_PCI_COMMON_CFG) {
@@ -410,8 +444,7 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 		bar.seg_max = regs->seg_max ? : bar.seg_max;
 	}
 
-	ret = snap_virtio_blk_modify_device(ctrl->common.sdev,
-					    regs_mask | extra_flags, &bar);
+	ret = snap_virtio_blk_modify_device(sdev, regs_mask | extra_flags, &bar);
 	if (ret) {
 		snap_error("Failed to config virtio controller\n");
 		return ret;
@@ -1087,8 +1120,14 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	dev_attr = to_blk_device_attr(vctrl->bar_curr);
 	vbq->attr = &dev_attr->q_attrs[index];
 	attr.idx = index;
-	attr.size_max = dev_attr->size_max;
-	attr.seg_max = dev_attr->seg_max;
+	if (vctrl->bar_curr->driver_feature & (1ULL << VIRTIO_BLK_F_SIZE_MAX))
+		attr.size_max = dev_attr->size_max;
+	else
+		attr.size_max = 8192;
+	if (vctrl->bar_curr->driver_feature & (1ULL << VIRTIO_BLK_F_SEG_MAX))
+		attr.seg_max = dev_attr->seg_max;
+	else
+		attr.seg_max = 1;
 	attr.queue_size = vbq->attr->vattr.size;
 	attr.pd = blk_ctrl->common.lb_pd;
 	attr.desc = vbq->attr->vattr.desc;
@@ -1096,7 +1135,12 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.device = vbq->attr->vattr.device;
 	attr.max_tunnel_desc = sctx->virtio_blk_caps.max_tunnel_desc;
 	attr.msix_vector = vbq->attr->vattr.msix_vector;
-	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
+	if ((sctx->virtio_blk_caps.features & SNAP_VIRTIO_F_VERSION_1) &&
+		(vctrl->bar_curr->driver_feature & SNAP_VIRTIO_F_VERSION_1)) {
+		attr.virtio_version_1_0 = 1;
+	} else {
+		attr.virtio_version_1_0 = 0;
+	}
 	attr.force_in_order = blk_ctrl->common.force_in_order;
 	attr.in_recovery = in_recovery;
 

@@ -435,9 +435,31 @@ static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
 
 static int snap_virtio_ctrl_device_error(struct snap_virtio_ctrl *ctrl)
 {
+	if (ctrl->sdev->transitional_device)
+		return 0;
+
 	ctrl->bar_curr->status |= SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET;
 	return snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_DEV_STATUS,
 					   ctrl->bar_curr);
+}
+
+int snap_virtio_ctrl_clear_reset(struct snap_virtio_ctrl *ctrl)
+{
+	int ret;
+
+	ctrl->bar_curr->reset = 0;
+	ret = snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_RESET,
+					  ctrl->bar_curr);
+	if (ret) {
+		snap_error("Failed to clear RESET bit, ret:%d\n", ret);
+		return ret;
+	}
+
+	/* The status should be 0 if Driver reset device. */
+	ctrl->bar_curr->status = 0;
+	snap_info("virtio controller %p set reset=0 and status=0\n", ctrl);
+
+	return 0;
 }
 
 static int snap_virtio_ctrl_reset(struct snap_virtio_ctrl *ctrl)
@@ -448,48 +470,27 @@ static int snap_virtio_ctrl_reset(struct snap_virtio_ctrl *ctrl)
 	if (ret)
 		return ret;
 
-	if (ctrl->bar_curr->pci_bdf) {
+	if (!ctrl->sdev->transitional_device && ctrl->bar_curr->pci_bdf) {
 		/*
 		 * When done with reset process, need to set reset bit
 		 * back to `0` which signal FW to update `device_status`
-		 * if needed. Host driver might be waiting for device
-		 * RESET process completion by polling device_status
-		 * until reading `0`.
+		 * if needed. Host driver (for modern device) might be
+		 * waiting for device RESET process completion by polling
+		 * device_status until reading `0`.
 		 */
-		ctrl->bar_curr->reset = 0;
-		ret = snap_virtio_ctrl_bar_modify(ctrl, SNAP_VIRTIO_MOD_RESET,
-						  ctrl->bar_curr);
-		/* The status should be 0 if Driver reset device. */
-		ctrl->bar_curr->status = 0;
+		ret = snap_virtio_ctrl_clear_reset(ctrl);
 	}
 
 	return ret;
 }
 
+void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
+
 static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 
-	/* NOTE: it is not allowed to reset or change bar while controller is
-	 * freezed. It is the responsibility of the migration channel implementation
-	 * to ensure it. Log error, the migration is probably going to fail.
-	 */
-	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
-		snap_info("virtio controller %p reset detected\n", ctrl);
-
-		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
-			snap_error("ctrl %p reset while in %s\n", ctrl, lm_state2str(ctrl->lm_state));
-		/*
-		 * suspending virtio queues may take some time. In such case
-		 * do reset once the controller is suspended.
-		 */
-		snap_virtio_ctrl_suspend(ctrl);
-		if (snap_virtio_ctrl_is_stopped(ctrl) ||
-		    snap_virtio_ctrl_is_suspended(ctrl)) {
-			ret = snap_virtio_ctrl_reset(ctrl);
-		} else
-			ctrl->pending_reset = true;
-	} else if (SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl)) {
+	if (SNAP_VIRTIO_CTRL_FLR_DETECTED(ctrl)) {
 		struct snap_context *sctx = ctrl->sdev->sctx;
 		void *dd_data = ctrl->sdev->dd_data;
 		int i;
@@ -549,20 +550,86 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 		if (ctrl->bar_cbs.post_flr)
 			ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 
+		if (ctrl->pending_flr == false) {
+
+			/* A new emu dev was created after FLR done, value stored
+			 * in ctrl->bar_curr was queried from destroyed emu dev,
+			 * must clear those stale value before do next bar_update.
+			 **/
+			ctrl->bar_curr->status = 0;
+			ctrl->bar_curr->enabled = 0;
+			ctrl->bar_curr->reset = 0;
+
+			/* return and wait for next round ctrl_progress on new emu dev */
+			return 0;
+		}
+
 		if (!ctrl->sdev) {
 			snap_error("virtio controller %p FLR failed\n", ctrl);
 			return -ENODEV;
 		}
-	} else {
+	}
+
+	if (!ctrl->ignore_reset && SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
+		snap_info("virtio controller %p reset detected\n", ctrl);
+
+		/* NOTE: it is not allowed to reset or change bar while controller is
+		 * freezed. It is the responsibility of the migration channel implementation
+		 * to ensure it. Log error, the migration is probably going to fail.
+		 */
+		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
+			snap_error("ctrl %p reset while in %s\n", ctrl, lm_state2str(ctrl->lm_state));
+
+		if (ctrl->sdev->transitional_device)
+			ctrl->ignore_reset = true;
+
+		/*
+		 * suspending virtio queues may take some time. In such case
+		 * do reset once the controller is suspended.
+		 */
+		snap_virtio_ctrl_suspend(ctrl);
+		if (snap_virtio_ctrl_is_stopped(ctrl) ||
+		    snap_virtio_ctrl_is_suspended(ctrl)) {
+			ret = snap_virtio_ctrl_reset(ctrl);
+		} else
+			ctrl->pending_reset = true;
+	}
+
+	/* LIVE event detect must be in the last `if` check, because
+	 * it will call ctrl_progress/bar_update if reset bit is set.
+	 * and if LIVE event is not in the last, do bar_update may
+	 * miss other event.
+	 **/
+	if (SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl)) {
 		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
 			snap_error("bar change while in %s\n", lm_state2str(ctrl->lm_state));
 
-		if (SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl)) {
-			ret = snap_virtio_ctrl_validate(ctrl);
-			if (!ret)
-				ret = snap_virtio_ctrl_start(ctrl);
+		snap_info("virtio controller %p DRIVER_OK detected\n", ctrl);
+		if (ctrl->sdev->transitional_device && SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
+			ret = snap_virtio_ctrl_clear_reset(ctrl);
+			if (ret)
+				goto out;
+
+			ctrl->ignore_reset = false;
+
+			/*
+			 * In order to eliminate the race condition between
+			 * clear reset bit and host driver did another round(s)
+			 * reset, need to do a bar query after clear reset.
+			 * Instead of do a bar query, we do another round ctrl_progress,
+			 * and ctrl_progress will do bar query there.
+			 **/
+			snap_virtio_ctrl_progress_unlock(ctrl);
+			snap_virtio_ctrl_progress(ctrl);
+
+			return 0;
 		}
+
+		ret = snap_virtio_ctrl_validate(ctrl);
+		if (!ret)
+			ret = snap_virtio_ctrl_start(ctrl);
 	}
+out:
 	if (ret)
 		snap_virtio_ctrl_device_error(ctrl);
 	return ret;
@@ -585,7 +652,8 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 {
 	int ret = 0;
 	int n_enabled = 0;
-	int i, j;
+	int i = 0, j;
+	bool vq_enable;
 	const struct snap_virtio_queue_attr *vq;
 
 	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
@@ -602,7 +670,12 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 	for (i = 0; i < ctrl->max_queues; i++) {
 		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
 
-		if (vq->enable) {
+		if (!ctrl->sdev->transitional_device)
+			vq_enable = vq->enable ? true : false;
+		else
+			vq_enable = vq->desc ? true : false;
+
+		if (vq_enable) {
 			ctrl->queues[i] = snap_virtio_ctrl_queue_create(ctrl, i);
 			if (!ctrl->queues[i]) {
 				ret = -ENOMEM;
@@ -2494,16 +2567,21 @@ int snap_virtio_ctrl_should_recover(struct snap_virtio_ctrl *ctrl)
 	rc = ctrl->bar_ops->get_attr(ctrl, &vattr);
 	if (rc)
 		return rc < 0 ? rc : -rc;
-	if (vattr.reset || (vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET))
+
+	if (vattr.reset || (!ctrl->sdev->transitional_device &&
+		(vattr.status & SNAP_VIRTIO_DEVICE_S_DEVICE_NEEDS_RESET)))
 		is_reset = 1;
+
 	if (vattr.enabled) {
 		if (!is_reset && (vattr.status & SNAP_VIRTIO_DEVICE_S_DRIVER_OK))
 			is_recovery_needed = 1;
 	}
+
 	if (!is_recovery_needed) {
 		snap_info("Bar status - enabled: %d reset: %d status: 0x%x, recovery mode not applied.\n",
 				vattr.enabled, vattr.reset, vattr.status);
 	}
+
 	return is_recovery_needed;
 }
 

@@ -3508,6 +3508,9 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		goto out_free_device_emulation;
 	}
 
+	sdev->transitional_device = snap_virtio_is_transitional_device(sdev);
+	snap_info("pci:%s transitional_device:%d\n", sdev->pci->pci_number, sdev->transitional_device);
+
 	/* This should be done only for BF-1 */
 	if (need_tunnel) {
 		sdev->mdev.vtunnel = snap_create_vhca_tunnel(sdev);

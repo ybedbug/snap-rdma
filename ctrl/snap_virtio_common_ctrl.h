@@ -235,6 +235,7 @@ struct snap_virtio_ctrl {
 	struct snap_channel *lm_channel;
 	/* true if reset was requested while some queues are not suspended */
 	bool pending_reset;
+	bool ignore_reset;
 	/* true if completion (commands handled by queues) should be sent in order */
 	bool force_in_order;
 	/* true if FLR was requested */
@@ -434,5 +435,6 @@ int snap_virtio_ctrl_start_dirty_pages_track(void *data);
 int snap_virtio_ctrl_stop_dirty_pages_track(void *data);
 int snap_virtio_ctrl_get_dirty_pages_size(void *data);
 int snap_virtio_ctrl_serialize_dirty_pages(void *data, void *buffer, size_t length);
+int snap_virtio_ctrl_clear_reset(struct snap_virtio_ctrl *ctrl);
 
 #endif

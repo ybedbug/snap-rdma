@@ -162,6 +162,8 @@ struct snap_device {
 
 	/* for live migration support */
 	struct snap_channel		*channel;
+
+	bool transitional_device;
 };
 
 struct snap_nvme_registers {
@@ -398,4 +400,13 @@ int snap_device_get_events(struct snap_device *sdev, int num_events,
 
 struct snap_cross_mkey *snap_create_cross_mkey(struct ibv_pd *pd,
 					       struct snap_device *target_device);
+
+static inline bool
+snap_virtio_is_transitional_device(const struct snap_device *sdev)
+{
+	const struct snap_pci_attr *pci = &sdev->pci->pci_attr;
+
+	return pci->vendor_id == 0x1af4 && pci->revision_id == 0 &&
+		(pci->device_id >= 0x1000 && pci->device_id <= 0x103f);
+}
 #endif
