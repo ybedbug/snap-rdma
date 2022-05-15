@@ -284,8 +284,8 @@ static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_hw_cq *dv_cq, int c
 
 	dv_cq->ci++;
 
-	snap_debug("ci: %d CQ opcode %d size %d wqe_counter %d scatter32 %d scatter64 %d\n",
-		   dv_cq->ci,
+	snap_debug("cq: 0x%x ci: %d CQ opcode %d size %d wqe_counter %d scatter32 %d scatter64 %d\n",
+		   dv_cq->cq_num, dv_cq->ci,
 		   mlx5dv_get_cqe_opcode(cqe),
 		   be32toh(cqe->byte_cnt),
 		   be16toh(cqe->wqe_counter),
