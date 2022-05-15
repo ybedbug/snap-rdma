@@ -57,6 +57,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_virtio_fs.h \
 		     snap_virtio_net.h \
 		     mlx5_snap.h \
+		     mlx5_ifc.h \
 		     snap_channel.h \
 		     snap_crypto.h \
 		     snap_macros.h \

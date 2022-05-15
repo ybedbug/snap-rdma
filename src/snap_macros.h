@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <assert.h>
+#include <stdint.h>
 
 #ifndef SNAP_DEBUG
 #define SNAP_DEBUG 0
@@ -108,4 +109,14 @@ static inline int snap_ref_safe(int *refcnt)
 	}
 	return 0;
 }
+
+static inline uint32_t snap_u32log2(uint32_t x)
+{
+	if (x == 0) {
+		/* log(0) is undefined */
+		return 0;
+	}
+	return 31u - __builtin_clz(x);
+}
+
 #endif
