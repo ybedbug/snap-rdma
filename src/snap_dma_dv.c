@@ -796,6 +796,8 @@ static inline int dv_dma_q_poll_rx(struct snap_dma_q *q,
 	if (n == 0)
 		return 0;
 
+	snap_memory_cpu_load_fence();
+
 	q->sw_qp.dv_qp.hw_qp.rq.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
 	return n;
