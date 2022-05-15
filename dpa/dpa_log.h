@@ -36,7 +36,7 @@ enum {
 #define dpa_debug_data(_fmt, ...)
 #endif
 
-#ifdef SNAP_DEBUG
+#if SNAP_DEBUG || DPA_DEBUG
 #define dpa_debug(_fmt, ...) \
 	_DPA_LOG_COMMON(DBG, _fmt, ## __VA_ARGS__)
 #else
