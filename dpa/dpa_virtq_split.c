@@ -54,15 +54,22 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 
 	idx = vcmd->cmd_create.vq.common.idx;
 	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
-	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d host_mkey 0x%x\n",
-			vhca_id, vq->duar_id, idx, vq->host_mkey);
+	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d size %d host_mkey 0x%x\n",
+			vhca_id, vq->duar_id, idx, vq->common.size, vq->host_mkey);
 	//dpa_window_set_active_mkey(vq->host_mkey);
 	//dpa_debug("set active mkey 0x%x\n", vq->host_mkey);
 
 	/* TODO: input validation/sanity check */
 	/* TODO: enable in 'modify' */
 	vq->enabled = 1;
+	/* there is a race between vq enable and doorbell. Basically driver
+	 * can send doorbell before we armed it
+	 */
+	vq->pending = 1;
 	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
+	/* TODO: host can submit requests even before the queue is ready,
+	 * get initial avail index.
+	 */
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -158,14 +165,18 @@ static inline int process_commands(int *done)
 	return do_command(done);
 }
 
+#define VIRTQ_DPA_NUM_P2P_MSGS 16
+
 static inline void virtq_progress()
 {
 	struct dpa_virtq *vq = get_vq();
 	struct dpa_rt_context *rt_ctx;
 	struct virtq_device_ring *avail_ring;
-	uint16_t host_avail_idx;
+	uint16_t delta, host_avail_idx;
 	struct mlx5_cqe64 *cqe;
-	int n;
+	struct snap_dpa_p2p_msg msgs[VIRTQ_DPA_NUM_P2P_MSGS];
+	int i, n;
+	//int cr_update;
 
 	// hack to slow thing down on simx
 #if SIMX_BUILD
@@ -178,18 +189,55 @@ static inline void virtq_progress()
 		return;
 
 	rt_ctx = dpa_rt_ctx();
+
+	/* recv messages from DPU */
+	//cr_update = 0;
+	n = snap_dpa_p2p_recv_msg(&rt_ctx->dpa_cmd_chan, msgs, VIRTQ_DPA_NUM_P2P_MSGS);
+	for (i = 0; i < n; i++) {
+		rt_ctx->dpa_cmd_chan.credit_count += msgs[i].base.credit_delta;
+		if (msgs[i].base.type == SNAP_DPA_P2P_MSG_CR_UPDATE) {
+			//cr_update = 1;
+			continue;
+		}
+		if (msgs[i].base.type != SNAP_DPA_P2P_MSG_VQ_MSIX)
+			continue;
+		/* TODO: trigger msix, log bad messages */
+	}
+
+	if (n)
+		dpa_debug("recv %d new messages\n", n);
+
+#if 0
+	/* todo: fix credit logic */
+	if (cr_update) {
+		int ret;
+
+		ret = snap_dpa_p2p_send_cr_update(&rt_ctx->dpa_cmd_chan, n);
+		/* should never fail, todo: move queue to fatal state */
+		if (ret) {
+			dpa_info("failed to send credit update\n");
+			goto fatal_err;
+		}
+	}
+#endif
+	/* event mode: arm channel */
+
 	/* we can collapse doorbells and just pick up last avail index,
 	 * todo use 1 entry cq
 	 */
-	for (n = 0; n < 64; n++) {
+	for (n = 0; n < SNAP_DPA_RT_THR_SINGLE_DB_CQE_CNT; n++) {
 		cqe = snap_dv_poll_cq(&rt_ctx->db_cq, 64);
 		if (!cqe)
 			break;
 		n++;
 	}
 
-	if (n == 0)
+	if (n == 0 && !vq->pending)
 		return;
+
+	/* snap_dv_arm_cq(&rt_ctx->db_cq); - only need in the event mode */
+	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
+	vq->pending = 0;
 
 	/* todo: consider keeping window adjusted 'driver' address */
 	avail_ring = (void *)dpa_window_get_base() + vq->common.driver;
@@ -205,19 +253,65 @@ static inline void virtq_progress()
 	 *   be here when controller is reset
 	 * - in doorbell mode we still can be here, but not in a 'good' flow.
 	 *   bad flow still can happen
+	 * - polling mode w/a is to check doorbell first before fetching avail
+	 *   index
 	 */
 	host_avail_idx = avail_ring->idx;
 
+	/* todo: unlikely */
 	if (vq->hw_available_index == host_avail_idx)
 		return;
 
-	dpa_debug("==> New avail idx: %d\n", host_avail_idx);
+	delta = host_avail_idx - vq->hw_available_index;
+	/*
+	if (delta < XX)
+		send_desc_heads
+	else
+		send_desc_heads + table
+		*/
+
+	dpa_debug("==> New avail idx: %d delta %d\n", host_avail_idx, delta);
 
 	/* add actual processing logic */
-	vq->hw_available_index = host_avail_idx;
+	n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+			vq->common.size,
+			vq->hw_available_index, host_avail_idx, vq->common.driver,
+			vq->host_mkey);
+	if (n <= 0) {
+		/* todo: error handling if not EGAIN */
+		dpa_info("error sending vq heads\n"); 
+		// should not happen, atm qp is large enough to handle all tx
+		goto fatal_err;
+	}
 
-	//snap_dv_arm_cq(&rt_ctx->db_cq); - only need in the event mode
-	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
+	/* unroll, only 1 iteration is expected */
+	if (snap_unlikely(n != delta)) {
+again:
+		vq->hw_available_index += n;
+		dpa_debug("wraparound handling\n");
+		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+				vq->common.size,
+				vq->hw_available_index, host_avail_idx, vq->common.driver,
+				vq->host_mkey);
+		if (n <= 0) {
+			/* todo: error handling if not EGAIN */
+			dpa_info("error sending vq heads\n");
+			// should not happen, atm qp is large enough to handle all tx
+			goto fatal_err;
+		}
+		if (vq->hw_available_index + (uint16_t)n != host_avail_idx) {
+			goto again;
+		}
+	}
+
+	dpa_debug("===> send vq heads done %d\n", n);
+	vq->hw_available_index = host_avail_idx;
+	return;
+fatal_err:
+	/* todo: add logic */
+	dpa_debug("FATAL processing error, disabling vq\n");
+	vq->enabled = 0;
+	return;
 }
 
 int dpa_init()

@@ -91,6 +91,8 @@ struct dpa_virtq {
 
 	uint32_t duar_id;
 	uint32_t enabled;
+
+	uint32_t pending;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd_create {

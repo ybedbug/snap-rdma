@@ -51,7 +51,7 @@ dpa_cmd_lat_bench_LDADD = libdpa.a
 
 # copy snap_dma datapath sources, we need to compile them both on host and on
 # the DPA
-BUILT_SOURCES : dpa_snap_dma.c dpa_snap_dma_dv.c
+BUILT_SOURCES : dpa_snap_dma.c dpa_snap_dma_dv.c dpa_snap_dpa_p2p.c
 
 dpa_snap_dma.c : ../src/snap_dma.c
 	cp $(srcdir)/../src/snap_dma.c $@
@@ -59,8 +59,11 @@ dpa_snap_dma.c : ../src/snap_dma.c
 dpa_snap_dma_dv.c : ../src/snap_dma_dv.c
 	cp $(srcdir)/../src/snap_dma_dv.c $@
 
+dpa_snap_dpa_p2p.c : ../src/snap_dpa_p2p.c
+	cp $(srcdir)/../src/snap_dpa_p2p.c $@
+
 libdpa_a_SOURCES = dpa.h snap_dma_compat.h dpa_log.h dpa_common.c dpa_start.c
-nodist_libdpa_a_SOURCES = dpa_snap_dma.c dpa_snap_dma_dv.c
+nodist_libdpa_a_SOURCES = dpa_snap_dma.c dpa_snap_dma_dv.c dpa_snap_dpa_p2p.c
 
 dpa_virtq_split_SOURCES = dpa_virtq_split.c
 dpa_virtq_split_LDADD = libdpa.a
