@@ -400,11 +400,12 @@ static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t 
 				    struct snap_dma_completion *flush_comp, int *n_bb)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	uint8_t fm_ce_se = 0;
 	struct mlx5_wqe_ctrl_seg *ctrl;
 	struct mlx5_wqe_inl_data_seg *dseg;
 	struct mlx5_wqe_raddr_seg *rseg;
-	uint16_t pi, wqe_size, to_end;
-	uint8_t fm_ce_se = 0;
+	uint16_t pi, wqe_size;
+	size_t to_end;
 	void *pdata;
 
 	wqe_size = sizeof(*ctrl) + sizeof(*dseg) + len;
