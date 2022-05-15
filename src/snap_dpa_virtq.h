@@ -43,6 +43,12 @@ struct snap_dpa_virtq_common {
 #if !__DPA
 struct snap_dpa_virtq {
 	struct snap_virtio_queue vq;
+	/* hack to match size with virtio blk queue. Unfortunately
+	 * snap virtio block virtq inherits from snap_virtio_queue so we need
+	 * to include the difference here.
+	 */
+	void *vbdev;
+	uint32_t uncomp_bdev_cmds;
 
 	struct snap_dpa_rt *rt;
 	struct snap_dpa_rt_thread *rt_thr;
@@ -53,6 +59,15 @@ struct snap_dpa_virtq {
 	struct snap_dpa_duar *duar;
 
 	struct snap_dpa_virtq_common common;
+
+	/* last <= host <= hw */
+	uint16_t hw_used_index;
+	uint16_t last_hw_used_index;
+	uint16_t host_used_index;
+	/* todo: make max pending comps configurable */
+	struct vring_used_elem pending_comps[16];
+	int num_pending_comps;
+	int debug_count;
 };
 #endif
 

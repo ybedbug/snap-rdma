@@ -217,7 +217,7 @@ struct snap_virtio_queue *virtq_blk_dpa_create(struct snap_device *sdev,
 
 	dpa_attr.type_size = sizeof(struct snap_virtio_queue);
 	vq = snap_dpa_virtq_create(sdev, &dpa_attr, attr);
-
+	attr->q_provider = SNAP_DPA_Q_PROVIDER;
 	return (struct snap_virtio_queue *)vq;
 }
 
@@ -278,68 +278,131 @@ struct snap_dpa_virtq *to_dpa_queue(struct snap_virtio_queue *vq)
 	return container_of(vq, struct snap_dpa_virtq, vq);
 }
 
-static void vq_heads_msg_handle(struct snap_dpa_virtq *vq,
-		struct snap_dpa_p2p_msg_vq_update *msg)
-{
-	struct virtq_split_tunnel_req_hdr hdr;
-	int i;
-
-	hdr.num_desc = 0;
-
-	for (i = 0; i < msg->descr_head_count; i++) {
-		hdr.descr_head_idx = msg->descr_heads[i];
-		vq->rt_thr->dpu_cmd_chan.dma_q->rx_cb(vq->rt_thr->dpu_cmd_chan.dma_q, &hdr, 0, 0);
-	}
-}
-
-static void vq_table_msg_handle(struct snap_dpa_virtq *vq,
-		struct snap_dpa_p2p_msg_vq_update *msg)
-{
-	struct virtq_split_tunnel_req req;
-	int i;
-
-	req.hdr.num_desc = 0;
-	/* TODO: use our own vring desc type */
-	req.tunnel_descs = (struct vring_desc *)vq->desc_shadow;
-	req.hdr.dpa_vq_table_flag = VQ_TABLE_REC;
-	for (i = 0; i < msg->descr_head_count; i++) {
-		 /* TODO: arrange descriptors in parallel and avoid extra memcpy */
-		req.hdr.descr_head_idx = msg->descr_heads[i];
-		vq->rt_thr->dpu_cmd_chan.dma_q->rx_cb(vq->rt_thr->dpu_cmd_chan.dma_q, &req, 0, 0);
-	}
-}
-
-static int snap_virtio_blk_progress_dpa_queue(struct snap_virtio_queue *vq)
+static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_tunnel_req *reqs, int num_reqs)
 {
 	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
 	int n, i;
-#ifdef __COVERITY__
-	struct snap_dpa_p2p_msg msgs[64] = {};
-#else
-	struct snap_dpa_p2p_msg msgs[64];
-#endif
+	struct snap_dpa_p2p_msg_vq_update msg;
 
-	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, msgs, 64);
-	for (i = 0; i < n; i++) {
-		dpa_q->rt_thr->dpu_cmd_chan.credit_count += msgs[i].base.credit_delta;
-		switch (msgs[i].base.type) {
-		case SNAP_DPA_P2P_MSG_CR_UPDATE:
-			break;
-		case SNAP_DPA_P2P_MSG_VQ_HEADS:
-			vq_heads_msg_handle(dpa_q, (struct snap_dpa_p2p_msg_vq_update *) &msgs[i]);
-			break;
-		case SNAP_DPA_P2P_MSG_VQ_TABLE:
-			vq_table_msg_handle(dpa_q, (struct snap_dpa_p2p_msg_vq_update *) &msgs[i]);
-			break;
-		default:
-			snap_error("invalid message type %d\n", msgs[i].base.type);
-			break;
-		}
+	/* TODO: use virtio specific recv msg, save one loop on translation,
+	 * since max virtq heads is known we can pick several messages */
+	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, (struct snap_dpa_p2p_msg *)&msg, 1);
+	if (n <= 0)
+		return n;
+
+	if (msg.descr_head_count >= num_reqs) {
+		snap_error("oops, too many requests (%d > %d)\n", n, num_reqs);
+		return -ENOMEM;
 	}
-	if (n)
-		snap_dpa_p2p_send_cr_update(&dpa_q->rt_thr->dpu_cmd_chan, n);
+
+	if (dpa_q->debug_count++ % 1000 == 0)
+		snap_dpa_log_print(dpa_q->rt_thr->thread->dpa_log);
+
+	if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_HEADS) {
+		snap_debug("vq heads message %d heads\n", msg.descr_head_count);
+		for (i = 0; i < msg.descr_head_count; i++) {
+			reqs[i].hdr.num_desc = 0;
+			reqs[i].hdr.descr_head_idx = msg.descr_heads[i];
+			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
+		}
+	} else {
+		snap_error("oops unknown p2p msg type\n");
+		return -ENOTSUP;
+	}
+
+	return msg.descr_head_count;
+}
+
+static inline int flush_completions(struct snap_dpa_virtq *dpa_q)
+{
+	uint64_t used_elem_addr;
+	int ret;
+
+	/* TODO: remove fatal on write */
+	used_elem_addr = dpa_q->common.device +
+			offsetof(struct vring_used, ring[dpa_q->host_used_index & (dpa_q->common.size - 1)]);
+
+	ret = snap_dma_q_write_short(dpa_q->rt_thr->dpu_cmd_chan.dma_q, dpa_q->pending_comps,
+			sizeof(struct vring_used_elem) * dpa_q->num_pending_comps, used_elem_addr,
+			dpa_q->cross_mkey->mkey);
+	if (snap_unlikely(ret)) {
+		snap_info("faied to send completion - %d\n", ret);
+		while(1) { sleep(1); }
+		return ret;
+	}
+
+	dpa_q->host_used_index += (uint16_t)dpa_q->num_pending_comps;
+	dpa_q->num_pending_comps = 0;
+	return ret;
+}
+
+int virtq_blk_dpa_complete(struct snap_virtio_queue *vq, struct vring_used_elem *comp)
+{
+	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
+	int ret;
+
+	dpa_q->pending_comps[dpa_q->num_pending_comps].id = comp->id;
+	dpa_q->pending_comps[dpa_q->num_pending_comps].len = comp->len;
+
+	dpa_q->num_pending_comps++;
+	dpa_q->hw_used_index++;
+
+	/* after 8 gains are marginal. TODO: virtq param */
+	if (dpa_q->num_pending_comps >= 8)
+		goto flush_comps;
+
+	if ((dpa_q->hw_used_index & (dpa_q->common.size - 1)) == 0)
+		goto flush_comps;
 
 	return 0;
+flush_comps:
+	/* TODO: rollback on error */
+	return flush_completions(dpa_q);
+
+	return ret;
+}
+
+int virtq_blk_dpa_send_completions(struct snap_virtio_queue *vq)
+{
+	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
+	uint64_t used_idx_addr;
+	int ret;
+
+	if (dpa_q->num_pending_comps) {
+		ret = flush_completions(dpa_q);
+		if (ret)
+			return ret;
+	}
+
+	if (dpa_q->host_used_index != dpa_q->hw_used_index) {
+		snap_error("Missing completions!!!\n");
+		while(1) { sleep(1); }
+	}
+
+	if (dpa_q->last_hw_used_index == dpa_q->hw_used_index)
+		return 0;
+
+	used_idx_addr = dpa_q->common.device + offsetof(struct vring_used, idx);
+	ret = snap_dma_q_write_short(dpa_q->rt_thr->dpu_cmd_chan.dma_q, &dpa_q->hw_used_index, sizeof(uint16_t),
+			used_idx_addr, dpa_q->cross_mkey->mkey);
+	if (ret) {
+		snap_info("failed to send hw_used - %d\n", ret);
+		while(1) { sleep(1); }
+		return ret;
+	}
+	/* if msix enabled, send also msix message */
+	dpa_q->last_hw_used_index = dpa_q->hw_used_index;
+	return ret;
+}
+
+int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr)
+{
+	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
+	int ret;
+
+	ret = snap_dma_q_write_short(dpa_q->rt_thr->dpu_cmd_chan.dma_q, data, size,
+			raddr, dpa_q->cross_mkey->mkey);
+	return ret;
 }
 
 struct virtq_q_ops snap_virtq_blk_dpa_ops = {
@@ -347,7 +410,9 @@ struct virtq_q_ops snap_virtq_blk_dpa_ops = {
 	.destroy = virtq_blk_dpa_destroy,
 	.query = virtq_blk_dpa_query,
 	.modify = virtq_blk_dpa_modify,
-	.progress = snap_virtio_blk_progress_dpa_queue
+	.poll = virtq_blk_dpa_poll,
+	.complete = virtq_blk_dpa_complete,
+	.send_completions = virtq_blk_dpa_send_completions
 };
 
 struct virtq_q_ops *get_dpa_queue_ops(void)
