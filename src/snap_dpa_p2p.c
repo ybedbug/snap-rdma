@@ -71,9 +71,10 @@ int snap_dpa_p2p_send_cr_update(struct snap_dpa_p2p_q *q, int credit)
 int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg *msgs, int n)
 {
 	int i, comps;
-	struct snap_rx_completion rx_comps[SNAP_DPA_P2P_CREDIT_COUNT];
-	struct snap_dma_completion *tx_comps[SNAP_DPA_P2P_CREDIT_COUNT];
+	struct snap_rx_completion rx_comps[n];
+	struct snap_dma_completion *tx_comps[n];
 
+	/* TODO: remove tx poll from here */
 	snap_dma_q_poll_tx(q->dma_q, tx_comps, n);
 	comps = snap_dma_q_poll_rx(q->dma_q, rx_comps, n);
 	for (i = 0; i < comps; i++) {
@@ -85,11 +86,11 @@ int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg *msg
 }
 
 static int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
-			uint16_t vqid, uint16_t last_avail_index, uint16_t avail_index,
+			uint16_t vqid, uint16_t vqsize, uint16_t last_avail_index, uint16_t avail_index,
 			uint64_t driver, uint32_t driver_mkey)
 {
 	struct snap_dpa_p2p_msg_vq_update msg;
-	int desc_heads_count;
+	uint16_t desc_heads_count, avail_pos;
 	int rc;
 	uint64_t desc_hdr_idx_addr;
 
@@ -97,24 +98,27 @@ static int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
 	msg.base.type = type;
 	msg.base.qid = vqid;
 	msg.avail_index = avail_index;
-	if (avail_index < last_avail_index)
-		desc_heads_count = snap_min(q->q_size - last_avail_index,
-				SNAP_DPA_P2P_VQ_MAX_HEADS);
-	else
-		desc_heads_count = snap_min(avail_index - last_avail_index,
-			SNAP_DPA_P2P_VQ_MAX_HEADS);
+
+	desc_heads_count = avail_index - last_avail_index;
+	if (snap_unlikely(desc_heads_count > SNAP_DPA_P2P_VQ_MAX_HEADS))
+		desc_heads_count = SNAP_DPA_P2P_VQ_MAX_HEADS;
+
+	/* have to handle wrap around */
+	avail_pos = last_avail_index & (vqsize - 1);
+	if (snap_unlikely(avail_pos + desc_heads_count > vqsize))
+		desc_heads_count = vqsize - avail_pos;
 
 	msg.descr_head_count = desc_heads_count;
 
 	/* offsetof(struct vring_avail, ring[last_avail_index]);*/
-	desc_hdr_idx_addr = driver + 4 + (2 * last_avail_index);
+	desc_hdr_idx_addr = driver + 4 + (2 * avail_pos);
 	rc = snap_dma_q_send(q->dma_q, &msg.base,
 			sizeof(struct snap_dpa_p2p_msg_vq_update) - sizeof(msg.descr_heads),
 			desc_hdr_idx_addr, desc_heads_count * sizeof(uint16_t), driver_mkey);
 	if (snap_unlikely(rc))
 		return rc;
 
-	--q->credit_count;
+	//--q->credit_count;
 
 	return desc_heads_count;
 }
@@ -123,6 +127,7 @@ static int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
  * snap_dpa_p2p_send_vq_heads() - Send VQ heads message
  * @q:    p2p queue
  * @vqid:  virtio queue ID
+ * @vqsize: virtio queue size
  * @last_avail_index:  index of previous available descriptor
  * @avail_index:  index of newest available descriptor
  * @driver:  descriptor address
@@ -133,14 +138,16 @@ static int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
  *
  * Return: actual number of descriptor heads that were sent or < 0 on error
  */
-int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid,
+int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t vqsize,
 		uint16_t last_avail_index, uint16_t avail_index, uint64_t driver,
 		uint32_t driver_mkey)
 {
+#if 0
 	if (!q->credit_count)
 		return -EAGAIN;
+#endif
 
-	return send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_HEADS, vqid, last_avail_index,
+	return send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_HEADS, vqid, vqsize, last_avail_index,
 			avail_index, driver, driver_mkey);
 }
 
@@ -161,6 +168,8 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid,
  * followed by sending vq table message
  * (same as snap_dpa_p2p_send_vq_heads with a different type)
  *
+ * Todo: vq size
+ *
  * Return: actual number of descriptor heads that were sent or < 0 on error
  */
 int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
@@ -174,13 +183,14 @@ int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
 	if (!q->credit_count)
 		return -EAGAIN;
 
+	/* todo: pass qsize */
 	rc = snap_dma_q_write(q->dma_q, (void *) descs,
 			q->q_size * SNAP_DPA_DESC_SIZE, driver_mkey, shadow_descs,
 			shadow_descs_mkey, NULL);
 	if (snap_unlikely(rc))
 		return rc;
 
-	rc = send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_TABLE, vqid, last_avail_index,
+	rc = send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_TABLE, vqid, 0, last_avail_index,
 		 avail_index, driver, driver_mkey);
 
 	return rc;
