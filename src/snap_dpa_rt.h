@@ -98,14 +98,14 @@ struct dpa_rt_context {
 	struct snap_dpa_p2p_q dpa_cmd_chan;
 };
 
-#define SNAP_DPA_RT_QP_TX_SIZE 128
-#define SNAP_DPA_RT_QP_RX_SIZE 128
-#define SNAP_DPA_RT_QP_TX_ELEM_SIZE 64
+#define SNAP_DPA_RT_QP_TX_SIZE 512
+#define SNAP_DPA_RT_QP_RX_SIZE 256
+#define SNAP_DPA_RT_QP_TX_ELEM_SIZE 128
 #define SNAP_DPA_RT_QP_RX_ELEM_SIZE 64
 
 #define SNAP_DPA_RT_THR_SINGLE_DB_CQE_SIZE 64
 #define SNAP_DPA_RT_THR_SINGLE_DB_CQE_CNT 2
-#define SNAP_DPA_RT_THR_SINGLE_HEAP_SIZE (64 * 1024)
+#define SNAP_DPA_RT_THR_SINGLE_HEAP_SIZE (96 * 1024)
 
 struct snap_dpa_rt_thread *snap_dpa_rt_thread_get(struct snap_dpa_rt *rt, struct snap_dpa_rt_filter *filter);
 void snap_dpa_rt_thread_put(struct snap_dpa_rt_thread *rt);
