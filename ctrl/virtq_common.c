@@ -627,6 +627,7 @@ static void virtq_progress_unordered(struct virtq_priv *vq_priv)
 	}
 }
 
+//#define VIRTIO_QUEUE_POLL_ENABLED
 /**
  * virtq_progress() - Progress RDMA QPs,  Polls on QPs CQs
  * @q:	queue to progress
@@ -646,9 +647,18 @@ int virtq_progress(struct virtq_common_ctx *q, int thread_id)
 	priv->thread_id = thread_id;
 	n += snap_dma_q_progress(priv->dma_q);
 
-#ifdef VIRTIO_QUEUE_PROGRESS_ENABLED
-	if (priv->snap_vbq->q_ops->progress)
-		n += priv->snap_vbq->q_ops->progress(priv->snap_vbq);
+#ifdef VIRTIO_QUEUE_POLL_ENABLED
+	if (priv->snap_vbq->q_ops->poll) {
+		int i;
+		int n;
+		struct virtq_split_tunnel_req reqs[64];
+
+		n = priv->snap_vbq->q_ops->poll(priv->snap_vbq, reqs, 64);
+		for (i = 0; i < n; i++) {
+			priv->dma_q->rx_cb(priv->dma_q, &reqs[i], 0, 0);
+		}
+		priv->snap_vbq->q_ops->send_completions(priv->snap_vbq);
+	}
 #endif
 	if (snap_unlikely(priv->force_in_order))
 		virtq_progress_unordered(priv);

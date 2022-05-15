@@ -173,6 +173,8 @@ struct snap_virtio_common_queue_attr {
 	struct snap_dma_q	*dma_q;
 };
 
+struct virtq_split_tunnel_req;
+
 struct virtq_q_ops {
 	struct snap_virtio_queue *(*create)(struct snap_device *sdev,
 			struct snap_virtio_common_queue_attr *attr);
@@ -181,7 +183,10 @@ struct virtq_q_ops {
 			struct snap_virtio_common_queue_attr *attr);
 	int (*modify)(struct snap_virtio_queue *vq,
 			uint64_t mask, struct snap_virtio_common_queue_attr *attr);
-	int (*progress)(struct snap_virtio_queue *vq);
+	/* extended ops */
+	int (*poll)(struct snap_virtio_queue *vq, struct virtq_split_tunnel_req *req, int num_reqs);
+	int (*complete)(struct snap_virtio_queue *vq, struct vring_used_elem *comp);
+	int (*send_completions)(struct snap_virtio_queue *vq);
 };
 
 struct snap_virtio_queue {

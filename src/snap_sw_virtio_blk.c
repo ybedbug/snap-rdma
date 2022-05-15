@@ -115,7 +115,8 @@ static int snap_virtio_blk_modify_sw_queue(struct snap_virtio_queue *vq,
 	return 0;
 }
 
-static int snap_virtio_blk_progress_sw_queue(struct snap_virtio_queue *vq)
+/* TODO: convert to the poll/complete/send_completion model */
+static int __attribute__((unused)) snap_virtio_blk_progress_sw_queue(struct snap_virtio_queue *vq)
 {
 	struct snap_virtio_blk_sw_queue *sw_q = to_sw_queue(to_blk_queue(vq));
 	uint64_t avail_idx_addr  = sw_q->driver_addr + offsetof(struct vring_avail, idx);
@@ -175,7 +176,7 @@ static struct virtq_q_ops snap_virtq_blk_sw_ops = {
 	.destroy = snap_virtio_blk_destroy_sw_queue,
 	.query = snap_virtio_blk_query_sw_queue,
 	.modify = snap_virtio_blk_modify_sw_queue,
-	.progress = snap_virtio_blk_progress_sw_queue,
+	//.progress = snap_virtio_blk_progress_sw_queue,
 };
 
 struct virtq_q_ops *get_sw_queue_ops(void)

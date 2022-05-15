@@ -83,9 +83,10 @@ void *snap_dpa_p2p_client_sm(void *arg)
 void *snap_dpa_p2p_host_sm(void *arg)
 {
 	struct snap_dpa_virtq *vq = arg;
+	struct virtq_split_tunnel_req req;
 
 	while (1) {
-		vq->vq.q_ops->progress(&vq->vq);
+		vq->vq.q_ops->poll(&vq->vq, &req, 1);
 	}
 
 	return NULL;
