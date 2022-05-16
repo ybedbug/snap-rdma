@@ -18,6 +18,7 @@
 #include "snap_dma.h"
 #include "snap_env.h"
 #include "snap_virtio_blk_ctrl.h"
+#include "snap_dpa_virtq.h"
 
 #define NUM_HDR_FTR_DESCS 2
 
@@ -1164,8 +1165,14 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 	}
 	if (to_common_queue_attr(vq_priv->vattr)->q_provider == SNAP_SW_Q_PROVIDER)
 		blk_impl_ops.send_comp = virtq_sw_send_comp;
-	snap_debug("created VIRTQ %d successfully in_order %d\n", attr->idx,
-		   attr->force_in_order);
+
+	if (to_common_queue_attr(vq_priv->vattr)->q_provider == SNAP_DPA_Q_PROVIDER) {
+		blk_impl_ops.send_comp = virtq_dpa_send_comp;
+		blk_impl_ops.send_status = virtq_blk_dpa_send_status;
+	}
+
+	snap_debug("created VIRTQ %d succesfully in_order %d q_provider %d\n", attr->idx,
+		   attr->force_in_order, to_common_queue_attr(vq_priv->vattr)->q_provider);
 	return vq_ctx;
 
 destroy_virtio_blk_queue:

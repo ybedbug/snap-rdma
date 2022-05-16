@@ -412,6 +412,7 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	int ret;
 	struct virtq_status_data sd;
 	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
+	extern int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
 
 	cmd->vq_priv->ops->status_data(cmd, &sd);
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
@@ -420,10 +421,15 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %u\n",
 		       descs[sd.desc].addr,
 			   sd.status_size);
-	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, sd.us_status,
-						sd.status_size,
-				     descs[sd.desc].addr,
-				     cmd->vq_priv->vattr->dma_mkey);
+	/* hack... */
+	if (snap_unlikely(cmd->vq_priv->ops->send_status))
+		ret = cmd->vq_priv->ops->send_status(cmd->vq_priv->snap_vbq, sd.us_status, sd.status_size, descs[sd.desc].addr);
+	else
+		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, sd.us_status,
+				sd.status_size,
+				descs[sd.desc].addr,
+				cmd->vq_priv->vattr->dma_mkey);
+
 	if (snap_unlikely(ret)) {
 		/* TODO: at some point we will have to do pending queue */
 		ERR_ON_CMD(cmd, "failed to send status, err=%d", ret);
@@ -461,6 +467,20 @@ int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
 						   used_idx_addr,
 					       cmd->vq_priv->vattr->dma_mkey);
 
+	return ret;
+}
+
+int virtq_dpa_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
+{
+	struct vring_used_elem comp;
+	int ret;
+	extern  int virtq_blk_dpa_complete(struct snap_virtio_queue *vq, struct vring_used_elem *comp);
+
+	comp.id = cmd->descr_head_idx;
+	comp.len = cmd->total_in_len;
+	virtq_log_data(cmd, "SEND_COMP(DPA): descr_head_idx %d len %d send_size %lu\n",
+		       comp.id, comp.len, sizeof(comp));
+	ret = virtq_blk_dpa_complete(cmd->vq_priv->snap_vbq, &comp);
 	return ret;
 }
 

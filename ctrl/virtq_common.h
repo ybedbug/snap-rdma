@@ -45,7 +45,7 @@
 		   (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, ## __VA_ARGS__)
 
 /* uncomment to enable fast path debugging */
-// #define VIRTQ_DEBUG_DATA
+//#define VIRTQ_DEBUG_DATA 1
 #ifdef VIRTQ_DEBUG_DATA
 #define virtq_log_data(cmd, fmt, ...) \
 	printf("queue:%d cmd_idx:%d " fmt, (cmd)->vq_priv->vq_ctx->idx, (cmd)->idx, \
@@ -295,6 +295,8 @@ struct virtq_impl_ops {
 	int (*seg_dmem)(struct virtq_cmd *cmd);
 	bool (*seg_dmem_release)(struct virtq_cmd *cmd);
 	int (*send_comp)(struct virtq_cmd *cmd, struct snap_dma_q *q);
+	/* hack... */
+	int (*send_status)(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
 };
 
 /**
@@ -383,6 +385,7 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, const void *data,
 			     uint32_t data_len, uint32_t imm_data);
 int virtq_tunnel_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
 int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
+int virtq_dpa_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q);
 
 static inline bool virtq_check_outstanding_progress_suspend(struct virtq_priv *vq_priv)
 {

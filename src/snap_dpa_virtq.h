@@ -69,6 +69,8 @@ struct snap_dpa_virtq {
 	int num_pending_comps;
 	int debug_count;
 };
+
+int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
 #endif
 
 enum {
