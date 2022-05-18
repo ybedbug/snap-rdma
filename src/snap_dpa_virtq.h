@@ -54,7 +54,7 @@ struct snap_dpa_virtq {
 	struct snap_dpa_rt_thread *rt_thr;
 
 	struct ibv_mr *desc_shadow_mr;
-	struct virtq_desc *desc_shadow;
+	struct vring_desc *desc_shadow;
 	struct snap_cross_mkey *cross_mkey;
 	struct snap_dpa_duar *duar;
 

@@ -303,6 +303,16 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 		for (i = 0; i < msg.descr_head_count; i++) {
 			reqs[i].hdr.num_desc = 0;
 			reqs[i].hdr.descr_head_idx = msg.descr_heads[i];
+			reqs[i].hdr.dpa_vq_table_flag = 0;
+			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
+		}
+	} else if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE) {
+		snap_debug("vq table message %d heads\n", msg.descr_head_count);
+		for (i = 0; i < msg.descr_head_count; i++) {
+			reqs[i].hdr.num_desc = 0;
+			reqs[i].hdr.descr_head_idx = msg.descr_heads[i];
+			reqs[i].hdr.dpa_vq_table_flag = VQ_TABLE_REC;
+			reqs[i].tunnel_descs = dpa_q->desc_shadow;
 			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
 		}
 	} else {
