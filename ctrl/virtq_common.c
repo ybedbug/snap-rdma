@@ -849,7 +849,7 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, const void *data,
 	}
 
 	if (split_hdr->dpa_vq_table_flag == VQ_TABLE_REC) {
-		const void *data_descs = data + sizeof(struct virtq_split_tunnel_req_hdr);
+		struct vring_desc *data_descs = ((struct virtq_split_tunnel_req *)data)->tunnel_descs;
 		struct vring_desc *aux_descs = cmd->vq_priv->ops->get_descs(cmd);
 
 		cmd->num_desc = arrange_descs(data_descs, aux_descs, split_hdr->descr_head_idx);
