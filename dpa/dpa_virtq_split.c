@@ -272,16 +272,29 @@ static inline void virtq_progress()
 
 	dpa_debug("==> New avail idx: %d delta %d\n", host_avail_idx, delta);
 
-	/* add actual processing logic */
-	n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
-			vq->common.size,
-			vq->hw_available_index, host_avail_idx, vq->common.driver,
-			vq->host_mkey);
-	if (n <= 0) {
-		/* todo: error handling if not EGAIN */
-		dpa_info("error sending vq heads\n"); 
-		// should not happen, atm qp is large enough to handle all tx
-		goto fatal_err;
+	if (delta <= 3) {
+		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+				vq->common.size,
+				vq->hw_available_index, host_avail_idx, vq->common.driver,
+				vq->host_mkey);
+		if (n <= 0) {
+			/* todo: error handling if not EGAIN */
+			dpa_info("error sending vq heads\n");
+			// should not happen, atm qp is large enough to handle all tx
+			goto fatal_err;
+		}
+	} else {
+		n = snap_dpa_p2p_send_vq_table(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+				vq->common.size,
+				vq->hw_available_index, host_avail_idx, vq->common.driver,
+				vq->host_mkey,
+				vq->common.desc, vq->dpu_desc_shadow_addr, vq->dpu_desc_shadow_mkey);
+		if (n <= 0) {
+			/* todo: error handling if not EGAIN */
+			dpa_info("error sending vq table\n");
+			// should not happen, atm qp is large enough to handle all tx
+			goto fatal_err;
+		}
 	}
 
 	/* unroll, only 1 iteration is expected */
