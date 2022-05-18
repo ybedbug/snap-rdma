@@ -43,7 +43,7 @@ void *snap_dpa_p2p_client_sm(void *arg)
 	uint64_t avail_addr;
 
 	avail_addr = dpa_queue->common.driver + dpa_queue->common.size * sizeof(struct vring_desc);
-	snap_dpa_p2p_send_vq_table(chan, dpa_queue->common.idx, 0, 1, avail_addr,
+	snap_dpa_p2p_send_vq_table(chan, dpa_queue->common.idx, 0, 0, 1, avail_addr,
 			dpa_queue->host_mkey,
 			dpa_queue->common.desc,
 			(uint64_t) dpa_queue->dpu_desc_shadow_addr,

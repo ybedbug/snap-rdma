@@ -155,6 +155,7 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t
  * snap_dpa_p2p_send_vq_table() - Send VQ table message
  * @q:    p2p queue
  * @vqid:  virtio queue ID
+ * @vqsize: virtio queue size
  * @last_avail_index:  index of previous available descriptor
  * @avail_index:  index of newest available descriptor
  * @driver:  descriptor address
@@ -173,25 +174,25 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t
  * Return: actual number of descriptor heads that were sent or < 0 on error
  */
 int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
-		uint16_t vqid,
+		uint16_t vqid, uint16_t vqsize,
 		uint16_t last_avail_index, uint16_t avail_index,
 		uint64_t driver, uint32_t driver_mkey,
 		uint64_t descs, uint64_t shadow_descs, uint32_t shadow_descs_mkey)
 {
-	int rc;
+	int n, rc;
 
-	if (!q->credit_count)
-		return -EAGAIN;
+	//if (!q->credit_count)
+	//	return -EAGAIN;
 
-	/* todo: pass qsize */
+	/* TODO: need 2 avail to tx */
 	rc = snap_dma_q_write(q->dma_q, (void *) descs,
-			q->q_size * SNAP_DPA_DESC_SIZE, driver_mkey, shadow_descs,
+			vqsize * SNAP_DPA_DESC_SIZE, driver_mkey, shadow_descs,
 			shadow_descs_mkey, NULL);
 	if (snap_unlikely(rc))
 		return rc;
 
-	rc = send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_TABLE, vqid, 0, last_avail_index,
+	n = send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_TABLE, vqid, vqsize, last_avail_index,
 		 avail_index, driver, driver_mkey);
 
-	return rc;
+	return n;
 }

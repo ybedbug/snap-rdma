@@ -142,7 +142,7 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t
 		uint32_t driver_mkey);
 
 int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
-		uint16_t vqid,
+		uint16_t vqid, uint16_t vqsize,
 		uint16_t last_avail_index, uint16_t avail_index,
 		uint64_t driver, uint32_t driver_mkey,
 		uint64_t descs, uint64_t shadow_descs, uint32_t shadow_descs_mkey);
