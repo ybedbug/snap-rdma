@@ -31,6 +31,7 @@ static inline void dpa_thread_config(struct snap_dpa_tcb *tcb)
 	  * allows 'metadata' configuration on thread startup.
 	  */
 	*(uint64_t *)(ctx + 1) = (uint64_t)tcb;
+	dpa_window_set_mkey(tcb->active_lkey);
 }
 
 static void dpa_do_init(struct snap_dpa_tcb *tcb)
@@ -39,7 +40,6 @@ static void dpa_do_init(struct snap_dpa_tcb *tcb)
 	struct flexio_os_thread_ctx *ctx;
 
 	ctx = flexio_os_get_thread_ctx();
-	dpa_window_set_active_mkey(tcb->mbox_lkey);
 	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 
 	flexio_os_outbox_set_cfg(ctx->outbox_config_id);

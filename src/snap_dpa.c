@@ -473,6 +473,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	/* copy mailbox addr & lkey to the thread */
 	tcb.mbox_address = (uint64_t)thr->cmd_mbox;
 	tcb.mbox_lkey = thr->cmd_mr->lkey;
+	tcb.active_lkey = tcb.mbox_lkey;
 	snap_debug("tcb 0x%lx tcb_size %ld mailbox lkey 0x%x addr %p size(mbox+log) %lu mem_base at 0x%lx\n",
 			dpa_tcb_addr, sizeof(tcb), thr->cmd_mr->lkey, thr->cmd_mbox, mbox_size, tcb.data_address);
 
