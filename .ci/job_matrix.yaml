@@ -34,13 +34,15 @@ runs_on_dockers:
   - {file: '.ci/Dockerfile.centos.stream8', name: 'centos_stream8ofed55', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed55', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed55', arch: 'aarch64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed56', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed56', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed55', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed55', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed55', arch: 'x86_64', tag: 'latest'}
   - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed55', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.euleros2sp8aarch64', name: 'euleros2sp8', arch: 'aarch64', tag: 'latest'}
   - {file: '.ci/Dockerfile.euleros2sp9x86', name: 'euleros2sp9', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2004', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: 'latest'}
   - {url: '$registry_host/toolbox/ngci-centos:7.9.2009.2', name: 'blackduck', category: 'tool', arch: 'x86_64'}
 
 steps:
@@ -54,6 +56,7 @@ steps:
     containerSelector:
       - "{name: 'centos_stream8ofed55', variant:1}"
       - "{name: 'ubuntu2004ofed55', variant:1}"
+      - "{name: 'ubuntu2204ofed56', variant:1}"
       - "{name: 'centos79ofed55', variant:1}"
       - "{name: 'euleros2sp8', variant:1}"
       - "{name: 'euleros2sp9', variant:1}"

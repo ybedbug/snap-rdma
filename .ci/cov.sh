@@ -14,6 +14,19 @@ echo "==== Running coverity ===="
 ncpus=$(cat /proc/cpuinfo|grep processor|wc -l)
 export AUTOMAKE_JOBS=$ncpus
 
+
+if [ ! -z "$GCC_VER" ]; then
+#   Coverity: the highest supported version of gcc is 9 (=> 10 not supported yet)
+#   https://sig-docs.synopsys.com/polaris/topics/c_coverity-compatible-platforms.html
+#   Override the CXX/GCC/CC vars if the GCC_VER variable is passed from the docker file
+#   On Ubuntu 22.04 we need to use gcc 9 (defined inside docker file)
+#   Overrided gcc used ONLY for coverity scan
+    echo "GCC_VER passed from the docker file: ${GCC_VER}"
+    test -f /usr/bin/g++-${GCC_VER} && export CXX=/usr/bin/g++-${GCC_VER}
+    test -f /usr/bin/gcc-${GCC_VER} && export GCC=/usr/bin/gcc-${GCC_VER}
+    export CC=/usr/bin/gcc-${GCC_VER}
+fi
+
 ./autogen.sh
 
 module load tools/cov
