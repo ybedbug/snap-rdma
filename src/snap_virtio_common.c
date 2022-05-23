@@ -1197,6 +1197,36 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	return 0;
 }
 
+int snap_virtio_get_mod_fields_queue(struct snap_virtio_queue *virtq)
+{
+	struct snap_virtio_common_queue_attr cattr = {};
+	struct snap_device *sdev = virtq->virtq->sdev;
+	struct snap_virtio_net_queue_attr nattr = {};
+	int ret = 0;
+
+	switch (sdev->pci->type) {
+	case SNAP_VIRTIO_NET_PF:
+	case SNAP_VIRTIO_NET_VF:
+		ret = snap_virtio_query_queue(virtq, &nattr.vattr);
+		if (ret) {
+			snap_error("Failed to query snap_vq hw_q\n");
+			return ret;
+		}
+		virtq->mod_allowed_mask = nattr.modifiable_fields;
+		break;
+	default:
+		ret = snap_virtio_query_queue(virtq, &cattr.vattr);
+		if (ret) {
+			snap_error("Failed to query snap_vq hw_q\n");
+			return ret;
+		}
+		virtq->mod_allowed_mask = cattr.modifiable_fields;
+		break;
+	}
+
+	return 0;
+}
+
 static int snap_virtio_init_virtq_umem(struct ibv_context *context,
 					struct snap_virtio_caps *virtio,
 					struct snap_virtio_queue *virtq,

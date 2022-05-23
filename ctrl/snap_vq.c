@@ -406,12 +406,11 @@ static int snap_vq_hwq_modify_state(struct snap_vq *q, enum snap_virtq_state sta
 	int ret;
 
 	if (!hw_q->mod_allowed_mask) {
-		ret = snap_virtio_query_queue(hw_q, &attr.vattr);
+		ret = snap_virtio_get_mod_fields_queue(hw_q);
 		if (ret) {
-			snap_error("Failed to query snap_vq hw_q\n");
+			snap_error("Failed to query queue mod fields\n");
 			return ret;
 		}
-		hw_q->mod_allowed_mask = attr.modifiable_fields;
 	}
 
 	attr.vattr.state = state;
@@ -666,3 +665,12 @@ int snap_vq_progress(struct snap_vq *q)
 	return n;
 }
 
+struct snap_dma_q *snap_vq_get_dma_q(struct snap_vq *q)
+{
+	return q->dma_q;
+}
+
+struct ibv_cq *snap_vq_get_vcq(struct snap_vq *q)
+{
+	return q->dma_q->sw_qp.rx_cq->verbs_cq;
+}

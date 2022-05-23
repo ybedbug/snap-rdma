@@ -124,6 +124,8 @@ bool snap_vq_is_suspended(const struct snap_vq *q);
 void snap_vq_resume(struct snap_vq *q);
 int snap_vq_progress(struct snap_vq *q);
 int snap_vq_handle_events(struct snap_vq *q);
+struct snap_dma_q *snap_vq_get_dma_q(struct snap_vq *q);
+struct ibv_cq *snap_vq_get_vcq(struct snap_vq *q);
 
 const struct snap_vq_cmd_desc_list *snap_vq_cmd_get_descs(struct snap_vq_cmd *cmd);
 int snap_vq_cmd_descs_rw(struct snap_vq_cmd *cmd,

@@ -290,6 +290,7 @@ int snap_virtio_query_queue(struct snap_virtio_queue *virtq,
 	struct snap_virtio_queue_attr *vattr);
 int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 	struct snap_virtio_queue_attr *vattr);
+int snap_virtio_get_mod_fields_queue(struct snap_virtio_queue *virtq);
 
 int snap_virtio_create_hw_queue(struct snap_device *sdev,
 				struct snap_virtio_queue *vq,
