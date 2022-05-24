@@ -44,11 +44,6 @@ enum {
 	MLX5_ZERO_LEN_RQ	= 0x3,
 };
 
-enum mlx5_snap_flow_group_type {
-	SNAP_FG_MATCH	= 1 << 0,
-	SNAP_FG_MISS	= 1 << 1,
-};
-
 enum {
 	MLX5_CMD_OP_QUERY_HCA_CAP = 0x100,
 	MLX5_CMD_OP_INIT_HCA = 0x102,

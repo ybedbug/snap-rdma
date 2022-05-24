@@ -15,7 +15,6 @@
 
 #include <stdlib.h>
 #include <pthread.h>
-#include "mlx5_ifc.h"
 
 #if !defined(__DPA)
 #include <infiniband/verbs.h>
@@ -25,6 +24,11 @@
 
 #define SNAP_FT_ROOT_LEVEL 5
 #define SNAP_FT_LOG_SIZE 10
+
+enum mlx5_snap_flow_group_type {
+	SNAP_FG_MATCH	= 1 << 0,
+	SNAP_FG_MISS	= 1 << 1,
+};
 
 struct snap_event;
 struct snap_pci_attr;
