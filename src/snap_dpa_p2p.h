@@ -63,6 +63,8 @@ enum {
 	/* DPA->DPU */
 	SNAP_DPA_P2P_MSG_VQ_HEADS = 20,
 	SNAP_DPA_P2P_MSG_VQ_TABLE = 21,
+	/* vq heads with valid table */
+	SNAP_DPA_P2P_MSG_VQ_TABLE_CONT = 22,
 	/* DPU->DPA */
 	/* TODO: trigger msix directly from DPU */
 	SNAP_DPA_P2P_MSG_VQ_MSIX = 30,
@@ -148,4 +150,7 @@ int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
 		uint64_t descs, uint64_t shadow_descs, uint32_t shadow_descs_mkey);
 
 
+int snap_dpa_p2p_send_vq_table_cont(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t vqsize,
+		uint16_t last_avail_index, uint16_t avail_index, uint64_t driver,
+		uint32_t driver_mkey);
 #endif

@@ -308,7 +308,7 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 			reqs[i].hdr.dpa_vq_table_flag = 0;
 			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
 		}
-	} else if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE) {
+	} else if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE || msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE_CONT) {
 		snap_debug("vq table message %d heads\n", msg.descr_head_count);
 		for (i = 0; i < msg.descr_head_count; i++) {
 			reqs[i].hdr.num_desc = 0;

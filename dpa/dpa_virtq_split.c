@@ -320,11 +320,20 @@ static inline void virtq_progress()
 	if (snap_unlikely(n != delta)) {
 again:
 		vq->hw_available_index += n;
-		dpa_debug("wraparound handling\n");
-		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
-				vq->common.size,
-				vq->hw_available_index, host_avail_idx, vq->common.driver,
-				vq->host_mkey);
+		if (delta < DPA_TABLE_THRESHOLD) {
+			n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+					vq->common.size,
+					vq->hw_available_index, host_avail_idx, vq->common.driver,
+					vq->host_mkey);
+			vq->stats.n_vq_heads++;
+		} else {
+			n = snap_dpa_p2p_send_vq_table_cont(&rt_ctx->dpa_cmd_chan, vq->common.idx,
+					vq->common.size,
+					vq->hw_available_index, host_avail_idx, vq->common.driver,
+					vq->host_mkey);
+			vq->stats.n_vq_tables++;
+		}
+
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
 			dpa_info("error sending vq heads\n");

@@ -151,6 +151,19 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t
 			avail_index, driver, driver_mkey);
 }
 
+int snap_dpa_p2p_send_vq_table_cont(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t vqsize,
+		uint16_t last_avail_index, uint16_t avail_index, uint64_t driver,
+		uint32_t driver_mkey)
+{
+#if 0
+	if (!q->credit_count)
+		return -EAGAIN;
+#endif
+
+	return send_vq_update(q, 1, SNAP_DPA_P2P_MSG_VQ_TABLE_CONT, vqid, vqsize, last_avail_index,
+			avail_index, driver, driver_mkey);
+}
+
 /**
  * snap_dpa_p2p_send_vq_table() - Send VQ table message
  * @q:    p2p queue
