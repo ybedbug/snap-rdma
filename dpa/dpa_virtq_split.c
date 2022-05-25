@@ -342,6 +342,9 @@ again:
 
 	dpa_debug("===> send vq heads done %d\n", n);
 	vq->hw_available_index = host_avail_idx;
+
+	/* kick off doorbells, pickup completions */
+	rt_ctx->dpa_cmd_chan.dma_q->ops->progress_tx(rt_ctx->dpa_cmd_chan.dma_q);
 	return;
 fatal_err:
 	/* todo: add logic */
