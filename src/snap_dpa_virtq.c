@@ -171,7 +171,9 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	struct dpa_virtq_cmd *cmd;
 	struct snap_dpa_rsp *rsp;
 
-	snap_info("destroy dpa virtq\n");
+	snap_info("destroy dpa virtq: 0x%x:%d io_completed: %d comp_updates: %d used_updates: %d\n",
+			vq->common.vhca_id, vq->common.idx,
+			vq->stats.n_io_completed, vq->stats.n_compl_updates, vq->stats.n_used_updates);
 	snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
 
@@ -343,6 +345,7 @@ static inline int flush_completions(struct snap_dpa_virtq *dpa_q)
 
 	dpa_q->host_used_index += (uint16_t)dpa_q->num_pending_comps;
 	dpa_q->num_pending_comps = 0;
+	dpa_q->stats.n_compl_updates++;
 	return ret;
 }
 
@@ -356,6 +359,7 @@ int virtq_blk_dpa_complete(struct snap_virtio_queue *vq, struct vring_used_elem 
 
 	dpa_q->num_pending_comps++;
 	dpa_q->hw_used_index++;
+	dpa_q->stats.n_io_completed++;
 
 	/* after 8 gains are marginal. TODO: virtq param */
 	if (dpa_q->num_pending_comps >= 8)
@@ -402,6 +406,10 @@ int virtq_blk_dpa_send_completions(struct snap_virtio_queue *vq)
 	}
 	/* if msix enabled, send also msix message */
 	dpa_q->last_hw_used_index = dpa_q->hw_used_index;
+	dpa_q->stats.n_used_updates++;
+
+	/* kick off completions */
+	dpa_q->rt_thr->dpu_cmd_chan.dma_q->ops->progress_tx(dpa_q->rt_thr->dpu_cmd_chan.dma_q);
 	return ret;
 }
 

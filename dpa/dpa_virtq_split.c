@@ -42,6 +42,17 @@ static inline struct dpa_virtq *get_vq()
 	return (struct dpa_virtq *)SNAP_ALIGN_CEIL((uint64_t)(rt_ctx + 1), DPA_CACHE_LINE_BYTES);
 }
 
+static void dump_stats(struct dpa_virtq *vq)
+{
+	dpa_info("vq 0x%x#%d : sends %lu long_sends %lu delta_total %lu vq_heads %lu vq_tables %lu\n",
+		vq->common.vhca_id, vq->common.idx,
+		vq->stats.n_sends,
+		vq->stats.n_long_sends,
+		vq->stats.n_delta_total,
+		vq->stats.n_vq_heads,
+		vq->stats.n_vq_tables);
+}
+
 int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
@@ -79,6 +90,7 @@ int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 
 	//dpa_window_set_active_mkey(dpa_tcb()->mbox_lkey);
 	dpa_info("0x%0x virtq destroy: %d hw_avail: %d\n", vq->common.vhca_id, vq->common.idx, vq->hw_available_index);
+	dump_stats(vq);
 	vq->enabled = 0;
 	return SNAP_DPA_RSP_OK;
 }
@@ -166,6 +178,7 @@ static inline int process_commands(int *done)
 }
 
 #define VIRTQ_DPA_NUM_P2P_MSGS 16
+#define DPA_TABLE_THRESHOLD 4
 
 static inline void virtq_progress()
 {
@@ -272,7 +285,9 @@ static inline void virtq_progress()
 
 	dpa_debug("==> New avail idx: %d delta %d\n", host_avail_idx, delta);
 
-	if (delta <= 3) {
+	vq->stats.n_delta_total += delta;
+
+	if (delta < DPA_TABLE_THRESHOLD) {
 		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
 				vq->hw_available_index, host_avail_idx, vq->common.driver,
@@ -283,6 +298,7 @@ static inline void virtq_progress()
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
+		vq->stats.n_vq_heads++;
 	} else {
 		n = snap_dpa_p2p_send_vq_table(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
@@ -295,7 +311,10 @@ static inline void virtq_progress()
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
+		vq->stats.n_vq_tables++;
 	}
+
+	vq->stats.n_sends++;
 
 	/* unroll, only 1 iteration is expected */
 	if (snap_unlikely(n != delta)) {
@@ -312,6 +331,10 @@ again:
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
+
+		vq->stats.n_sends++;
+		vq->stats.n_long_sends++;
+
 		if (vq->hw_available_index + (uint16_t)n != host_avail_idx) {
 			goto again;
 		}

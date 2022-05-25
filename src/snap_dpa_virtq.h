@@ -68,6 +68,12 @@ struct snap_dpa_virtq {
 	struct vring_used_elem pending_comps[16];
 	int num_pending_comps;
 	int debug_count;
+
+	struct {
+		uint32_t n_io_completed;
+		uint32_t n_compl_updates;
+		uint32_t n_used_updates;
+	} stats;
 };
 
 int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
@@ -95,6 +101,14 @@ struct dpa_virtq {
 	uint32_t enabled;
 
 	uint32_t pending;
+
+	struct {
+		uint32_t n_vq_heads;
+		uint32_t n_vq_tables;
+		uint32_t n_sends;
+		uint32_t n_long_sends;
+		uint32_t n_delta_total;
+	} stats;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd_create {
