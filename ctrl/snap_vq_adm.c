@@ -453,6 +453,11 @@ void snap_vaq_cmd_complete(struct snap_vq_cmd *vcmd,
 	snap_vq_cmd_complete(vcmd);
 }
 
+void **snap_vaq_cmd_priv(struct snap_vq_cmd *cmd)
+{
+	return &cmd->priv;
+}
+
 /**
  * snap_vaq_cmd_layout_get() - Get snap virtio admin command's layout
  * @cmd: command to get layout from

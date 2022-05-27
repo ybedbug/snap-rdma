@@ -59,6 +59,7 @@ struct snap_vq_cmd {
 	bool pending_completion;
 	struct snap_dma_completion dma_comp;
 	snap_vq_cmd_done_cb_t done_cb;
+	void *priv;
 
 	TAILQ_ENTRY(snap_vq_cmd) entry;
 };
