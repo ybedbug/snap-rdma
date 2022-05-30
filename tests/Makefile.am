@@ -147,6 +147,7 @@ gtest_snap_rdma_SOURCES = gtest_example.cc \
 			  tests_common.h \
 			  tests_common.cc \
 			  test_sample_channel.cc \
+			  test_snap_dp_map.cc \
 			  $(UIO_FILES)
 
 gtest_snap_rdma_LDFLAGS = $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
