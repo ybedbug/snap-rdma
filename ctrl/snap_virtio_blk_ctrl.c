@@ -17,6 +17,7 @@
 #include <sys/mman.h>
 #include "snap_vq_adm.h"
 #include "snap_buf.h"
+#include "snap_dp_map.h"
 
 #define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
 					 (1ULL << VIRTIO_BLK_F_MQ) |\
@@ -566,6 +567,144 @@ snap_virtio_blk_ctrl_get_vf(struct snap_virtio_ctrl *vctrl, struct snap_vq_cmd *
 	return NULL;
 }
 
+static void snap_virtio_blk_ctrl_lm_dp_start_track_cb(struct snap_vq_cmd *vcmd,
+		enum ibv_wc_status status)
+{
+	enum snap_virtio_adm_status vq_adm_status = SNAP_VIRTIO_ADM_STATUS_OK;
+	struct snap_virtio_ctrl *vf_ctrl, *pf_ctrl;
+	struct snap_virtio_blk_ctrl *pf_blk_ctrl;
+	struct snap_vq_adm_dirty_page_track_start *dp_start_cmd;
+	size_t sge_len;
+
+	pf_ctrl = snap_vaq_cmd_ctrl_get(vcmd);
+	pf_blk_ctrl = to_blk_ctrl(pf_ctrl);
+
+	if (status != IBV_WC_SUCCESS) {
+		vq_adm_status = SNAP_VIRTIO_ADM_STATUS_DATA_TRANSFER_ERR;
+		goto done;
+	}
+
+	vf_ctrl = snap_virtio_blk_ctrl_get_vf(pf_ctrl, vcmd);
+	if (!vf_ctrl) {
+		vq_adm_status = SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR;
+		goto done;
+	}
+
+	dp_start_cmd = &snap_vaq_cmd_layout_get(vcmd)->in.dp_track_start_data;
+	sge_len = snap_vaq_cmd_get_total_len(vcmd) -
+		(sizeof(struct snap_virtio_adm_cmd_hdr) + sizeof(*dp_start_cmd));
+
+	/* TODO: support multiple map updates */
+	vf_ctrl->dp_map = snap_dp_bmap_create((struct snap_vq_adm_sge *)pf_blk_ctrl->lm_buf,
+			sge_len/sizeof(struct snap_vq_adm_sge),
+			dp_start_cmd->vdev_host_page_size,
+			dp_start_cmd->track_mode == VIRTIO_M_DIRTY_TRACK_PUSH_BYTEMAP ? true : false);
+
+	if (!vf_ctrl->dp_map) {
+		vq_adm_status = SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR;
+		goto done;
+	}
+
+	snap_virtio_ctrl_start_dirty_pages_track(vf_ctrl);
+
+done:
+	snap_vaq_cmd_complete(vcmd, vq_adm_status);
+	snap_buf_free(pf_blk_ctrl->lm_buf);
+}
+
+static void snap_virtio_blk_ctrl_lm_dp_start_track(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *ctrl;
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+	struct snap_vq_adm_dirty_page_track_start *dp_cmd;
+	size_t offset, sgl_len;
+	int ret;
+
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	dp_cmd = &snap_vaq_cmd_layout_get(cmd)->in.dp_track_start_data;
+	switch (dp_cmd->track_mode) {
+	case VIRTIO_M_DIRTY_TRACK_PULL_PAGELIST:
+		snap_virtio_ctrl_start_dirty_pages_track(ctrl);
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+		break;
+	case VIRTIO_M_DIRTY_TRACK_PUSH_BITMAP:
+	case VIRTIO_M_DIRTY_TRACK_PUSH_BYTEMAP:
+		/* read the rest of the chain, according to the spec it will
+		 * contain sge list
+		 */
+		sgl_len = snap_vaq_cmd_get_total_len(cmd);
+		offset = sizeof(struct snap_virtio_adm_cmd_hdr) + sizeof(*dp_cmd);
+		sgl_len -= offset;
+
+		blk_ctrl = to_blk_ctrl(vctrl);
+		blk_ctrl->lm_buf = snap_buf_alloc(vctrl->lb_pd, sgl_len);
+		if (!blk_ctrl->lm_buf) {
+			snap_error("Failed allocating data buf for restore internal state.\n");
+			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+			return;
+		}
+
+		ret = snap_vaq_cmd_layout_data_read(cmd, sgl_len, blk_ctrl->lm_buf,
+				snap_buf_get_mkey(blk_ctrl->lm_buf),
+				snap_virtio_blk_ctrl_lm_dp_start_track_cb, offset);
+		if (ret) {
+			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+			snap_buf_free(blk_ctrl->lm_buf);
+		}
+		break;
+	default:
+		snap_error("Unsupported dirty pages track mode %d\n", dp_cmd->track_mode);
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+	}
+}
+
+static void snap_virtio_blk_ctrl_lm_dp_stop_track(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *ctrl;
+
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	snap_virtio_ctrl_stop_dirty_pages_track(ctrl);
+
+	if (ctrl->dp_map) {
+		snap_dp_bmap_destroy(ctrl->dp_map);
+		ctrl->dp_map = NULL;
+	}
+
+	snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
+static void snap_virtio_blk_ctrl_lm_dp_pending_bytes_get(struct snap_virtio_ctrl *vctrl,
+					struct snap_vq_cmd *cmd)
+{
+	struct snap_virtio_ctrl *ctrl;
+	struct snap_vq_adm_get_pending_bytes_result *res;
+
+	res = &snap_vaq_cmd_layout_get(cmd)->out.pending_bytes_res;
+	ctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!ctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	res->pending_bytes = snap_virtio_ctrl_get_dirty_pages_size(ctrl);
+	if (res->pending_bytes < 0)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	else
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);
+}
+
 static void snap_virtio_blk_ctrl_lm_status_get(struct snap_virtio_ctrl *vctrl,
 						struct snap_vq_cmd *cmd)
 {
@@ -699,7 +838,6 @@ static void snap_virtio_blk_ctrl_lm_state_restore_cb(struct snap_vq_cmd *vcmd,
 	}
 }
 
-
 static void snap_virtio_blk_ctrl_lm_state_save(struct snap_virtio_ctrl *vctrl,
 						struct snap_vq_cmd *cmd)
 {
@@ -733,7 +871,6 @@ static void snap_virtio_blk_ctrl_lm_state_save(struct snap_virtio_ctrl *vctrl,
 				snap_virtio_blk_ctrl_lm_state_save_cb);
 	if (ret)
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
-
 }
 
 static void snap_virtio_blk_ctrl_lm_state_restore(struct snap_virtio_ctrl *vctrl,
@@ -760,6 +897,43 @@ static void snap_virtio_blk_ctrl_lm_state_restore(struct snap_virtio_ctrl *vctrl
 	ret = snap_vaq_cmd_layout_data_read(cmd, data.length, blk_ctrl->lm_buf,
 			snap_buf_get_mkey(blk_ctrl->lm_buf),
 			snap_virtio_blk_ctrl_lm_state_restore_cb, offset);
+	if (ret)
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+}
+
+static void snap_virtio_blk_ctrl_lm_dp_report_map(struct snap_virtio_ctrl *vctrl,
+						struct snap_vq_cmd *cmd)
+{
+	/* at the moment use the same logic and structs as save state but
+	 * fill it with different format */
+	struct snap_virtio_ctrl *vf_vctrl;
+	struct snap_virtio_blk_ctrl *blk_ctrl;
+	struct snap_vq_adm_save_state_data *data;
+	int ret;
+
+	vf_vctrl = snap_virtio_blk_ctrl_get_vf(vctrl, cmd);
+	if (!vf_vctrl) {
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+
+	data = &snap_vaq_cmd_layout_get(cmd)->in.save_state_data;
+	blk_ctrl = to_blk_ctrl(vctrl);
+	blk_ctrl->lm_buf = snap_buf_alloc(vctrl->lb_pd, data->length * sizeof(uint8_t));
+	if (!blk_ctrl->lm_buf) {
+		snap_error("Failed allocating data buf for dirty pages\n");
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+	}
+	ret = snap_virtio_ctrl_serialize_dirty_pages(vf_vctrl, blk_ctrl->lm_buf, data->length);
+	if (ret < 0) {
+		snap_buf_free(blk_ctrl->lm_buf);
+		blk_ctrl->lm_buf = NULL;
+		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
+		return;
+	}
+	ret = snap_vaq_cmd_layout_data_write(cmd, data->length, blk_ctrl->lm_buf,
+				snap_buf_get_mkey(blk_ctrl->lm_buf),
+				snap_virtio_blk_ctrl_lm_state_save_cb);
 	if (ret)
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
 }
@@ -796,11 +970,19 @@ static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
 		break;
 	case SNAP_VQ_ADM_DP_TRACK_CTRL:
 		switch (hdr.command) {
-		case SNAP_VQ_ADM_DP_IDENTITY:
 		case SNAP_VQ_ADM_DP_START_TRACK:
+			snap_virtio_blk_ctrl_lm_dp_start_track(vctrl, cmd);
+			break;
 		case SNAP_VQ_ADM_DP_STOP_TRACK:
+			snap_virtio_blk_ctrl_lm_dp_stop_track(vctrl, cmd);
+			break;
 		case SNAP_VQ_ADM_DP_GET_MAP_PENDING_BYTES:
+			snap_virtio_blk_ctrl_lm_dp_pending_bytes_get(vctrl, cmd);
+			break;
 		case SNAP_VQ_ADM_DP_REPORT_MAP:
+			snap_virtio_blk_ctrl_lm_dp_report_map(vctrl, cmd);
+			break;
+		case SNAP_VQ_ADM_DP_IDENTITY:
 		default:
 			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.cmd_class);
 			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_COMMAND);

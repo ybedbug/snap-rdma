@@ -152,6 +152,7 @@ gtest_snap_rdma_SOURCES = gtest_example.cc \
 
 gtest_snap_rdma_LDFLAGS = $(IBVERBS_LIBS) $(GTEST_LDFLAGS) -lgtest_main $(IBVERBS_LDFLAGS)
 gtest_snap_rdma_LDADD = \
+			$(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la
 			$(top_builddir)/src/libsnap.la
 
 if HAVE_FLEXIO

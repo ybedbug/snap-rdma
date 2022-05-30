@@ -5,7 +5,7 @@ lib_LTLIBRARIES = libsnap-env.la libsnap-mr.la libsnap-dma.la libsnap.la
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
 		 snap_dpa.h snap_dpa_virtq.h snap_dma_internal.h \
 		 snap_sw_virtio_blk.h snap_dpa_p2p.h snap_dpa_rt.h \
-		 snap_dp_map.h khash.h
+		 khash.h
 
 #snap-env lib
 libsnap_env_ladir = $(includedir)/
@@ -79,8 +79,7 @@ libsnap_la_SOURCES = snap.c \
 		     snap_crypto.c \
 		     snap_dpa.c \
 		     snap_dpa_p2p.c \
-		     snap_dpa_rt.c \
-		     snap_dp_map.c
+		     snap_dpa_rt.c
 
 libsnap_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS)
 libsnap_la_LIBADD = $(IBVERBS_LIBS) ./libsnap-env.la ./libsnap-mr.la ./libsnap-dma.la -lpthread

@@ -69,12 +69,16 @@ static size_t snap_vaq_cmd_in_get_len(struct snap_vaq_cmd *cmd)
 			break;
 		default:
 			break;
-		break;
 		}
+		break;
 	case SNAP_VQ_ADM_DP_TRACK_CTRL:
 		switch (hdr.command) {
 		case SNAP_VQ_ADM_DP_START_TRACK:
+			ret = sizeof(struct snap_vq_adm_dirty_page_track_start);
+			break;
 		case SNAP_VQ_ADM_DP_STOP_TRACK:
+			ret = sizeof(struct snap_vq_adm_dirty_page_track_stop);
+			break;
 		case SNAP_VQ_ADM_DP_GET_MAP_PENDING_BYTES:
 		case SNAP_VQ_ADM_DP_REPORT_MAP:
 		default:
@@ -104,8 +108,8 @@ static size_t snap_vaq_cmd_out_get_len(struct snap_vaq_cmd *cmd)
 			break;
 		default:
 			break;
-		break;
 		}
+		break;
 	case SNAP_VQ_ADM_DP_TRACK_CTRL:
 		switch (hdr.command) {
 		case SNAP_VQ_ADM_DP_START_TRACK:

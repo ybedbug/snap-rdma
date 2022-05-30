@@ -16,6 +16,7 @@
 #include "snap_channel.h"
 #include "snap_dma.h"
 #include "snap_env.h"
+#include "snap_dp_map.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
@@ -345,11 +346,53 @@ inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 		len = 6 + 8 * cmd->vq_priv->vattr->size;
 	}
 	virtq_log_data(cmd, "MARK_DIRTY_MEM: pa 0x%lx len %u\n", pa, len);
-	if (!vq->ctrl->lm_channel) {
+	if (vq->ctrl->lm_channel) {
+		rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
+	} else if (vq->ctrl->dp_map) {
+		int64_t total_size = len;
+		/* this is what can be written inline: 8 bytes, 32k for pagemap 128k
+		 * for bitmap
+		 */
+		char pbuf[sizeof(struct virtq_split_tunnel_comp)];
+		int b_off;
+		uint32_t size;
+		uint64_t start_pa;
+
+		rc = 0;
+		memset(pbuf, 0xFF, sizeof(pbuf));
+		do {
+			rc = snap_dp_bmap_get_start_pa(vq->ctrl->dp_map, pa, len, &start_pa, &b_off, &size);
+			if (rc < 0)
+				break;
+
+			virtq_log_data(cmd, "MARK_DIRTY_MEM: start_pa 0x%lx n_bytes %d byte_len %u\n", start_pa, size, rc);
+			total_size -= rc;
+			/*
+			 * Amount of pages we can set is defined by the max inline
+			 * We need to do more writes for bigger buffers.
+			 * TODO: handle -EAGAIN, force flush in such case
+			 */
+			do {
+				size_t to_write = size <= sizeof(pbuf) ? size : sizeof(pbuf);
+				rc = snap_dma_q_write_short(cmd->vq_priv->dma_q, pbuf,
+						to_write,
+						start_pa,
+						cmd->vq_priv->vattr->dma_mkey);
+				if (rc < 0) {
+					ERR_ON_CMD(cmd, "rdma_write failed: %d\n", rc);
+					goto done;
+				}
+				size -= to_write;
+			} while (size > 0);
+
+			/* most probably region will stay in the single memory range */
+		} while (total_size > 0);
+
+	} else {
 		ERR_ON_CMD(cmd, "dirty memory logging enabled but migration channel is not present\n");
 		return;
 	}
-	rc = snap_channel_mark_dirty_page(vq->ctrl->lm_channel, pa, len);
+done:
 	if (rc)
 		ERR_ON_CMD(cmd, "mark dirty page failed: pa 0x%lx len %u\n", pa, len);
 }

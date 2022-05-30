@@ -17,6 +17,7 @@
 #include "snap_channel.h"
 #include "snap_virtio_common.h"
 #include "snap_vq_adm.h"
+#include "snap_dp_map.h"
 
 /*
  * Driver may choose to reset device for numerous reasons:
@@ -1814,18 +1815,19 @@ static int snap_virtio_ctrl_copy_state(void *data, void *buf, int len,
 	return ret < 0 ? -1 : 0;
 }
 
-static int snap_virtio_ctrl_start_dirty_pages_track(void *data)
+int snap_virtio_ctrl_start_dirty_pages_track(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 
 	snap_virtio_ctrl_progress_lock(ctrl);
+
 	snap_virtio_ctrl_log_writes(ctrl, true);
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("ttid: %ld ctrl %p: start dirty pages track\n", syscall(SYS_gettid), ctrl);
 	return 0;
 }
 
-static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
+int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
 {
 	struct snap_virtio_ctrl *ctrl = data;
 
@@ -1834,6 +1836,33 @@ static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
 	snap_virtio_ctrl_progress_unlock(ctrl);
 	snap_info("ttid: %ld ctrl %p: stop dirty pages track\n", syscall(SYS_gettid), ctrl);
 	return 0;
+}
+
+int snap_virtio_ctrl_get_dirty_pages_size(void *data)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int size = 0;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	//size = snap_dp_map_get_size(ctrl->dp_map);
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: dirty pages size %d\n", ctrl, size);
+	return size;
+}
+
+int snap_virtio_ctrl_serialize_dirty_pages(void *data, void *buffer, size_t length)
+{
+	struct snap_virtio_ctrl *ctrl = data;
+	int nelems = 0;
+
+	if (!ctrl->dp_map)
+		return -EINVAL;
+
+	snap_virtio_ctrl_progress_lock(ctrl);
+	//nelems = snap_dp_map_serialize(ctrl->dp_map, buffer, length);
+	snap_virtio_ctrl_progress_unlock(ctrl);
+	snap_info("%p: dirty pages serialize %lu\n", ctrl, length);
+	return nelems;
 }
 
 static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)

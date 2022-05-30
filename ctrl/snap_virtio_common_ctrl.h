@@ -246,6 +246,7 @@ struct snap_virtio_ctrl {
 	struct snap_vq_cmd *quiesce_cmd;
 	/* true if ctrl resume was requested while ctrl was still suspending */
 	bool pending_resume;
+	struct snap_dp_bmap *dp_map;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
@@ -412,5 +413,10 @@ snap_virtio_ctrl_set_lm_state(struct snap_virtio_ctrl *ctrl,
 {
 	ctrl->lm_state = lm_state;
 }
+
+int snap_virtio_ctrl_start_dirty_pages_track(void *data);
+int snap_virtio_ctrl_stop_dirty_pages_track(void *data);
+int snap_virtio_ctrl_get_dirty_pages_size(void *data);
+int snap_virtio_ctrl_serialize_dirty_pages(void *data, void *buffer, size_t length);
 
 #endif

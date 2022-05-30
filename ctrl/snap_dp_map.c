@@ -18,7 +18,7 @@
 #include "khash.h"
 #include "snap_dp_map.h"
 #include "snap_macros.h"
-#include "ctrl/snap_virtio_adm_spec.h"
+#include "snap_virtio_adm_spec.h"
 
 KHASH_INIT(snap_dp_hash, uint64_t, char, 0, kh_int64_hash_func, kh_int64_hash_equal);
 
