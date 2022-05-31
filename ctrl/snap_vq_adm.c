@@ -489,3 +489,18 @@ snap_vaq_cmd_ctrl_get(struct snap_vq_cmd *vcmd)
 {
 	return vcmd->vq->vctrl;
 }
+
+/**
+ * snap_vaq_cmd_dmaq_get() - Get snap virtio admin command's dma_q
+ * @cmd: command to get ctrl from
+ *
+ * Get snap virtio command's dma_q. Should be called during
+ * command processing stage to get the dma_q to process the completions.
+ *
+ * Return: admin command vq's dma_q.
+ */
+inline struct snap_dma_q *
+snap_vaq_cmd_dmaq_get(struct snap_vq_cmd *cmd)
+{
+	return cmd->vq->dma_q;
+}

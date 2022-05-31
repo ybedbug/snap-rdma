@@ -37,6 +37,9 @@ struct snap_virtio_adm_cmd_layout *
 snap_vaq_cmd_layout_get(struct snap_vq_cmd *cmd);
 struct snap_virtio_ctrl *
 snap_vaq_cmd_ctrl_get(struct snap_vq_cmd *cmd);
+
+struct snap_dma_q *
+snap_vaq_cmd_dmaq_get(struct snap_vq_cmd *cmd);
 void snap_vaq_cmd_complete(struct snap_vq_cmd *vcmd,
 				enum snap_virtio_adm_status status);
 void **snap_vaq_cmd_priv(struct snap_vq_cmd *cmd);
