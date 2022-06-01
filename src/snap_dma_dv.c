@@ -292,7 +292,8 @@ static int dv_dma_q_readc(struct snap_dma_q *q,
 
 static int do_dv_dma_xfer_v2v(struct snap_dma_q *q,
 				int wqe_cnt, int op, int *num_sge,
-				struct ibv_sge **l_sgl, struct ibv_sge *r_sgl,
+				struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM],
+				struct ibv_sge *r_sgl,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
@@ -357,7 +358,8 @@ static int dv_dma_q_writev2v(struct snap_dma_q *q,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 	int num_sge[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct ibv_sge r_sgl[io_attr->riov_cnt];
+	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
 
 	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
 		return -EINVAL;
@@ -375,7 +377,8 @@ static int dv_dma_q_readv2v(struct snap_dma_q *q,
 				struct snap_dma_completion *comp, int *n_bb)
 {
 	int num_sge[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct ibv_sge r_sgl[io_attr->riov_cnt];
+	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
 
 	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
 		return -EINVAL;

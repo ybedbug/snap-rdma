@@ -72,7 +72,7 @@ verbs_prepare_iov_ctx(struct snap_dma_q *q, int n_bb,
 }
 
 static inline void verbs_dma_q_prepare_wr(struct ibv_send_wr *wr,
-			int num_wr,	struct ibv_sge **l_sgl, int *num_sge,
+			int num_wr,	struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM], int *num_sge,
 			struct ibv_sge *r_sgl, enum ibv_wr_opcode op, int flags,
 			struct snap_dma_completion *comp)
 {
@@ -102,13 +102,12 @@ static inline int verbs_dma_q_write(struct snap_dma_q *q,
 {
 	int num_sge[1];
 	struct ibv_send_wr wr[1];
-	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+	struct ibv_sge l_sgl[1][SNAP_DMA_Q_MAX_SGE_NUM], r_sgl[1];
 
-	l_sge[0][0].addr = (uint64_t)src_buf;
-	l_sge[0][0].length = len;
-	l_sge[0][0].lkey = lkey;
+	l_sgl[0][0].addr = (uint64_t)src_buf;
+	l_sgl[0][0].length = len;
+	l_sgl[0][0].lkey = lkey;
 
-	l_sgl[0] = l_sge[0];
 	num_sge[0] = 1;
 
 	r_sgl[0].addr = dstaddr;
@@ -134,7 +133,8 @@ static inline int verbs_dma_q_writev2v(struct snap_dma_q *q,
 {
 	int num_sge[io_attr->riov_cnt];
 	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct ibv_sge r_sgl[io_attr->riov_cnt];
+	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
 	struct snap_dma_q_iov_ctx *iov_ctx;
 
 	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
@@ -159,17 +159,16 @@ static inline int verbs_dma_q_write_short(struct snap_dma_q *q, void *src_buf,
 {
 	int num_sge[1];
 	struct ibv_send_wr wr[1];
-	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+	struct ibv_sge l_sgl[1][SNAP_DMA_Q_MAX_SGE_NUM], r_sgl[1];
 
 	*n_bb = 1;
 	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
 		return -EAGAIN;
 
-	l_sge[0][0].addr = (uint64_t)src_buf;
-	l_sge[0][0].length = len;
-	l_sge[0][0].lkey = 0;
+	l_sgl[0][0].addr = (uint64_t)src_buf;
+	l_sgl[0][0].length = len;
+	l_sgl[0][0].lkey = 0;
 
-	l_sgl[0] = l_sge[0];
 	num_sge[0] = 1;
 
 	r_sgl[0].addr = dstaddr;
@@ -188,13 +187,12 @@ static inline int verbs_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t l
 {
 	int num_sge[1];
 	struct ibv_send_wr wr[1];
-	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+	struct ibv_sge l_sgl[1][SNAP_DMA_Q_MAX_SGE_NUM], r_sgl[1];
 
-	l_sge[0][0].addr = (uint64_t)dst_buf;
-	l_sge[0][0].length = len;
-	l_sge[0][0].lkey = lkey;
+	l_sgl[0][0].addr = (uint64_t)dst_buf;
+	l_sgl[0][0].length = len;
+	l_sgl[0][0].lkey = lkey;
 
-	l_sgl[0] = l_sge[0];
 	num_sge[0] = 1;
 
 	r_sgl[0].addr = srcaddr;
@@ -220,7 +218,8 @@ static inline int verbs_dma_q_readv2v(struct snap_dma_q *q,
 {
 	int num_sge[io_attr->riov_cnt];
 	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge *l_sgl[io_attr->riov_cnt], r_sgl[io_attr->riov_cnt];
+	struct ibv_sge r_sgl[io_attr->riov_cnt];
+	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
 	struct snap_dma_q_iov_ctx *iov_ctx;
 
 	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
@@ -480,17 +479,16 @@ static int verbs_dma_q_flush_nowait(struct snap_dma_q *q, struct snap_dma_comple
 {
 	int num_sge[1];
 	struct ibv_send_wr wr[1];
-	struct ibv_sge *l_sgl[1], r_sgl[1], l_sge[1][1];
+	struct ibv_sge l_sgl[1][SNAP_DMA_Q_MAX_SGE_NUM], r_sgl[1];
 
 	*n_bb = 1;
 	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
 		return -EAGAIN;
 
-	l_sge[0][0].addr = 0;
-	l_sge[0][0].length = 0;
-	l_sge[0][0].lkey = 0;
+	l_sgl[0][0].addr = 0;
+	l_sgl[0][0].length = 0;
+	l_sgl[0][0].lkey = 0;
 
-	l_sgl[0] = l_sge[0];
 	num_sge[0] = 1;
 
 	r_sgl[0].addr = 0;

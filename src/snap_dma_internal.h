@@ -255,11 +255,12 @@ extern const struct snap_dma_q_ops gga_ops;
 
 /* `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
 static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
-		int *n_bb, int *num_sge, struct ibv_sge **l_sgl, struct ibv_sge *r_sgl)
+		int *n_bb, int *num_sge, struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM],
+		struct ibv_sge *r_sgl)
 {
 	int i, j, sge_cnt;
 	size_t len_to_handle, left, offset;
-	struct ibv_sge l_sge[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
+	struct ibv_sge *l_sge;
 
 	/* TODO: this function should not be inline and should be moved to .c file */
 	*n_bb = 0;
@@ -268,6 +269,7 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 	memset(num_sge, 0, sizeof(int) * io_attr->riov_cnt);
 
 	for (i = 0, j = 0; i < io_attr->riov_cnt; i++) {
+		l_sge = l_sgl[i];
 		len_to_handle = io_attr->riov[i].iov_len;
 		sge_cnt = 0;
 
@@ -275,31 +277,31 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 			if (left != 0) {
 				if (len_to_handle >= left) {
 					len_to_handle -= left;
-					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
-					l_sge[i][sge_cnt].length = left;
-					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					l_sge[sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[sge_cnt].length = left;
+					l_sge[sge_cnt].lkey = io_attr->lkey[j];
 					j++;
 					left = 0;
 					offset = 0;
 				} else {
 					left -= len_to_handle;
-					l_sge[i][sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
-					l_sge[i][sge_cnt].length = len_to_handle;
-					l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+					l_sge[sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
+					l_sge[sge_cnt].length = len_to_handle;
+					l_sge[sge_cnt].lkey = io_attr->lkey[j];
 					offset += len_to_handle;
 					len_to_handle = 0;
 				}
 			} else if (len_to_handle >= io_attr->liov[j].iov_len) {
 				len_to_handle -= io_attr->liov[j].iov_len;
-				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
-				l_sge[i][sge_cnt].length = io_attr->liov[j].iov_len;
-				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				l_sge[sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[sge_cnt].length = io_attr->liov[j].iov_len;
+				l_sge[sge_cnt].lkey = io_attr->lkey[j];
 				j++;
 			} else {
 				left = io_attr->liov[j].iov_len - len_to_handle;
-				l_sge[i][sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
-				l_sge[i][sge_cnt].length = len_to_handle;
-				l_sge[i][sge_cnt].lkey = io_attr->lkey[j];
+				l_sge[sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
+				l_sge[sge_cnt].length = len_to_handle;
+				l_sge[sge_cnt].lkey = io_attr->lkey[j];
 				offset = len_to_handle;
 				len_to_handle = 0;
 			}
@@ -311,7 +313,6 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 			}
 		}
 
-		l_sgl[i] = l_sge[i];
 		/* num_sge[i] is the sge cnt in l_sgl[i] for wr[i] */
 		num_sge[i] = sge_cnt;
 
