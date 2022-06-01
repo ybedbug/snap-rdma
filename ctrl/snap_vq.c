@@ -609,10 +609,7 @@ int snap_vq_handle_events(struct snap_vq *q)
  */
 void snap_vq_suspend(struct snap_vq *q)
 {
-	if (TAILQ_EMPTY(&q->inflight_cmds))
-		q->state = SNAP_VQ_STATE_SUSPENDED;
-	else
-		q->state = SNAP_VQ_STATE_FLUSHING;
+	q->state = SNAP_VQ_STATE_FLUSHING;
 }
 
 /**
