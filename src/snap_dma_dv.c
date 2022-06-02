@@ -33,6 +33,12 @@ struct snap_dma_xfer_ctx {
 	struct snap_dma_completion *comp;
 };
 
+static inline void snap_dv_set_comp_payload(struct snap_dv_qp *dv_qp,
+			uint16_t pi, void *buf)
+{
+	dv_qp->comps[pi].read_payload = buf;
+}
+
 static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 		uint32_t lkey, uint64_t raddr, uint32_t rkey, int op, int flags,
 		struct snap_dma_completion *comp, bool use_fence)
@@ -44,6 +50,7 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	uint16_t comp_idx;
 	uint8_t fm_ce_se = 0;
 
+	fm_ce_se |= flags;
 	fm_ce_se |= snap_dv_get_cq_update(dv_qp, comp);
 	if (use_fence)
 		fm_ce_se |= MLX5_WQE_CTRL_INITIATOR_SMALL_FENCE;
@@ -66,6 +73,10 @@ static inline int do_dv_dma_xfer(struct snap_dma_q *q, void *buf, size_t len,
 	 **/
 	comp_idx = (dv_qp->hw_qp.sq.pi - 1) & (dv_qp->hw_qp.sq.wqe_cnt - 1);
 	snap_dv_set_comp(dv_qp, comp_idx, comp, fm_ce_se, 1);
+
+	if (flags)
+		snap_dv_set_comp_payload(dv_qp, comp_idx, buf);
+
 	return 0;
 }
 
@@ -81,8 +92,12 @@ static int dv_dma_q_read(struct snap_dma_q *q, void *dst_buf, size_t len,
 			 uint32_t lkey, uint64_t srcaddr, uint32_t rmkey,
 			 struct snap_dma_completion *comp)
 {
+	int flags;
+
+	flags = (len <= 32) ? MLX5_WQE_CTRL_CQ_UPDATE : 0;
+
 	return do_dv_dma_xfer(q, dst_buf, len, lkey, srcaddr, rmkey,
-			MLX5_OPCODE_RDMA_READ, 0, comp, false);
+			MLX5_OPCODE_RDMA_READ, flags, comp, false);
 }
 
 /* UMRs are not supported on the DPA yet */
@@ -692,6 +707,11 @@ static inline struct snap_dma_completion *dv_dma_q_get_comp(struct snap_dma_q *q
 	sq_mask = dv_qp->hw_qp.sq.wqe_cnt - 1;
 	comp_idx = be16toh(cqe->wqe_counter) & sq_mask;
 	q->tx_available += dv_qp->comps[comp_idx].n_outstanding;
+
+	if ((cqe->op_own & MLX5_INLINE_SCATTER_32) && dv_qp->comps[comp_idx].read_payload) {
+		memcpy(dv_qp->comps[comp_idx].read_payload, (void *)cqe, be32toh(cqe->byte_cnt));
+		dv_qp->comps[comp_idx].read_payload = NULL;
+	}
 
 	return dv_qp->comps[comp_idx].comp;
 }

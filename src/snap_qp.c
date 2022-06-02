@@ -511,7 +511,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 
 		DEVX_SET(qpc, qpc, cqn_snd, attr->sq_cq->devx_cq.devx.id);
 		DEVX_SET(qpc, qpc, log_sq_size, snap_u32log2(devx_qp->sq_size));
-		/* TODO: enable scatter to cqe for TX */
+		DEVX_SET(qpc, qpc, cs_req, MLX5_REQ_SCAT_DATA32_CQE);
 	} else {
 		DEVX_SET(qpc, qpc, no_sq, 1);
 	}
@@ -633,6 +633,8 @@ static int verbs_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct sna
 	init_attr.cap.max_recv_wr = attr->rq_size;
 	init_attr.cap.max_recv_sge = attr->rq_max_sge;
 	init_attr.recv_cq = snap_cq_to_verbs_cq(attr->rq_cq);
+
+	init_attr.sq_sig_all = 1;
 
 	qp->verbs_qp = ibv_create_qp(pd, &init_attr);
 	if (!qp->verbs_qp)

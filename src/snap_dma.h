@@ -111,6 +111,7 @@ struct snap_rx_completion {
 
 struct snap_dv_dma_completion {
 	int n_outstanding;
+	void *read_payload;
 	struct snap_dma_completion *comp;
 };
 
