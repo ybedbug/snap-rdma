@@ -61,6 +61,7 @@ enum {
 	MLX5_CMD_OP_RTS2RTS_QP = 0x505,
 	MLX5_CMD_OP_INIT2INIT_QP = 0x50E,
 	MLX5_CMD_OP_CREATE_TIR = 0x900,
+	MLX5_CMD_OP_QUERY_ESW_FUNCTIONS = 0x740,
 	MLX5_CMD_OP_QUERY_ESW_VPORT_CONTEXT = 0x752,
 	MLX5_CMD_OP_QUERY_NIC_VPORT_CONTEXT = 0x754,
 	MLX5_CMD_OP_QUERY_ROCE_ADDRESS = 0x760,
@@ -1690,7 +1691,7 @@ struct mlx5_ifc_query_hca_cap_in_bits {
 };
 
 // PRM - QUERY_EMULATED_FUNCTIONS_INFO Input Structure Field Descriptions
-enum {
+enum mlx5_emu_fns_op_mod {
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_NVME_PHYSICAL_FUNCTIONS = 0x0,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_PHYSICAL_FUNCTIONS = 0x1,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS = 0x2,
@@ -4356,6 +4357,50 @@ struct mlx5_ifc_hotunplug_device_output_bits {
 	u8	syndrome[0x20];
 
 	u8	reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_host_params_context_bits {
+	u8         host_number[0x8];
+	u8         reserved_at_8[0x5];
+	u8	   host_pf_not_exist[0x1];
+	u8	   reserved_at_14[0x1];
+	u8         host_pf_disabled[0x1];
+	u8         host_num_of_vfs[0x10];
+
+	u8         host_total_vfs[0x10];
+	u8         host_pci_bus[0x10];
+
+	u8         reserved_at_40[0x10];
+	u8         host_pci_device[0x10];
+
+	u8         reserved_at_60[0x10];
+	u8         host_pci_function[0x10];
+
+	u8         reserved_at_80[0x180];
+};
+
+struct mlx5_ifc_query_esw_functions_in_bits {
+	u8         opcode[0x10];
+	u8         reserved_at_10[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_query_esw_functions_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+
+	struct mlx5_ifc_host_params_context_bits host_params_context;
+
+	u8         reserved_at_280[0x180];
+	u8         host_sf_enable[][0x40];
 };
 
 struct mlx5_ifc_query_vuid_in_bits {
