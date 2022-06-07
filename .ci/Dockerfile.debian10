@@ -4,7 +4,7 @@ ARG _GID=11429
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
 ARG DEBIAN_FRONTEND=noninteractive
-ARG MOFED_VER=5.5-1.0.3.2
+ARG MOFED_VER=5.6-2.0.9.0
 ENV TZ=Etc/UTC
 USER root
 
@@ -37,11 +37,10 @@ RUN apt-get update && \
 
 RUN wget -qO - https://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | \
     sudo apt-key add - && \
-    cd /etc/apt/sources.list.d && \
-    wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/debian10.8/mellanox_mlnx_ofed.list
-RUN apt update && apt install -y mlnx-ofed-basic-user-only
-RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+    echo "deb [trusted=yes] http://webrepo.mtr.labs.mlnx/mswg/release/MLNX_OFED/MLNX_OFED_LINUX-${MOFED_VER}/MLNX_OFED_LINUX-${MOFED_VER}-debian10.8-$(dpkg-architecture -qDEB_HOST_GNU_CPU)/DEBS/ ./" > /etc/apt/sources.list.d/ofed.list && \
+    apt update && apt install -y mlnx-ofed-basic-user-only
 
+RUN echo "${_LOGIN} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 RUN mkdir -p $_HOME
 RUN groupadd -f -g "$_GID" "$_LOGIN"
 RUN useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN"

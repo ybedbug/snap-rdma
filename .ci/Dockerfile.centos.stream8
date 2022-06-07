@@ -3,7 +3,7 @@ ARG _UID=6213
 ARG _GID=11429
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
-ARG MOFED_VER=5.5-1.0.3.2
+ARG MOFED_VER=5.6-2.0.9.0
 ENV LANG=en_US.utf-8
 USER root
 
@@ -46,8 +46,14 @@ RUN yum install -y \
     wget \
     ccache
 
-RUN cd /etc/yum.repos.d && wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/rhel8.3/mellanox_mlnx_ofed.repo
-RUN yum install -y mlnx-ofed-basic-user-only.noarch
+RUN set -eux; \
+    echo -e "[mlnx_ofed]\n\
+name=Mellanox Technologies \$basearch mlnx_ofed\n\
+baseurl=http://webrepo.mtr.labs.mlnx/mswg/release/MLNX_OFED/MLNX_OFED_LINUX-${MOFED_VER}/MLNX_OFED_LINUX-${MOFED_VER}-rhel8.3-\$basearch/RPMS/\n\
+enabled=1\n\
+gpgcheck=0" > /etc/yum.repos.d/mellanox_mlnx_ofed.repo; \
+    yum install -y mlnx-ofed-basic-user-only
+
 RUN pip3 -qq install gitlint
 RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/checkpatch.pl && chmod +x checkpatch.pl
 RUN cd /usr/local/bin/ && wget https://raw.githubusercontent.com/torvalds/linux/master/scripts/spelling.txt

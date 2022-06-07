@@ -4,7 +4,7 @@ ARG _GID=11429
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
 ENV LANG=en_US.utf-8
-ARG MOFED_VER=5.5-1.0.3.2
+ARG MOFED_VER=5.6-2.0.9.0
 USER root
 
 RUN yum install -y \
@@ -47,10 +47,12 @@ RUN useradd -u "$_UID" -g "$_GID" -s /bin/bash -m -d ${_HOME} "$_LOGIN" || true
 RUN chown $_LOGIN $_HOME
 
 RUN set -eux; \
-   cd /etc/yum.repos.d && \
-   wget https://linux.mellanox.com/public/repo/mlnx_ofed/${MOFED_VER}/euleros2.0sp9/mellanox_mlnx_ofed.repo
-
-RUN yum install -y mlnx-ofed-basic-user-only.noarch
+    echo -e "[mlnx_ofed]\n\
+name=Mellanox Technologies \$basearch mlnx_ofed\n\
+baseurl=http://webrepo.mtr.labs.mlnx/mswg/release/MLNX_OFED/MLNX_OFED_LINUX-${MOFED_VER}/MLNX_OFED_LINUX-${MOFED_VER}-euleros2.0sp9-\$basearch/RPMS/\n\
+enabled=1\n\
+gpgcheck=0" > /etc/yum.repos.d/mellanox_mlnx_ofed.repo; \
+    yum install -y mlnx-ofed-basic-user-only
 
 RUN yum clean all
 
