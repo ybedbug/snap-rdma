@@ -387,25 +387,6 @@ static int dv_dma_q_writev2v(struct snap_dma_q *q,
 				l_sgl, r_sgl, comp, n_bb);
 }
 
-static int dv_dma_q_readv2v(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int num_sge[io_attr->riov_cnt];
-	struct ibv_sge r_sgl[io_attr->riov_cnt];
-	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
-
-	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
-		return -EINVAL;
-
-	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
-		return -EAGAIN;
-
-	return do_dv_dma_xfer_v2v(q, io_attr->riov_cnt,
-				MLX5_OPCODE_RDMA_READ, num_sge,
-				l_sgl, r_sgl, comp, n_bb);
-}
-
 static inline int do_dv_xfer_inline(struct snap_dma_q *q, void *src_buf, size_t len,
 				    int op, uint64_t raddr, uint32_t rkey,
 				    struct snap_dma_completion *flush_comp, int *n_bb)
@@ -935,7 +916,6 @@ const struct snap_dma_q_ops dv_ops = {
 	.writec          = dv_dma_q_writec,
 	.write_short     = dv_dma_q_write_short,
 	.read            = dv_dma_q_read,
-	.readv2v         = dv_dma_q_readv2v,
 	.readc           = dv_dma_q_readc,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,
@@ -1040,7 +1020,6 @@ const struct snap_dma_q_ops gga_ops = {
 	.writec          = gga_dma_q_writec,
 	.write_short     = dv_dma_q_write_short,
 	.read            = gga_dma_q_read,
-	.readv2v         = dv_dma_q_readv2v,
 	.readc           = gga_dma_q_readc,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,

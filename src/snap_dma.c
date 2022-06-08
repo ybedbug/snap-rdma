@@ -456,40 +456,7 @@ int snap_dma_q_readv2v(struct snap_dma_q *q,
 				bool share_dst_mkey, bool share_src_mkey,
 				struct snap_dma_completion *comp)
 {
-	int i, rc, n_bb = 0;
-	uint32_t lkey[dst_iovcnt];
-	uint32_t rkey[src_iovcnt];
-	struct snap_dma_q_io_attr io_attr = {0};
-
-	if (share_dst_mkey) {
-		for (i = 0; i < dst_iovcnt; i++)
-			lkey[i] = *dst_mkey;
-		io_attr.lkey = lkey;
-	} else {
-		io_attr.lkey = dst_mkey;
-	}
-
-	if (share_src_mkey) {
-		for (i = 0; i < src_iovcnt; i++)
-			rkey[i] = *src_mkey;
-		io_attr.rkey = rkey;
-	} else {
-		io_attr.rkey = src_mkey;
-	}
-
-	io_attr.io_type = SNAP_DMA_Q_IO_TYPE_IOV;
-	io_attr.liov = dst_iov;
-	io_attr.liov_cnt = dst_iovcnt;
-	io_attr.riov = src_iov;
-	io_attr.riov_cnt = src_iovcnt;
-
-	rc = q->ops->readv2v(q, &io_attr, comp, &n_bb);
-	if (snap_unlikely(rc))
-		return rc;
-
-	q->tx_available -= n_bb;
-
-	return 0;
+	return -ENOTSUP;
 }
 
 /**

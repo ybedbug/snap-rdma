@@ -212,32 +212,6 @@ static int verbs_dma_q_readc(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
-static inline int verbs_dma_q_readv2v(struct snap_dma_q *q,
-				struct snap_dma_q_io_attr *io_attr,
-				struct snap_dma_completion *comp, int *n_bb)
-{
-	int num_sge[io_attr->riov_cnt];
-	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge r_sgl[io_attr->riov_cnt];
-	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
-	struct snap_dma_q_iov_ctx *iov_ctx;
-
-	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
-		return -EINVAL;
-
-	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
-		return -EAGAIN;
-
-	iov_ctx = verbs_prepare_iov_ctx(q, *n_bb, comp);
-	if (!iov_ctx)
-		return errno;
-
-	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
-			IBV_WR_RDMA_READ, 0, &iov_ctx->comp);
-
-	return do_verbs_dma_xfer(q, wr);
-}
-
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
 					      size_t len, int *n_bb)
 {
@@ -520,7 +494,6 @@ const struct snap_dma_q_ops verb_ops = {
 	.writec           = verbs_dma_q_writec,
 	.write_short     = verbs_dma_q_write_short,
 	.read            = verbs_dma_q_read,
-	.readv2v          = verbs_dma_q_readv2v,
 	.readc            = verbs_dma_q_readc,
 	.send_completion = verbs_dma_q_send_completion,
 	.send            = verbs_dma_q_send,
