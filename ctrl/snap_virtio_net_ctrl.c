@@ -241,8 +241,9 @@ static void snap_virtio_net_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq
 	free(vnq);
 }
 
-static void snap_virtio_net_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+static int snap_virtio_net_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
+	return 0;
 }
 
 static int snap_virtio_net_ctrl_queue_get_state(struct snap_virtio_ctrl_queue *vq,

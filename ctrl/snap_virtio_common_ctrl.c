@@ -323,11 +323,11 @@ static void snap_virtio_ctrl_queue_destroy(struct snap_virtio_ctrl_queue *vq)
 	ctrl->q_ops->destroy(vq);
 }
 
-static void snap_virtio_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+static int snap_virtio_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_ctrl *ctrl = vq->ctrl;
 
-	ctrl->q_ops->progress(vq);
+	return ctrl->q_ops->progress(vq);
 }
 
 static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
@@ -915,33 +915,39 @@ pg_q_entry_to_virtio_ctrl_queue(struct snap_pg_q_entry *pg_q)
 	return container_of(pg_q, struct snap_virtio_ctrl_queue, pg_q);
 }
 
-static void snap_virtio_ctrl_pg_thread_io_progress(
+static int snap_virtio_ctrl_pg_thread_io_progress(
 		struct snap_virtio_ctrl *ctrl, int pg_id, int thread_id)
 {
 	struct snap_pg *pg = &ctrl->pg_ctx.pgs[pg_id];
 	struct snap_virtio_ctrl_queue *vq;
 	struct snap_pg_q_entry *pg_q;
+	int n = 0;
 
 	pthread_spin_lock(&pg->lock);
 	TAILQ_FOREACH(pg_q, &pg->q_list, entry) {
 		vq = pg_q_entry_to_virtio_ctrl_queue(pg_q);
 		vq->thread_id = thread_id;
-		snap_virtio_ctrl_queue_progress(vq);
+		n += snap_virtio_ctrl_queue_progress(vq);
 	}
 	pthread_spin_unlock(&pg->lock);
+
+	return n;
 }
 
-void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id)
+int snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id)
 {
-	snap_virtio_ctrl_pg_thread_io_progress(ctrl, pg_id, pg_id);
+	return snap_virtio_ctrl_pg_thread_io_progress(ctrl, pg_id, pg_id);
 }
 
-void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl)
+int snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl)
 {
 	int i;
+	int n = 0;
 
 	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
-		snap_virtio_ctrl_pg_thread_io_progress(ctrl, i, -1);
+		n += snap_virtio_ctrl_pg_thread_io_progress(ctrl, i, -1);
+
+	return n;
 }
 
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,

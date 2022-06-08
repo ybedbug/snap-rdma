@@ -534,14 +534,14 @@ bool virtq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status sta
 	return false;
 }
 
-static int virtq_progress_suspend(struct virtq_common_ctx *q)
+static void virtq_progress_suspend(struct virtq_common_ctx *q)
 {
 	struct virtq_priv *priv = q->priv;
 	struct snap_virtio_common_queue_attr qattr = { };
 
 	/* TODO: add option to ignore commands in the bdev layer */
 	if (!virtq_check_outstanding_progress_suspend(priv))
-		return 0;
+		return;
 
 	snap_dma_q_flush(priv->dma_q);
 
@@ -553,7 +553,6 @@ static int virtq_progress_suspend(struct virtq_common_ctx *q)
 	/* at this point QP is in the error state and cannot be used anymore */
 	snap_info("queue %d: moving to the SUSPENDED state\n", q->idx);
 	priv->swq_state = SW_VIRTQ_SUSPENDED;
-	return 0;
 }
 
 /**
@@ -589,16 +588,17 @@ static void virtq_progress_unordered(struct virtq_priv *vq_priv)
 int virtq_progress(struct virtq_common_ctx *q, int thread_id)
 {
 	struct virtq_priv *priv = q->priv;
+	int n = 0;
 
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_SUSPENDED))
-		return 0;
+		goto out;
 
 	priv->thread_id = thread_id;
-	snap_dma_q_progress(priv->dma_q);
+	n += snap_dma_q_progress(priv->dma_q);
 
 #ifdef VIRTIO_QUEUE_PROGRESS_ENABLED
 	if (priv->snap_vbq->q_ops->progress)
-		priv->snap_vbq->q_ops->progress(priv->snap_vbq);
+		n += priv->snap_vbq->q_ops->progress(priv->snap_vbq);
 #endif
 	if (snap_unlikely(priv->force_in_order))
 		virtq_progress_unordered(priv);
@@ -608,9 +608,10 @@ int virtq_progress(struct virtq_common_ctx *q, int thread_id)
 	 * are finished before moving to the suspend state
 	 */
 	if (snap_unlikely(priv->swq_state == SW_VIRTQ_FLUSHING))
-		return virtq_progress_suspend(q);
+		virtq_progress_suspend(q);
 
-	return 0;
+out:
+	return n;
 }
 
 /**

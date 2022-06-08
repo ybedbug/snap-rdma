@@ -77,8 +77,8 @@ int snap_virtio_blk_ctrl_bar_setup(struct snap_virtio_blk_ctrl *ctrl,
 int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 			struct snap_virtio_ctrl_debugstat *ctrl_debugstat);
 void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl);
-void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl);
-void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
+int snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl);
+int snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
 					     uint32_t thread_id);
 
 #endif

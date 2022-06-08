@@ -673,12 +673,12 @@ static int snap_virtio_fs_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	return 0;
 }
 
-static void snap_virtio_fs_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+static int snap_virtio_fs_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_fs_ctrl_queue *vfsq = to_fs_ctrl_q(vq);
 	struct virtq_common_ctx *q = &to_fs_ctx(vfsq->q_impl)->common_ctx;
 
-	virtq_progress(q, vq->thread_id);
+	return virtq_progress(q, vq->thread_id);
 }
 
 static void snap_virtio_fs_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)

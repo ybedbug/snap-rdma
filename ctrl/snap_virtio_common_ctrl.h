@@ -170,7 +170,7 @@ struct snap_virtio_queue_ops {
 	struct snap_virtio_ctrl_queue *(*create)(struct snap_virtio_ctrl *ctrl,
 						 int index);
 	void (*destroy)(struct snap_virtio_ctrl_queue *queue);
-	void (*progress)(struct snap_virtio_ctrl_queue *queue);
+	int (*progress)(struct snap_virtio_ctrl_queue *queue);
 	void (*start)(struct snap_virtio_ctrl_queue *queue);
 	void (*suspend)(struct snap_virtio_ctrl_queue *queue);
 	bool (*is_suspended)(struct snap_virtio_ctrl_queue *queue);
@@ -251,8 +251,8 @@ bool snap_virtio_ctrl_critical_bar_change_detected(struct snap_virtio_ctrl *ctrl
 void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress_lock(struct snap_virtio_ctrl *ctrl);
 void snap_virtio_ctrl_progress_unlock(struct snap_virtio_ctrl *ctrl);
-void snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
-void snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id);
+int snap_virtio_ctrl_io_progress(struct snap_virtio_ctrl *ctrl);
+int snap_virtio_ctrl_pg_io_progress(struct snap_virtio_ctrl *ctrl, int pg_id);
 int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 			  struct snap_virtio_ctrl_bar_ops *bar_ops,
 			  struct snap_virtio_queue_ops *q_ops,

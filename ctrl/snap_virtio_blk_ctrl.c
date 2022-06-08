@@ -1046,16 +1046,18 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	return 0;
 }
 
-static void snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
+static int snap_virtio_blk_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 	struct virtq_common_ctx *q = &to_blk_ctx(vbq->q_impl)->common_ctx;
 
 	if (vbq->is_adm_vq) {
 		if (snap_likely(vbq->q_impl))
-			snap_vq_progress(vbq->q_impl);
+			return snap_vq_progress(vbq->q_impl);
 	} else
-		virtq_progress(q, vq->thread_id);
+		return virtq_progress(q, vq->thread_id);
+
+	return 0;
 }
 
 static void snap_virtio_blk_ctrl_queue_start(struct snap_virtio_ctrl_queue *vq)
@@ -1328,9 +1330,9 @@ void snap_virtio_blk_ctrl_progress(struct snap_virtio_blk_ctrl *ctrl)
  * Looks for any IO requests from host received on any QPs, and handles
  * them based on the request's parameters.
  */
-void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
+int snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
 {
-	snap_virtio_ctrl_io_progress(&ctrl->common);
+	return snap_virtio_ctrl_io_progress(&ctrl->common);
 }
 
 /**
@@ -1341,8 +1343,8 @@ void snap_virtio_blk_ctrl_io_progress(struct snap_virtio_blk_ctrl *ctrl)
  * Looks for any IO requests from host received on QPs which belong to thread
  * thread_id, and handles them based on the request's parameters.
  */
-void snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
+int snap_virtio_blk_ctrl_io_progress_thread(struct snap_virtio_blk_ctrl *ctrl,
 					     uint32_t thread_id)
 {
-	snap_virtio_ctrl_pg_io_progress(&ctrl->common, thread_id);
+	return snap_virtio_ctrl_pg_io_progress(&ctrl->common, thread_id);
 }
