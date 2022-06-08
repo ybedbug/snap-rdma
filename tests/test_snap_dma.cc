@@ -298,6 +298,55 @@ void SnapDmaTest::dma_xfer_test(struct snap_dma_q *q, bool is_read, bool poll_mo
 	}
 }
 
+static void dma_read_short_test(struct ibv_pd *pd, struct snap_dma_q_create_attr *attr, void *lbuf, int len, void *rbuf, int rkey)
+{
+	int n, rc;
+	struct snap_dma_q *q;
+	struct snap_dma_completion comp;
+
+	comp.func = dma_completion;
+	comp.count = 1;
+	g_comp_count = 0;
+
+	q = snap_dma_q_create(pd, attr);
+	ASSERT_TRUE(q);
+
+	memset(rbuf, 'A', len);
+
+	rc = snap_dma_q_read_short(q, lbuf, len, (uintptr_t)rbuf, rkey, &comp);
+	ASSERT_EQ(0, rc);
+
+	n = 0;
+	while (n < 10000) {
+		snap_dma_q_progress(q);
+		if (g_comp_count == 1)
+			break;
+		n++;
+	}
+
+	ASSERT_EQ(1, g_comp_count);
+	ASSERT_EQ(0, g_last_comp_status);
+	ASSERT_EQ(0, comp.count);
+
+	ASSERT_EQ(0, memcmp(lbuf, rbuf, len));
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, dma_read_short_dv_verbs) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = false;
+
+	dma_read_short_test(m_pd, &m_dma_q_attr, m_lbuf, 32, m_rbuf,  m_rmr->rkey);
+}
+
+TEST_F(SnapDmaTest, dma_read_short_dv_devx) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = true;
+
+	dma_read_short_test(m_pd, &m_dma_q_attr, m_lbuf, 32, m_rbuf,  m_rmr->rkey);
+}
+
 TEST_F(SnapDmaTest, dma_read) {
 	struct snap_dma_q *q;
 
