@@ -735,8 +735,11 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 		snap_virtio_ctrl_desched_q_nolock(ctrl->queues[i]);
 		ctrl->queues[i]->pg = pg;
 		ret = ctrl->q_ops->resume(ctrl->queues[i]);
-		if (ret)
+		if (ret) {
+			snap_warn("virtio controller %p: resume failed for q %d\n", ctrl, i);
+			snap_pgs_resume(&ctrl->pg_ctx);
 			return ret;
+		}
 		snap_virtio_ctrl_sched_q_nolock(ctrl, ctrl->queues[i], pg);
 		n_enabled++;
 	}
