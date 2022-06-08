@@ -212,6 +212,13 @@ static int verbs_dma_q_readc(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
+static int verbs_dma_q_read_short(struct snap_dma_q *q, void *dst_buf,
+			 size_t len, uint64_t srcaddr, uint32_t rmkey,
+			 struct snap_dma_completion *comp)
+{
+	return -ENOTSUP;
+}
+
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,
 					      size_t len, int *n_bb)
 {
@@ -495,6 +502,7 @@ const struct snap_dma_q_ops verb_ops = {
 	.write_short     = verbs_dma_q_write_short,
 	.read            = verbs_dma_q_read,
 	.readc            = verbs_dma_q_readc,
+	.read_short      = verbs_dma_q_read_short,
 	.send_completion = verbs_dma_q_send_completion,
 	.send            = verbs_dma_q_send,
 	.progress_tx     = verbs_dma_q_progress_tx,

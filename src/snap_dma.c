@@ -521,6 +521,51 @@ int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 }
 
 /**
+ * snap_dma_q_read_short() - DMA read_inline from the host memory
+ * @q:            dma queue
+ * @dst_buf:      where to put the read data
+ * @len:          data length
+ * @srcaddr:      host physical or virtual address
+ * @rmkey:        host memory key that describes remote memory
+ * @comp:         dma completion structure
+ *
+ * The function starts non blocking memory transfer from the host memory.
+ * Once data transfer is completed the user defined callback may be called.
+ * Operations on the same dma queue are done in order.
+ *
+ * Return:
+ * 0
+ *	operation has been successfully submitted to the queue
+ *	and is now in progress
+ * \-EINVAL
+ *	requested read len is larger than 32 Bytes
+ * \-EAGAIN
+ *	queue does not have enough resources, must be retried later
+ * < 0
+ *	some other error has occurred. Return value is -errno
+ */
+int snap_dma_q_read_short(struct snap_dma_q *q, void *dst_buf,
+		    size_t len, uint64_t srcaddr, uint32_t rmkey,
+		    struct snap_dma_completion *comp)
+{
+	int rc;
+
+	/* only support up-to-32B Scatter-to-CQE */
+	if (snap_unlikely(len > 32))
+		return -EINVAL;
+
+	if (snap_unlikely(!qp_can_tx(q, 1)))
+		return -EAGAIN;
+
+	rc = q->ops->read_short(q, dst_buf, len, srcaddr, rmkey, comp);
+	if (snap_unlikely(rc))
+		return rc;
+
+	q->tx_available--;
+	return 0;
+}
+
+/**
  * snap_dma_q_send_completion() - Send completion to the host
  * @q:       dma queue to
  * @src_buf: local buffer to copy the completion data from.

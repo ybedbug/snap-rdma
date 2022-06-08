@@ -305,6 +305,14 @@ static int dv_dma_q_readc(struct snap_dma_q *q,
 			dx_ctx.comp, dx_ctx.use_fence);
 }
 
+static int dv_dma_q_read_short(struct snap_dma_q *q, void *dst_buf,
+			 size_t len, uint64_t srcaddr, uint32_t rmkey,
+			 struct snap_dma_completion *comp)
+{
+	return do_dv_dma_xfer(q, dst_buf, len, 0, srcaddr, rmkey,
+			MLX5_OPCODE_RDMA_READ, MLX5_WQE_CTRL_CQ_UPDATE, comp, false);
+}
+
 static int do_dv_dma_xfer_v2v(struct snap_dma_q *q,
 				int wqe_cnt, int op, int *num_sge,
 				struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM],
@@ -917,6 +925,7 @@ const struct snap_dma_q_ops dv_ops = {
 	.write_short     = dv_dma_q_write_short,
 	.read            = dv_dma_q_read,
 	.readc           = dv_dma_q_readc,
+	.read_short      = dv_dma_q_read_short,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,
 	.progress_tx     = dv_dma_q_progress_tx,
@@ -1021,6 +1030,7 @@ const struct snap_dma_q_ops gga_ops = {
 	.write_short     = dv_dma_q_write_short,
 	.read            = gga_dma_q_read,
 	.readc           = gga_dma_q_readc,
+	.read_short      = dv_dma_q_read_short,
 	.send_completion = dv_dma_q_send_completion,
 	.send            = dv_dma_q_send,
 	.progress_tx     = dv_dma_q_progress_tx,

@@ -203,6 +203,9 @@ struct snap_dma_q_ops {
 		    struct snap_dma_completion *comp, int *n_bb);
 	int (*readc)(struct snap_dma_q *q, struct snap_dma_q_io_attr *io_attr,
 		    struct snap_dma_completion *comp, int *n_bb);
+	int (*read_short)(struct snap_dma_q *q, void *dst_buf,
+			 size_t len, uint64_t srcaddr, uint32_t rmkey,
+			 struct snap_dma_completion *comp);
 	int (*send_completion)(struct snap_dma_q *q, void *src_buf,
 			size_t len, int *n_bb);
 	int (*send)(struct snap_dma_q *q, void *in_buf, size_t in_len,
@@ -422,6 +425,9 @@ int snap_dma_q_readv2v(struct snap_dma_q *q,
 int snap_dma_q_readc(struct snap_dma_q *q, void *dst_buf, uint32_t lkey,
 		struct iovec *iov, int iov_cnt, uint32_t rmkey,
 	    uint32_t dek_obj_id, struct snap_dma_completion *comp);
+int snap_dma_q_read_short(struct snap_dma_q *q, void *dst_buf,
+		    size_t len, uint64_t srcaddr, uint32_t rmkey,
+		    struct snap_dma_completion *comp);
 int snap_dma_q_send_completion(struct snap_dma_q *q, void *src_buf, size_t len);
 int snap_dma_q_progress(struct snap_dma_q *q);
 int snap_dma_q_poll_rx(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions);
