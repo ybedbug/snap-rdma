@@ -163,8 +163,7 @@ static int alloc_aux(struct virtq_cmd *cmd, uint32_t seg_max)
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
 	if (!cmd->aux_mr) {
-		snap_error("failed to register mr for virtq %d cmd %d\n",
-			   cmd->vq_priv->vq_ctx->idx, cmd->idx);
+		virtq_reg_mr_fail_log_error(cmd);
 		free(cmd->aux);
 		return -1;
 	}
@@ -321,8 +320,7 @@ static int virtq_alloc_desc_buf(struct virtq_cmd *cmd, size_t old_len, size_t le
 					IBV_ACCESS_REMOTE_WRITE |
 					IBV_ACCESS_LOCAL_WRITE);
 	if (!new_aux_mr) {
-		snap_error("failed to register mr for virtq %d cmd %d\n",
-			   cmd->vq_priv->vq_ctx->idx, cmd->idx);
+		virtq_reg_mr_fail_log_error(cmd);
 		free(new_aux);
 		goto err;
 	}
@@ -550,7 +548,7 @@ static int virtq_alloc_req_dbuf(struct blk_virtq_cmd *cmd, size_t len)
 
 	cmd->common_cmd.req_mr = snap_reg_mr(cmd->common_cmd.vq_priv->pd, cmd->common_cmd.req_buf, len);
 	if (!cmd->common_cmd.req_mr) {
-		snap_error("failed to register mr for command %d\n", cmd->common_cmd.idx);
+		virtq_reg_mr_fail_log_error(&cmd->common_cmd);
 		goto free_buf;
 	}
 	cmd->common_cmd.use_dmem = true;

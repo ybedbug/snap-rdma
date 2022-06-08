@@ -881,7 +881,8 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	vbq->q_impl = blk_virtq_create(vbq, blk_ctrl->bdev_ops, blk_ctrl->bdev,
 				       vctrl->sdev, &attr);
 	if (!vbq->q_impl) {
-		snap_error("controller failed to create blk virtq\n");
+		snap_error("controller %p bdf 0x%x - failed to create blk virtq\n", vctrl,
+			   dev_attr->vattr.pci_bdf);
 		return -EINVAL;
 	}
 

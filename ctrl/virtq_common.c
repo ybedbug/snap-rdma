@@ -779,3 +779,12 @@ bool virtq_rx_cb_common_proc(struct virtq_cmd *cmd, const void *data,
 	virtq_cmd_progress(cmd, status);
 	return true;
 }
+
+void virtq_reg_mr_fail_log_error(const struct virtq_cmd *cmd)
+{
+	struct snap_virtio_ctrl_queue *vq = cmd->vq_priv->vbq;
+
+	/* On failure, errno indicates the failure reason */
+	snap_error("failed to register mr: ctrl %p queue %d cmd %p cmd_idx %d - error %d (%s)\n",
+		   vq->ctrl, cmd->vq_priv->vq_ctx->idx, cmd, cmd->idx, errno, strerror(errno));
+}

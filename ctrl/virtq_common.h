@@ -399,5 +399,7 @@ static inline bool virtq_check_outstanding_progress_suspend(struct virtq_priv *v
 	return false;
 }
 
+void virtq_reg_mr_fail_log_error(const struct virtq_cmd *cmd);
+
 #endif
 
