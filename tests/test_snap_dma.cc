@@ -310,6 +310,35 @@ TEST_F(SnapDmaTest, dma_read) {
 	snap_dma_q_destroy(q);
 }
 
+TEST_F(SnapDmaTest, dma_read_inline_verbs) {
+	struct snap_dma_q *q;
+
+	m_bsize = 32;
+
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+	dma_xfer_test(q, true, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	snap_dma_q_destroy(q);
+}
+
+TEST_F(SnapDmaTest, dma_read_inline_devx) {
+	struct snap_dma_q *q;
+
+	m_dma_q_attr.use_devx = true;
+	m_bsize = 32;
+
+	q = snap_dma_q_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(q);
+
+	dma_xfer_test(q, true, false, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+	dma_xfer_test(q, true, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	snap_dma_q_destroy(q);
+}
+
 TEST_F(SnapDmaTest, dma_write) {
 	struct snap_dma_q *q;
 
