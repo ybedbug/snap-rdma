@@ -850,7 +850,6 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 		cmd->total_in_len += len;
 		virtq_log_data(cmd, "WRITE_DEVID: pa 0x%llx len %u\n",
 				to_blk_cmd_aux(cmd->aux)->descs[1].addr, len);
-		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->aux)->descs[1].addr, len, false);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->req_buf,
 				       len,
@@ -858,6 +857,7 @@ static bool blk_virtq_sm_handle_req(struct virtq_cmd *cmd,
 				       to_blk_cmd_aux(cmd->aux)->descs[1].addr,
 				       cmd->vq_priv->vattr->dma_mkey,
 				       &(cmd->dma_comp));
+		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->aux)->descs[1].addr, len, false);
 		break;
 	default:
 		ERR_ON_CMD(cmd, "invalid command - requested command type 0x%x is not implemented\n",
@@ -926,8 +926,6 @@ static bool blk_virtq_sm_handle_in_iov_done(struct virtq_cmd *cmd,
 	for (i = 0; i < cmd->num_desc - NUM_HDR_FTR_DESCS; i++) {
 		virtq_log_data(cmd, "WRITE_DATA: pa 0x%llx len %u\n",
 			       to_blk_cmd_aux(cmd->aux)->descs[i + 1].addr, to_blk_cmd_aux(cmd->aux)->descs[i + 1].len);
-		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->aux)->descs[i + 1].addr,
-				     to_blk_cmd_aux(cmd->aux)->descs[i + 1].len, false);
 		ret = snap_dma_q_write(cmd->vq_priv->dma_q,
 				       cmd->req_buf + offset,
 				       to_blk_cmd_aux(cmd->aux)->descs[i + 1].len,
@@ -940,6 +938,8 @@ static bool blk_virtq_sm_handle_in_iov_done(struct virtq_cmd *cmd,
 			cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
 			return true;
 		}
+		virtq_mark_dirty_mem(cmd, to_blk_cmd_aux(cmd->aux)->descs[i + 1].addr,
+				     to_blk_cmd_aux(cmd->aux)->descs[i + 1].len, false);
 		offset += to_blk_cmd_aux(cmd->aux)->descs[i + 1].len;
 		cmd->total_in_len += to_blk_cmd_aux(cmd->aux)->descs[i + 1].len;
 	}

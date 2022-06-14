@@ -376,8 +376,6 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %u\n",
 		       descs[sd.desc].addr,
 			   sd.status_size);
-	virtq_mark_dirty_mem(cmd, descs[sd.desc].addr,
-			sd.status_size, false);
 	ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, sd.us_status,
 						sd.status_size,
 				     descs[sd.desc].addr,
@@ -388,6 +386,8 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 		return true;
 	}
+
+	virtq_mark_dirty_mem(cmd, descs[sd.desc].addr, sd.status_size, false);
 
 	cmd->total_in_len += sd.status_size;
 	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
@@ -477,13 +477,14 @@ inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
 		return false;
 	}
 
-	virtq_mark_dirty_mem(cmd, 0, 0, true);
 	ret = cmd->vq_priv->ops->send_comp(cmd, cmd->vq_priv->dma_q);
 	if (snap_unlikely(ret)) {
 		/* TODO: pending queue */
 		ERR_ON_CMD(cmd, "failed to send completion ret %d\n", ret);
 		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
 	} else {
+		virtq_mark_dirty_mem(cmd, 0, 0, true);
+
 		cmd->state = VIRTQ_CMD_STATE_RELEASE;
 		++cmd->vq_priv->ctrl_used_index;
 	}
