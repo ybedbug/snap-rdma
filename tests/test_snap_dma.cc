@@ -347,6 +347,12 @@ TEST_F(SnapDmaTest, dma_read_short_dv_devx) {
 	dma_read_short_test(m_pd, &m_dma_q_attr, m_lbuf, 32, m_rbuf,  m_rmr->rkey);
 }
 
+TEST_F(SnapDmaTest, dma_read_short_verbs) {
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_VERBS;
+
+	dma_read_short_test(m_pd, &m_dma_q_attr, m_lbuf, 32, m_rbuf,  m_rmr->rkey);
+}
+
 TEST_F(SnapDmaTest, dma_read) {
 	struct snap_dma_q *q;
 
