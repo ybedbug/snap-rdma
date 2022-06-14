@@ -122,6 +122,18 @@ static size_t snap_vaq_cmd_out_get_len(struct snap_vaq_cmd *cmd)
 	return ret;
 }
 
+size_t snap_vaq_cmd_get_total_len(struct snap_vq_cmd *cmd)
+{
+	size_t total_len = 0;
+	struct snap_vq_cmd_desc *desc = NULL;
+
+	TAILQ_FOREACH(desc, snap_vq_cmd_get_descs(cmd), entry) {
+		total_len += desc->desc.len;
+	}
+
+	return total_len;
+}
+
 /**
  * snap_vaq_cmd_layout_data_read() - Read data from host memory.
  * @cmd: command context

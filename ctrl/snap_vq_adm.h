@@ -52,4 +52,5 @@ int snap_vaq_cmd_layout_data_write(struct snap_vq_cmd *cmd, size_t total_len,
 			void *lbuf, uint32_t lbuf_mkey,
 			snap_vq_cmd_done_cb_t done_fn);
 
+size_t snap_vaq_cmd_get_total_len(struct snap_vq_cmd *cmd);
 #endif
