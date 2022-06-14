@@ -1282,37 +1282,22 @@ int snap_virtio_get_used_index_from_host(struct snap_dma_q *dma_q,
 		struct ibv_pd *pd, uint64_t dev_addr, uint32_t dma_mkey, int *hw_used)
 {
 	struct vring_used vru;
-	struct ibv_mr *vru_mr;
 	int ret;
 
-	vru_mr = ibv_reg_mr(pd, &vru, sizeof(vru),
-			    IBV_ACCESS_LOCAL_WRITE);
-	if (!vru_mr) {
-		snap_error("failed to register vring_used mr for dev: 0x%lx\n", dev_addr);
-		goto err;
-	}
-
-	ret = snap_dma_q_read(dma_q, &vru, sizeof(struct vring_used),
-			      vru_mr->lkey, dev_addr, dma_mkey, NULL);
+	ret = snap_dma_q_read_short(dma_q, &vru, sizeof(struct vring_used),
+			      dev_addr, dma_mkey, NULL);
 	if (ret) {
 		snap_error("failed DMA read vring_used for dev: 0x%lx\n", dev_addr);
-		goto dereg_vru_mr;
+		return ret;
 	}
 
 	ret = snap_dma_q_flush(dma_q);
 	if (ret != 1)
 		snap_error("failed flush, ret %d\n", ret);
 
-	ibv_dereg_mr(vru_mr);
-
 	*hw_used = vru.idx;
 
 	return 0;
-
-dereg_vru_mr:
-	ibv_dereg_mr(vru_mr);
-err:
-	return -EINVAL;
 }
 
 /**
@@ -1335,8 +1320,6 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 					    struct vring_avail *vra,
 					    struct vring_used *vru)
 {
-	struct ibv_mr *vra_mr;
-	struct ibv_mr *vru_mr;
 	struct snap_dma_q_create_attr dma_q_attr = {};
 	struct snap_dma_q *dma_q;
 	int ret;
@@ -1358,36 +1341,20 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 		return -EINVAL;
 	}
 
-	vra_mr = ibv_reg_mr(pd, vra, sizeof(vra),
-			    IBV_ACCESS_LOCAL_WRITE);
-	if (!vra_mr) {
-		snap_error("failed to register vring_avail mr for drv: 0x%lx dev: 0x%lx\n",
+	ret = snap_dma_q_read_short(dma_q, vra, sizeof(struct vring_avail),
+				drv_addr, dma_mkey, NULL);
+	if (ret) {
+		snap_error("failed DMA read vring_used for drv: 0x%lx dev: 0x%lx\n",
 			   drv_addr, dev_addr);
 		goto err;
 	}
 
-	vru_mr = ibv_reg_mr(pd, vru, sizeof(vru),
-			    IBV_ACCESS_LOCAL_WRITE);
-	if (!vru_mr) {
-		snap_error("failed to register vring_used mr for drv: 0x%lx dev: 0x%lx\n",
-			   drv_addr, dev_addr);
-		goto dereg_vra_mr;
-	}
-
-	ret = snap_dma_q_read(dma_q, vra, sizeof(struct vring_avail),
-			      vra_mr->lkey, drv_addr, dma_mkey, NULL);
+	ret = snap_dma_q_read_short(dma_q, vru, sizeof(struct vring_used),
+			      dev_addr, dma_mkey, NULL);
 	if (ret) {
 		snap_error("failed DMA read vring_used for drv: 0x%lx dev: 0x%lx\n",
 			   drv_addr, dev_addr);
-		goto dereg_vru_mr;
-	}
-
-	ret = snap_dma_q_read(dma_q, vru, sizeof(struct vring_used),
-			      vru_mr->lkey, dev_addr, dma_mkey, NULL);
-	if (ret) {
-		snap_error("failed DMA read vring_used for drv: 0x%lx dev: 0x%lx\n",
-			   drv_addr, dev_addr);
-		goto dereg_vru_mr;
+		goto err;
 	}
 
 	ret = snap_dma_q_flush(dma_q);
@@ -1395,19 +1362,12 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 		snap_error("failed flush drv: 0x%lx dev: 0x%lx, ret %d\n",
 			   drv_addr, dev_addr, ret);
 
-	ibv_dereg_mr(vru_mr);
-	ibv_dereg_mr(vra_mr);
-	snap_dma_q_destroy(dma_q);
+	ret = 0;
 
-	return 0;
-
-dereg_vru_mr:
-	ibv_dereg_mr(vru_mr);
-dereg_vra_mr:
-	ibv_dereg_mr(vra_mr);
 err:
 	snap_dma_q_destroy(dma_q);
-	return -EINVAL;
+
+	return ret;
 }
 
 int snap_virtio_common_queue_config(struct snap_virtio_common_queue_attr *common_attr,
