@@ -246,6 +246,21 @@ struct snap_dma_q_crypto_ctx {
 	TAILQ_ENTRY(snap_dma_q_crypto_ctx) entry;
 };
 
+/* dma inline recv ctx, only used for VERBS mode */
+struct snap_dma_q_ir_ctx {
+	struct snap_dma_q *q;
+
+	void *buf;
+	uint32_t mkey;
+	struct snap_dma_completion comp;
+
+	void *user_buf;
+	size_t len;
+	void *uctx;
+
+	TAILQ_ENTRY(snap_dma_q_ir_ctx) entry;
+};
+
 /**
  * struct snap_dma_q - DMA queue
  *
@@ -279,10 +294,16 @@ struct snap_dma_q {
 
 	struct snap_dma_q_iov_ctx *iov_ctx;
 	struct snap_dma_q_crypto_ctx *crypto_ctx;
+	void *ir_buf;
+	struct ibv_mr *ir_mr;
+	struct snap_dma_q_ir_ctx *ir_ctx;
 
 	TAILQ_HEAD(, snap_dma_q_iov_ctx) free_iov_ctx;
 
 	TAILQ_HEAD(, snap_dma_q_crypto_ctx) free_crypto_ctx;
+
+	TAILQ_HEAD(, snap_dma_q_ir_ctx) free_ir_ctx;
+
 	struct snap_dma_q_ops  *custom_ops;
 	struct snap_dma_worker *worker;
 

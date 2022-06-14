@@ -212,11 +212,48 @@ static int verbs_dma_q_readc(struct snap_dma_q *q,
 	return -ENOTSUP;
 }
 
+static void snap_dma_ir_done(struct snap_dma_completion *comp, int status)
+{
+	struct snap_dma_q *q;
+	struct snap_dma_q_ir_ctx *ir_ctx;
+	struct snap_dma_completion *orig_comp;
+
+	ir_ctx = container_of(comp, struct snap_dma_q_ir_ctx, comp);
+
+	q = ir_ctx->q;
+	orig_comp = (struct snap_dma_completion *)ir_ctx->uctx;
+
+	memcpy(ir_ctx->user_buf, ir_ctx->buf, ir_ctx->len);
+
+	TAILQ_INSERT_HEAD(&q->free_ir_ctx, ir_ctx, entry);
+
+	if (orig_comp && --orig_comp->count == 0)
+		orig_comp->func(orig_comp, status);
+}
+
 static int verbs_dma_q_read_short(struct snap_dma_q *q, void *dst_buf,
 			 size_t len, uint64_t srcaddr, uint32_t rmkey,
 			 struct snap_dma_completion *comp)
 {
-	return -ENOTSUP;
+	struct snap_dma_q_ir_ctx *ir_ctx;
+
+	ir_ctx = TAILQ_FIRST(&q->free_ir_ctx);
+	if (!ir_ctx) {
+		snap_error("dma_q:%p Out of ir_ctx from pool\n", q);
+		return -EAGAIN;
+	}
+
+	TAILQ_REMOVE(&q->free_ir_ctx, ir_ctx, entry);
+
+	ir_ctx->user_buf = dst_buf;
+	ir_ctx->len = len;
+	ir_ctx->uctx = comp;
+
+	ir_ctx->comp.func = snap_dma_ir_done;
+	ir_ctx->comp.count = 1;
+
+	return verbs_dma_q_read(q, ir_ctx->buf, len, ir_ctx->mkey,
+			srcaddr, rmkey, &ir_ctx->comp);
 }
 
 static inline int verbs_dma_q_send_completion(struct snap_dma_q *q, void *src_buf,

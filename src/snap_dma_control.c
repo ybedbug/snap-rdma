@@ -1299,6 +1299,78 @@ static void snap_free_crypto_ctx(struct snap_dma_q *q)
 	q->crypto_ctx = NULL;
 }
 
+static int snap_alloc_ir_ctx(struct snap_dma_q *q, struct ibv_pd *pd)
+{
+	int i, ret, io_ctx_cnt;
+	struct snap_dma_q_ir_ctx *ir_ctx;
+
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	ret = posix_memalign((void **)&ir_ctx, SNAP_DMA_BUF_ALIGN,
+			io_ctx_cnt * sizeof(struct snap_dma_q_ir_ctx));
+	if (ret) {
+		snap_error("alloc dma_q ir_ctx array failed");
+		return -ENOMEM;
+	}
+
+	q->ir_ctx = ir_ctx;
+
+	ret = posix_memalign((void **)&q->ir_buf, SNAP_DMA_BUF_ALIGN,
+			io_ctx_cnt * 32);
+	if (ret) {
+		snap_error("alloc dma_q inline recv buffer failed");
+		goto free_ir_ctx;
+	}
+
+	q->ir_mr = ibv_reg_mr(pd, q->ir_buf, io_ctx_cnt * 32,
+					IBV_ACCESS_LOCAL_WRITE |
+					IBV_ACCESS_REMOTE_WRITE |
+					IBV_ACCESS_REMOTE_READ);
+	if (!q->ir_mr) {
+		snap_error("register ir_mr failed");
+		ret = -errno;
+		goto free_ir_buf;
+	}
+
+	memset(ir_ctx, 0, io_ctx_cnt * sizeof(struct snap_dma_q_ir_ctx));
+	TAILQ_INIT(&q->free_ir_ctx);
+	memset(q->ir_buf, 0, io_ctx_cnt * 32);
+
+	for (i = 0; i < io_ctx_cnt; i++) {
+		ir_ctx[i].q = q;
+		ir_ctx[i].buf = (char *)q->ir_buf + i * 32;
+		ir_ctx[i].mkey = q->ir_mr->lkey;
+
+		TAILQ_INSERT_TAIL(&q->free_ir_ctx, &ir_ctx[i], entry);
+	}
+
+	return 0;
+
+free_ir_buf:
+	free(q->ir_buf);
+
+free_ir_ctx:
+	free(q->ir_ctx);
+
+	return ret;
+}
+
+static void snap_free_ir_ctx(struct snap_dma_q *q)
+{
+	int i, io_ctx_cnt;
+	struct snap_dma_q_ir_ctx *ir_ctx = q->ir_ctx;
+
+	io_ctx_cnt = q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
+
+	for (i = 0; i < io_ctx_cnt; i++)
+		TAILQ_REMOVE(&q->free_ir_ctx, &ir_ctx[i], entry);
+
+	ibv_dereg_mr(q->ir_mr);
+	free(q->ir_buf);
+	free(ir_ctx);
+	q->ir_ctx = NULL;
+}
+
 static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 			const struct snap_dma_q_create_attr *attr)
 {
@@ -1329,12 +1401,22 @@ static int snap_create_io_ctx(struct snap_dma_q *q, struct ibv_pd *pd,
 		q->crypto_support = true;
 	}
 
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS) {
+		ret = snap_alloc_ir_ctx(q, pd);
+		if (ret) {
+			snap_error("Allocate ir_ctx failed\n");
+			goto free_iov_ctx;
+		}
+	}
+
 	return 0;
 
 free_iov_ctx:
-	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
-		snap_free_iov_ctx(q);
-	q->iov_support = false;
+	if (attr->iov_enable) {
+		if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+			snap_free_iov_ctx(q);
+		q->iov_support = false;
+	}
 
 out:
 	return 1;
@@ -1352,6 +1434,9 @@ static void snap_destroy_io_ctx(struct snap_dma_q *q)
 		snap_free_crypto_ctx(q);
 		q->crypto_support = false;
 	}
+
+	if (q->sw_qp.mode == SNAP_DMA_Q_MODE_VERBS)
+		snap_free_ir_ctx(q);
 }
 
 /**
