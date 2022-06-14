@@ -1253,7 +1253,7 @@ static int snap_virtio_ctrl_save_all_queues(struct snap_virtio_ctrl *ctrl,
 		/* if enabled, call specific queue impl to get
 		 * hw_avail and used
 		 **/
-		if (vq->enable && ctrl->q_ops->get_state) {
+		if (vq->enable && ctrl->q_ops->get_state && ctrl->queues[i]) {
 			ret = ctrl->q_ops->get_state(ctrl->queues[i], &queue_state[i]);
 			if (ret) {
 				snap_pgs_resume(&ctrl->pg_ctx);
