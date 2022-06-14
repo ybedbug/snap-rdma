@@ -199,7 +199,7 @@ int snap_vq_cmd_descs_rw(struct snap_vq_cmd *cmd,
 	desc = first_desc;
 	offset = first_offset;
 	laddr = lbuf;
-	while (total_len > 0) {
+	while (total_len > 0 && desc) {
 		desc_len = desc->desc.len - offset;
 		len = snap_min(total_len, desc_len);
 		raddr = desc->desc.addr + offset;
