@@ -47,7 +47,7 @@ enum snap_virtio_adm_status {
 };
 
 struct snap_virtio_adm_cmd_hdr {
-	uint8_t class;
+	uint8_t cmd_class;
 	uint8_t command;
 } SNAP_PACKED;
 

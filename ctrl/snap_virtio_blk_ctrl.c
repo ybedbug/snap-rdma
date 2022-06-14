@@ -766,8 +766,8 @@ static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
 {
 	struct snap_virtio_adm_cmd_hdr hdr = snap_vaq_cmd_layout_get(cmd)->hdr;
 
-	snap_debug("Proceessing adm cmd class %d cmd %d\n", hdr.class, hdr.command);
-	switch (hdr.class) {
+	snap_debug("Proceessing adm cmd class %d cmd %d\n", hdr.cmd_class, hdr.command);
+	switch (hdr.cmd_class) {
 	case SNAP_VQ_ADM_MIG_CTRL:
 		switch (hdr.command) {
 		case SNAP_VQ_ADM_MIG_GET_STATUS:
@@ -786,7 +786,7 @@ static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
 			snap_virtio_blk_ctrl_lm_state_restore(vctrl, cmd);
 			break;
 		default:
-			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.class);
+			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.cmd_class);
 			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_COMMAND);
 			break;
 		}
@@ -799,13 +799,13 @@ static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
 		case SNAP_VQ_ADM_DP_GET_MAP_PENDING_BYTES:
 		case SNAP_VQ_ADM_DP_REPORT_MAP:
 		default:
-			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.class);
+			snap_error("Invalid admin commamd %d for class %d\n", hdr.command, hdr.cmd_class);
 			snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_COMMAND);
 			break;
 		}
 		break;
 	default:
-		snap_error("Invalid admin cmd class %d\n", hdr.class);
+		snap_error("Invalid admin cmd class %d\n", hdr.cmd_class);
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_INVALID_CLASS);
 		break;
 	}

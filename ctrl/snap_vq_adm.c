@@ -49,7 +49,7 @@ static size_t snap_vaq_cmd_in_get_len(struct snap_vaq_cmd *cmd)
 	struct snap_virtio_adm_cmd_hdr hdr = cmd->layout->hdr;
 	size_t ret = 0;
 
-	switch (hdr.class) {
+	switch (hdr.cmd_class) {
 	case SNAP_VQ_ADM_MIG_CTRL:
 		switch (hdr.command) {
 		case SNAP_VQ_ADM_MIG_GET_STATUS:
@@ -93,7 +93,7 @@ static size_t snap_vaq_cmd_out_get_len(struct snap_vaq_cmd *cmd)
 	struct snap_virtio_adm_cmd_hdr hdr = cmd->layout->hdr;
 	size_t ret = 0;
 
-	switch (hdr.class) {
+	switch (hdr.cmd_class) {
 	case SNAP_VQ_ADM_MIG_CTRL:
 		switch (hdr.command) {
 		case SNAP_VQ_ADM_MIG_GET_STATUS:
