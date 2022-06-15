@@ -25,6 +25,7 @@
 #include "snap_mr.h"
 #include "snap_qp.h"
 #include "snap_dpa_common.h"
+#include "snap_dma_stat.h"
 
 #define SNAP_DMA_Q_OPMODE        "SNAP_DMA_Q_OPMODE"
 #define SNAP_DMA_Q_IOV_SUPP      "SNAP_DMA_Q_IOV_SUPP"
@@ -135,6 +136,7 @@ struct snap_dv_qp {
 	enum snap_db_ring_flag db_flag;
 	bool tx_need_ring_db;
 	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct snap_dv_qp_stat stat;
 };
 
 struct snap_dma_ibv_qp {
@@ -220,6 +222,7 @@ struct snap_dma_q_ops {
 	int (*poll)(struct snap_dma_q *q);
 	int (*poll_rx)(struct snap_dma_q *q, struct snap_rx_completion *rx_completions, int max_completions);
 	int (*poll_tx)(struct snap_dma_q *q, struct snap_dma_completion **comp, int max_completions);
+	const struct snap_dv_qp_stat* (*stat)(const struct snap_dma_q *q);
 };
 
 struct snap_dma_q_iov_ctx {
@@ -484,6 +487,11 @@ int snap_dma_ep_dpa_copy_sync(struct snap_dpa_thread *thr, struct snap_dma_q *q)
 static inline void *snap_dma_q_ctx(struct snap_dma_q *q)
 {
 	return q->uctx;
+}
+
+static inline const struct snap_dv_qp_stat *snap_dma_q_stat(const struct snap_dma_q *q)
+{
+	return q->ops->stat ? q->ops->stat(q) : NULL;
 }
 
 /* how many tx and rx completions to process during a single progress call */

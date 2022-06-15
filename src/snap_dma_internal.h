@@ -114,6 +114,7 @@ static inline void snap_dv_update_tx_db(struct snap_dv_qp *dv_qp)
 static inline void snap_dv_flush_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
 {
 	*(uint64_t *)(dv_qp->hw_qp.sq.bf_addr) = *(uint64_t *)ctrl;
+	++dv_qp->stat.tx.total_dbs;
 }
 
 static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_ctrl_seg *ctrl)
@@ -168,6 +169,7 @@ static inline void snap_dv_update_rx_db(struct snap_dv_qp *dv_qp)
 {
 	snap_memory_cpu_store_fence();
 	((uint32_t *)dv_qp->hw_qp.dbr_addr)[MLX5_RCV_DBR] = htobe32(dv_qp->hw_qp.rq.ci);
+	++dv_qp->stat.rx.total_dbs;
 }
 
 static inline void snap_dv_ring_rx_db(struct snap_dv_qp *dv_qp)

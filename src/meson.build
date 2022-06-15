@@ -16,6 +16,7 @@ libsnap_core_sources = [
 	'mlx5_ifc.h',
 	'snap_dma.h',
 	'snap_dma_internal.h',
+	'snap_dma_stat.h',
 	'snap_dpa.h',
 	'snap_env.h',
 	'snap_macros.h',

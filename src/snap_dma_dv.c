@@ -742,6 +742,7 @@ static inline int dv_dma_q_progress_tx(struct snap_dma_q *q)
 	}
 
 	snap_dv_tx_complete(dv_qp);
+	dv_qp->stat.tx.total_completed += n;
 	return n;
 }
 
@@ -803,6 +804,7 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 
 	q->sw_qp.dv_qp.hw_qp.rq.ci += n;
 	snap_dv_ring_rx_db(&q->sw_qp.dv_qp);
+	q->sw_qp.dv_qp.stat.rx.total_completed += n;
 	return n;
 }
 
@@ -917,6 +919,11 @@ static bool dv_dma_q_empty(struct snap_dma_q *q)
 	return q->tx_available == q->sw_qp.dv_qp.hw_qp.sq.wqe_cnt;
 }
 
+static const struct snap_dv_qp_stat *dv_dma_q_stat(const struct snap_dma_q *q)
+{
+	return &q->sw_qp.dv_qp.stat;
+}
+
 const struct snap_dma_q_ops dv_ops = {
 	.mode            = SNAP_DMA_Q_MODE_DV,
 	.write           = dv_dma_q_write,
@@ -935,7 +942,8 @@ const struct snap_dma_q_ops dv_ops = {
 	.arm             = dv_dma_q_arm,
 	.flush           = dv_dma_q_flush,
 	.flush_nowait    = dv_dma_q_flush_nowait,
-	.empty		 = dv_dma_q_empty,
+	.empty           = dv_dma_q_empty,
+	.stat            = dv_dma_q_stat,
 };
 
 /* GGA */
@@ -1040,7 +1048,8 @@ const struct snap_dma_q_ops gga_ops = {
 	.arm             = dv_dma_q_arm,
 	.flush           = dv_dma_q_flush,
 	.flush_nowait    = dv_dma_q_flush_nowait,
-	.empty		 = dv_dma_q_empty,
+	.empty           = dv_dma_q_empty,
+	.stat            = dv_dma_q_stat,
 };
 
 int dv_worker_progress_rx(struct snap_dma_worker *wk)
