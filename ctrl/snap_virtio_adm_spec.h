@@ -93,12 +93,44 @@ struct snap_vq_adm_get_status_result {
 	__le16 reserved;
 };
 
+/* dirty page tracking */
+enum snap_vq_adm_dirty_page_track_mode {
+	VIRTIO_M_DIRTY_TRACK_PUSH_BITMAP = 1, /* Use push mode with bit granularity */
+	VIRTIO_M_DIRTY_TRACK_PUSH_BYTEMAP = 2, /* Use push mode with byte granularity */
+	VIRTIO_M_DIRTY_TRACK_PULL_BITMAP = 3, /* Use pull mode with bit granularity */
+	VIRTIO_M_DIRTY_TRACK_PULL_BYTEMAP = 4, /* Use pull mode with byte granularity */
+
+	/* experimental, non standard */
+	VIRTIO_M_DIRTY_TRACK_PULL_PAGELIST = 0xF001 /* report pages as a raw pagelist */
+};
+
+struct snap_vq_adm_sge {
+	__le64 addr;
+	__le32 len;
+};
+
+struct snap_vq_adm_dirty_page_track_start {
+	__le16 vdev_id;
+	__le16 track_mode;
+	__le32 vdev_host_page_size;
+	__le64 vdev_host_range_addr;
+	__le64 range_length;
+};
+
+struct snap_vq_adm_dirty_page_track_stop {
+	__le16 vdev_id;
+	__le16 reserved[3];
+	__le64 vdev_host_range_addr;
+};
+
 union snap_virtio_adm_cmd_in {
 	struct snap_vq_adm_get_pending_bytes_data pending_bytes_data;
 	struct snap_vq_adm_modify_status_data modify_status_data;
 	struct snap_vq_adm_save_state_data save_state_data;
 	struct snap_vq_adm_get_status_data get_status_data;
 	struct snap_vq_adm_restore_state_data restore_state_data;
+	struct snap_vq_adm_dirty_page_track_start dp_track_start_data;
+	struct snap_vq_adm_dirty_page_track_stop dp_track_stop_data;
 	__le16 vdev_id;
 };
 
