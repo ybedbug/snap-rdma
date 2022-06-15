@@ -1615,6 +1615,15 @@ int snap_virtio_ctrl_freeze(void *data)
 		ret = -EINVAL;
 		goto err;
 	}
+
+	/*
+	 * We cannot guarantee that progress will run and update bar between
+	 * freeze and state save.
+	 * make sure that snap_virtio_ctrl_state_save() will get
+	 * latest state.
+	 */
+	ctrl->bar_ops->update(ctrl, ctrl->bar_curr);
+
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_FREEZED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
