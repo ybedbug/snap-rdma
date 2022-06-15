@@ -35,6 +35,9 @@ libsnap_core_sources = [
 	'snap_umr.c'
 ]
 
+#TODO remove once DOCA moves to work over dev_emu_dma_* API
+install_headers('snap_dma.h', 'snap_qp.h', 'snap_macros.h', 'snap_mr.h', 'snap_env.h', 'snap_dma_stat.h')
+
 libsnap_core = static_library('libsnap_core',
 			libsnap_core_sources,
 			dependencies : libsnap_core_depends,
