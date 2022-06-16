@@ -1039,8 +1039,8 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	if (ret)
 		return ret;
 
-	snap_info("queue %d: pg_id %d RESUMED with hw_avail %u hw_used %u\n",
-		  vq->index, vq->pg->id,
+	snap_info("queue %d: RESUMED with hw_avail %u hw_used %u\n",
+		  vq->index,
 		  dev_attr->q_attrs[index].hw_available_index,
 		  dev_attr->q_attrs[index].hw_used_index);
 	return 0;

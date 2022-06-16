@@ -822,19 +822,21 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 		if (!ctrl->queues[i])
 			continue;
 
-		/* preserve pg across resume */
-		pg = ctrl->queues[i]->pg;
-		if (!pg)
-			pg = snap_pg_get_next(&ctrl->pg_ctx);
-		snap_virtio_ctrl_desched_q_nolock(ctrl->queues[i]);
-		ctrl->queues[i]->pg = pg;
 		ret = ctrl->q_ops->resume(ctrl->queues[i]);
 		if (ret) {
 			snap_warn("virtio controller %p: resume failed for q %d\n", ctrl, i);
 			snap_pgs_resume(&ctrl->pg_ctx);
 			return ret;
 		}
+
+		/* preserve pg across resume */
+		pg = ctrl->queues[i]->pg;
+		if (!pg)
+			pg = snap_pg_get_next(&ctrl->pg_ctx);
+		snap_virtio_ctrl_desched_q_nolock(ctrl->queues[i]);
 		snap_virtio_ctrl_sched_q_nolock(ctrl, ctrl->queues[i], pg);
+		snap_info("ctrl %p queue %d: pg_id %d RESUMED\n", ctrl, ctrl->queues[i]->index,
+		ctrl->queues[i]->pg->id);
 		n_enabled++;
 	}
 	snap_pgs_resume(&ctrl->pg_ctx);
