@@ -10,6 +10,8 @@
  * provided with the software product.
  */
 
+#include <sys/syscall.h>
+
 #include "snap_virtio_common_ctrl.h"
 #include "snap_queue.h"
 #include "snap_channel.h"
@@ -474,10 +476,10 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 	 * to ensure it. Log error, the migration is probably going to fail.
 	 */
 	if (SNAP_VIRTIO_CTRL_RESET_DETECTED(ctrl)) {
-		snap_info("virtio controller reset detected\n");
+		snap_info("virtio controller %p reset detected\n", ctrl);
 
 		if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
-			snap_error("reset while in %s\n", lm_state2str(ctrl->lm_state));
+			snap_error("ctrl %p reset while in %s\n", ctrl, lm_state2str(ctrl->lm_state));
 		/*
 		 * suspending virtio queues may take some time. In such case
 		 * do reset once the controller is suspended.
@@ -495,7 +497,7 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 
 		if (!snap_virtio_ctrl_is_stopped(ctrl)) {
 			if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED) {
-				snap_info("stopping virtio controller before FLR\n");
+				snap_info("stopping virtio controller %p before FLR\n", ctrl);
 				snap_virtio_ctrl_suspend(ctrl);
 			}
 
@@ -510,7 +512,7 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 				return 0;
 		}
 
-		snap_info("virtio controller FLR detected\n");
+		snap_info("virtio controller %p FLR detected\n", ctrl);
 
 		if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_RUNNING) {
 			snap_info("clearing live migration state");
@@ -549,7 +551,7 @@ static int snap_virtio_ctrl_change_status(struct snap_virtio_ctrl *ctrl)
 			ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 
 		if (!ctrl->sdev) {
-			snap_error("virtio controller FLR failed\n");
+			snap_error("virtio controller %p FLR failed\n", ctrl);
 			return -ENODEV;
 		}
 	} else {
@@ -592,8 +594,8 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 
 	/* controller can be created in the suspended state */
 	if (ctrl->state == SNAP_VIRTIO_CTRL_SUSPENDING) {
-		snap_error("cannot start controller while it is being suspended, ctrl state: %d\n",
-			   ctrl->state);
+		snap_error("cannot start controller %p while it is being suspended, ctrl state: %d\n",
+			   ctrl, ctrl->state);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -620,10 +622,10 @@ int snap_virtio_ctrl_start(struct snap_virtio_ctrl *ctrl)
 	}
 
 	if (ctrl->state != SNAP_VIRTIO_CTRL_SUSPENDED) {
-		snap_info("virtio controller started with %d queues\n", n_enabled);
+		snap_info("virtio controller %p started with %d queues\n", ctrl, n_enabled);
 		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
 	} else
-		snap_info("virtio controller SUSPENDED with %d queues\n", n_enabled);
+		snap_info("virtio controller %p SUSPENDED with %d queues\n", ctrl, n_enabled);
 
 	goto out;
 
@@ -676,7 +678,7 @@ int snap_virtio_ctrl_stop(struct snap_virtio_ctrl *ctrl)
 	}
 
 	ctrl->state = SNAP_VIRTIO_CTRL_STOPPED;
-	snap_info("virtio controller stopped. state: %d\n", ctrl->state);
+	snap_info("virtio controller %p (bdf 0x%x) stopped. state: %d\n", ctrl, ctrl->bar_curr->pci_bdf, ctrl->state);
 out:
 	return ret;
 }
@@ -764,7 +766,7 @@ int snap_virtio_ctrl_suspend(struct snap_virtio_ctrl *ctrl)
 		return 0;
 	}
 
-	snap_info("Suspending controller\n");
+	snap_info("Suspending controller %p\n", ctrl);
 
 	snap_pgs_suspend(&ctrl->pg_ctx);
 	for (i = 0; i < ctrl->max_queues; i++) {
@@ -842,7 +844,7 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 	snap_pgs_resume(&ctrl->pg_ctx);
 	if (n_enabled > 0)
 		ctrl->state = SNAP_VIRTIO_CTRL_STARTED;
-	snap_info("virtio controller: resumed with %d queues\n", n_enabled);
+	snap_info("virtio controller %p: resumed with %d queues\n", ctrl, n_enabled);
 	return 0;
 }
 
@@ -896,12 +898,12 @@ static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
 	snap_pgs_resume(&ctrl->pg_ctx);
 
 	ctrl->state = SNAP_VIRTIO_CTRL_SUSPENDED;
-	snap_info("Controller SUSPENDED\n");
+	snap_info("Controller %p SUSPENDED\n", ctrl);
 
 	if (ctrl->pending_reset) {
 		ret = snap_virtio_ctrl_reset(ctrl);
 		if (ret)
-			snap_error("virtio controlelr pending reset failed\n");
+			snap_error("virtio controller %p pending reset failed\n", ctrl);
 		ctrl->pending_reset = false;
 	}
 
@@ -1164,7 +1166,7 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 
 	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
 		if (!TAILQ_EMPTY(&ctrl->pg_ctx.pgs[i].q_list))
-			snap_warn("Closing ctrl with queue %d still active", i);
+			snap_warn("Closing ctrl %p with queue %d still active", ctrl, i);
 	(void)snap_destroy_cross_mkey(ctrl->xmkey);
 	snap_pgs_free(&ctrl->pg_ctx);
 	free(ctrl->queues);
@@ -1704,8 +1706,8 @@ int snap_virtio_ctrl_unquiesce(void *data)
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: unqueisce: new state %s ret %d\n", ctrl,
-		  lm_state2str(ctrl->lm_state), ret);
+	snap_info("ttid %ld: ctrl %p: unqueisce: new state %s ret %d\n", syscall(SYS_gettid),
+		  ctrl, lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1732,8 +1734,8 @@ int snap_virtio_ctrl_freeze(void *data)
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_FREEZED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: freeze: new state %s ret %d\n", ctrl,
-		  lm_state2str(ctrl->lm_state), ret);
+	snap_info("ttid %ld: ctrl %p: freeze: new state %s ret %d\n", syscall(SYS_gettid),
+		  ctrl, lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1751,8 +1753,8 @@ int snap_virtio_ctrl_unfreeze(void *data)
 	snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_QUIESCED);
 err:
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: unfreeze: new state %s ret %d\n", ctrl,
-		  lm_state2str(ctrl->lm_state), ret);
+	snap_info("ttid: %ld ctrl %p: unfreeze: new state %s ret %d\n", syscall(SYS_gettid),
+		  ctrl, lm_state2str(ctrl->lm_state), ret);
 	return ret;
 }
 
@@ -1761,20 +1763,20 @@ int snap_virtio_ctrl_get_state_size(void *data)
 	struct snap_virtio_ctrl *ctrl = data;
 	size_t dev_cfg_len, queue_cfg_len, common_cfg_len, len;
 
-	snap_info("%p: get_state_size ", ctrl);
+	snap_info("ctrl %p: get_state_size ", ctrl);
 	snap_virtio_ctrl_progress_lock(ctrl);
 
 	if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_FREEZED) {
 		/* act as if we don't support state tracking */
 		snap_virtio_ctrl_progress_unlock(ctrl);
-		snap_info("not freezed, no state tracking - zero state size\n");
+		snap_info("ctrl %p not freezed, no state tracking - zero state size\n", ctrl);
 		return 0;
 	}
 	len = snap_virtio_ctrl_state_size(ctrl, &common_cfg_len, &queue_cfg_len,
 					  &dev_cfg_len);
 
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%lu\n", len);
+	snap_info("ttid %ld len %lu\n", syscall(SYS_gettid), len);
 	return len;
 }
 
@@ -1792,8 +1794,8 @@ static int snap_virtio_ctrl_copy_state(void *data, void *buf, int len,
 		ret = snap_virtio_ctrl_state_restore(ctrl, buf, len);
 
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: lm_state %s: copy state: dir %s buf %p len %d ret %d\n", ctrl,
-		  lm_state2str(ctrl->lm_state),
+	snap_info("ttid: %ld ctrl %p: lm_state %s: copy state: dir %s buf %p len %d ret %d\n", syscall(SYS_gettid),
+		  ctrl, lm_state2str(ctrl->lm_state),
 		  copy_from_buffer ? "from_buffer" : "to_buffer", buf, len, ret);
 	return ret < 0 ? -1 : 0;
 }
@@ -1805,7 +1807,7 @@ static int snap_virtio_ctrl_start_dirty_pages_track(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	snap_virtio_ctrl_log_writes(ctrl, true);
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: start dirty pages track\n", ctrl);
+	snap_info("ttid: %ld ctrl %p: start dirty pages track\n", syscall(SYS_gettid), ctrl);
 	return 0;
 }
 
@@ -1816,7 +1818,7 @@ static int snap_virtio_ctrl_stop_dirty_pages_track(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	snap_virtio_ctrl_log_writes(ctrl, false);
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: stop dirty pages track\n", ctrl);
+	snap_info("ttid: %ld ctrl %p: stop dirty pages track\n", syscall(SYS_gettid), ctrl);
 	return 0;
 }
 
@@ -1828,7 +1830,7 @@ static uint16_t snap_virtio_ctrl_get_pci_bdf(void *data)
 	snap_virtio_ctrl_progress_lock(ctrl);
 	bdf = ctrl->sdev->pci->pci_bdf.raw;
 	snap_virtio_ctrl_progress_unlock(ctrl);
-	snap_info("%p: get_pci_bdf: 0x0%x\n", ctrl, bdf);
+	snap_info("ctrl %p: get_pci_bdf: 0x0%x\n", ctrl, bdf);
 	return bdf;
 }
 
@@ -1872,7 +1874,7 @@ int snap_virtio_ctrl_lm_enable(struct snap_virtio_ctrl *ctrl, const char *name)
 	int ret = 0;
 
 	if (ctrl->lm_channel) {
-		snap_error("%p: controller already has a migration channel %s\n",
+		snap_error("ctrl %p: controller already has a migration channel %s\n",
 			   ctrl, ctrl->lm_channel->channel_ops->name);
 		return -EEXIST;
 	}
@@ -1934,8 +1936,8 @@ int snap_virtio_ctrl_recover(struct snap_virtio_ctrl *ctrl,
 	snap_debug("recover the virtio ctrl\n");
 
 	if (!snap_virtio_ctrl_is_suspended(ctrl)) {
-		snap_error("original controller state (%d) must be SUSPENDED\n",
-			   ctrl->state);
+		snap_error("ctrl %p: original controller state (%d) must be SUSPENDED\n",
+			   ctrl, ctrl->state);
 		return -EINVAL;
 	}
 

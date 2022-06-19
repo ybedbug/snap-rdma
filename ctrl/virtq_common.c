@@ -538,20 +538,21 @@ static void virtq_progress_suspend(struct virtq_common_ctx *q)
 {
 	struct virtq_priv *priv = q->priv;
 	struct snap_virtio_common_queue_attr qattr = { };
+	int n;
 
 	/* TODO: add option to ignore commands in the bdev layer */
 	if (!virtq_check_outstanding_progress_suspend(priv))
 		return;
 
-	snap_dma_q_flush(priv->dma_q);
+	n = snap_dma_q_flush(priv->dma_q);
 
 	qattr.vattr.state = SNAP_VIRTQ_STATE_SUSPEND;
 	/* TODO: check with FLR/reset. I see modify fail where it should not */
 	if (priv->ops->progress_suspend(priv->snap_vbq, &qattr))
-		snap_error("queue %d: failed to move to the SUSPENDED state\n", q->idx);
+		snap_error("ctrl %p queue %d: failed to move to the SUSPENDED state\n", priv->vbq->ctrl, q->idx);
 
 	/* at this point QP is in the error state and cannot be used anymore */
-	snap_info("queue %d: moving to the SUSPENDED state\n", q->idx);
+	snap_info("ctrl %p queue %d: moving to the SUSPENDED state (q_flush %d)\n", priv->vbq->ctrl, q->idx, n);
 	priv->swq_state = SW_VIRTQ_SUSPENDED;
 }
 
@@ -654,12 +655,14 @@ int virtq_suspend(struct virtq_common_ctx *q)
 		return -EBUSY;
 	}
 
-	snap_info("queue %d: SUSPENDING command(s) - in %d bdev %d host %d fatal %d\n", q->idx,
+	snap_info("ctrl %p queue %d: SUSPENDING command(s) - in %d bdev %d host %d fatal %d\n",
+			priv->vbq->ctrl, q->idx,
 			priv->cmd_cntrs.outstanding_total, priv->cmd_cntrs.outstanding_in_bdev,
 			priv->cmd_cntrs.outstanding_to_host, priv->cmd_cntrs.fatal);
 
 	if (priv->vq_ctx->fatal_err)
-		snap_warn("queue %d: fatal error. Resuming or live migration will not be possible\n", q->idx);
+		snap_warn("ctrl %p queue %d: fatal error. Resuming or live migration will not be possible\n",
+			  priv->vbq->ctrl, q->idx);
 
 	priv->swq_state = SW_VIRTQ_FLUSHING;
 	return 0;

@@ -977,7 +977,7 @@ static bool snap_virtio_blk_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queu
 		if (!virtq_is_suspended(&to_blk_ctx(vbq->q_impl)->common_ctx))
 			return false;
 
-		snap_info("queue %d: pg_id %d SUSPENDED\n", vq->index, vq->pg->id);
+		snap_info("ctrl %p queue %d: pg_id %d SUSPENDED\n", vbq->common.ctrl, vq->index, vq->pg->id);
 		return true;
 	}
 
@@ -1039,8 +1039,8 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	if (ret)
 		return ret;
 
-	snap_info("queue %d: RESUMED with hw_avail %u hw_used %u\n",
-		  vq->index,
+	snap_info("ctrl %p queue %d: RESUMED with hw_avail %u hw_used %u\n",
+		  vq->ctrl, vq->index,
 		  dev_attr->q_attrs[index].hw_available_index,
 		  dev_attr->q_attrs[index].hw_used_index);
 	return 0;
