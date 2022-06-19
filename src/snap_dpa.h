@@ -15,9 +15,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <infiniband/verbs.h>
 #if HAVE_FLEXIO
 #include <libflexio/flexio.h>
+#endif
+#if !__DPA
+#include <infiniband/verbs.h>
 #endif
 
 bool snap_dpa_enabled(struct ibv_context *ctx);

@@ -147,7 +147,7 @@ void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
 	free(h);
 }
 
-static void dummy_rx_cb(struct snap_dma_q *q, void *data, uint32_t data_len, uint32_t imm_data)
+static void dummy_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len, uint32_t imm_data)
 {
 	snap_error("OOPS: rx cb called\n");
 }
