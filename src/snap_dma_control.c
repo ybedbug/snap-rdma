@@ -599,9 +599,13 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 	}
 
 	/*
-	 * TODO: disable event mode if OBJ_DEVX are used to create qp and cq
+	 * disable event mode if OBJ_DEVX are used to create qp and cq
+	 * snap_dma_q_arm() will still work but event channel cannot be used
+	 * to pick up events.
+	 * At the moment this is only relevant for the unit tests
 	 */
-	q->no_events = true;
+	if (attr->use_devx)
+		q->no_events = true;
 
 	/* make sure that the completion is requested at least once */
 	if (q->ops->mode != SNAP_DMA_Q_MODE_VERBS
@@ -634,6 +638,7 @@ static int snap_qp_attr_helper(struct snap_dma_q *q, struct ibv_pd *pd,
 		qp_init_attr->qp_type = SNAP_OBJ_DEVX;
 		qp_init_attr->uidx = worker_q->index;
 		qp_init_attr->qp_on_dpa = false;
+		q->no_events = true;
 	}
 
 	return 0;
