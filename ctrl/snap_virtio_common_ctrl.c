@@ -1130,6 +1130,7 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 
 	if (snap_pgs_alloc(&ctrl->pg_ctx, npgs)) {
 		snap_error("allocate poll groups failed");
+		ret = -EINVAL;
 		goto free_queues;
 	}
 
@@ -1139,8 +1140,10 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
 
 	ctrl->xmkey = snap_create_cross_mkey_by_attr(attr->pd, &cm_attr);
-	if (!ctrl->xmkey)
+	if (!ctrl->xmkey) {
+		ret = -EACCES;
 		goto free_pgs;
+	}
 
 	ctrl->type = attr->type;
 	ctrl->force_in_order = attr->force_in_order;
