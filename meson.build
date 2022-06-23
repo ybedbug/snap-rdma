@@ -20,7 +20,7 @@ project('libsnap_core', 'C', 'CPP',
 			  'b_pie=true',
 			  'b_staticpic=true',
 			  'prefix=/opt/mellanox/devemu'],
-	meson_version: '>= 0.47.1'
+	meson_version: '>= 0.55.0'
 )
 
 cc = meson.get_compiler('c')
@@ -32,6 +32,21 @@ libsnap_core_depends += dependency('libmlx5', required : true)
 
 conf_data = configuration_data()
 
+#todo: in the future consider subproject/system install
+flexio_include = []
+flexio_pfx = get_option('with-flexio')
+if (flexio_pfx != '')
+	message('Checking flexio in ' + flexio_pfx)
+	flexio_include = [flexio_pfx + '/include', flexio_pfx + '/include/libflexio']
+	flexio = cc.find_library('flexio',
+			dirs: flexio_pfx + '/lib',
+			has_headers: 'libflexio/flexio.h',
+			header_include_directories: include_directories(flexio_include),
+			required : true)
+	libsnap_core_depends += flexio
+	conf_data.set10('HAVE_FLEXIO', 1, description : 'Enable DPA host side support')
+endif
+
 conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
 		cc.has_function('ibv_query_gid_ex', prefix : '#include <infiniband/verbs.h>', dependencies: libsnap_core_depends),
 		description: 'Set HAVE_DECL_IBV_QUERY_GID_EX if ibv_query_gid_ex() is supported')
@@ -39,3 +54,4 @@ conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
 configure_file(output : 'config.h', configuration : conf_data)
 
 subdir('src')
+subdir('tests')

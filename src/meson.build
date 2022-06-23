@@ -10,7 +10,7 @@
 # provided with the software product.
 #
 
-libsnap_core_include = include_directories('.', '..')
+libsnap_core_include = include_directories('.', '..', flexio_include)
 
 libsnap_core_sources = [
 	'mlx5_ifc.h',
@@ -38,7 +38,7 @@ libsnap_core_sources = [
 #TODO remove once DOCA moves to work over dev_emu_dma_* API
 install_headers('snap_dma.h', 'snap_qp.h', 'snap_macros.h', 'snap_mr.h', 'snap_env.h', 'snap_dma_stat.h')
 
-libsnap_core = static_library('libsnap_core',
+libsnap_core = static_library('snap_core',
 			libsnap_core_sources,
 			dependencies : libsnap_core_depends,
 			include_directories : libsnap_core_include,
