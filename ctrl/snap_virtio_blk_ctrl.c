@@ -795,16 +795,14 @@ static void snap_virtio_blk_ctrl_lm_state_save_cb(struct snap_vq_cmd *vcmd,
 {
 	struct snap_virtio_blk_ctrl *blk_ctrl;
 
-	if (snap_unlikely(status != IBV_WC_SUCCESS))
-		return snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_ERR);
-
 	blk_ctrl = to_blk_ctrl(snap_vaq_cmd_ctrl_get(vcmd));
-	if (blk_ctrl->lm_buf) {
-		snap_buf_free(blk_ctrl->lm_buf);
-		blk_ctrl->lm_buf = NULL;
-	}
 
-	snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_OK);
+	snap_buf_free(blk_ctrl->lm_buf);
+
+	if (snap_unlikely(status != IBV_WC_SUCCESS))
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+	else
+		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_OK);
 }
 
 static void snap_virtio_blk_ctrl_lm_state_restore_cb(struct snap_vq_cmd *vcmd,
@@ -815,29 +813,28 @@ static void snap_virtio_blk_ctrl_lm_state_restore_cb(struct snap_vq_cmd *vcmd,
 	struct snap_vq_adm_restore_state_data data;
 	int ret;
 
+	blk_ctrl = to_blk_ctrl(snap_vaq_cmd_ctrl_get(vcmd));
+
 	if (status != IBV_WC_SUCCESS) {
 		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DATA_TRANSFER_ERR);
-		return;
+		goto free_mem;
 	}
 
 	vf_ctrl = snap_virtio_blk_ctrl_get_vf(snap_vaq_cmd_ctrl_get(vcmd), vcmd);
 	if (!vf_ctrl) {
 		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
-		return;
+		goto free_mem;
 	}
 
 	data = snap_vaq_cmd_layout_get(vcmd)->in.restore_state_data;
-	blk_ctrl = to_blk_ctrl(snap_vaq_cmd_ctrl_get(vcmd));
 	ret = snap_virtio_ctrl_state_restore(vf_ctrl, blk_ctrl->lm_buf, data.length);
 	if (ret >= 0)
 		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_OK);
 	else
 		snap_vaq_cmd_complete(vcmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
 
-	if (blk_ctrl->lm_buf) {
-		snap_buf_free(blk_ctrl->lm_buf);
-		blk_ctrl->lm_buf = NULL;
-	}
+free_mem:
+	snap_buf_free(blk_ctrl->lm_buf);
 }
 
 static void snap_virtio_blk_ctrl_lm_state_save(struct snap_virtio_ctrl *vctrl,
@@ -864,15 +861,20 @@ static void snap_virtio_blk_ctrl_lm_state_save(struct snap_virtio_ctrl *vctrl,
 	ret = snap_virtio_ctrl_state_save(vf_vctrl, blk_ctrl->lm_buf, data.length);
 	if (ret < 0) {
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
-		snap_buf_free(blk_ctrl->lm_buf);
-		blk_ctrl->lm_buf = NULL;
-		return;
+		goto free_lm_buf;
 	}
 	ret = snap_vaq_cmd_layout_data_write(cmd, data.length, blk_ctrl->lm_buf,
 				  snap_buf_get_mkey(blk_ctrl->lm_buf),
 				snap_virtio_blk_ctrl_lm_state_save_cb);
-	if (ret)
+	if (ret) {
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+		goto free_lm_buf;
+	}
+
+	return;
+
+free_lm_buf:
+	snap_buf_free(blk_ctrl->lm_buf);
 }
 
 static void snap_virtio_blk_ctrl_lm_state_restore(struct snap_virtio_ctrl *vctrl,
@@ -899,8 +901,10 @@ static void snap_virtio_blk_ctrl_lm_state_restore(struct snap_virtio_ctrl *vctrl
 	ret = snap_vaq_cmd_layout_data_read(cmd, data.length, blk_ctrl->lm_buf,
 			snap_buf_get_mkey(blk_ctrl->lm_buf),
 			snap_virtio_blk_ctrl_lm_state_restore_cb, offset);
-	if (ret)
+	if (ret) {
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_ERR);
+		snap_buf_free(blk_ctrl->lm_buf);
+	}
 }
 
 static void snap_virtio_blk_ctrl_lm_dp_report_map(struct snap_virtio_ctrl *vctrl,
@@ -929,7 +933,6 @@ static void snap_virtio_blk_ctrl_lm_dp_report_map(struct snap_virtio_ctrl *vctrl
 	ret = snap_virtio_ctrl_serialize_dirty_pages(vf_vctrl, blk_ctrl->lm_buf, data->length);
 	if (ret < 0) {
 		snap_buf_free(blk_ctrl->lm_buf);
-		blk_ctrl->lm_buf = NULL;
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
 		return;
 	}
