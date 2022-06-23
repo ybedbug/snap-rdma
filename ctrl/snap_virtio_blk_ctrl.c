@@ -549,6 +549,7 @@ out:
 static struct snap_virtio_ctrl*
 snap_virtio_blk_ctrl_get_vf(struct snap_virtio_ctrl *vctrl, struct snap_vq_cmd *cmd)
 {
+	struct snap_virtio_adm_cmd_hdr *hdr = &snap_vaq_cmd_layout_get(cmd)->hdr;
 	struct snap_virtio_blk_ctrl *pf_ctrl = to_blk_ctrl(vctrl);
 	struct snap_virtio_blk_ctrl *vf_ctrl;
 	int vdev_id;
@@ -561,11 +562,24 @@ snap_virtio_blk_ctrl_get_vf(struct snap_virtio_ctrl *vctrl, struct snap_vq_cmd *
 	if (pf_ctrl->common.sdev->pci->num_vfs > vdev_id && pf_ctrl->vfs_ctrl) {
 		vf_ctrl =  pf_ctrl->vfs_ctrl[vdev_id];
 		if (vf_ctrl) {
-			snap_debug("Got adm cmd to run on VF %s\n",
-				   vf_ctrl->common.sdev->pci->pci_number);
+			snap_info("%p: PF:%d (%s) got adm cmd %d:%d to run on VF:%d (%s) ctrl %p\n",
+				  pf_ctrl,
+				  vctrl->sdev->pci->id,
+				  vctrl->sdev->pci->pci_number,
+				  hdr->cmd_class, hdr->command,
+				  vdev_id,
+				  vf_ctrl->common.sdev->pci->pci_number,
+				  vf_ctrl);
 			return &vf_ctrl->common;
 		}
 	}
+
+	snap_error("%p: PF:%d (%s) got adm cmd %d:%d to run on VF:%d - failed to find VF controller\n",
+		   pf_ctrl,
+		   vctrl->sdev->pci->id,
+		   vctrl->sdev->pci->pci_number,
+		   hdr->cmd_class, hdr->command, vdev_id);
+
 	return NULL;
 }
 
