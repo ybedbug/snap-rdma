@@ -18,8 +18,29 @@
 #ifndef VIRTIO_F_ADMIN_VQ
 #define VIRTIO_F_ADMIN_VQ 40
 #endif
+
 #ifndef VIRTIO_F_ADMIN_MIGRATION
 #define VIRTIO_F_ADMIN_MIGRATION 43
+#endif
+
+#ifndef VIRTIO_F_ADMIN_MIGRATION_DYNAMIC_INTERNAL_STATE_TRACK
+#define VIRTIO_F_ADMIN_MIGRATION_DYNAMIC_INTERNAL_STATE_TRACK 44
+#endif
+
+#ifndef VIRTIO_F_ADMIN_DIRTY_PAGE_PUSH_BITMAP_TRACK
+#define VIRTIO_F_ADMIN_DIRTY_PAGE_PUSH_BITMAP_TRACK 45
+#endif
+
+#ifndef VIRTIO_F_ADMIN_DIRTY_PAGE_PUSH_BYTEMAP_TRACK
+#define VIRTIO_F_ADMIN_DIRTY_PAGE_PUSH_BYTEMAP_TRACK 46
+#endif
+
+#ifndef VIRTIO_F_ADMIN_DIRTY_PAGE_PULL_BITMAP_TRACK
+#define VIRTIO_F_ADMIN_DIRTY_PAGE_PULL_BITMAP_TRACK 47
+#endif
+
+#ifndef VIRTIO_F_ADMIN_DIRTY_PAGE_PULL_BYTEMAP_TRACK
+#define VIRTIO_F_ADMIN_DIRTY_PAGE_PULL_BYTEMAP_TRACK 48
 #endif
 
 #define SNAP_VQ_ADM_MIG_CTRL 64
@@ -94,6 +115,12 @@ struct snap_vq_adm_get_status_result {
 };
 
 /* dirty page tracking */
+struct virtio_admin_dirty_page_identity_result {
+	__le16 log_max_pages_track_pull_bitmap_mode; /* Per managed device (log) */
+	__le16 log_max_pages_track_pull_bytemap_mode; /* Per managed device (log) */
+	__le32 max_track_ranges; /* Maximum number of ranges a device can track */
+};
+
 enum snap_vq_adm_dirty_page_track_mode {
 	VIRTIO_M_DIRTY_TRACK_PUSH_BITMAP = 1, /* Use push mode with bit granularity */
 	VIRTIO_M_DIRTY_TRACK_PUSH_BYTEMAP = 2, /* Use push mode with byte granularity */

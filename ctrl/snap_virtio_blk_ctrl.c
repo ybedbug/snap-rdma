@@ -25,7 +25,9 @@
 					 (1ULL << VIRTIO_BLK_F_SEG_MAX) |\
 					 (1ULL << VIRTIO_BLK_F_BLK_SIZE)|\
 					 (1ULL << VIRTIO_F_ADMIN_VQ)|\
-					 (1ULL << VIRTIO_F_ADMIN_MIGRATION))
+					 (1ULL << VIRTIO_F_ADMIN_MIGRATION)|\
+					 (1ULL << VIRTIO_F_ADMIN_DIRTY_PAGE_PUSH_BITMAP_TRACK)|\
+					 (1ULL << VIRTIO_F_ADMIN_DIRTY_PAGE_PULL_BITMAP_TRACK))
 
 static inline struct snap_virtio_blk_ctrl_queue*
 to_blk_ctrl_q(struct snap_virtio_ctrl_queue *vq)
