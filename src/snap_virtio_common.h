@@ -118,6 +118,8 @@ struct snap_virtio_queue_attr {
 	enum snap_virtq_period_mode	queue_period_mode;
 	uint16_t			queue_period;
 	uint16_t			queue_max_count;
+	uint16_t			reset;
+	bool				modify_pending;
 
 	/* lm */
 	bool				dirty_map_dump_enable;
@@ -203,6 +205,14 @@ enum snap_virtio_dev_modify {
 	SNAP_VIRTIO_MOD_NUM_MSIX = 1 << 8,
 	SNAP_VIRTIO_MOD_DYN_MSIX_RESET = 1 << 9,
 	SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE = 1 << 10,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_SIZE = 1 << 11,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_MSIX_VECTOR = 1 << 12,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_ENABLE = 1 << 13,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_DESC = 1 << 14,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_DRIVER = 1 << 15,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_DEVICE = 1 << 16,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_NOTIFY_OFF = 1 << 17,
+	SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET = 1 << 18,
 };
 
 struct snap_virtio_device_attr {
@@ -224,6 +234,7 @@ struct snap_virtio_device_attr {
 	uint8_t				driver_feature_select;
 	uint16_t			queue_select;
 	uint8_t				pci_hotplug_state;
+	uint16_t			q_conf_list_size;
 };
 
 
@@ -274,6 +285,8 @@ to_common_queue_attr(struct snap_virtio_queue_attr *vattr)
 
 void snap_virtio_get_queue_attr(struct snap_virtio_queue_attr *vattr,
 	void *q_configuration);
+void snap_virtio_get_queue_attr_v2(struct snap_virtio_queue_attr *vattr,
+				   void *q_configuration_v2);
 void snap_virtio_get_device_attr(struct snap_device *sdev,
 				 struct snap_virtio_device_attr *vattr,
 				 void *device_configuration);

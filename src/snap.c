@@ -770,6 +770,8 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		out, capability.virtio_emulation_cap.dirty_byte_map);
 	virtio->vnet_modify_ext = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.vnet_modify_ext);
+	virtio->virtio_q_cfg_v2 = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.virtio_q_cfg_v2);
 
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
@@ -2921,6 +2923,8 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 q_cfg_version, sdev->sctx->virtio_net_caps.virtio_q_cfg_v2 ? 1 : 0);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
 
 	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&

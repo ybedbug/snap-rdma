@@ -1538,7 +1538,12 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 	u8	 max_emulated_devices[0x8];
 	u8	 max_num_virtio_queues[0x18];
 
-	u8	 reserved_at_120[0x60];
+	u8	 reserved_at_a0[0x20];
+
+	u8	 reserved_at_c1[0x1f];
+	u8	 virtio_q_cfg_v2[0x1];
+
+	u8	 reserved_at_e0[0x20];
 
 	u8	 umem_1_buffer_param_a[0x20];
 	u8	 umem_1_buffer_param_b[0x20];
@@ -1580,6 +1585,14 @@ enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX = 1 << 8,
 	MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET = 1 << 9,
 	MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE = 1 << 10,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_SIZE = 1 << 11,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_MSIX_VECTOR = 1 << 12,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_ENABLE = 1 << 13,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DESC = 1 << 14,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DRIVER = 1 << 15,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DEVICE = 1 << 16,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_NOTIFY_OFF = 1 << 17,
+	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET = 1 << 18,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -3014,6 +3027,15 @@ struct mlx5_ifc_virtio_q_layout_bits {
 	u8	   queue_device[0x40];
 };
 
+struct mlx5_ifc_virtio_q_layout_v2_bits {
+	u8	   queue_reset[0x10];
+	u8	   queue_index[0x10];
+
+	u8	   reserved_at_20[0xe0];
+
+	struct mlx5_ifc_virtio_q_layout_bits queue_configuration;
+};
+
 struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   modify_field_select[0x40];
 
@@ -3026,10 +3048,14 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   dynamic_vf_msix_control[0x1];
 	u8	   dynamic_vf_msix_reset[0x1];
 	u8	   pci_hotplug_state[0x3];
-	u8	   reserved_at_65[0x8];
+	u8	   reserved_at_65[0x6];
+	u8	   q_cfg_version[0x2];
 	u8	   num_free_dynamic_vfs_msix[0x10];
 
-	u8	   reserved_at_80[0x40];
+	u8	   reserved_at_80[0x10];
+	u8	   q_configuration_list_size[0x10];
+
+	u8	   reserved_at_a0[0x20];
 
 	u8	   emulated_device_crossed_vhca_mkey[0x20];
 
@@ -3043,7 +3069,10 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 
 	struct mlx5_ifc_virtio_net_config_bits virtio_net_config;
 
-	struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
+	union {
+		struct mlx5_ifc_virtio_q_layout_bits virtio_q_configuration[0];
+		struct mlx5_ifc_virtio_q_layout_v2_bits virtio_q_configuration_v2[0];
+	};
 };
 
 struct mlx5_ifc_virtio_blk_device_emulation_bits {

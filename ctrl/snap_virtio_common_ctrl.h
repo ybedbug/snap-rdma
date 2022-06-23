@@ -103,6 +103,11 @@ struct snap_virtio_ctrl_bar_cbs {
 	int (*post_flr)(void *cb_ctx);
 };
 
+struct snap_virtio_ctrl_queue_cbs {
+	void (*reset)(void *cb_ctx, int idx);
+	int (*enable)(void *cb_ctx, int idx);
+};
+
 struct snap_virtio_ctrl_attr {
 	struct ibv_context *context;
 	enum snap_virtio_ctrl_type type;
@@ -112,6 +117,7 @@ struct snap_virtio_ctrl_attr {
 	bool event;
 	void *cb_ctx;
 	struct snap_virtio_ctrl_bar_cbs *bar_cbs;
+	struct snap_virtio_ctrl_queue_cbs *q_cbs;
 	struct ibv_pd *pd;
 	uint32_t npgs;
 	bool force_in_order;
@@ -179,6 +185,8 @@ struct snap_virtio_queue_ops {
 			 struct snap_virtio_ctrl_queue_state *state);
 	const struct snap_virtio_ctrl_queue_stats *
 			(*get_io_stats)(struct snap_virtio_ctrl_queue *queue);
+	bool (*reset_check)(struct snap_virtio_ctrl_queue *queue);
+	bool (*enable_check)(struct snap_virtio_ctrl *ctrl, int idx);
 };
 
 struct snap_virtio_ctrl_bar_ops {
@@ -215,6 +223,7 @@ struct snap_virtio_ctrl {
 	size_t enabled_queues;
 	struct snap_virtio_ctrl_queue **queues;
 	struct snap_virtio_queue_ops *q_ops;
+	struct snap_virtio_ctrl_queue_cbs *q_cbs;
 	void *cb_ctx; /* bar callback context */
 	struct snap_virtio_ctrl_bar_cbs bar_cbs;
 	struct snap_virtio_ctrl_bar_ops *bar_ops;

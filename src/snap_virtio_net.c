@@ -15,6 +15,33 @@
 #include "snap_internal.h"
 #include "mlx5_ifc.h"
 
+static void
+snap_virtio_net_get_queues_attr(struct snap_device *sdev,
+				struct snap_virtio_net_device_attr *attr,
+				uint8_t *device_emulation_out)
+{
+	uint8_t *q_conf_addr;
+	int i, idx;
+
+	if (!sdev->sctx->virtio_net_caps.virtio_q_cfg_v2)
+		for (i = 0; i < attr->queues; i++) {
+			q_conf_addr = DEVX_ADDR_OF(virtio_net_device_emulation,
+						   device_emulation_out,
+						   virtio_q_configuration[i]);
+			snap_virtio_get_queue_attr(&attr->q_attrs[i].vattr,
+						   q_conf_addr);
+		}
+	else
+		for (i = 0; i < attr->vattr.q_conf_list_size; i++) {
+			q_conf_addr = DEVX_ADDR_OF(virtio_net_device_emulation,
+						   device_emulation_out,
+						   virtio_q_configuration_v2[i]);
+			idx = DEVX_GET(virtio_q_layout_v2, q_conf_addr, queue_index);
+			snap_virtio_get_queue_attr_v2(&attr->q_attrs[idx].vattr,
+						      q_conf_addr);
+		}
+}
+
 /**
  * snap_virtio_net_query_device() - Query an Virtio net snap device
  * @sdev:       snap device
@@ -31,7 +58,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	uint8_t *out;
 	struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_out;
-	int i, ret, out_size;
+	int ret, out_size;
 	uint64_t dev_allowed;
 
 	if (attr->queues > sctx->virtio_net_caps.max_emulated_virtqs)
@@ -39,7 +66,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation) +
-		   attr->queues * DEVX_ST_SZ_BYTES(virtio_q_layout);
+		   attr->queues * DEVX_ST_SZ_BYTES(virtio_q_layout_v2);
 	out = calloc(1, out_size);
 	if (!out)
 		return -ENOMEM;
@@ -57,17 +84,15 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 
 	attr->vattr.num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
 	attr->vattr.num_msix = sdev->pci->pci_attr.num_msix;
+	attr->vattr.q_conf_list_size = DEVX_GET(virtio_net_device_emulation,
+						device_emulation_out,
+						q_configuration_list_size);
 	snap_virtio_get_device_attr(sdev, &attr->vattr,
 				    DEVX_ADDR_OF(virtio_net_device_emulation,
 						 device_emulation_out,
 						 virtio_device));
-	if (attr->queues) {
-		for (i = 0; i < attr->queues; i++)
-			snap_virtio_get_queue_attr(&attr->q_attrs[i].vattr,
-						   DEVX_ADDR_OF(virtio_net_device_emulation,
-								device_emulation_out,
-								virtio_q_configuration[i]));
-	}
+	if (attr->queues)
+		snap_virtio_net_get_queues_attr(sdev, attr, device_emulation_out);
 
 	snap_update_pci_bdf(sdev->pci, attr->vattr.pci_bdf);
 
@@ -99,6 +124,22 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DYN_MSIX_RESET;
 		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE)
 			attr->modifiable_fields |= SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_SIZE)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_SIZE;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_MSIX_VECTOR)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_MSIX_VECTOR;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_ENABLE)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_ENABLE;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_NOTIFY_OFF)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_NOTIFY_OFF;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DESC)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DESC;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DRIVER)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DRIVER;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DEVICE)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DEVICE;
+		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET)
+			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET;
 	}
 	attr->vattr.num_free_dynamic_vfs_msix = DEVX_GET(virtio_net_device_emulation,
 						   device_emulation_out, num_free_dynamic_vfs_msix);

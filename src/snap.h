@@ -333,6 +333,7 @@ struct snap_virtio_caps {
 	uint16_t	min_num_vf_dynamic_msix;
 	uint16_t	max_num_vf_dynamic_msix;
 	bool		virtio_q_counters;
+	uint8_t		virtio_q_cfg_v2;
 };
 
 struct snap_context {
