@@ -500,9 +500,13 @@ int snap_vq_create(struct snap_vq *q, struct snap_vq_create_attr *attr,
 	if (snap_vq_dma_q_create(q, attr, cmd_ops))
 		goto err;
 
-	if (snap_virtio_get_used_index_from_host(q->dma_q, attr->pd,
-				attr->device_pa, attr->xmkey, &hw_used))
-		goto destroy_dma_q;
+	if (attr->in_recovery) {
+		if (snap_virtio_get_used_index_from_host(q->dma_q, attr->pd,
+					attr->device_pa, attr->xmkey, &hw_used))
+			goto destroy_dma_q;
+	} else {
+		hw_used = 0;
+	}
 
 	attr->hw_avail_index = hw_used;
 	attr->hw_used_index = hw_used;

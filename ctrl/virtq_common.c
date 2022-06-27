@@ -109,9 +109,13 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 		goto destroy_attr;
 	}
 
-	if (snap_virtio_get_used_index_from_host(vq_priv->dma_q, attr->pd,
-			attr->device, attr->xmkey, &hw_used))
-		goto destroy_dma_q;
+	if (attr->in_recovery) {
+		if (snap_virtio_get_used_index_from_host(vq_priv->dma_q, attr->pd,
+				attr->device, attr->xmkey, &hw_used))
+			goto destroy_dma_q;
+	} else {
+		hw_used = 0;
+	}
 
 	attr->hw_available_index = hw_used;
 	attr->hw_used_index = hw_used;

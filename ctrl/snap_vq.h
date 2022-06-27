@@ -117,6 +117,7 @@ struct snap_vq_create_attr {
 	struct snap_virtio_caps *caps;
 	struct ibv_comp_channel *comp_channel;
 	int comp_vector;
+	bool in_recovery;
 };
 
 void snap_vq_suspend(struct snap_vq *q);

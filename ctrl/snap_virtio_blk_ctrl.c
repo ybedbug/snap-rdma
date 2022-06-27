@@ -812,7 +812,7 @@ static void snap_virtio_blk_adm_cmd_process(struct snap_virtio_ctrl *vctrl,
 }
 
 static int blk_adm_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
-				   struct snap_virtio_ctrl *vctrl, int index)
+				   struct snap_virtio_ctrl *vctrl, int index, bool in_recovery)
 {
 	struct snap_vq_adm_create_attr attr = {};
 	struct snap_virtio_blk_device_attr *dev_attr;
@@ -835,6 +835,7 @@ static int blk_adm_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.common.sdev = vctrl->sdev;
 	attr.common.caps = &vctrl->sdev->sctx->virtio_blk_caps;
 	attr.common.vctrl = vctrl;
+	attr.common.in_recovery = in_recovery;
 
 	attr.adm_process_fn = snap_virtio_blk_adm_cmd_process;
 
@@ -851,7 +852,7 @@ static int blk_adm_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 }
 
 static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
-				   struct snap_virtio_ctrl *vctrl, int index)
+				   struct snap_virtio_ctrl *vctrl, int index, bool in_recovery)
 {
 	struct virtq_create_attr attr = {0};
 	struct snap_virtio_blk_ctrl *blk_ctrl = to_blk_ctrl(vctrl);
@@ -872,6 +873,7 @@ static int blk_virtq_create_helper(struct snap_virtio_blk_ctrl_queue *vbq,
 	attr.msix_vector = vbq->attr->vattr.msix_vector;
 	attr.virtio_version_1_0 = vbq->attr->vattr.virtio_version_1_0;
 	attr.force_in_order = blk_ctrl->common.force_in_order;
+	attr.in_recovery = in_recovery;
 
 	attr.xmkey = vctrl->xmkey->mkey;
 
@@ -909,12 +911,12 @@ snap_virtio_blk_ctrl_queue_create(struct snap_virtio_ctrl *vctrl, int index)
 
 	if (index == 0 && vctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
 	    vctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ)) {
-		if (blk_adm_virtq_create_helper(vbq, vctrl, index)) {
+		if (blk_adm_virtq_create_helper(vbq, vctrl, index, false)) {
 			free(vbq);
 			return NULL;
 		}
 	} else {
-		if (blk_virtq_create_helper(vbq, vctrl, index)) {
+		if (blk_virtq_create_helper(vbq, vctrl, index, false)) {
 			free(vbq);
 			return NULL;
 		}
@@ -1033,9 +1035,9 @@ static int snap_virtio_blk_ctrl_queue_resume(struct snap_virtio_ctrl_queue *vq)
 	// this should use the new blk vq implementation when its added.
 	if (index == 0 && ctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
 		ctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ))
-		ret = blk_adm_virtq_create_helper(vbq, ctrl, index);
+		ret = blk_adm_virtq_create_helper(vbq, ctrl, index, true);
 	else
-		ret = blk_virtq_create_helper(vbq, ctrl, index);
+		ret = blk_virtq_create_helper(vbq, ctrl, index, true);
 	if (ret)
 		return ret;
 
