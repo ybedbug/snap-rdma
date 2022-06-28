@@ -22,6 +22,8 @@
 #include <infiniband/verbs.h>
 #endif
 
+#include "snap_dpa_common.h"
+
 bool snap_dpa_enabled(struct ibv_context *ctx);
 
 struct snap_dpa_ctx {
