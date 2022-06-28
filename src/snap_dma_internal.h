@@ -294,30 +294,35 @@ static inline struct mlx5_cqe64 *snap_dv_poll_cq(struct snap_hw_cq *dv_cq, int c
 	return cqe;
 }
 
-/* `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
-static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
+/* `wr_cnt`, `n_bb`, `num_sge`, `l_sgl` and `r_sgl` are all output parameters */
+static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr, int *wr_cnt,
 		int *n_bb, int *num_sge, struct ibv_sge (*l_sgl)[SNAP_DMA_Q_MAX_SGE_NUM],
 		struct ibv_sge *r_sgl)
 {
-	int i, j, sge_cnt;
-	size_t len_to_handle, left, offset;
+	int i, j, k, sge_cnt;
+	size_t len_to_handle, left, offset, sge_total_len, wr_consumed_len;
 	struct ibv_sge *l_sge;
 
 	/* TODO: this function should not be inline and should be moved to .c file */
+	k = 0;
 	*n_bb = 0;
 	left = 0;
 	offset = 0;
-	memset(num_sge, 0, sizeof(int) * io_attr->riov_cnt);
+	memset(num_sge, 0, sizeof(int) * SNAP_DMA_Q_MAX_WR_CNT);
 
 	for (i = 0, j = 0; i < io_attr->riov_cnt; i++) {
-		l_sge = l_sgl[i];
 		len_to_handle = io_attr->riov[i].iov_len;
+		sge_total_len = 0;
+		wr_consumed_len = 0;
 		sge_cnt = 0;
 
 		while (j < io_attr->liov_cnt && len_to_handle > 0) {
+			l_sge = l_sgl[k];
+
 			if (left != 0) {
 				if (len_to_handle >= left) {
 					len_to_handle -= left;
+					sge_total_len += left;
 					l_sge[sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
 					l_sge[sge_cnt].length = left;
 					l_sge[sge_cnt].lkey = io_attr->lkey[j];
@@ -326,6 +331,7 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 					offset = 0;
 				} else {
 					left -= len_to_handle;
+					sge_total_len += len_to_handle;
 					l_sge[sge_cnt].addr = (uint64_t)(io_attr->liov[j].iov_base + offset);
 					l_sge[sge_cnt].length = len_to_handle;
 					l_sge[sge_cnt].lkey = io_attr->lkey[j];
@@ -334,12 +340,14 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 				}
 			} else if (len_to_handle >= io_attr->liov[j].iov_len) {
 				len_to_handle -= io_attr->liov[j].iov_len;
+				sge_total_len += io_attr->liov[j].iov_len;
 				l_sge[sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
 				l_sge[sge_cnt].length = io_attr->liov[j].iov_len;
 				l_sge[sge_cnt].lkey = io_attr->lkey[j];
 				j++;
 			} else {
 				left = io_attr->liov[j].iov_len - len_to_handle;
+				sge_total_len += len_to_handle;
 				l_sge[sge_cnt].addr = (uint64_t)io_attr->liov[j].iov_base;
 				l_sge[sge_cnt].length = len_to_handle;
 				l_sge[sge_cnt].lkey = io_attr->lkey[j];
@@ -348,25 +356,49 @@ static inline int snap_dma_build_sgl(struct snap_dma_q_io_attr *io_attr,
 			}
 
 			sge_cnt++;
-			if (sge_cnt >= SNAP_DMA_Q_MAX_SGE_NUM) {
-				snap_error("sge number exceed the max supported(30)\n");
-				return -1;
+			if (sge_cnt == SNAP_DMA_Q_MAX_SGE_NUM && len_to_handle > 0) {
+				snap_warn("sge cnt reach to max supported(30), open a new WR for this iov.\n");
+
+				/* num_sge[k] is the sge cnt in l_sgl[k] for wr[k] */
+				num_sge[k] = sge_cnt;
+
+				r_sgl[k].addr = (uint64_t)((char *)io_attr->riov[i].iov_base + wr_consumed_len);
+				r_sgl[k].length = sge_total_len;
+				r_sgl[k].lkey = io_attr->rkey[i];
+
+				k++;
+				if (k >= SNAP_DMA_Q_MAX_WR_CNT) {
+					snap_error("wr cnt reach to max number(%d) supported.\n", SNAP_DMA_Q_MAX_WR_CNT);
+					return -1;
+				}
+				wr_consumed_len += sge_total_len;
+				*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
+
+				sge_cnt = 0;
+				sge_total_len = 0;
 			}
 		}
 
-		/* num_sge[i] is the sge cnt in l_sgl[i] for wr[i] */
-		num_sge[i] = sge_cnt;
+		/* num_sge[k] is the sge cnt in l_sgl[k] for wr[k] */
+		num_sge[k] = sge_cnt;
 
-		r_sgl[i].addr = (uint64_t)io_attr->riov[i].iov_base;
-		r_sgl[i].length = io_attr->riov[i].iov_len;
-		r_sgl[i].lkey = io_attr->rkey[i];
+		r_sgl[k].addr = (uint64_t)((char *)io_attr->riov[i].iov_base + wr_consumed_len);
+		r_sgl[k].length = sge_total_len;
+		r_sgl[k].lkey = io_attr->rkey[i];
 
+		k++;
+		if (k >= SNAP_DMA_Q_MAX_WR_CNT) {
+			snap_error("wr cnt reach to max number(%d) supported.\n", SNAP_DMA_Q_MAX_WR_CNT);
+			return -1;
+		}
 		*n_bb += (sge_cnt <= 2) ? 1 : 1 + round_up((sge_cnt - 2), 4);
 	}
 
 	/* after for loop, j should equal to io_attr->liov_cnt,
 	 *  and, left should be 0.
 	 */
+
+	*wr_cnt = k;
 
 	return 0;
 }

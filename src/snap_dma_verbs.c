@@ -131,23 +131,26 @@ static inline int verbs_dma_q_writev2v(struct snap_dma_q *q,
 				struct snap_dma_q_io_attr *io_attr,
 				struct snap_dma_completion *comp, int *n_bb)
 {
-	int num_sge[io_attr->riov_cnt];
-	struct ibv_send_wr wr[io_attr->riov_cnt];
-	struct ibv_sge r_sgl[io_attr->riov_cnt];
-	struct ibv_sge l_sgl[io_attr->riov_cnt][SNAP_DMA_Q_MAX_SGE_NUM];
+	int wr_cnt;
+	int num_sge[SNAP_DMA_Q_MAX_WR_CNT];
+	struct ibv_send_wr wr[SNAP_DMA_Q_MAX_WR_CNT];
+	struct ibv_sge r_sgl[SNAP_DMA_Q_MAX_WR_CNT];
+	struct ibv_sge l_sgl[SNAP_DMA_Q_MAX_WR_CNT][SNAP_DMA_Q_MAX_SGE_NUM];
 	struct snap_dma_q_iov_ctx *iov_ctx;
 
-	if (snap_dma_build_sgl(io_attr, n_bb, num_sge, l_sgl, r_sgl))
+	if (snap_dma_build_sgl(io_attr, &wr_cnt, n_bb, num_sge, l_sgl, r_sgl))
 		return -EINVAL;
 
-	if (snap_unlikely(!qp_can_tx(q, *n_bb)))
+	if (snap_unlikely(!qp_can_tx(q, *n_bb))) {
+		snap_error("%s: qp out of tx_available resource\n", __func__);
 		return -EAGAIN;
+	}
 
 	iov_ctx = verbs_prepare_iov_ctx(q, *n_bb, comp);
 	if (!iov_ctx)
 		return errno;
 
-	verbs_dma_q_prepare_wr(wr, io_attr->riov_cnt, l_sgl, num_sge, r_sgl,
+	verbs_dma_q_prepare_wr(wr, wr_cnt, l_sgl, num_sge, r_sgl,
 			IBV_WR_RDMA_WRITE, 0, &iov_ctx->comp);
 
 	return do_verbs_dma_xfer(q, wr);
