@@ -803,8 +803,11 @@ int snap_virtio_ctrl_resume(struct snap_virtio_ctrl *ctrl)
 	if (snap_virtio_ctrl_is_stopped(ctrl))
 		return 0;
 
-	if (!snap_virtio_ctrl_is_suspended(ctrl))
-		return -EINVAL;
+	if (!snap_virtio_ctrl_is_suspended(ctrl)) {
+		/*Resume ctrl after it reached SUSPENDED state */
+		ctrl->pending_resume = true;
+		return 0;
+	}
 
 	if (!ctrl->q_ops->suspend) {
 		/* pretend that resume was done. It is done for the compatibility
@@ -910,6 +913,14 @@ static void snap_virtio_ctrl_progress_suspend(struct snap_virtio_ctrl *ctrl)
 	/* For live migration - finish ongoing quiesce command */
 	if (ctrl->is_quiesce)
 		snap_virtio_ctrl_quiesce_adm_done(ctrl);
+
+	if (ctrl->pending_resume) {
+		ret = snap_virtio_ctrl_resume(ctrl);
+		if (ret)
+			snap_error("virtio controller %p pending resume failed\n", ctrl);
+		ctrl->pending_resume = false;
+	}
+
 }
 
 /**

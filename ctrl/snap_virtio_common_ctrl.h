@@ -244,6 +244,8 @@ struct snap_virtio_ctrl {
 	struct snap_cross_mkey *xmkey;
 	bool is_quiesce;
 	struct snap_vq_cmd *quiesce_cmd;
+	/* true if ctrl resume was requested while ctrl was still suspending */
+	bool pending_resume;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);
