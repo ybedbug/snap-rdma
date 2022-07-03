@@ -495,13 +495,13 @@ static void snap_vq_hwq_destroy(struct snap_vq *q)
 int snap_vq_create(struct snap_vq *q, struct snap_vq_create_attr *attr,
 			const struct snap_vq_cmd_ops *cmd_ops)
 {
-	int hw_used;
+	uint16_t hw_used;
 
 	if (snap_vq_dma_q_create(q, attr, cmd_ops))
 		goto err;
 
 	if (attr->in_recovery) {
-		if (snap_virtio_get_used_index_from_host(q->dma_q, attr->pd,
+		if (snap_virtio_get_used_index_from_host(q->dma_q,
 					attr->device_pa, attr->xmkey, &hw_used))
 			goto destroy_dma_q;
 	} else {

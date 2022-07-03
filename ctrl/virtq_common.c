@@ -81,7 +81,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 {
 	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
 	struct ibv_qp *fw_qp;
-	int hw_used;
+	uint16_t hw_used;
 
 	if (!vq_priv)
 		goto err;
@@ -111,7 +111,7 @@ bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
 	}
 
 	if (attr->in_recovery) {
-		if (snap_virtio_get_used_index_from_host(vq_priv->dma_q, attr->pd,
+		if (snap_virtio_get_used_index_from_host(vq_priv->dma_q,
 				attr->device, attr->xmkey, &hw_used))
 			goto destroy_dma_q;
 	} else {

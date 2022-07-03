@@ -1415,8 +1415,30 @@ static void get_vring_rx_cb(struct snap_dma_q *q, const void *data, uint32_t dat
 		   q, data_len);
 }
 
+int snap_virtio_get_avail_index_from_host(struct snap_dma_q *dma_q,
+		uint64_t drv_addr, uint32_t dma_mkey, uint16_t *hw_avail)
+{
+	struct vring_avail vra;
+	int ret;
+
+	ret = snap_dma_q_read_short(dma_q, &vra, sizeof(struct vring_avail),
+			      drv_addr, dma_mkey, NULL);
+	if (ret) {
+		snap_error("failed DMA read vring_avail for drv: 0x%lx\n", drv_addr);
+		return ret;
+	}
+
+	ret = snap_dma_q_flush(dma_q);
+	if (ret != 1)
+		snap_error("failed flush, ret %d\n", ret);
+
+	*hw_avail = vra.idx;
+
+	return 0;
+}
+
 int snap_virtio_get_used_index_from_host(struct snap_dma_q *dma_q,
-		struct ibv_pd *pd, uint64_t dev_addr, uint32_t dma_mkey, int *hw_used)
+		uint64_t dev_addr, uint32_t dma_mkey, uint16_t *hw_used)
 {
 	struct vring_used vru;
 	int ret;

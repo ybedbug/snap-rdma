@@ -315,8 +315,10 @@ int snap_virtio_get_vring_indexes_from_host(struct ibv_pd *pd, uint64_t drv_addr
 					    uint64_t dev_addr, uint32_t dma_mkey,
 					    struct vring_avail *vra,
 					    struct vring_used *vru);
+int snap_virtio_get_avail_index_from_host(struct snap_dma_q *dma_q,
+		uint64_t drv_addr, uint32_t dma_mkey, uint16_t *hw_avail);
 int snap_virtio_get_used_index_from_host(struct snap_dma_q *dma_q,
-		struct ibv_pd *pd, uint64_t dev_addr, uint32_t dma_mkey, int *hw_used);
+		uint64_t dev_addr, uint32_t dma_mkey, uint16_t *hw_used);
 int snap_virtio_query_queue_counters(struct mlx5_snap_devx_obj *counters_obj,
 				struct snap_virtio_queue_counters_attr *attr);
 int snap_virtio_common_queue_config(struct snap_virtio_common_queue_attr *common_attr,
