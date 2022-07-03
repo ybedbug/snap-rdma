@@ -520,3 +520,9 @@ snap_vaq_cmd_dmaq_get(struct snap_vq_cmd *cmd)
 {
 	return cmd->vq->dma_q;
 }
+
+int snap_vq_adm_get_debugstat(struct snap_vq *vq,
+			  struct snap_virtio_queue_debugstat *q_debugstat)
+{
+	return snap_vq_get_debugstat(vq, q_debugstat);
+}

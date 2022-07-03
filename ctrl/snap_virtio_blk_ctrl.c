@@ -424,7 +424,11 @@ snap_virtio_blk_ctrl_queue_get_debugstat(struct snap_virtio_ctrl_queue *vq,
 {
 	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
 
-	return blk_virtq_get_debugstat(vbq->q_impl, q_debugstat);
+	if (vq->index == 0 && vq->ctrl->sdev->pci->type == SNAP_VIRTIO_BLK_PF &&
+	    vq->ctrl->bar_curr->driver_feature & (1ULL << VIRTIO_F_ADMIN_VQ))
+		return snap_vq_adm_get_debugstat(vbq->q_impl, q_debugstat);
+	else
+		return blk_virtq_get_debugstat(vbq->q_impl, q_debugstat);
 }
 
 static int
@@ -529,7 +533,7 @@ int snap_virtio_blk_ctrl_get_debugstat(struct snap_virtio_blk_ctrl *ctrl,
 	if (ret)
 		goto out;
 
-	for (i = ctrl->has_adm_vq; i < ctrl->common.max_queues; i++) {
+	for (i = 0; i < ctrl->common.max_queues; i++) {
 		struct snap_virtio_ctrl_queue *vq = ctrl->common.queues[i];
 
 		if (!vq)

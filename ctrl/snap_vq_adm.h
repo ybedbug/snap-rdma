@@ -53,4 +53,6 @@ int snap_vaq_cmd_layout_data_write(struct snap_vq_cmd *cmd, size_t total_len,
 			snap_vq_cmd_done_cb_t done_fn);
 
 size_t snap_vaq_cmd_get_total_len(struct snap_vq_cmd *cmd);
+int snap_vq_adm_get_debugstat(struct snap_vq *vq,
+			  struct snap_virtio_queue_debugstat *q_debugstat);
 #endif

@@ -23,6 +23,7 @@
 struct snap_vq;
 struct snap_vq_cmd;
 struct snap_virtio_ctrl;
+struct snap_virtio_queue_debugstat;
 
 /**
  * typedef snap_vq_cmd_done_cb_t - Command operation done callback.
@@ -134,4 +135,6 @@ int snap_vq_cmd_descs_rw(struct snap_vq_cmd *cmd,
 		void *lbuf, size_t total_len, uint32_t lbuf_mkey,
 		snap_vq_cmd_done_cb_t done_cb, bool write);
 
+int snap_vq_get_debugstat(struct snap_vq *q,
+			  struct snap_virtio_queue_debugstat *q_debugstat);
 #endif

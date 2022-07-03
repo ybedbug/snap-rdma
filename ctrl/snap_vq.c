@@ -443,6 +443,12 @@ static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 		goto err;
 	}
 
+	hw_q->ctrs_obj = snap_virtio_create_queue_counters(qattr->sdev);
+	if (!hw_q->ctrs_obj) {
+		ret = -ENODEV;
+		goto free_hwq;
+	}
+
 	hw_qattr.type = SNAP_VIRTQ_SPLIT_MODE;
 	hw_qattr.offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
 	hw_qattr.full_emulation = true;
@@ -469,15 +475,17 @@ static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 	ret = snap_virtio_create_hw_queue(qattr->sdev, hw_q, qattr->caps,
 					  &hw_qattr);
 	if (ret)
-		goto free_hwq;
+		goto free_ctrs;
 
 	q->hw_q = hw_q;
 	ret = snap_vq_hwq_modify_state(q, SNAP_VIRTQ_STATE_RDY);
 	if (ret)
-		goto free_hwq;
+		goto free_ctrs;
 
 	return 0;
 
+free_ctrs:
+	snap_devx_obj_destroy(hw_q->ctrs_obj);
 free_hwq:
 	free(hw_q);
 err:
@@ -487,6 +495,7 @@ err:
 static void snap_vq_hwq_destroy(struct snap_vq *q)
 {
 	snap_virtio_destroy_hw_queue(q->hw_q);
+	snap_devx_obj_destroy(q->hw_q->ctrs_obj);
 	free(q->hw_q);
 	q->hw_q = NULL;
 }
@@ -674,4 +683,51 @@ struct snap_dma_q *snap_vq_get_dma_q(struct snap_vq *q)
 struct ibv_cq *snap_vq_get_vcq(struct snap_vq *q)
 {
 	return q->dma_q->sw_qp.rx_cq->verbs_cq;
+}
+
+int snap_vq_get_debugstat(struct snap_vq *q,
+			  struct snap_virtio_queue_debugstat *q_debugstat)
+{
+	struct snap_virtio_queue_attr vq_attr = {};
+	struct snap_virtio_queue_counters_attr vqc_attr = {};
+	uint16_t vru, vra;
+	int ret;
+
+	ret = snap_virtio_get_used_index_from_host(q->dma_q, q->device_pa,
+						q->xmkey, &vru);
+	if (ret) {
+		snap_error("failed to get vring used index from host memory for queue %d\n",
+			   q->index);
+		return ret;
+	}
+
+	ret = snap_virtio_get_avail_index_from_host(q->dma_q, q->driver_pa,
+						q->xmkey, &vra);
+	if (ret) {
+		snap_error("failed to get vring avail index from host memory for queue %d\n",
+			   q->index);
+		return ret;
+	}
+
+	ret = snap_virtio_query_queue(q->hw_q, &vq_attr);
+	if (ret) {
+		snap_error("failed query queue %d\n", q->index);
+		return ret;
+	}
+
+	ret = snap_virtio_query_queue_counters(q->hw_q->ctrs_obj, &vqc_attr);
+	if (ret) {
+		snap_error("failed query virtio_q_counters %d\n", q->index);
+		return ret;
+	}
+
+	q_debugstat->qid = q->index;
+	q_debugstat->hw_available_index = vq_attr.hw_available_index;
+	q_debugstat->sw_available_index = vra;
+	q_debugstat->hw_used_index = vq_attr.hw_used_index;
+	q_debugstat->sw_used_index = vru;
+	q_debugstat->hw_received_descs = vqc_attr.received_desc;
+	q_debugstat->hw_completed_descs = vqc_attr.completed_desc;
+
+	return 0;
 }
