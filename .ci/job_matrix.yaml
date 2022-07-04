@@ -28,19 +28,19 @@ env:
   CCACHE_TEMPDIR: '/tmp'
 
 runs_on_dockers:
-  - {file: '.ci/Dockerfile.centos.stream8', name: 'centos_stream8ofed56', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos.stream8', name: 'centos_stream8ofed56', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed56', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed56', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed56', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed56', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed56', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed56', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed56', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed56', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.euleros2sp8aarch64', name: 'euleros2sp8', arch: 'aarch64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.euleros2sp9x86', name: 'euleros2sp9', arch: 'x86_64', tag: 'latest'}
-  - {file: '.ci/Dockerfile.ubuntu2204', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: 'latest'}
+  - {file: '.ci/Dockerfile.centos.stream8', name: 'centos_stream8ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.centos.stream8', name: 'centos_stream8ofed57', arch: 'aarch64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.ubuntu2004', name: 'ubuntu2004ofed57', arch: 'aarch64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'ubuntu2204ofed57', arch: 'aarch64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.centos7.9.2009', name: 'centos79ofed57', arch: 'aarch64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.debian10', name: 'debian10ofed57', arch: 'aarch64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.euleros2sp8aarch64', name: 'euleros2sp8ofed56', arch: 'aarch64', tag: '5.6-2.0.9.0'}
+  - {file: '.ci/Dockerfile.euleros2sp9x86', name: 'euleros2sp9ofed57', arch: 'x86_64', tag: '5.7-0.1.9.0'}
+  - {file: '.ci/Dockerfile.ubuntu2204', name: 'toolbox', category: 'tool', arch: 'x86_64', tag: '5.7-0.1.9.0'}
   - {url: '$registry_host/toolbox/ngci-centos:7.9.2009.2', name: 'blackduck', category: 'tool', arch: 'x86_64'}
 
 steps:
@@ -52,12 +52,12 @@ steps:
   - name: Upload distro package
     credentialsId: '311997c9-cc1c-4d5d-8ba2-6eb43ba0a06d'
     containerSelector:
-      - "{name: 'centos_stream8ofed56', variant:1}"
-      - "{name: 'ubuntu2004ofed56', variant:1}"
-      - "{name: 'ubuntu2204ofed56', variant:1}"
-      - "{name: 'centos79ofed56', variant:1}"
-      - "{name: 'euleros2sp8', variant:1}"
-      - "{name: 'euleros2sp9', variant:1}"
+      - "{name: 'centos_stream8ofed57', variant:1}"
+      - "{name: 'ubuntu2004ofed57', variant:1}"
+      - "{name: 'ubuntu2204ofed57', variant:1}"
+      - "{name: 'centos79ofed57', variant:1}"
+      - "{name: 'euleros2sp8ofed56', variant:1}"
+      - "{name: 'euleros2sp9ofed57', variant:1}"
     run: |
       .ci/upload.sh
 
