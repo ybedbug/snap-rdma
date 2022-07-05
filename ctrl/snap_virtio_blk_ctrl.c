@@ -19,6 +19,7 @@
 #include "snap_buf.h"
 #include "snap_dp_map.h"
 #include "snap_vq_internal.h"
+#include "snap_virtio_state.h"
 
 #define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
 					 (1ULL << VIRTIO_BLK_F_MQ) |\
@@ -129,13 +130,13 @@ static size_t
 snap_virtio_blk_ctrl_bar_get_state_size(struct snap_virtio_ctrl *ctrl)
 {
 	/* use block device config definition from linux/virtio_blk.h */
-	return sizeof(struct virtio_blk_config);
+	return sizeof(struct virtio_state_blk_config);
 }
 
 static void
 snap_virtio_blk_ctrl_bar_dump_state(struct snap_virtio_ctrl *ctrl, const void *buf, int len)
 {
-	const struct virtio_blk_config *dev_cfg;
+	const struct virtio_state_blk_config *dev_cfg;
 
 	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl)) {
 		snap_info(">>> blk_config: state is truncated (%d < %lu)\n", len,
@@ -155,7 +156,7 @@ snap_virtio_blk_ctrl_bar_get_state(struct snap_virtio_ctrl *ctrl,
 				   void *buf, size_t len)
 {
 	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
-	struct virtio_blk_config *dev_cfg;
+	struct virtio_state_blk_config *dev_cfg;
 
 	if (len < snap_virtio_blk_ctrl_bar_get_state_size(ctrl))
 		return -EINVAL;
@@ -176,7 +177,7 @@ snap_virtio_blk_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 				   const void *buf, int len)
 {
 	struct snap_virtio_blk_device_attr *vbbar = to_blk_device_attr(vbar);
-	const struct virtio_blk_config *dev_cfg;
+	const struct virtio_state_blk_config *dev_cfg;
 	int i, ret;
 
 	if (!buf)
@@ -815,7 +816,7 @@ static void snap_virtio_blk_ctrl_lm_pending_bytes_get(struct snap_virtio_ctrl *v
 		return;
 	}
 
-	res->pending_bytes = snap_virtio_ctrl_get_state_size(ctrl);
+	res->pending_bytes = snap_virtio_ctrl_get_state_size_v2(ctrl);
 	if (res->pending_bytes < 0)
 		snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR);
 	else

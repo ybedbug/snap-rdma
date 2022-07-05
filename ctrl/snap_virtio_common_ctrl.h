@@ -369,11 +369,25 @@ enum snap_virtio_ctrl_lm_state {
 	SNAP_VIRTIO_CTRL_LM_FREEZED,
 };
 
+/* defaults to v2 */
 int snap_virtio_ctrl_state_size(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
 				size_t *queue_cfg_len, size_t *dev_cfg_len);
 int snap_virtio_ctrl_state_save(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
 int snap_virtio_ctrl_state_restore(struct snap_virtio_ctrl *ctrl,
 				   const void *buf, size_t len);
+
+int snap_virtio_ctrl_state_size_v1(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
+				size_t *queue_cfg_len, size_t *dev_cfg_len);
+int snap_virtio_ctrl_state_save_v1(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
+int snap_virtio_ctrl_state_restore_v1(struct snap_virtio_ctrl *ctrl,
+				   const void *buf, size_t len);
+
+int snap_virtio_ctrl_state_size_v2(struct snap_virtio_ctrl *ctrl, size_t *common_cfg_len,
+				size_t *queue_cfg_len, size_t *dev_cfg_len);
+int snap_virtio_ctrl_state_save_v2(struct snap_virtio_ctrl *ctrl, void *buf, size_t len);
+int snap_virtio_ctrl_state_restore_v2(struct snap_virtio_ctrl *ctrl,
+				   const void *buf, size_t len);
+
 int snap_virtio_ctrl_provision_queue(struct snap_virtio_ctrl *ctrl,
 				     struct snap_virtio_ctrl_queue_state *qst,
 				     uint32_t vq_index);
@@ -399,7 +413,8 @@ int snap_virtio_ctrl_quiesce_adm(void *data);
 int snap_virtio_ctrl_freeze(void *data);
 int snap_virtio_ctrl_unquiesce(void *data);
 int snap_virtio_ctrl_unfreeze(void *data);
-int snap_virtio_ctrl_get_state_size(void *data);
+/* v1 is now internal for use in the migration channel only */
+int snap_virtio_ctrl_get_state_size_v2(void *data);
 enum snap_virtio_ctrl_lm_state snap_virtio_ctrl_get_lm_state(void *data);
 /**
  * snap_virtio_ctrl_set_lm_state() - Set the live migtration state

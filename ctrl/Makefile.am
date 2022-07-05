@@ -16,6 +16,7 @@ libsnap_virtio_blk_ctrl_la_HEADERS = snap_virtio_blk_ctrl.h \
 				     snap_vq.h \
 				     snap_vq_adm.h \
 				     snap_virtio_adm_spec.h \
+				     snap_virtio_state.h \
 				     $(top_srcdir)/blk/snap_blk_ops.h \
 				     snap_poll_groups.h
 
