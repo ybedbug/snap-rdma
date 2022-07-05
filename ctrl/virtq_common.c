@@ -377,7 +377,7 @@ inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 				rc = snap_dma_q_write_short(cmd->vq_priv->dma_q, pbuf,
 						to_write,
 						start_pa,
-						cmd->vq_priv->vattr->dma_mkey);
+						snap_dp_bmap_get_mkey(vq->ctrl->dp_map));
 				if (rc < 0) {
 					ERR_ON_CMD(cmd, "rdma_write failed: %d\n", rc);
 					goto done;

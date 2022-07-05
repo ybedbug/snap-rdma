@@ -103,7 +103,18 @@ struct snap_dp_bmap {
 	unsigned page_size;
 	bool is_bytemap;
 	uint64_t start_pa;
+	uint32_t host_key;
 };
+
+void snap_dp_bmap_set_mkey(struct snap_dp_bmap *map, uint32_t mkey)
+{
+	map->host_key = mkey;
+}
+
+uint32_t snap_dp_bmap_get_mkey(struct snap_dp_bmap *map)
+{
+	return map->host_key;
+}
 
 struct snap_dp_bmap *snap_dp_bmap_create(struct snap_vq_adm_sge *sge_list, int sge_count,
 		unsigned page_size, bool is_bytemap)

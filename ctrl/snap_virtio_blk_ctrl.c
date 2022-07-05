@@ -18,6 +18,7 @@
 #include "snap_vq_adm.h"
 #include "snap_buf.h"
 #include "snap_dp_map.h"
+#include "snap_vq_internal.h"
 
 #define SNAP_VIRTIO_BLK_MODIFIABLE_FTRS ((1ULL << VIRTIO_F_VERSION_1) |\
 					 (1ULL << VIRTIO_BLK_F_MQ) |\
@@ -621,6 +622,7 @@ static void snap_virtio_blk_ctrl_lm_dp_start_track_cb(struct snap_vq_cmd *vcmd,
 		goto done;
 	}
 
+	snap_dp_bmap_set_mkey(vf_ctrl->dp_map, vcmd->vq->xmkey);
 	snap_virtio_ctrl_start_dirty_pages_track(vf_ctrl);
 
 done:

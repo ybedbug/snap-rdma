@@ -37,4 +37,7 @@ void snap_dp_bmap_destroy(struct snap_dp_bmap *map);
 uint32_t snap_dp_bmap_range_size(struct snap_dp_bmap *map, uint64_t pa, uint32_t length);
 uint32_t snap_dp_bmap_get_start_pa(struct snap_dp_bmap *map, uint64_t pa, uint32_t length,
 		uint64_t *start_pa, int *byte_offset, uint32_t *num_pages);
+
+void snap_dp_bmap_set_mkey(struct snap_dp_bmap *map, uint32_t mkey);
+uint32_t snap_dp_bmap_get_mkey(struct snap_dp_bmap *map);
 #endif
