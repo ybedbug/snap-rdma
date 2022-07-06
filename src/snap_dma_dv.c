@@ -489,12 +489,13 @@ static inline int dv_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_le
 				    int *n_bb)
 {
 	struct snap_dv_qp *dv_qp = &q->sw_qp.dv_qp;
+	uint16_t complement = 0;
+	uint8_t fm_ce_se = 0;
 	struct mlx5_wqe_ctrl_seg *ctrl;
 	struct mlx5_wqe_inl_data_seg *in_seg;
 	struct mlx5_wqe_data_seg *data_seg;
-	uint16_t pi, wqe_size, to_end;
-	uint16_t complement = 0;
-	uint8_t fm_ce_se = 0;
+	uint16_t pi, wqe_size;
+	size_t to_end;
 	void *pdata;
 
 	/* Every inline data segment occupies one or more octowords */
