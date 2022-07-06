@@ -622,7 +622,14 @@ static void snap_virtio_blk_ctrl_lm_dp_start_track_cb(struct snap_vq_cmd *vcmd,
 		goto done;
 	}
 
-	snap_dp_bmap_set_mkey(vf_ctrl->dp_map, vcmd->vq->xmkey);
+	vf_ctrl->pf_xmkey = snap_create_cross_mkey(vf_ctrl->lb_pd, pf_ctrl->sdev);
+	if (!vf_ctrl->pf_xmkey) {
+		snap_dp_bmap_destroy(vf_ctrl->dp_map);
+		vq_adm_status = SNAP_VIRTIO_ADM_STATUS_DEVICE_INTERNAL_ERR;
+		goto done;
+	}
+
+	snap_dp_bmap_set_mkey(vf_ctrl->dp_map, vf_ctrl->pf_xmkey->mkey);
 	snap_virtio_ctrl_start_dirty_pages_track(vf_ctrl);
 
 done:
@@ -698,6 +705,11 @@ static void snap_virtio_blk_ctrl_lm_dp_stop_track(struct snap_virtio_ctrl *vctrl
 	if (ctrl->dp_map) {
 		snap_dp_bmap_destroy(ctrl->dp_map);
 		ctrl->dp_map = NULL;
+	}
+
+	if (ctrl->pf_xmkey) {
+		snap_destroy_cross_mkey(ctrl->pf_xmkey);
+		ctrl->pf_xmkey = NULL;
 	}
 
 	snap_vaq_cmd_complete(cmd, SNAP_VIRTIO_ADM_STATUS_OK);

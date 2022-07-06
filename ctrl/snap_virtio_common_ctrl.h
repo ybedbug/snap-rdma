@@ -247,6 +247,7 @@ struct snap_virtio_ctrl {
 	/* true if ctrl resume was requested while ctrl was still suspending */
 	bool pending_resume;
 	struct snap_dp_bmap *dp_map;
+	struct snap_cross_mkey *pf_xmkey;
 };
 
 bool snap_virtio_ctrl_is_stopped(struct snap_virtio_ctrl *ctrl);

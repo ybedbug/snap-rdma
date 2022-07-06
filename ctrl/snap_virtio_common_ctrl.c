@@ -1182,6 +1182,14 @@ void snap_virtio_ctrl_close(struct snap_virtio_ctrl *ctrl)
 	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
 		if (!TAILQ_EMPTY(&ctrl->pg_ctx.pgs[i].q_list))
 			snap_warn("Closing ctrl %p with queue %d still active", ctrl, i);
+	/* if controller is destroyed while dirty page tracking is enabled
+	 * need to destroy dp tracking structs to avoid memory leak
+	 */
+	if (ctrl->pf_xmkey)
+		snap_destroy_cross_mkey(ctrl->pf_xmkey);
+	if (ctrl->dp_map)
+		snap_dp_bmap_destroy(ctrl->dp_map);
+
 	(void)snap_destroy_cross_mkey(ctrl->xmkey);
 	snap_pgs_free(&ctrl->pg_ctx);
 	free(ctrl->queues);
