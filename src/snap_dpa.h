@@ -121,7 +121,7 @@ int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr);
 int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey);
 
 struct snap_dpa_duar {
-	 struct flexio_emu_db_to_cq_ctx *map_entry;
+	struct flexio_emu_db_to_cq_ctx *map_entry;
 };
 
 struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num);

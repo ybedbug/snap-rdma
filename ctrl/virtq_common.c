@@ -398,6 +398,7 @@ done:
 		ERR_ON_CMD(cmd, "mark dirty page failed: pa 0x%lx len %u\n", pa, len);
 }
 
+int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
 /**
  * virtq_sm_write_status() - Write command status to host memory upon finish
  * @cmd:	command which requested the write
@@ -412,7 +413,6 @@ inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
 	int ret;
 	struct virtq_status_data sd;
 	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
-	extern int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
 
 	cmd->vq_priv->ops->status_data(cmd, &sd);
 	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
@@ -470,11 +470,12 @@ int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
 	return ret;
 }
 
+int virtq_blk_dpa_complete(struct snap_virtio_queue *vq, struct vring_used_elem *comp);
+
 int virtq_dpa_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
 {
 	struct vring_used_elem comp;
 	int ret;
-	extern  int virtq_blk_dpa_complete(struct snap_virtio_queue *vq, struct vring_used_elem *comp);
 
 	comp.id = cmd->descr_head_idx;
 	comp.len = cmd->total_in_len;
@@ -674,9 +675,9 @@ int virtq_progress(struct virtq_common_ctx *q, int thread_id)
 		struct virtq_split_tunnel_req reqs[64];
 
 		n = priv->snap_vbq->q_ops->poll(priv->snap_vbq, reqs, 64);
-		for (i = 0; i < n; i++) {
+		for (i = 0; i < n; i++)
 			priv->dma_q->rx_cb(priv->dma_q, &reqs[i], 0, 0);
-		}
+
 		priv->snap_vbq->q_ops->send_completions(priv->snap_vbq);
 	}
 #endif

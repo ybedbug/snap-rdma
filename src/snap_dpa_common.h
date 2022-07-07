@@ -121,8 +121,8 @@ struct snap_dpa_rsp {
 };
 
 struct snap_dpa_cmd_start {
-    struct snap_dpa_cmd base;
-    struct snap_hw_cq cmd_cq;
+	struct snap_dpa_cmd base;
+	struct snap_hw_cq cmd_cq;
 };
 
 struct snap_dpa_cmd_mr {
@@ -154,7 +154,8 @@ static inline void snap_dpa_rsp_send(void *mbox, int type)
 
 	rsp->status = type;
 	/* TODO: check if weaker barriers can be used -
-	 * single io fence may be enough here. Check with AdiM NitzanA */
+	 * single io fence may be enough here. Check with AdiM NitzanA
+	 */
 	snap_memory_cpu_fence();
 	rsp->sn = cmd->sn;
 	snap_memory_bus_fence();

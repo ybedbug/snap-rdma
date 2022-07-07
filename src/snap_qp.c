@@ -245,8 +245,7 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	if (!devx_cq->devx.on_dpa) {
 		hw_cq->cq_addr = (uintptr_t)devx_cq->devx.umem.buf;
 		hw_cq->dbr_addr = hw_cq->cq_addr + hw_cq->cqe_cnt * hw_cq->cqe_size;
-	}
-	else {
+	} else {
 		hw_cq->cq_addr = snap_dpa_mem_addr(devx_cq->devx.dpa_mem);
 		hw_cq->dbr_addr = (uintptr_t)devx_cq->devx.umem.buf;
 	}

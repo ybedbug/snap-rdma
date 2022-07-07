@@ -267,22 +267,6 @@ enum {
 	SNAP_DPA_Q_PROVIDER = 2,
 };
 
-#if 0
-//TODO: move struct snap_dpa_virtq to seperate file
-struct snap_dpa_virtq {
-	struct snap_virtio_queue vq;
-	struct snap_dpa_p2p_q *q;
-	struct snap_dpa_thread *dpa_worker;
-	struct ibv_mr *dpa_window_mr;
-	void *dpa_window;
-	/* hack to do window copy without xgvmi mkey */
-	struct ibv_mr *host_driver_mr;
-	struct vring_desc *descs_table;
-	struct ibv_mr *descs_mr;
-
-};
-#endif
-
 static inline struct snap_virtio_common_queue_attr*
 to_common_queue_attr(struct snap_virtio_queue_attr *vattr)
 {

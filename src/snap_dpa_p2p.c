@@ -142,7 +142,7 @@ int snap_dpa_p2p_send_vq_heads(struct snap_dpa_p2p_q *q, uint16_t vqid, uint16_t
 		uint16_t last_avail_index, uint16_t avail_index, uint64_t driver,
 		uint32_t driver_mkey)
 {
-#if 0
+#if P2P_TODO
 	if (!q->credit_count)
 		return -EAGAIN;
 #endif
@@ -155,7 +155,7 @@ int snap_dpa_p2p_send_vq_table_cont(struct snap_dpa_p2p_q *q, uint16_t vqid, uin
 		uint16_t last_avail_index, uint16_t avail_index, uint64_t driver,
 		uint32_t driver_mkey)
 {
-#if 0
+#if P2P_TODO
 	if (!q->credit_count)
 		return -EAGAIN;
 #endif

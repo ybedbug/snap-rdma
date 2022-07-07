@@ -87,7 +87,8 @@ struct snap_dpa_rt_thread {
 	struct snap_dpa_p2p_q dpu_cmd_chan;
 	struct snap_cq *db_cq;
 	/* in manyq per thread, we should have array of msix, for now use
-	 * one msix cq */
+	 * one msix per cq
+	 */
 	struct snap_cq *msix_cq;
 	struct snap_msix_map *msix_vector;
 	int n_msix;

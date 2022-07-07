@@ -1171,7 +1171,7 @@ struct blk_virtq_ctx *blk_virtq_create(struct snap_virtio_blk_ctrl_queue *vbq,
 		blk_impl_ops.send_status = virtq_blk_dpa_send_status;
 	}
 
-	snap_debug("created VIRTQ %d succesfully in_order %d q_provider %d\n", attr->idx,
+	snap_debug("created VIRTQ %d successfully in_order %d q_provider %d\n", attr->idx,
 		   attr->force_in_order, to_common_queue_attr(vq_priv->vattr)->q_provider);
 	return vq_ctx;
 

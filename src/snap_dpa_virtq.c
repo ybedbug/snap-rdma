@@ -200,13 +200,7 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 int snap_dpa_virtq_query(struct snap_dpa_virtq *vq,
 		struct snap_virtio_common_queue_attr *attr)
 {
-#if 0
 	/* TODO */
-	struct virtq_device_ring *avail_ring;
-
-	avail_ring = (struct virtq_device_ring *)vq->dpa_window;
-	attr->hw_available_index = avail_ring->idx;
-#endif
 	snap_warn("DPA query is not supported. Returning OK\n");
 	return 0;
 }
@@ -287,7 +281,8 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 	struct snap_dpa_p2p_msg_vq_update msg;
 
 	/* TODO: use virtio specific recv msg, save one loop on translation,
-	 * since max virtq heads is known we can pick several messages */
+	 * since max virtq heads is known we can pick several messages
+	 */
 	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, (struct snap_dpa_p2p_msg *)&msg, 1);
 	if (n <= 0)
 		return n;
@@ -338,8 +333,7 @@ static inline int flush_completions(struct snap_dpa_virtq *dpa_q)
 			sizeof(struct vring_used_elem) * dpa_q->num_pending_comps, used_elem_addr,
 			dpa_q->cross_mkey->mkey);
 	if (snap_unlikely(ret)) {
-		snap_info("faied to send completion - %d\n", ret);
-		while(1) { sleep(1); }
+		snap_info("failed to send completion - %d\n", ret);
 		return ret;
 	}
 
@@ -388,10 +382,8 @@ int virtq_blk_dpa_send_completions(struct snap_virtio_queue *vq)
 			return ret;
 	}
 
-	if (dpa_q->host_used_index != dpa_q->hw_used_index) {
+	if (dpa_q->host_used_index != dpa_q->hw_used_index)
 		snap_error("Missing completions!!!\n");
-		while(1) { sleep(1); }
-	}
 
 	if (dpa_q->last_hw_used_index == dpa_q->hw_used_index)
 		return 0;
@@ -401,7 +393,6 @@ int virtq_blk_dpa_send_completions(struct snap_virtio_queue *vq)
 			used_idx_addr, dpa_q->cross_mkey->mkey);
 	if (ret) {
 		snap_info("failed to send hw_used - %d\n", ret);
-		while(1) { sleep(1); }
 		return ret;
 	}
 	/* if msix enabled, send also msix message */
