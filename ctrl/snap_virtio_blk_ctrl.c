@@ -939,7 +939,8 @@ static void snap_virtio_blk_ctrl_lm_dp_report_map(struct snap_virtio_ctrl *vctrl
 						struct snap_vq_cmd *cmd)
 {
 	/* at the moment use the same logic and structs as save state but
-	 * fill it with different format */
+	 * fill it with different format
+	 */
 	struct snap_virtio_ctrl *vf_vctrl;
 	struct snap_virtio_blk_ctrl *blk_ctrl;
 	struct snap_vq_adm_save_state_data *data;

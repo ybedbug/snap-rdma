@@ -19,7 +19,7 @@ struct snap_dp_map;
 struct snap_vq_adm_sge;
 
 /* page set */
-struct snap_dp_map *snap_dp_map_create(unsigned page_size);
+struct snap_dp_map *snap_dp_map_create(unsigned int page_size);
 void snap_dp_map_destroy(struct snap_dp_map *map);
 
 int snap_dp_map_add_range(struct snap_dp_map *map, uint64_t pa, uint32_t length);
@@ -31,7 +31,7 @@ int snap_dp_map_serialize(struct snap_dp_map *map, uint64_t *buf, uint32_t lengt
 struct snap_dp_bmap;
 
 struct snap_dp_bmap *snap_dp_bmap_create(struct snap_vq_adm_sge *sge_list, int sge_count,
-		unsigned page_size, bool is_bytemap);
+		unsigned int page_size, bool is_bytemap);
 void snap_dp_bmap_destroy(struct snap_dp_bmap *map);
 
 uint32_t snap_dp_bmap_range_size(struct snap_dp_bmap *map, uint64_t pa, uint32_t length);

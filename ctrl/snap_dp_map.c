@@ -25,10 +25,10 @@ KHASH_INIT(snap_dp_hash, uint64_t, char, 0, kh_int64_hash_func, kh_int64_hash_eq
 struct snap_dp_map {
 	khash_t(snap_dp_hash) dp_set;
 	pthread_spinlock_t lock;
-	unsigned page_size;
+	unsigned int page_size;
 };
 
-struct snap_dp_map *snap_dp_map_create(unsigned page_size)
+struct snap_dp_map *snap_dp_map_create(unsigned int page_size)
 {
 	struct snap_dp_map *map;
 
@@ -100,7 +100,7 @@ int snap_dp_map_serialize(struct snap_dp_map *map, uint64_t *buf, uint32_t lengt
 struct snap_dp_bmap {
 	struct snap_vq_adm_sge *sge_list;
 	int sge_count;
-	unsigned page_size;
+	unsigned int page_size;
 	bool is_bytemap;
 	uint64_t start_pa;
 	uint32_t host_key;
@@ -117,7 +117,7 @@ uint32_t snap_dp_bmap_get_mkey(struct snap_dp_bmap *map)
 }
 
 struct snap_dp_bmap *snap_dp_bmap_create(struct snap_vq_adm_sge *sge_list, int sge_count,
-		unsigned page_size, bool is_bytemap)
+		unsigned int page_size, bool is_bytemap)
 {
 	struct snap_dp_bmap *map;
 

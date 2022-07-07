@@ -374,6 +374,7 @@ inline void virtq_mark_dirty_mem(struct virtq_cmd *cmd, uint64_t pa,
 			 */
 			do {
 				size_t to_write = size <= sizeof(pbuf) ? size : sizeof(pbuf);
+
 				rc = snap_dma_q_write_short(cmd->vq_priv->dma_q, pbuf,
 						to_write,
 						start_pa,
