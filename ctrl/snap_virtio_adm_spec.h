@@ -134,6 +134,7 @@ enum snap_vq_adm_dirty_page_track_mode {
 struct snap_vq_adm_sge {
 	__le64 addr;
 	__le32 len;
+	__le32 reserved;
 };
 
 struct snap_vq_adm_dirty_page_track_start {
