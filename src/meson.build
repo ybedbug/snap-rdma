@@ -13,18 +13,6 @@
 libsnap_core_include = include_directories('.', '..', flexio_include)
 
 libsnap_core_sources = [
-	'mlx5_ifc.h',
-	'snap_dma.h',
-	'snap_dma_internal.h',
-	'snap_dma_stat.h',
-	'snap_dpa.h',
-	'snap_dpa_common.h',
-	'snap_env.h',
-	'snap_macros.h',
-	'snap_mb.h',
-	'snap_mr.h',
-	'snap_qp.h',
-	'snap_umr.h',
 	'snap_dma.c',
 	'snap_dma_control.c',
 	'snap_dma_dv.c',

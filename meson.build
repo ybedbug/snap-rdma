@@ -10,16 +10,26 @@
 # provided with the software product.
 #
 
+#Meson docs:
+#
+#For setting optimization levels and toggling debug, you can either set
+#the buildtype option, or you can set the optimization and debug options
+#which give finer control over the same.
+#
 project('libsnap_core', 'C', 'CPP',
 	# Get version number from file.
 	# Fallback to "more" for Windows compatibility.
 	version: run_command(find_program('cat', 'more'),
 		files('VERSION'), check: false).stdout().strip(),
-	default_options: ['buildtype=release',
+	default_options: [
 			  'werror=true',
 			  'b_pie=true',
 			  'b_staticpic=true',
-			  'prefix=/opt/mellanox/devemu'],
+			  'prefix=/opt/mellanox/devemu',
+			  # always add debug symbols (-g)
+			  'debug=true',
+			  'optimization=3'
+			  ],
 	meson_version: '>= 0.55.0'
 )
 
