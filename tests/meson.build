@@ -20,6 +20,7 @@ cpp_args = [
 ]
 
 gtest = dependency('gtest_main',
+		fallback : ['gtest', 'gtest_main_dep'],
 		required : true,
 		not_found_message :
 		'gtest is not found. Check that PKG_CONFIG_PATH is set. Ex: ' +
