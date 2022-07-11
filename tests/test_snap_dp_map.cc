@@ -1,8 +1,14 @@
 #include <limits.h>
 #include "gtest/gtest.h"
+
+#include <stdint.h>
+#include <pthread.h>
+#include <errno.h>
+#include <linux/virtio_ring.h>
+
 extern "C" {
 #include "snap_dp_map.h"
-#include "ctrl/snap_virtio_adm_spec.h"
+#include "snap_virtio_adm_spec.h"
 };
 
 TEST(snap_dp_map, create) {
