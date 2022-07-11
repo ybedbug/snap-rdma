@@ -191,8 +191,10 @@ static inline void virtq_progress()
 	int i, n;
 	//int cr_update;
 
-	// hack to slow thing down on simx
+	// hack to slow things down on simx
 #if SIMX_BUILD
+	static int count;
+
 	if (count++ % COMMAND_DELAY)
 		return;
 #endif
