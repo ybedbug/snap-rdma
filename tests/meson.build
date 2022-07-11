@@ -10,7 +10,7 @@
 # provided with the software product.
 #
 
-if get_option('enable-gtest') == false
+if not get_option('enable-gtest')
 	warning('Skipping compilation of tests')
 	subdir_done()
 endif
@@ -23,7 +23,8 @@ gtest = dependency('gtest_main',
 		required : true,
 		not_found_message :
 		'gtest is not found. Check that PKG_CONFIG_PATH is set. Ex: ' +
-		'PKG_CONFIG_PATH=/usr/local/gtest/lib64/pkgconfig/'
+		'PKG_CONFIG_PATH=/usr/local/gtest/lib64/pkgconfig/',
+		native : true
 		)
 
 gtest_snap_dma_srcs = [
@@ -37,7 +38,8 @@ gtest_snap_dma = executable('gtest_snap_dma',
 		cpp_args : cpp_args,
 		dependencies : [ libsnap_core_dep, gtest ],
 		pie : false,
-		install : false
+		install : false,
+		native : true
 		)
 
 #
@@ -47,3 +49,21 @@ test('dma', gtest_snap_dma,
 		env : 'MLXDEV=mlx5_0',
 		protocol : 'gtest',
 		verbose : true)
+
+if flexio.found()
+
+gtest_snap_dpa_srcs = [
+	'test_snap_dpa.cc',
+	'tests_common.cc'
+	]
+
+gtest_snap_dpa = executable('gtest_snap_dpa',
+		gtest_snap_dpa_srcs,
+		cpp_args : cpp_args,
+		dependencies : [ libdpa_core_dep, gtest ],
+		pie : false,
+		install : false,
+		native : true
+		)
+
+endif

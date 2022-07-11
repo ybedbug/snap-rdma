@@ -1,0 +1,9 @@
+[host_machine]
+system = 'unknown'
+cpu_family = 'riscv64'
+cpu = 'riscv'
+endian = 'little'
+
+[binaries]
+c = 'riscv64-unknown-elf-gcc'
+cpp = 'riscv64-unknown-elf-g++'

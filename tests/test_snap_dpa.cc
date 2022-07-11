@@ -4,7 +4,7 @@
 #include "gtest/gtest.h"
 
 extern "C" {
-#include "snap.h"
+//#include "snap.h"
 #include "snap_dpa.h"
 #include "snap_qp.h"
 #include "snap_dpa_rt.h"
@@ -68,12 +68,14 @@ void SnapDpaTest::TearDown()
 
 /* check that we have emulation caps working on simx */
 TEST_F(SnapDpaTest, hello_simx) {
-
+/* this one can only work with snap */
+#if 0
 	struct snap_context *ctx;
 
 	ctx = snap_open(get_ib_ctx()->device);
 	ASSERT_TRUE(ctx);
 	snap_close(ctx);
+#endif
 }
 
 TEST_F(SnapDpaTest, app_load_unload) {
@@ -243,6 +245,7 @@ TEST_F(SnapDpaTest, cmd_lat_bench_polling) {
 	snap_dpa_process_destroy(dpa_ctx);
 }
 
+#if 0
 extern "C" {
 #include "snap_virtio_common.h"
 #include "snap_dpa_common.h"
@@ -377,3 +380,4 @@ TEST_F(SnapDpaTest, dpa_two_virtq_create) {
 	snap_close(ctx);
 #endif
 }
+#endif

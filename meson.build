@@ -33,12 +33,12 @@ project('libsnap_core', 'C', 'CPP',
 	meson_version: '>= 0.55.0'
 )
 
-cc = meson.get_compiler('c')
-cpp = meson.get_compiler('cpp')
+cc = meson.get_compiler('c', native : true)
+cpp = meson.get_compiler('cpp', native : true)
 
 libsnap_core_depends = []
-libsnap_core_depends += dependency('libibverbs', required : true)
-libsnap_core_depends += dependency('libmlx5', required : true)
+libsnap_core_depends += dependency('libibverbs', required : true, native : true)
+libsnap_core_depends += dependency('libmlx5', required : true, native : true)
 
 conf_data = configuration_data()
 
@@ -55,6 +55,8 @@ if (flexio_pfx != '')
 			required : true)
 	libsnap_core_depends += flexio
 	conf_data.set10('HAVE_FLEXIO', 1, description : 'Enable DPA host side support')
+else
+	flexio = disabler()
 endif
 
 conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
@@ -64,4 +66,5 @@ conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
 configure_file(output : 'config.h', configuration : conf_data)
 
 subdir('src')
+subdir('dpa')
 subdir('tests')

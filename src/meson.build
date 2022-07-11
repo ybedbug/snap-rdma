@@ -31,10 +31,33 @@ libsnap_core = static_library('snap_core',
 			libsnap_core_sources,
 			dependencies : libsnap_core_depends,
 			include_directories : libsnap_core_include,
-			install: false)
+			install: false,
+			native: true)
 
 libsnap_core_dep = declare_dependency(
 			dependencies : libsnap_core_depends,
 			include_directories : libsnap_core_include,
 			sources : libsnap_core_sources)
 
+if flexio.found()
+
+libdpa_core_include = include_directories('.', '..', flexio_include)
+
+libdpa_core_sources = [
+	'snap_dpa_rt.c',
+	'snap_dpa_p2p.c'
+]
+
+libdpa_core = static_library('dpa_core',
+			libdpa_core_sources,
+			dependencies : libsnap_core_dep,
+			include_directories : libdpa_core_include,
+			install: false,
+			native: true)
+
+libdpa_core_dep = declare_dependency(
+			dependencies : libsnap_core_dep,
+			include_directories : libdpa_core_include,
+			sources : libdpa_core_sources)
+
+endif
