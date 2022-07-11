@@ -65,6 +65,15 @@ conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
 
 configure_file(output : 'config.h', configuration : conf_data)
 
+# common cflags
+common_cflags = []
+if get_option('enable-debug')
+	common_cflags += '-DSNAP_DEBUG=1'
+endif
+if get_option('enable-simx')
+	common_cflags += '-DSIMX_BUILD=1'
+endif
+
 subdir('src')
 subdir('dpa')
 subdir('tests')

@@ -23,8 +23,10 @@
  * between DPA and DPU
  */
 
-/* TODO: should be configurable, enable to run on SimX */
+/* enable to run on SimX */
+#ifndef SIMX_BUILD
 #define SIMX_BUILD 0
+#endif
 
 /* max length of *printf/log buffer on DPA */
 #define SNAP_DPA_PRINT_BUF_LEN 160 /* should be careful because this is allocated on stack */

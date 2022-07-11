@@ -29,12 +29,14 @@ install_headers('snap_dma.h', 'snap_qp.h', 'snap_macros.h', 'snap_mr.h', 'snap_e
 
 libsnap_core = static_library('snap_core',
 			libsnap_core_sources,
+			c_args : common_cflags,
 			dependencies : libsnap_core_depends,
 			include_directories : libsnap_core_include,
 			install: false,
 			native: true)
 
 libsnap_core_dep = declare_dependency(
+			compile_args : common_cflags,
 			dependencies : libsnap_core_depends,
 			include_directories : libsnap_core_include,
 			sources : libsnap_core_sources)
@@ -50,12 +52,14 @@ libdpa_core_sources = [
 
 libdpa_core = static_library('dpa_core',
 			libdpa_core_sources,
+			c_args : common_cflags,
 			dependencies : libsnap_core_dep,
 			include_directories : libdpa_core_include,
 			install: false,
 			native: true)
 
 libdpa_core_dep = declare_dependency(
+			compile_args : common_cflags,
 			dependencies : libsnap_core_dep,
 			include_directories : libdpa_core_include,
 			sources : libdpa_core_sources)

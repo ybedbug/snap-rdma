@@ -28,6 +28,8 @@ dpa_cflags = [
 	'-DE_MODE_LE', '-DUSER_SPACE', '-D__DPA=1'
 ]
 
+dpa_cflags += common_cflags
+
 dpa_link_script = meson.current_source_dir() + '/flexio_linker.ld'
 
 #
