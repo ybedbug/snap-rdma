@@ -153,10 +153,6 @@ static inline void snap_vq_cmd_put(struct snap_vq *q, struct snap_vq_cmd *cmd)
 {
 	TAILQ_REMOVE(&q->inflight_cmds, cmd, entry);
 	TAILQ_INSERT_HEAD(&q->free_cmds, cmd, entry);
-
-	if (snap_unlikely(q->state == SNAP_VQ_STATE_FLUSHING &&
-			TAILQ_EMPTY(&q->inflight_cmds)))
-		q->state = SNAP_VQ_STATE_SUSPENDED;
 }
 
 static void snap_vq_cmd_start(struct snap_vq *q, const struct snap_vq_header *hdr)
@@ -618,7 +614,9 @@ int snap_vq_handle_events(struct snap_vq *q)
  * After the function returns, it is guaranteed that no new commands
  * will be fetched from host. However, there might still be inflight
  * commands in the pipeline. To ensure queue is fully suspended, user
- * needs to query it by calling snap_vq_is_suspended()
+ * needs to query it by calling snap_vq_is_suspended(). If user is working in
+ * non-polling mode, user must first call snap_vq_progress() to move queue to
+ * the SUSPENDED state.
  */
 void snap_vq_suspend(struct snap_vq *q)
 {
@@ -671,6 +669,10 @@ int snap_vq_progress(struct snap_vq *q)
 	n = q->dma_q->ops->progress_tx(q->dma_q);
 	if (snap_likely(q->state == SNAP_VQ_STATE_RUNNING))
 		n += q->dma_q->ops->progress_rx(q->dma_q);
+
+	if (snap_unlikely(q->state == SNAP_VQ_STATE_FLUSHING &&
+			TAILQ_EMPTY(&q->inflight_cmds)))
+		q->state = SNAP_VQ_STATE_SUSPENDED;
 
 	return n;
 }
