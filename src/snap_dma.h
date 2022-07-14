@@ -492,6 +492,7 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key);
+int snap_dma_q_post_recv(struct snap_dma_q *q);
 struct snap_dma_ep_copy_cmd {
 	struct snap_dpa_cmd base;
 	struct snap_dma_q q;

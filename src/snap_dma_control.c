@@ -503,7 +503,7 @@ static int query_mmo_caps(struct ibv_context *context,
 	return 0;
 }
 
-static int snap_post_recv(struct snap_dma_q *q)
+int snap_dma_q_post_recv(struct snap_dma_q *q)
 {
 	int i;
 	int rc;
@@ -1510,11 +1510,11 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 	 * However in our case we control both sides and there is no traffic
 	 * until this function completes.
 	 */
-	ret = snap_post_recv(q1);
+	ret = snap_dma_q_post_recv(q1);
 	if (ret)
 		return ret;
 
-	ret = snap_post_recv(q2);
+	ret = snap_dma_q_post_recv(q2);
 	if (ret)
 		return ret;
 
@@ -1646,7 +1646,7 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	 * However in our case we control both sides and there is no traffic
 	 * until fw qp is passed to the FW
 	 */
-	rc = snap_post_recv(q);
+	rc = snap_dma_q_post_recv(q);
 	if (rc)
 		goto free_fw_qp;
 
