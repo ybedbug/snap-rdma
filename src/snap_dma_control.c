@@ -1156,6 +1156,89 @@ static int snap_activate_loop_2_qp(struct snap_dma_ibv_qp *qp1, struct snap_dma_
 	return 0;
 }
 
+static int snap_activate_qp_to_remote_qpn(struct snap_dma_ibv_qp *qp1,
+					  int remote_qpn, enum ibv_mtu mtu,
+					  bool force_loopback)
+{
+	struct ibv_qp_attr attr;
+	int rc, flags_mask;
+	uint16_t udp_sport = 0;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.qp_state = IBV_QPS_INIT;
+	attr.pkey_index = SNAP_DMA_QP_PKEY_INDEX;
+	attr.port_num = SNAP_DMA_QP_PORT_NUM;
+	attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
+	flags_mask = IBV_QP_STATE |
+		IBV_QP_PKEY_INDEX |
+		IBV_QP_PORT |
+		IBV_QP_ACCESS_FLAGS;
+
+	rc = snap_modify_lb_qp_rst2init(qp1->qp, &attr, flags_mask);
+	if (rc) {
+		snap_error("failed to modify SW QP to INIT errno=%d\n", rc);
+		return rc;
+	} else if (qp1->mode == SNAP_DMA_Q_MODE_GGA) {
+		rc = snap_modify_lb_qp_init2init(qp1->qp);
+		if (rc) {
+			snap_error("failed to modify SW QP in INIT2INIT errno=%d\n",
+					rc);
+			return rc;
+		}
+	}
+
+	memset(&attr, 0, sizeof(attr));
+	attr.qp_state = IBV_QPS_RTR;
+	attr.path_mtu = mtu;
+	attr.rq_psn = SNAP_DMA_QP_RQ_PSN;
+	attr.max_dest_rd_atomic = SNAP_DMA_QP_MAX_DEST_RD_ATOMIC;
+	attr.min_rnr_timer = SNAP_DMA_QP_RNR_TIMER;
+	attr.ah_attr.port_num = SNAP_DMA_QP_PORT_NUM;
+	attr.ah_attr.grh.hop_limit = SNAP_DMA_QP_HOP_LIMIT;
+	attr.ah_attr.is_global = 1;
+
+	attr.dest_qp_num = remote_qpn;
+	flags_mask = IBV_QP_STATE              |
+		IBV_QP_AV                 |
+		IBV_QP_PATH_MTU           |
+		IBV_QP_DEST_QPN           |
+		IBV_QP_RQ_PSN             |
+		IBV_QP_MAX_DEST_RD_ATOMIC |
+		IBV_QP_MIN_RNR_TIMER;
+
+	rc = snap_modify_lb_qp_init2rtr(qp1->qp, &attr, flags_mask,
+			force_loopback, udp_sport);
+	if (rc) {
+		snap_error("failed to modify SW QP to RTR errno=%d\n", rc);
+		return rc;
+	}
+
+	memset(&attr, 0, sizeof(attr));
+	attr.qp_state = IBV_QPS_RTS;
+	attr.timeout = SNAP_DMA_QP_TIMEOUT;
+	attr.retry_cnt = SNAP_DMA_QP_RETRY_COUNT;
+	attr.sq_psn = SNAP_DMA_QP_SQ_PSN;
+	attr.rnr_retry = SNAP_DMA_QP_RNR_RETRY;
+	attr.max_rd_atomic = SNAP_DMA_QP_MAX_RD_ATOMIC;
+	flags_mask = IBV_QP_STATE              |
+		IBV_QP_TIMEOUT            |
+		IBV_QP_RETRY_CNT          |
+		IBV_QP_RNR_RETRY          |
+		IBV_QP_SQ_PSN             |
+		IBV_QP_MAX_QP_RD_ATOMIC;
+
+	/* once QPs were moved to RTR using devx, they must also move to RTS
+	 * using devx since kernel doesn't know QPs are on RTR state
+	 */
+	rc = snap_modify_lb_qp_rtr2rts(qp1->qp, &attr, flags_mask);
+	if (rc) {
+		snap_error("failed to modify SW QP to RTS errno=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 static int snap_dma_ep_connect_helper(struct snap_dma_ibv_qp *qp1,
 		struct snap_dma_ibv_qp *qp2, struct ibv_pd *pd)
 {
@@ -1208,6 +1291,45 @@ static int snap_dma_ep_connect_helper(struct snap_dma_ibv_qp *qp1,
 
 	return snap_activate_loop_2_qp(qp1, qp2, mtu, ib_en, lid, roce_en,
 				     force_loopback, &sw_gid_entry, &fw_gid_entry, &roce_caps);
+}
+
+static int snap_dma_ep_connect_qpn_helper(struct snap_dma_ibv_qp *qp1,
+					  int remote_qpn, struct ibv_pd *pd)
+{
+	struct snap_roce_caps roce_caps = {0};
+	bool roce_en = false, ib_en = false;
+	enum ibv_mtu mtu = IBV_MTU_1024;
+	bool force_loopback = false;
+	uint16_t lid = 0;
+	int rc;
+
+	rc = check_port(pd->context, SNAP_DMA_QP_PORT_NUM, &roce_en,
+			&ib_en, &lid, &mtu);
+
+	if (rc)
+		return rc;
+
+	if (ib_en) {
+		snap_error("IB mode not supported. Cannot create queue\n");
+		return -ENOTSUP;
+	}
+
+	rc = fill_roce_caps(pd->context, &roce_caps);
+	if (rc)
+		return rc;
+
+	/* Check if force-loopback is supported based on roce caps */
+	if (roce_caps.resources_on_nvme_emulation_manager &&
+			((roce_caps.roce_enabled && roce_caps.fl_when_roce_enabled) ||
+			 (!roce_caps.roce_enabled && roce_caps.fl_when_roce_disabled))) {
+		force_loopback = true;
+	} else {
+		snap_error("Force-loopback option is not supported. Cannot create queue\n");
+		return -ENOTSUP;
+	}
+
+	return snap_activate_qp_to_remote_qpn(qp1, remote_qpn, mtu,
+			force_loopback);
 }
 
 static int snap_alloc_iov_ctx(struct snap_dma_q *q)
@@ -1515,6 +1637,34 @@ int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2)
 		return ret;
 
 	ret = snap_dma_q_post_recv(q2);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+/**
+ * snap_dma_ep_connect_remote_qpn() - Connect 2 Qps
+ * @q1:  first queue
+ * @q2:  qpn of remote queue
+ *
+ * connect software qps of 2 separate snap_dma_q's
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int snap_dma_ep_connect_remote_qpn(struct snap_dma_q *q1, int remote_qpn)
+{
+	struct ibv_pd *pd;
+	int ret;
+
+	if (!q1 || !remote_qpn)
+		return -1;
+
+	pd = snap_qp_get_pd(q1->sw_qp.qp);
+	if (!pd)
+		return -1;
+
+	ret = snap_dma_ep_connect_qpn_helper(&q1->sw_qp, remote_qpn, pd);
 	if (ret)
 		return ret;
 

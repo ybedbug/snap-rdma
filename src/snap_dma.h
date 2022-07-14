@@ -490,6 +490,7 @@ struct ibv_qp *snap_dma_q_get_fw_qp(struct snap_dma_q *q);
 struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	const struct snap_dma_q_create_attr *attr);
 int snap_dma_ep_connect(struct snap_dma_q *q1, struct snap_dma_q *q2);
+int snap_dma_ep_connect_remote_qpn(struct snap_dma_q *q1, int remote_qp2_num);
 int snap_dma_q_send(struct snap_dma_q *q, void *in_buf, size_t in_len,
 		uint64_t addr, size_t len, uint32_t key);
 int snap_dma_q_post_recv(struct snap_dma_q *q);
