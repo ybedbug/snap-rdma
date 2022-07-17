@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-lib_LTLIBRARIES = libsnap-virtio-blk-ctrl.la libsnap-virtio-net-ctrl.la libsnap-virtio-fs-ctrl.la libsnap-nvme-ctrl.la
+lib_LTLIBRARIES = libsnap-virtio-blk-ctrl.la libsnap-virtio-net-ctrl.la libsnap-virtio-fs-ctrl.la
 
 noinst_HEADERS = virtq_common.h snap_vq_internal.h snap_vq_prm.h snap_dp_map.h
 
@@ -79,10 +79,3 @@ libsnap_virtio_fs_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLU
 				    $(FS_INCLUDE)
 libsnap_virtio_fs_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread
 
-
-#nvme-ctrl
-libsnap_nvme_ctrl_ladir = $(includedir)/
-libsnap_nvme_ctrl_la_HEADERS = snap_nvme_ctrl.h nvme_proto.h nvme_register.h
-libsnap_nvme_ctrl_la_SOURCES = snap_nvme_ctrl.c nvme_register.c
-libsnap_nvme_ctrl_la_CFLAGS = $(BASE_CFLAGS) $(IBVERBS_CFLAGS) $(SNAP_INCLUDE)
-libsnap_nvme_ctrl_la_LIBADD = $(IBVERBS_LIBS) $(top_builddir)/src/libsnap.la -lpthread

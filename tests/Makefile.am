@@ -9,7 +9,6 @@ noinst_PROGRAMS = \
 		snap_create_destroy_nvme_namespace \
 		snap_create_destroy_nvme_cq \
 		snap_create_destroy_nvme_sq \
-		snap_create_destroy_nvme_ctrl \
 		snap_query_virtio_device \
 		snap_create_destroy_virtio_queue \
 		snap_dpa_p2p_test \
@@ -102,14 +101,6 @@ snap_create_destroy_virtio_ctrl_LDADD = $(IBVERBS_LIBS) \
                                         $(top_builddir)/ctrl/libsnap-virtio-blk-ctrl.la \
 					$(top_builddir)/ctrl/libsnap-virtio-fs-ctrl.la \
 				        $(top_builddir)/src/libsnap.la
-
-snap_create_destroy_nvme_ctrl_CFLAGS = $(LOCAL_CFLAGS) \
-					-I$(top_srcdir)/ctrl
-snap_create_destroy_nvme_ctrl_SOURCES = $(SNAP_TEST_FILES) snap_create_destroy_nvme_ctrl.c
-					  $(SNAP_TEST_FILES)
-snap_create_destroy_nvme_ctrl_LDADD = $(IBVERBS_LIBS) \
-				      $(top_builddir)/ctrl/libsnap-nvme-ctrl.la \
-				      $(top_builddir)/src/libsnap.la
 
 snap_rpc_client_open_close_CFLAGS = $(LOCAL_CFLAGS) \
 					-I$(top_srcdir)/rpc
