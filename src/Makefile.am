@@ -3,7 +3,7 @@ ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libsnap-env.la libsnap-mr.la libsnap-dma.la libsnap.la
 
 noinst_HEADERS = mlx5_ifc.h snap_queue.h snap_rdma_channel.h snap_internal.h \
-		 snap_dpa.h snap_dpa_virtq.h snap_dma_internal.h \
+		 snap_dpa.h snap_dpa_virtq.h snap_dpa_virtq_common.h snap_dma_internal.h \
 		 snap_sw_virtio_blk.h snap_dpa_p2p.h snap_dpa_rt.h \
 		 khash.h
 
