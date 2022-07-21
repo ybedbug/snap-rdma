@@ -872,9 +872,9 @@ snap_virtio_create_queue(struct snap_device *sdev,
 			DEVX_SET(virtio_net_q, virtq_in, vhca_id,
 				 vattr->vhca_id);
 		DEVX_SET(virtio_net_q, virtq_in, hw_available_index,
-			 vattr->hw_available_index);
+			 attr->hw_available_index);
 		DEVX_SET(virtio_net_q, virtq_in, hw_used_index,
-			 vattr->hw_used_index);
+			 attr->hw_used_index);
 		DEVX_SET(virtio_q, virtq_ctx, counter_set_id,
 			 vattr->ctrs_obj_id);
 
@@ -1120,6 +1120,9 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 			   fields_to_modify);
 	} else if (sdev->pci->type == SNAP_VIRTIO_NET_PF ||
 		   sdev->pci->type == SNAP_VIRTIO_NET_VF) {
+		struct snap_virtio_net_queue_attr *attr;
+
+		attr = to_net_queue_attr(vattr);
 		in = in_net;
 		inlen = sizeof(in_net);
 
@@ -1160,12 +1163,12 @@ int snap_virtio_modify_queue(struct snap_virtio_queue *virtq, uint64_t mask,
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX) {
 			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_HW_AVAIL_IDX;
-			DEVX_SET(virtio_net_q,  virtq_in, hw_available_index, vattr->hw_available_index);
+			DEVX_SET(virtio_net_q,  virtq_in, hw_available_index, attr->hw_available_index);
 		}
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX) {
 			fields_to_modify |= SNAP_VIRTIO_NET_QUEUE_HW_USED_IDX;
-			DEVX_SET(virtio_net_q,  virtq_in, hw_used_index, vattr->hw_used_index);
+			DEVX_SET(virtio_net_q,  virtq_in, hw_used_index, attr->hw_used_index);
 		}
 
 		if (mask & SNAP_VIRTIO_NET_QUEUE_DESC_USED_AVAIL_ADDR) {
