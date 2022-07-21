@@ -115,7 +115,7 @@ struct __attribute__((packed)) dpa_virtq_cmd_create {
 	struct dpa_virtq vq;
 };
 
-struct __attribute__((packed)) dpa_virtq_cmd {
+struct dpa_virtq_cmd {
 	struct snap_dpa_cmd base;
 	union {
 		struct dpa_virtq_cmd_create cmd_create;
