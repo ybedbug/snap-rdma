@@ -201,48 +201,65 @@ snap_virtio_net_queue_config_fill(void *in, uint64_t mask,
 	q = DEVX_ADDR_OF(virtio_q_layout_v2, in, queue_configuration);
 
 	snap_debug("offset %ld\n", q - in);
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_SIZE |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_SIZE) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_SIZE;
 		DEVX_SET(virtio_q_layout, q, queue_size,
 			 nattr->q_attrs[i].vattr.size);
 	}
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_MSIX_VECTOR |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_MSIX_VECTOR) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_MSIX_VECTOR;
 		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
 			 nattr->q_attrs[i].vattr.msix_vector);
 	}
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_ENABLE |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_ENABLE) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_ENABLE;
 		DEVX_SET(virtio_q_layout, q, queue_enable,
 			 nattr->q_attrs[i].vattr.enable);
 	}
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_NOTIFY_OFF |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_NOTIFY_OFF) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_NOTIFY_OFF;
 		DEVX_SET(virtio_q_layout, q, queue_notify_off,
 			 nattr->q_attrs[i].vattr.notify_off);
 	}
 
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_DESC |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_DESC) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DESC;
 		DEVX_SET64(virtio_q_layout, q, queue_desc,
 			   nattr->q_attrs[i].vattr.desc);
 	}
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_DRIVER |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_DRIVER) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DRIVER;
 		DEVX_SET64(virtio_q_layout, q, queue_driver,
 			   nattr->q_attrs[i].vattr.driver);
 	}
-	if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_DEVICE |
-		    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_DEVICE) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DEVICE;
 		DEVX_SET64(virtio_q_layout, q, queue_device,
 			   nattr->q_attrs[i].vattr.device);
+	}
+	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET;
+		DEVX_SET(virtio_q_layout_v2, q, queue_reset,
+			 nattr->q_attrs[i].vattr.reset);
+	}
+	if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG) {
+		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG;
+		DEVX_SET(virtio_q_layout, q, queue_size,
+			 nattr->q_attrs[i].vattr.size);
+		DEVX_SET(virtio_q_layout, q, queue_msix_vector,
+			 nattr->q_attrs[i].vattr.msix_vector);
+		DEVX_SET(virtio_q_layout, q, queue_enable,
+			 nattr->q_attrs[i].vattr.enable);
+		DEVX_SET(virtio_q_layout, q, queue_notify_off,
+			 nattr->q_attrs[i].vattr.notify_off);
+		DEVX_SET64(virtio_q_layout, q, queue_desc,
+			   nattr->q_attrs[i].vattr.desc);
+		DEVX_SET64(virtio_q_layout, q, queue_driver,
+			   nattr->q_attrs[i].vattr.driver);
+		DEVX_SET64(virtio_q_layout, q, queue_device,
+			   nattr->q_attrs[i].vattr.device);
+		DEVX_SET(virtio_q_layout_v2, q, queue_reset,
+			 nattr->q_attrs[i].vattr.reset);
 	}
 }
 
@@ -272,13 +289,6 @@ snap_virtio_net_queue_configs_v2_fill(void *in, uint64_t mask,
 					 virtio_q_configuration_v2[idx++]);
 
 			snap_debug("offset %ld\n", q - in);
-			if (mask & (SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET |
-				    SNAP_VIRTIO_MOD_QUEUE_CFG)) {
-				*fields_to_modify |=
-					MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET;
-				DEVX_SET(virtio_q_layout_v2, q, queue_reset,
-					 nattr->q_attrs[i].vattr.reset);
-			}
 			DEVX_SET(virtio_q_layout_v2, q, queue_index,
 				 nattr->q_attrs[i].vattr.idx);
 			snap_virtio_net_queue_config_fill(q, mask, attr, i,
