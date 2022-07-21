@@ -1009,11 +1009,15 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
 		snap_virtio_ctrl_change_num_vfs(ctrl);
 
-	ret = snap_virtio_ctrl_queue_reset_check(ctrl);
-	if (ret)
-		goto out;
+	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED) {
+		ret = snap_virtio_ctrl_queue_reset_check(ctrl);
+		if (ret)
+			goto out;
 
-	snap_virtio_ctrl_queue_enable_check(ctrl);
+		ret = snap_virtio_ctrl_queue_enable_check(ctrl);
+		if (ret)
+			goto out;
+	}
 
 out:
 	snap_virtio_ctrl_progress_unlock(ctrl);
