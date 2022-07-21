@@ -319,16 +319,13 @@ static bool snap_virtio_net_ctrl_queue_reset_check(struct snap_virtio_ctrl_queue
 static bool
 snap_virtio_net_ctrl_queue_enable_check(struct snap_virtio_ctrl *ctrl, int index)
 {
-	struct snap_virtio_net_device_attr *dev_attr;
+	struct snap_virtio_net_device_attr *prev_attr, *curr_attr;
 
-	dev_attr = to_net_device_attr(ctrl->bar_curr);
+	prev_attr = to_net_device_attr(ctrl->bar_prev);
+	curr_attr = to_net_device_attr(ctrl->bar_curr);
 
-	if (dev_attr->q_attrs[index].vattr.enable && !ctrl->queues[index]) {
-		dev_attr->q_attrs[index].vattr.enable = 1;
-		return true;
-	}
-
-	return false;
+	return !prev_attr->q_attrs[index].vattr.enable &&
+		curr_attr->q_attrs[index].vattr.enable;
 }
 
 static struct snap_virtio_queue_ops snap_virtio_net_queue_ops = {
