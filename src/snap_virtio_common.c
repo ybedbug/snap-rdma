@@ -274,27 +274,24 @@ snap_virtio_net_queue_configs_v2_fill(void *in, uint64_t mask,
 
 	snap_debug("modify queues v2\n");
 	for (i = 0; i < attr->max_queues; i++) {
-		if (nattr->q_attrs[i].vattr.modify_pending) {
-			snap_debug("q: %u size: %u msix %u enable %u notify %u desc 0x%lx avail 0x%lx used 0x%lx reset %u\n",
-				   nattr->q_attrs[i].vattr.idx,
-				   nattr->q_attrs[i].vattr.size,
-				   nattr->q_attrs[i].vattr.msix_vector,
-				   nattr->q_attrs[i].vattr.enable,
-				   nattr->q_attrs[i].vattr.notify_off,
-				   nattr->q_attrs[i].vattr.desc,
-				   nattr->q_attrs[i].vattr.driver,
-				   nattr->q_attrs[i].vattr.device,
-				   nattr->q_attrs[i].vattr.reset);
-			q = DEVX_ADDR_OF(virtio_net_device_emulation, in,
-					 virtio_q_configuration_v2[idx++]);
+		snap_debug("q: %u size: %u msix %u enable %u notify %u desc 0x%lx avail 0x%lx used 0x%lx reset %u\n",
+			   nattr->q_attrs[i].vattr.idx,
+			   nattr->q_attrs[i].vattr.size,
+			   nattr->q_attrs[i].vattr.msix_vector,
+			   nattr->q_attrs[i].vattr.enable,
+			   nattr->q_attrs[i].vattr.notify_off,
+			   nattr->q_attrs[i].vattr.desc,
+			   nattr->q_attrs[i].vattr.driver,
+			   nattr->q_attrs[i].vattr.device,
+			   nattr->q_attrs[i].vattr.reset);
+		q = DEVX_ADDR_OF(virtio_net_device_emulation, in,
+				 virtio_q_configuration_v2[idx++]);
 
-			snap_debug("offset %ld\n", q - in);
-			DEVX_SET(virtio_q_layout_v2, q, queue_index,
-				 nattr->q_attrs[i].vattr.idx);
-			snap_virtio_net_queue_config_fill(q, mask, attr, i,
-							  fields_to_modify);
-			nattr->q_attrs[i].vattr.modify_pending = false;
-		}
+		snap_debug("offset %ld\n", q - in);
+		DEVX_SET(virtio_q_layout_v2, q, queue_index,
+			 nattr->q_attrs[i].vattr.idx);
+		snap_virtio_net_queue_config_fill(q, mask, attr, i,
+						  fields_to_modify);
 	}
 
 	return idx;

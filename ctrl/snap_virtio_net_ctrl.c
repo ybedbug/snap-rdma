@@ -175,8 +175,6 @@ snap_virtio_net_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 	for (i = 0; i < ctrl->max_queues; i++) {
 		vnbar->q_attrs[i].hw_available_index = queue_state[i].hw_available_index;
 		vnbar->q_attrs[i].hw_used_index = queue_state[i].hw_used_index;
-		if (ctrl->sdev->sctx->virtio_net_caps.virtio_q_cfg_v2)
-			vnbar->q_attrs[i].vattr.modify_pending = true;
 		snap_info("[%s %d]dev %s q 0x%x , restore avl ix:0x%x, used ix:0x%x\n",
 			  __func__, __LINE__, ctrl->sdev->pci->pci_number, i,
 			  queue_state[i].hw_available_index, queue_state[i].hw_used_index);
@@ -312,7 +310,6 @@ static bool snap_virtio_net_ctrl_queue_reset_check(struct snap_virtio_ctrl_queue
 	if (dev_attr->q_attrs[index].vattr.enable &&
 	    dev_attr->q_attrs[index].vattr.reset) {
 		dev_attr->q_attrs[index].vattr.reset = 0;
-		dev_attr->q_attrs[index].vattr.modify_pending = true;
 		return true;
 	}
 
@@ -328,7 +325,6 @@ snap_virtio_net_ctrl_queue_enable_check(struct snap_virtio_ctrl *ctrl, int index
 
 	if (dev_attr->q_attrs[index].vattr.enable && !ctrl->queues[index]) {
 		dev_attr->q_attrs[index].vattr.enable = 1;
-		dev_attr->q_attrs[index].vattr.modify_pending = true;
 		return true;
 	}
 

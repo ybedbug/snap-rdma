@@ -99,7 +99,6 @@ struct snap_virtio_queue_attr {
 	uint16_t			queue_period;
 	uint16_t			queue_max_count;
 	uint16_t			reset;
-	bool				modify_pending;
 
 	/* lm */
 	bool				dirty_map_dump_enable;
