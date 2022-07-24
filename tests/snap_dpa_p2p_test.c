@@ -36,7 +36,7 @@ void *snap_dpa_p2p_client_sm(void *arg)
 {
 	struct dpa_virtq *dpa_queue = arg;
 	struct snap_dpa_p2p_q *chan = &g_dpu_rt_thr.dpa_cmd_chan;
-	struct snap_dpa_p2p_msg msgs[64];
+	struct snap_dpa_p2p_msg *msgs[64];
 	int msgs_rec, i;
 	int n = 0;
 	int cr_sent = 0;
@@ -55,8 +55,8 @@ void *snap_dpa_p2p_client_sm(void *arg)
 		n++;
 		msgs_rec = snap_dpa_p2p_recv_msg(chan, msgs, 64);
 		for(i = 0; i < msgs_rec; i++) {
-			chan->credit_count += msgs[i].base.credit_delta;
-			switch(msgs[i].base.type) {
+			chan->credit_count += msgs[i]->base.credit_delta;
+			switch(msgs[i]->base.type) {
 			case SNAP_DPA_P2P_MSG_CR_UPDATE:
 				break;
 			case SNAP_DPA_P2P_MSG_VQ_HEADS:

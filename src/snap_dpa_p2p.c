@@ -68,18 +68,16 @@ int snap_dpa_p2p_send_cr_update(struct snap_dpa_p2p_q *q, int credit)
  *
  * Return: number of messages received
  */
-int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg *msgs, int n)
+int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg **msgs, int n)
 {
 	int i, comps;
 	struct snap_rx_completion rx_comps[n];
-	//struct snap_dma_completion *tx_comps[n];
 
-	/* TODO: remove tx poll from here */
-	//snap_dma_q_poll_tx(q->dma_q, tx_comps, n);
 	comps = snap_dma_q_poll_rx(q->dma_q, rx_comps, n);
 	for (i = 0; i < comps; i++) {
 		/* TODO: remove extra copy */
-		memcpy(&msgs[i], rx_comps[i].data, sizeof(struct snap_dpa_p2p_msg));
+		//memcpy(&msgs[i], rx_comps[i].data, sizeof(struct snap_dpa_p2p_msg));
+		msgs[i] = rx_comps[i].data;
 	}
 
 	return comps;

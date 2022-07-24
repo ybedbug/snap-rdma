@@ -187,7 +187,7 @@ static inline void virtq_progress()
 	struct virtq_device_ring *avail_ring;
 	uint16_t delta, host_avail_idx;
 	struct mlx5_cqe64 *cqe;
-	struct snap_dpa_p2p_msg msgs[VIRTQ_DPA_NUM_P2P_MSGS];
+	struct snap_dpa_p2p_msg *msgs[VIRTQ_DPA_NUM_P2P_MSGS];
 	int i, n;
 	//int cr_update;
 
@@ -209,12 +209,12 @@ static inline void virtq_progress()
 	//cr_update = 0;
 	n = snap_dpa_p2p_recv_msg(&rt_ctx->dpa_cmd_chan, msgs, VIRTQ_DPA_NUM_P2P_MSGS);
 	for (i = 0; i < n; i++) {
-		rt_ctx->dpa_cmd_chan.credit_count += msgs[i].base.credit_delta;
-		if (msgs[i].base.type == SNAP_DPA_P2P_MSG_CR_UPDATE) {
+		rt_ctx->dpa_cmd_chan.credit_count += msgs[i]->base.credit_delta;
+		if (msgs[i]->base.type == SNAP_DPA_P2P_MSG_CR_UPDATE) {
 			//cr_update = 1;
 			continue;
 		}
-		if (msgs[i].base.type != SNAP_DPA_P2P_MSG_VQ_MSIX)
+		if (msgs[i]->base.type != SNAP_DPA_P2P_MSG_VQ_MSIX)
 			continue;
 		/* TODO: trigger msix, log bad messages */
 	}

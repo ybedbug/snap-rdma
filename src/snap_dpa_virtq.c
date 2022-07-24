@@ -279,16 +279,16 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 {
 	struct snap_dpa_virtq *dpa_q = to_dpa_queue(vq);
 	int n, i;
-	struct snap_dpa_p2p_msg_vq_update msg;
+	struct snap_dpa_p2p_msg_vq_update *msg;
 
 	/* TODO: use virtio specific recv msg, save one loop on translation,
 	 * since max virtq heads is known we can pick several messages
 	 */
-	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, (struct snap_dpa_p2p_msg *)&msg, 1);
+	n = snap_dpa_p2p_recv_msg(&dpa_q->rt_thr->dpu_cmd_chan, (struct snap_dpa_p2p_msg **)&msg, 1);
 	if (n <= 0)
 		return n;
 
-	if (msg.descr_head_count >= num_reqs) {
+	if (msg->descr_head_count >= num_reqs) {
 		snap_error("oops, too many requests (%d > %d)\n", n, num_reqs);
 		return -ENOMEM;
 	}
@@ -296,19 +296,19 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 	if (dpa_q->debug_count++ % 1000 == 0)
 		snap_dpa_log_print(dpa_q->rt_thr->thread->dpa_log);
 
-	if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_HEADS) {
-		snap_debug("vq heads message %d heads\n", msg.descr_head_count);
-		for (i = 0; i < msg.descr_head_count; i++) {
+	if (msg->base.type == SNAP_DPA_P2P_MSG_VQ_HEADS) {
+		snap_debug("vq heads message %d heads\n", msg->descr_head_count);
+		for (i = 0; i < msg->descr_head_count; i++) {
 			reqs[i].hdr.num_desc = 0;
-			reqs[i].hdr.descr_head_idx = msg.descr_heads[i];
+			reqs[i].hdr.descr_head_idx = msg->descr_heads[i];
 			reqs[i].hdr.dpa_vq_table_flag = 0;
 			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
 		}
-	} else if (msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE || msg.base.type == SNAP_DPA_P2P_MSG_VQ_TABLE_CONT) {
-		snap_debug("vq table message %d heads\n", msg.descr_head_count);
-		for (i = 0; i < msg.descr_head_count; i++) {
+	} else if (msg->base.type == SNAP_DPA_P2P_MSG_VQ_TABLE || msg->base.type == SNAP_DPA_P2P_MSG_VQ_TABLE_CONT) {
+		snap_debug("vq table message %d heads\n", msg->descr_head_count);
+		for (i = 0; i < msg->descr_head_count; i++) {
 			reqs[i].hdr.num_desc = 0;
-			reqs[i].hdr.descr_head_idx = msg.descr_heads[i];
+			reqs[i].hdr.descr_head_idx = msg->descr_heads[i];
 			reqs[i].hdr.dpa_vq_table_flag = VQ_TABLE_REC;
 			reqs[i].tunnel_descs = dpa_q->desc_shadow;
 			snap_debug("vq head idx: %d\n", reqs[i].hdr.descr_head_idx);
@@ -318,7 +318,7 @@ static int virtq_blk_dpa_poll(struct snap_virtio_queue *vq, struct virtq_split_t
 		return -ENOTSUP;
 	}
 
-	return msg.descr_head_count;
+	return msg->descr_head_count;
 }
 
 static inline int flush_completions(struct snap_dpa_virtq *dpa_q)

@@ -135,7 +135,7 @@ int snap_dpa_p2p_send_msg(struct snap_dpa_p2p_q *q,
 		struct snap_dpa_p2p_msg *msg);
 
 int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q,
-		struct snap_dpa_p2p_msg *msgs, int n);
+		struct snap_dpa_p2p_msg **msgs, int n);
 
 int snap_dpa_p2p_send_cr_update(struct snap_dpa_p2p_q *q, int credit);
 
