@@ -166,14 +166,14 @@ TEST_F(SnapDpaTest, create_rt_thread_single_polling)
 	struct snap_dpa_rt_attr attr = {};
 	struct snap_dpa_rt *rt;
 	struct snap_dpa_rt_thread *thr;
-	struct snap_dpa_rt_filter f = {
-		.mode = SNAP_DPA_RT_THR_POLLING,
-		.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE
-	};
+	struct snap_dpa_rt_filter f;
 
 	rt = snap_dpa_rt_get(get_ib_ctx(), "dpa_rt_test_polling", &attr);
 	ASSERT_TRUE(rt);
 
+	f.mode = SNAP_DPA_RT_THR_POLLING;
+	f.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE;
+	f.pd = NULL;
 	thr = snap_dpa_rt_thread_get(rt, &f);
 	ASSERT_TRUE(thr);
 	sleep(1);
@@ -187,14 +187,14 @@ TEST_F(SnapDpaTest, create_rt_thread_single_event)
 	struct snap_dpa_rt_attr attr = {};
 	struct snap_dpa_rt *rt;
 	struct snap_dpa_rt_thread *thr;
-	struct snap_dpa_rt_filter f = {
-		.mode = SNAP_DPA_RT_THR_EVENT,
-		.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE
-	};
+	struct snap_dpa_rt_filter f;
 
 	rt = snap_dpa_rt_get(get_ib_ctx(), "dpa_rt_test_event", &attr);
 	ASSERT_TRUE(rt);
 
+	f.mode = SNAP_DPA_RT_THR_POLLING;
+	f.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE;
+	f.pd = NULL;
 	thr = snap_dpa_rt_thread_get(rt, &f);
 	ASSERT_TRUE(thr);
 	sleep(1);

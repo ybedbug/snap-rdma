@@ -69,6 +69,7 @@ enum snap_dpa_rt_thr_nqs {
 };
 
 struct snap_dpa_rt_filter {
+	struct ibv_pd *pd; // create p2p qps on this pd
 	enum snap_dpa_rt_thr_mode mode;
 	enum snap_dpa_rt_thr_nqs queue_mux_mode;
 	struct snap_dpa_rt_worker *w;

@@ -143,7 +143,7 @@ void dummy_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len, uint
 	snap_error("OOPS: rx cb called\n");
 }
 
-static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
+static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr, struct ibv_pd *pd_in)
 {
 	struct snap_dpa_thread_attr attr = {
 		.heap_size = SNAP_DPA_RT_THR_SINGLE_HEAP_SIZE
@@ -163,7 +163,8 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 		.cq_on_dpa = true
 	};
 	struct snap_dpa_rt *rt = rt_thr->rt;
-	struct ibv_pd *pd = rt->dpa_proc->pd;
+	struct ibv_pd *pd = pd_in ? pd_in : rt->dpa_proc->pd;
+	struct ibv_pd *dpa_pd = rt->dpa_proc->pd;
 	struct snap_hw_cq hw_cq;
 	int ret;
 
@@ -205,7 +206,7 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 	rt_thr->dpu_cmd_chan.q_size = SNAP_DPA_RT_QP_RX_SIZE;
 	rt_thr->dpu_cmd_chan.credit_count = SNAP_DPA_RT_QP_RX_SIZE;
 
-	rt_thr->db_cq = snap_cq_create(pd->context, &db_cq_attr);
+	rt_thr->db_cq = snap_cq_create(dpa_pd->context, &db_cq_attr);
 	if (!rt_thr->db_cq)
 		goto free_dpa_qp;
 
@@ -222,7 +223,7 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr)
 		goto free_db_cq;
 
 	/* todo: attribute, copy to rt context */
-	rt_thr->msix_cq = snap_cq_create(pd->context, &db_cq_attr);
+	rt_thr->msix_cq = snap_cq_create(dpa_pd->context, &db_cq_attr);
 	if (!rt_thr->msix_cq)
 		goto free_db_cq;
 
@@ -286,7 +287,8 @@ struct snap_dpa_rt_thread *snap_dpa_rt_thread_get(struct snap_dpa_rt *rt, struct
 	rt_thr->queue_mux_mode = filter->queue_mux_mode;
 	rt_thr->refcount = 1;
 
-	ret = rt_thread_init(rt_thr);
+	/* TODO: modify attribute to accept external snap_dma_q */
+	ret = rt_thread_init(rt_thr, filter->pd);
 	if (ret)
 		goto free_mem;
 
