@@ -44,7 +44,7 @@ void *snap_dpa_p2p_client_sm(void *arg)
 
 	avail_addr = dpa_queue->common.driver + dpa_queue->common.size * sizeof(struct vring_desc);
 	snap_dpa_p2p_send_vq_table(chan, dpa_queue->common.idx, 0, 0, 1, avail_addr,
-			dpa_queue->host_mkey,
+			dpa_queue->dpu_xmkey,
 			dpa_queue->common.desc,
 			(uint64_t) dpa_queue->dpu_desc_shadow_addr,
 			dpa_queue->dpu_desc_shadow_mkey);
@@ -191,7 +191,8 @@ int main(int argc, char **argv)
 		goto end;
 	}
 
-	dpa_vq.host_mkey = vr_mr->rkey;
+	dpa_vq.dpu_xmkey = vr_mr->rkey;
+	dpa_vq.dpa_xmkey = vr_mr->rkey;
 	dpa_vq.common.desc = (uint64_t) vr.desc;
 	dpa_vq.common.driver = (uint64_t) vr.avail;
 

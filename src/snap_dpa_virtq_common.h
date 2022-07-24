@@ -55,7 +55,8 @@ struct dpa_virtq {
 	uint16_t hw_available_index;
 	uint16_t hw_used_index;
 
-	uint32_t host_mkey; /* todo: should be part of the rt thread */
+	uint32_t dpa_xmkey;
+	uint32_t dpu_xmkey;
 	uint32_t dpu_desc_shadow_mkey;
 	uint64_t dpu_desc_shadow_addr;
 

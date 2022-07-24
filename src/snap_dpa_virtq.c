@@ -133,7 +133,8 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	//snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 	//printf("wait... xmkey 0x%x\n", vq->cross_mkey->mkey); //getchar();
 
-	cmd->cmd_create.vq.host_mkey = vq->cross_mkey->mkey;
+	cmd->cmd_create.vq.dpu_xmkey = vq->cross_mkey->mkey;
+	cmd->cmd_create.vq.dpa_xmkey = vq->cross_mkey->mkey;
 	cmd->cmd_create.vq.duar_id = snap_dpa_duar_id(vq->duar);
 	snap_dpa_cmd_send(vq->rt_thr->thread, &cmd->base, DPA_VIRTQ_CMD_CREATE);
 

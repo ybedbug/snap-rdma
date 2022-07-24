@@ -65,8 +65,8 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 
 	idx = vcmd->cmd_create.vq.common.idx;
 	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
-	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d size %d host_mkey 0x%x\n",
-			vhca_id, vq->duar_id, idx, vq->common.size, vq->host_mkey);
+	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d size %d dpa_xmkey 0x%x dpu_xmkey 0x%x\n",
+			vhca_id, vq->duar_id, idx, vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey);
 	//dpa_window_set_active_mkey(vq->host_mkey);
 	//dpa_debug("set active mkey 0x%x\n", vq->host_mkey);
 
@@ -163,7 +163,7 @@ static int do_command(int *done)
 	snap_dpa_rsp_send(dpa_mbox(), rsp_status);
 cmd_done:
 	if (vq->enabled)
-		dpa_window_set_active_mkey(vq->host_mkey);
+		dpa_window_set_active_mkey(vq->dpa_xmkey);
 
 	return 0;
 }
@@ -293,7 +293,7 @@ static inline void virtq_progress()
 		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
 				vq->hw_available_index, host_avail_idx, vq->common.driver,
-				vq->host_mkey);
+				vq->dpu_xmkey);
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
 			dpa_info("error sending vq heads\n");
@@ -305,7 +305,7 @@ static inline void virtq_progress()
 		n = snap_dpa_p2p_send_vq_table(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
 				vq->hw_available_index, host_avail_idx, vq->common.driver,
-				vq->host_mkey,
+				vq->dpu_xmkey,
 				vq->common.desc, vq->dpu_desc_shadow_addr, vq->dpu_desc_shadow_mkey);
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
@@ -326,13 +326,13 @@ again:
 			n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 					vq->common.size,
 					vq->hw_available_index, host_avail_idx, vq->common.driver,
-					vq->host_mkey);
+					vq->dpu_xmkey);
 			vq->stats.n_vq_heads++;
 		} else {
 			n = snap_dpa_p2p_send_vq_table_cont(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 					vq->common.size,
 					vq->hw_available_index, host_avail_idx, vq->common.driver,
-					vq->host_mkey);
+					vq->dpu_xmkey);
 			vq->stats.n_vq_tables++;
 		}
 
