@@ -682,6 +682,11 @@ struct snap_dma_q *snap_vq_get_dma_q(struct snap_vq *q)
 	return q->dma_q;
 }
 
+struct snap_virtio_queue *snap_vq_get_hw_q(struct snap_vq *q)
+{
+	return q->hw_q;
+}
+
 struct ibv_cq *snap_vq_get_vcq(struct snap_vq *q)
 {
 	return q->dma_q->sw_qp.rx_cq->verbs_cq;
