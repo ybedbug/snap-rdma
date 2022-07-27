@@ -16,7 +16,7 @@
 #include "snap_macros.h"
 
 #ifndef VIRTIO_F_ADMIN_VQ
-#define VIRTIO_F_ADMIN_VQ 40
+#define VIRTIO_F_ADMIN_VQ 41
 #endif
 
 #ifndef VIRTIO_F_ADMIN_MIGRATION
