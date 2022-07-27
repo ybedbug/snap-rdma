@@ -1364,6 +1364,45 @@ TEST_F(SnapDmaTest, devx_dma_only_q) {
 	snap_dma_ep_destroy(dummy_q);
 }
 
+TEST_F(SnapDmaTest, devx_dma_q_connect_via_qpn) {
+	struct snap_dma_q *dma_q;
+	struct snap_dma_q *dummy_q;
+	int ret;
+	int dma_q_qpn;
+	int dummy_q_qpn;
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = true;
+	m_dma_q_attr.tx_qsize = 16;
+	m_dma_q_attr.tx_elem_size = 0;
+	m_dma_q_attr.rx_qsize = 0;
+
+	dma_q = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dma_q);
+	dma_q_qpn = snap_qp_get_qpnum(dma_q->sw_qp.qp);
+
+	m_dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	m_dma_q_attr.use_devx = true;
+	m_dma_q_attr.tx_qsize = 0;
+	m_dma_q_attr.rx_qsize = 0;
+
+	dummy_q = snap_dma_ep_create(m_pd, &m_dma_q_attr);
+	ASSERT_TRUE(dummy_q);
+	dummy_q_qpn = snap_qp_get_qpnum(dummy_q->sw_qp.qp);
+
+	ret = snap_dma_ep_connect_remote_qpn(dummy_q, dma_q_qpn);
+	EXPECT_EQ(0, ret);
+
+	ret = snap_dma_ep_connect_remote_qpn(dma_q, dummy_q_qpn);
+	EXPECT_EQ(0, ret);
+
+	dma_xfer_test(dma_q, true, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+	dma_xfer_test(dma_q, false, true, m_rbuf, m_rbuf, m_rmr->lkey, m_bsize);
+
+	snap_dma_ep_destroy(dma_q);
+	snap_dma_ep_destroy(dummy_q);
+}
+
 /* DPA section */
 TEST_F(SnapDmaTest, dpa_ep_create_polling) {
 	struct snap_dma_q *dpu_qp;
