@@ -831,7 +831,7 @@ static inline int dv_dma_q_poll_tx(struct snap_dma_q *q, struct snap_dma_complet
 			n++;
 		}
 
-	} while (n < SNAP_DMA_MAX_TX_COMPLETIONS);
+	} while (n < max_completions);
 
 	return n;
 }
