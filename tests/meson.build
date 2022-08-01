@@ -48,8 +48,7 @@ gtest_snap_dma = executable('gtest_snap_dma',
 #
 test('dma', gtest_snap_dma,
 		env : 'MLXDEV=mlx5_0',
-		protocol : 'gtest',
-		verbose : true)
+		protocol : 'gtest')
 
 if flexio.found()
 
