@@ -17,7 +17,22 @@
 #include <stdbool.h>
 #if HAVE_FLEXIO
 #include <libflexio/flexio.h>
+
+/* internal flexio structs that are not exposed */
+struct flexio_eq;
+
+struct flexio_eq_attr {
+	uint8_t log_eq_ring_depth;
+	uint32_t uar_id;
+};
+
+flexio_status flexio_eq_create(struct flexio_process *process, struct ibv_context *ibv_ctx,
+			       struct flexio_eq_attr *attr, struct flexio_eq **eq);
+flexio_status flexio_eq_destroy(struct flexio_eq *eq);
+struct flexio_hw_eq *flexio_eq_get_hw_eq(struct flexio_eq *eq);
+
 #endif
+
 #if !__DPA
 #include <infiniband/verbs.h>
 #endif
@@ -35,10 +50,12 @@ struct snap_dpa_ctx {
 	struct snap_dma_q      *dma_q;
 	struct snap_dma_q      *dummy_q;
 	struct snap_dpa_mkeyh  *dma_mkeyh;
+	struct flexio_uar      *flexio_uar;
 };
 
 struct snap_dpa_memh {
-	uint64_t *va;
+	struct snap_dpa_ctx *dctx;
+	uint64_t va;
 	size_t size;
 };
 
@@ -47,7 +64,7 @@ uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem);
 void snap_dpa_mem_free(struct snap_dpa_memh *mem);
 
 struct snap_dpa_mkeyh {
-	uint32_t *mkey_id;
+	struct flexio_mkey *mkey;
 };
 
 struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *ctx, struct ibv_pd *pd);
@@ -58,6 +75,7 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 void snap_dpa_process_destroy(struct snap_dpa_ctx *app);
 uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx);
 uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx);
+uint64_t snap_dpa_process_umem_size(struct snap_dpa_ctx *ctx);
 uint32_t snap_dpa_process_eq_id(struct snap_dpa_ctx *ctx);
 
 /**

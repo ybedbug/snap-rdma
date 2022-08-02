@@ -23,7 +23,6 @@
 #if HAVE_FLEXIO
 #include <libflexio/flexio_elf.h>
 #include <libflexio/flexio.h>
-#include <libflexio/flexio_poll.h>
 #endif
 
 #include "snap_dpa.h"
@@ -34,6 +33,7 @@ SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_tcb) % SNAP_MLX5_L2_CACHE_SIZE == 0,
 		"Thread control block must be padded to the cache line");
 
 #if HAVE_FLEXIO
+
 /**
  * snap_dpa_mem_alloc() - allocate memory on DPA
  * @dctx: snap context
@@ -54,6 +54,7 @@ struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
 		return 0;
 	}
 
+	mem->dctx = dctx;
 	mem->size = size;
 	st = flexio_buf_dev_alloc(dctx->dpa_proc, size, &mem->va);
 	if (st != FLEXIO_STATUS_SUCCESS) {
@@ -73,7 +74,7 @@ struct snap_dpa_memh *snap_dpa_mem_alloc(struct snap_dpa_ctx *dctx, size_t size)
  */
 void snap_dpa_mem_free(struct snap_dpa_memh *mem)
 {
-	flexio_buf_dev_free(mem->va);
+	flexio_buf_dev_free(mem->dctx->dpa_proc, mem->va);
 	free(mem);
 }
 
@@ -85,7 +86,7 @@ void snap_dpa_mem_free(struct snap_dpa_memh *mem)
  */
 uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem)
 {
-	return *mem->va;
+	return mem->va;
 }
 
 /**
@@ -99,14 +100,13 @@ uint64_t snap_dpa_mem_addr(struct snap_dpa_memh *mem)
  * For example, a QP can use memory key to perform DMA or post_send operations
  * TODO: consider caching protection domains and sharing the key
  *
- * NOTE: mkey_id returned by flexio is actually a pointer to its internal struct
- *
  * Return:
  * mkey handle or NULL
  */
 struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *dctx, struct ibv_pd *pd)
 {
 	struct snap_dpa_mkeyh *h;
+	struct flexio_mkey_attr fattr;
 	flexio_status st;
 
 	h = calloc(1, sizeof(*h));
@@ -115,7 +115,12 @@ struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *dctx, struct ibv
 		return 0;
 	}
 
-	st = flexio_device_mkey_create(dctx->dpa_proc, pd, &h->mkey_id);
+	fattr.pd = pd;
+	fattr.daddr = snap_dpa_process_umem_addr(dctx);
+	fattr.len = snap_dpa_process_umem_size(dctx);
+	fattr.access = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
+
+	st = flexio_device_mkey_create(dctx->dpa_proc, &fattr, &h->mkey);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		free(h);
 		return NULL;
@@ -135,7 +140,7 @@ struct snap_dpa_mkeyh *snap_dpa_mkey_alloc(struct snap_dpa_ctx *dctx, struct ibv
  */
 uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h)
 {
-	return *h->mkey_id;
+	return flexio_mkey_get_id(h->mkey);
 }
 
 /**
@@ -146,7 +151,7 @@ uint32_t snap_dpa_mkey_id(struct snap_dpa_mkeyh *h)
  */
 void snap_dpa_mkey_free(struct snap_dpa_mkeyh *h)
 {
-	flexio_device_mkey_destroy(h->mkey_id);
+	flexio_device_mkey_destroy(h->mkey);
 	free(h);
 }
 
@@ -266,10 +271,15 @@ struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char
 	if (!dpa_ctx->uar)
 		goto free_dpa_proc;
 
-	st = flexio_outbox_create(dpa_ctx->dpa_proc, NULL, dpa_ctx->uar->uar->page_id, &dpa_ctx->dpa_uar);
+	/* convert to flexio uar... */
+	st = flexio_uar_create(dpa_ctx->dpa_proc, dpa_ctx->uar->uar, &dpa_ctx->flexio_uar);
+	if (st != FLEXIO_STATUS_SUCCESS)
+		goto deref_uar;
+
+	st = flexio_outbox_create(dpa_ctx->dpa_proc, NULL, dpa_ctx->flexio_uar, &dpa_ctx->dpa_uar);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("%s: Failed to create DPA outbox (uar)\n", app_name);
-		goto deref_uar;
+		goto free_flexio_uar;
 	}
 
 	/* create a placeholder eq to attach cqs */
@@ -291,6 +301,8 @@ free_dpa_eq:
 	flexio_eq_destroy(dpa_ctx->dpa_eq);
 free_dpa_outbox:
 	flexio_outbox_destroy(dpa_ctx->dpa_uar);
+free_flexio_uar:
+	flexio_uar_destroy(dpa_ctx->flexio_uar);
 deref_uar:
 	snap_uar_put(dpa_ctx->uar);
 free_dpa_proc:
@@ -339,6 +351,17 @@ uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx)
 uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx)
 {
 	return flexio_process_get_dumem_addr(ctx->dpa_proc);
+}
+
+/**
+ * snap_dpa_process_umem_size() - get DPA process 'umem' size
+ * @ctx: DPA context
+ *
+ * Return: DPA process umem size
+ */
+uint64_t snap_dpa_process_umem_size(struct snap_dpa_ctx *ctx)
+{
+	return flexio_process_get_dumem_size(ctx->dpa_proc);
 }
 
 /**
@@ -412,6 +435,7 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 {
 	struct snap_dpa_tcb tcb = {0};
 	struct snap_dpa_thread_attr default_attr = {0};
+	struct flexio_event_handler_attr f_thr_attr = {0};
 	struct snap_dpa_thread *thr;
 	int ret;
 	flexio_status st;
@@ -483,7 +507,13 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 		goto free_mem;
 	}
 
-	st = flexio_event_handler_create(thr->dctx->dpa_proc, SNAP_DPA_THREAD_ENTRY_POINT, dpa_tcb_addr,
+	f_thr_attr.func_symbol = SNAP_DPA_THREAD_ENTRY_POINT;
+	f_thr_attr.arg = dpa_tcb_addr;
+	f_thr_attr.thread_local_storage_daddr = dpa_tcb_addr;
+	// TODO: sceduling
+	//f_thr_attr.hart_bitmask = ;
+
+	st = flexio_event_handler_create(thr->dctx->dpa_proc, &f_thr_attr,
 			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		snap_error("Failed to create DPA thread: %d\n", st);
@@ -584,7 +614,7 @@ void snap_dpa_thread_destroy(struct snap_dpa_thread *thr)
  */
 uint32_t snap_dpa_thread_id(struct snap_dpa_thread *thr)
 {
-	return *flexio_event_handler_get_thread_id_ptr(thr->dpa_thread);
+	return flexio_event_handler_get_thread_id(thr->dpa_thread);
 }
 
 /**
@@ -824,7 +854,7 @@ struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t v
 	if (!duar)
 		return NULL;
 
-	st = flexio_emu_db_to_cqid_map(dctx->pd->context, vhca_id, queue_id, cq_num, &duar->map_entry);
+	st = flexio_emu_db_to_cq_map(dctx->pd->context, vhca_id, queue_id, cq_num, &duar->map_entry);
 	if (st != FLEXIO_STATUS_SUCCESS) {
 		free(duar);
 		return NULL;
@@ -853,7 +883,7 @@ void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
  */
 uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
 {
-	return flexio_emu_db_to_cq_id(duar->map_entry);
+	return flexio_emu_db_to_cq_ctx_get_id(duar->map_entry);
 }
 
 #else
@@ -912,6 +942,11 @@ uint32_t snap_dpa_process_umem_id(struct snap_dpa_ctx *ctx)
 }
 
 uint64_t snap_dpa_process_umem_addr(struct snap_dpa_ctx *ctx)
+{
+	return 0;
+}
+
+uint64_t snap_dpa_process_umem_size(struct snap_dpa_ctx *ctx)
 {
 	return 0;
 }
