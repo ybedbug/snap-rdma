@@ -199,5 +199,9 @@ void dpa_logger(const char *file_name, unsigned int line_num,
 
 void dpa_error_freeze()
 {
-	flexio_os_app_fatal_error(1);
+	int dummy;
+
+	/* freeze calling thread so that we can debug it */
+	while (1) { dummy++; }
+	//flexio_os_event_wait();
 }

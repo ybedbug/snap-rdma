@@ -40,7 +40,7 @@ dpa_ldflags = [
 	'-static', '-nostartfiles',
 	'-T', dpa_link_script,
 	'-L' + flexio_pfx + '/lib',
-	'-lflexio_dev', '-l:flexio_os.a',
+	'-lflexio_dev', '-lflexio_os'
 ]
 
 libdpa_include = include_directories('.', '..', '../src', flexio_include)

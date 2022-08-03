@@ -22,15 +22,11 @@ static inline void dpa_thread_config(struct snap_dpa_tcb *tcb)
 
 	ctx = flexio_os_get_thread_ctx();
 
-	 /* There is an extra 8 bytes at the end of the os thread context
-	  * that can be used to hold arbitrary data. It is called 'metadata'
-	  * in the PRM.
-	  * We use it to hold thread control block address in order to avoid
-	  * passing it as extra parameter everywhere.
-	  * TODO: hope that flexio updates flexio_os_thread_ctx struct and
-	  * allows 'metadata' configuration on thread startup.
-	  */
-	*(uint64_t *)(ctx + 1) = (uint64_t)tcb;
+	/**
+	 * TODO: metadata can be set at thread creation however flexio
+	 * attaches its own metadata
+	 */
+	ctx->metadata_parameter = (uint64_t)tcb;
 	dpa_window_set_mkey(tcb->active_lkey);
 }
 

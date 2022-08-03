@@ -31,6 +31,7 @@ gtest = dependency('gtest_main',
 gtest_snap_dma_srcs = [
 	'gtest_example.cc',
 	'test_snap_dma.cc',
+	'test_snap_qp.cc',
 	'tests_common.cc'
 	]
 

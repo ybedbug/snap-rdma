@@ -6,7 +6,7 @@ ACLOCAL_AMFLAGS = -I m4
 #
 COMPILE = $(DPA_CC) $(AM_CFLAGS)
 LINK = $(DPA_CC) $(AM_LDFLAGS) -o $@
-LIBS = -lflexio_dev -l:flexio_os.a
+LIBS = -lflexio_dev -lflexio_os
 
 noinst_PROGRAMS =
 

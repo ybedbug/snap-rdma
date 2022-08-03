@@ -77,11 +77,12 @@ static inline struct snap_dpa_tcb *dpa_tcb(void)
 
 	ctx = flexio_os_get_thread_ctx();
 
-	/* TODO: need to replace with the real thing,
-	 * at the moment we use hacked rtos that adds extra 8 bytes
-	 * to the thread contexts and sets it to thread arg
+	/*
+	 * Note: flexio uses metadata for its internal bookkeepig
+	 * it is possible to setup an additional pointer but at
+	 * at the moment we nuke flexio internal struct
 	 */
-	return (struct snap_dpa_tcb *)(*(uint64_t *)(ctx + 1));
+	return (struct snap_dpa_tcb *)ctx->metadata_parameter;
 }
 
 /**

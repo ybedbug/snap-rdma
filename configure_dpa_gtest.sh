@@ -11,5 +11,5 @@
 meson setup \
       --cross-file cross-gcc-riscv64.txt \
       -Denable-gtest=true \
-      -Dwith-flexio=/labhome/amikheev/workspace/NVME/apu/flexio-sdk-new/inst_feb2022 \
+      -Dwith-flexio=/labhome/amikheev/workspace/NVME/apu/flexio-sdk-jul2022/inst \
       $*
