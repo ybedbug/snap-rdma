@@ -60,6 +60,7 @@
             org-list: ["Mellanox"]
             white-list: ["swx-jenkins","swx-jenkins2","swx-jenkins3", "mellanox-github"]
             allow-whitelist-orgs-as-admins: true
+            black-list-target-branches: ["devemu"]
     pipeline-scm:
         scm:
             - git:
