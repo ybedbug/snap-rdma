@@ -153,11 +153,15 @@ static inline void snap_dv_ring_tx_db(struct snap_dv_qp *dv_qp, struct mlx5_wqe_
 	 * - only need a store fence to ensure that the wqe is committed to the
 	 *   memory
 	 * - there is no need to update dbr on DPA
-	 *
-	 * TODO: store outbox address in the qp as bf_addr instead of doing
-	 * syscall
+	 * - The flow works only if there is no doorbell recovery. Unfortunately
+	 *   doorbell recovery can happen on any QP in the same gvmi. Then it
+	 *   will trigger recovery on the dpa qp with wrong pi.
+	 * - Disable optimization for now.
+	 * - At the moment optimization has no measurable effect on single
+	 *   queue virtio performance
 	 */
-#if SIMX_BUILD
+#define HAVE_DOORBELL_RECOVERY 1
+#if SIMX_BUILD || HAVE_DOORBELL_RECOVERY
 	snap_dv_update_tx_db(dv_qp);
 #endif
 	snap_memory_bus_store_fence();
