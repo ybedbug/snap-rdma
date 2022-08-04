@@ -389,7 +389,7 @@ static void snap_virtio_fs_impl_modify_device(uint8_t *in, uint8_t *device_emula
 		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
 				virtio_device.device_status, attr->status);
 	}
-	if (mask & SNAP_VIRTIO_MOD_RESET) {
+	if (mask & (SNAP_VIRTIO_MOD_RESET | SNAP_VIRTIO_MOD_ALL)) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_RESET;
 		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
 				reset, attr->reset);
@@ -403,7 +403,7 @@ static void snap_virtio_fs_impl_modify_device(uint8_t *in, uint8_t *device_emula
 		DEVX_SET(virtio_fs_device_emulation, device_emulation_in,
 				virtio_device.max_queue_size, attr->max_queue_size);
 	}
-	if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+	if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
 		fs_tag = DEVX_ADDR_OF(virtio_fs_device_emulation, device_emulation_in,
 					virtio_fs_config.tag);
@@ -415,10 +415,8 @@ static void snap_virtio_fs_impl_modify_device(uint8_t *in, uint8_t *device_emula
 	}
 
 	if (mask & SNAP_VIRTIO_MOD_ALL) {
-		/* note: mod all overwrites STATUS and PCI_COMMON config */
-		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ALL;
-		*fields_to_modify &= ~(SNAP_VIRTIO_MOD_PCI_COMMON_CFG |
-				      SNAP_VIRTIO_MOD_DEV_STATUS);
+		/* note: mod all overwrites all flags except queue_cfg */
+		*fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
 		DEVX_SET64(virtio_fs_device_emulation, device_emulation_in,
 				virtio_device.driver_feature, attr->driver_feature);
 
@@ -512,12 +510,12 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_device.device_status, attr->status);
 		}
-		if (mask & SNAP_VIRTIO_MOD_RESET) {
+		if (mask & (SNAP_VIRTIO_MOD_RESET | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_RESET;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 reset, attr->reset);
 		}
-		if (mask & SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE) {
+		if (mask & (SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE;
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 pci_hotplug_state, attr->pci_hotplug_state);
@@ -531,7 +529,7 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 			DEVX_SET(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_device.max_queue_size, attr->max_queue_size);
 		}
-		if (mask & SNAP_VIRTIO_MOD_DEV_CFG) {
+		if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
 			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
 			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 				 virtio_blk_config.capacity, battr->capacity);
@@ -546,10 +544,8 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		}
 
 		if (mask & SNAP_VIRTIO_MOD_ALL) {
-			/* note: mod all overwrites STATUS and PCI_COMMON config */
-			fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_ALL;
-			fields_to_modify &= ~(SNAP_VIRTIO_MOD_PCI_COMMON_CFG |
-					      SNAP_VIRTIO_MOD_DEV_STATUS);
+			/* note: mod all overwrites all flags except queue_cfg */
+			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
 			DEVX_SET64(virtio_blk_device_emulation, device_emulation_in,
 				   virtio_device.driver_feature, attr->driver_feature);
 
