@@ -214,7 +214,6 @@ snap_virtio_fs_ctrl_bar_set_state(struct snap_virtio_ctrl *ctrl,
 
 	ret = snap_virtio_fs_modify_device(ctrl->sdev,
 					    SNAP_VIRTIO_MOD_ALL |
-					    SNAP_VIRTIO_MOD_DEV_CFG |
 					    SNAP_VIRTIO_MOD_QUEUE_CFG,
 					    vfsbar);
 	if (ret)
