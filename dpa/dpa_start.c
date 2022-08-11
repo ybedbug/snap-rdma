@@ -43,7 +43,7 @@ static void dpa_do_init(struct snap_dpa_tcb *tcb)
 	dpa_debug("Mailbox base: 0x%lx\n", tcb->mbox_address);
 	dpa_debug("Heap base   : 0x%lx\n", tcb->data_address);
 	dpa_debug("Heap size   : %ld\n", tcb->heap_size);
-	dpa_debug("Thread data : 0x%lx\n", *(uint64_t *)(ctx + 1));
+	dpa_debug("Thread data : 0x%lx\n", (uint64_t)ctx->metadata_parameter);
 
 	snap_memory_bus_fence();
 	dpa_init();
