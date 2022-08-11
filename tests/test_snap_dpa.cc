@@ -119,6 +119,85 @@ TEST_F(SnapDpaTest, create_thread_event) {
 	snap_dpa_process_destroy(dpa_ctx);
 }
 
+TEST_F(SnapDpaTest, create_thread_two) {
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr1, *dpa_thr2;
+	struct snap_dpa_thread_attr attr = {0};
+	cpu_set_t cpu_mask;
+
+	CPU_ZERO(&cpu_mask);
+	attr.hart_set = &cpu_mask;
+
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello");
+	ASSERT_TRUE(dpa_ctx);
+
+	/* polling threads should run on 2 harts */
+	CPU_SET(0, &cpu_mask);
+	dpa_thr1 = snap_dpa_thread_create(dpa_ctx, &attr);
+	ASSERT_TRUE(dpa_thr1);
+	snap_dpa_log_print(dpa_thr1->dpa_log);
+	printf("thread1 is running now...\n");
+
+	CPU_CLR(0, &cpu_mask);
+	CPU_SET(1, &cpu_mask);
+	printf("cpu isset %d\n", CPU_ISSET(1, &cpu_mask));
+	dpa_thr2 = snap_dpa_thread_create(dpa_ctx, &attr);
+	ASSERT_TRUE(dpa_thr2);
+	snap_dpa_log_print(dpa_thr2->dpa_log);
+	printf("thread2 is running now...\n");
+	sleep(1);
+
+	printf("b4 dtor, anyk\n");getchar();
+
+	snap_dpa_log_print(dpa_thr2->dpa_log);
+	snap_dpa_thread_destroy(dpa_thr2);
+	printf("thr2 done, anyk\n");getchar();
+
+	snap_dpa_log_print(dpa_thr1->dpa_log);
+	snap_dpa_thread_destroy(dpa_thr1);
+	printf("thr1 done, anyk\n");getchar();
+
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDpaTest, create_thread_two_event) {
+	struct snap_dpa_ctx *dpa_ctx;
+	struct snap_dpa_thread *dpa_thr1, *dpa_thr2;
+	struct snap_dpa_thread_attr attr = {0};
+	cpu_set_t cpu_mask;
+
+	CPU_ZERO(&cpu_mask);
+	attr.hart_set = &cpu_mask;
+
+	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_hello_event");
+	ASSERT_TRUE(dpa_ctx);
+
+	/* polling threads should run on 2 harts */
+	CPU_SET(0, &cpu_mask);
+	dpa_thr1 = snap_dpa_thread_create(dpa_ctx, &attr);
+	ASSERT_TRUE(dpa_thr1);
+	snap_dpa_log_print(dpa_thr1->dpa_log);
+	printf("thread1 is running now...\n");
+
+	CPU_CLR(0, &cpu_mask);
+	CPU_SET(1, &cpu_mask);
+	dpa_thr2 = snap_dpa_thread_create(dpa_ctx, &attr);
+	ASSERT_TRUE(dpa_thr2);
+	snap_dpa_log_print(dpa_thr2->dpa_log);
+	printf("thread2 is running now...\n");
+	sleep(1);
+
+	snap_dpa_log_print(dpa_thr2->dpa_log);
+	snap_dpa_thread_destroy(dpa_thr2);
+	printf("thr2 done\n");
+
+	snap_dpa_log_print(dpa_thr1->dpa_log);
+	snap_dpa_thread_destroy(dpa_thr1);
+	printf("thr1 done\n");
+
+	snap_dpa_process_destroy(dpa_ctx);
+}
+
 TEST_F(SnapDpaTest, dpa_memcpy) {
 	struct snap_dpa_ctx *dpa_ctx;
 	size_t i;

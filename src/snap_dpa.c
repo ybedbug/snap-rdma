@@ -34,6 +34,8 @@ SNAP_STATIC_ASSERT(sizeof(struct snap_dpa_tcb) % SNAP_MLX5_L2_CACHE_SIZE == 0,
 
 #if HAVE_FLEXIO
 
+SNAP_STATIC_ASSERT(CPU_SETSIZE > 256, "Static cpu set size must be greater than the max number of HARTS");
+
 /**
  * snap_dpa_mem_alloc() - allocate memory on DPA
  * @dctx: snap context
@@ -419,6 +421,33 @@ static void trigger_q_destroy(struct snap_dpa_thread *thr)
 	snap_dma_q_destroy(thr->dummy_q);
 }
 
+static int set_hart_mask(struct snap_dpa_ctx *dctx, struct snap_dpa_thread_attr *attr,
+		struct flexio_event_handler_attr *f_thr_attr)
+{
+	int i, n;
+	flexio_status st;
+
+	if (!attr->hart_set)
+		return 0;
+
+	/* convert cpu_set_t into hart mask */
+	for (n = i = 0; n < CPU_COUNT(attr->hart_set) && i < CPU_SETSIZE; i++) {
+		if (!CPU_ISSET(i, attr->hart_set))
+			continue;
+
+		/* set hart mask */
+		snap_info("hart_mask: adding hart %d\n", i);
+		n++;
+		st = flexio_hart_mask_bit_set(dctx->dpa_proc, i, f_thr_attr->hart_bitmask);
+		if (st != FLEXIO_STATUS_SUCCESS) {
+			snap_error("Failed to add core %d to HART mask\n", i);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 /**
  * snap_dpa_thread_create() - create DPA thread
  * @dctx:  DPA application context
@@ -453,6 +482,10 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	thr->dctx = dctx;
 	if (!attr)
 		attr = &default_attr;
+
+	ret = set_hart_mask(dctx, attr, &f_thr_attr);
+	if (ret)
+		goto free_thread;
 
 	ret = pthread_mutex_init(&thr->cmd_lock, NULL);
 	if (ret < 0) {
@@ -510,8 +543,6 @@ struct snap_dpa_thread *snap_dpa_thread_create(struct snap_dpa_ctx *dctx,
 	f_thr_attr.func_symbol = SNAP_DPA_THREAD_ENTRY_POINT;
 	f_thr_attr.arg = dpa_tcb_addr;
 	f_thr_attr.thread_local_storage_daddr = dpa_tcb_addr;
-	// TODO: sceduling
-	//f_thr_attr.hart_bitmask = ;
 
 	st = flexio_event_handler_create(thr->dctx->dpa_proc, &f_thr_attr,
 			thr->cmd_window, thr->dctx->dpa_uar, &thr->dpa_thread);

@@ -15,6 +15,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+/* for cpu_set_t */
+#include <sched.h>
 #if HAVE_FLEXIO
 #include <libflexio/flexio.h>
 
@@ -103,9 +105,10 @@ int snap_dpa_memcpy(struct snap_dpa_ctx *ctx, uint64_t dpa_va, void *src, size_t
  */
 struct snap_dpa_thread_attr {
 	size_t heap_size;
+	/* pointer to a static cpu set. CPU_ALLOC may not work */
+	cpu_set_t *hart_set;
 	/* private: */
 	uint32_t thread_attr;
-	uint32_t cpu_mask[16]; // hard, best effort according to PRM
 };
 
 struct snap_dpa_thread {

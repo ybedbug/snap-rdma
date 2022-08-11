@@ -17,6 +17,8 @@
  * on DPA. At the moment it looks like a much simpler approach than working
  * with standard/rdma-core headers.
  */
+/* sched.h */
+typedef void * cpu_set_t;
 
 typedef unsigned long size_t;
 /* from sys/uio.h */
