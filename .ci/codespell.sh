@@ -11,4 +11,4 @@ if ! command -v codespell &> /dev/null; then
   exit 1
 fi
 
-codespell $DIRS_TO_CHECK
+codespell -I $SCRIPTPATH/codespell_ignore.txt $DIRS_TO_CHECK
