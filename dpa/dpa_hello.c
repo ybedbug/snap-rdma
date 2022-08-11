@@ -28,7 +28,9 @@ int dpa_run()
 
 	printf("WAIT4 exit command\n");
 	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
-	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	printf("All done. Exiting\n");
+	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
+	/* note that thread can be terminated at any time once responce is sent
+	 * so it is unsafe to print here */
 	return 0;
 }

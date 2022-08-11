@@ -71,6 +71,5 @@ void __snap_dpa_thread_start(uint64_t tcb_addr)
 
 	dpa_run();
 
-	dpa_debug("==> DPA thread done\n");
 	flexio_dev_return();
 }
