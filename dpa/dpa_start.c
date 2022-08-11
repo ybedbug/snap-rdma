@@ -38,8 +38,6 @@ static void dpa_do_init(struct snap_dpa_tcb *tcb)
 	ctx = flexio_os_get_thread_ctx();
 	tcb->mbox_address = ctx->window_base + tcb->mbox_address;
 
-	flexio_os_outbox_set_cfg(ctx->outbox_config_id);
-
 	dpa_debug("==> Starting DPA thread\n");
 	dpa_debug("TCB         : 0x%lx\n", (uint64_t)tcb);
 	dpa_debug("Mailbox base: 0x%lx\n", tcb->mbox_address);
