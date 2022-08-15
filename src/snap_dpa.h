@@ -107,8 +107,9 @@ struct snap_dpa_thread_attr {
 	size_t heap_size;
 	/* pointer to a static cpu set. CPU_ALLOC may not work */
 	cpu_set_t *hart_set;
-	/* private: */
-	uint32_t thread_attr;
+	/* arbitrary user defined values */
+	uint64_t user_arg;
+	uint8_t user_flag;
 };
 
 struct snap_dpa_thread {
