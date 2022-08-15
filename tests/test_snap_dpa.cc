@@ -148,15 +148,13 @@ TEST_F(SnapDpaTest, create_thread_two) {
 	printf("thread2 is running now...\n");
 	sleep(1);
 
-	printf("b4 dtor, anyk\n");getchar();
-
 	snap_dpa_log_print(dpa_thr2->dpa_log);
 	snap_dpa_thread_destroy(dpa_thr2);
-	printf("thr2 done, anyk\n");getchar();
+	printf("thr2 done\n");
 
 	snap_dpa_log_print(dpa_thr1->dpa_log);
 	snap_dpa_thread_destroy(dpa_thr1);
-	printf("thr1 done, anyk\n");getchar();
+	printf("thr1 done\n");
 
 	snap_dpa_process_destroy(dpa_ctx);
 }
