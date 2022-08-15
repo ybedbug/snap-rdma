@@ -17,7 +17,6 @@
 
 int dpa_init()
 {
-	dpa_rt_init();
 	printf("dpa runtime test init done!\n");
 	return 0;
 }
@@ -54,23 +53,26 @@ int dpa_run()
 	struct snap_dpa_tcb *tcb = dpa_tcb();
 	struct mlx5_cqe64 *cqe;
 
-	if (tcb->user_arg == 0) {
-		cqe = snap_dv_poll_cq(&tcb->cmd_cq, 64);
-		if (!cqe)
-			return 0;
+	if (tcb->user_arg == 0 || tcb->user_arg == 1) {
+		if (tcb->user_arg == 0) {
+			cqe = snap_dv_poll_cq(&tcb->cmd_cq, 64);
+			if (!cqe)
+				return 0;
+		}
 
+		/* sched_in is currently a fence */
 		do_command(&done);
 	} else {
 		do {
-			cqe = snap_dv_poll_cq(&tcb->cmd_cq, 64);
-			if (!cqe)
-				continue;
+			if (tcb->user_arg == 2) {
+				cqe = snap_dv_poll_cq(&tcb->cmd_cq, 64);
+				if (!cqe)
+					continue;
+			}
+			snap_memory_bus_fence();
 			do_command(&done);
 		} while (done == 0);
 	}
-
-	if (done)
-		printf("command latency test done. Exiting\n");
 
 	return 0;
 }

@@ -18,6 +18,7 @@ class SnapDpaTest : public ::testing::Test {
 
 	protected:
 	struct ibv_pd *m_pd;
+	void run_cmd_lat_bench(int how);
 	public:
 	struct ibv_context *get_ib_ctx() { return m_pd->context; }
 };
@@ -282,9 +283,11 @@ TEST_F(SnapDpaTest, create_rt_thread_single_event)
 	snap_dpa_rt_put(rt);
 }
 
-TEST_F(SnapDpaTest, cmd_lat_bench_polling) {
+void SnapDpaTest::run_cmd_lat_bench(int how)
+{
 	struct snap_dpa_ctx *dpa_ctx;
 	struct snap_dpa_thread *dpa_thr;
+	struct snap_dpa_thread_attr attr = {0};
 	void *mbox;
 	struct snap_dpa_cmd *cmd;
 	struct snap_dpa_rsp *rsp;
@@ -297,7 +300,8 @@ TEST_F(SnapDpaTest, cmd_lat_bench_polling) {
 	dpa_ctx = snap_dpa_process_create(get_ib_ctx(), "dpa_cmd_lat_bench");
 	ASSERT_TRUE(dpa_ctx);
 
-	dpa_thr = snap_dpa_thread_create(dpa_ctx, 0);
+	attr.user_arg = how;
+	dpa_thr = snap_dpa_thread_create(dpa_ctx, &attr);
 	ASSERT_TRUE(dpa_thr);
 	printf("benchmark is running now...\n");
 
@@ -322,6 +326,22 @@ TEST_F(SnapDpaTest, cmd_lat_bench_polling) {
 	snap_dpa_log_print(dpa_thr->dpa_log);
 	snap_dpa_thread_destroy(dpa_thr);
 	snap_dpa_process_destroy(dpa_ctx);
+}
+
+TEST_F(SnapDpaTest, cmd_lat_bench_event_on_cq) {
+	run_cmd_lat_bench(0);
+}
+
+TEST_F(SnapDpaTest, cmd_lat_bench_event_on_window) {
+	run_cmd_lat_bench(1);
+}
+
+TEST_F(SnapDpaTest, cmd_lat_bench_poll_on_cq) {
+	run_cmd_lat_bench(2);
+}
+
+TEST_F(SnapDpaTest, cmd_lat_bench_poll_on_window) {
+	run_cmd_lat_bench(3);
 }
 
 #if 0
