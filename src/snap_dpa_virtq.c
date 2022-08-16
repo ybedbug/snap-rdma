@@ -39,7 +39,8 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 {
 	/* TODO: should get these from the upper layer */
 	struct snap_dpa_rt_filter f = {
-		.mode = SNAP_DPA_RT_THR_POLLING,
+		//.mode = SNAP_DPA_RT_THR_POLLING,
+		.mode = SNAP_DPA_RT_THR_EVENT,
 		.queue_mux_mode = SNAP_DPA_RT_THR_SINGLE
 	};
 	struct snap_dpa_rt_attr attr = {};
