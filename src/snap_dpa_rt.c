@@ -9,6 +9,9 @@
  * This software product is governed by the End User License Agreement
  * provided with the software product.
  */
+#define _GNU_SOURCE
+#include <sched.h>
+
 #include "config.h"
 
 #include "snap_env.h"
@@ -35,6 +38,10 @@ static struct snap_dpa_rt *snap_dpa_rt_create(struct ibv_context *ctx, const cha
 	rt->refcount = 1;
 	pthread_mutex_init(&rt->lock, NULL);
 	strncpy(rt->name, name, sizeof(rt->name) - 1);
+	CPU_ZERO(&rt->polling_cores);
+	CPU_ZERO(&rt->polling_core_set);
+	CPU_ZERO(&rt->event_core_set);
+
 	/* TODO: allocate rt, worker list, mutex etc */
 	return rt;
 free_rt:
@@ -129,6 +136,56 @@ void snap_dpa_rt_put(struct snap_dpa_rt *rt)
 	snap_dpa_rt_destroy(rt);
 }
 
+int snap_dpa_rt_polling_core_get(struct snap_dpa_rt *rt)
+{
+	int hart;
+	int i;
+
+	pthread_mutex_lock(&rt->lock);
+
+	hart = rt->next_polling_core;
+	for (i = 0; i < SNAP_DPA_HW_THREADS_COUNT; i++) {
+		/* todo: check that core is in polling core set */
+		if (!CPU_ISSET(hart, &rt->polling_cores)) {
+			CPU_SET(hart, &rt->polling_cores);
+			rt->next_polling_core = (hart + 1) % SNAP_DPA_HW_THREADS_COUNT;
+			goto found;
+		}
+		hart = (hart + 1) % SNAP_DPA_HW_THREADS_COUNT;
+	}
+	hart = -1;
+found:
+	pthread_mutex_unlock(&rt->lock);
+	return hart;
+}
+
+void snap_dpa_rt_polling_core_put(struct snap_dpa_rt *rt, int i)
+{
+	pthread_mutex_lock(&rt->lock);
+	if (!CPU_ISSET(i, &rt->polling_cores))
+		snap_error("core %d is already free\n", i);
+	CPU_CLR(i, &rt->polling_cores);
+	pthread_mutex_unlock(&rt->lock);
+}
+
+int snap_dpa_rt_event_core_get(struct snap_dpa_rt *rt)
+{
+	int hart;
+
+	/* todo: prefer sceduling across cores first, but at the moment
+	 * there seems to be no advantage
+	 */
+	pthread_mutex_lock(&rt->lock);
+	hart = rt->next_event_core;
+	rt->next_event_core = (rt->next_event_core + 1) % SNAP_DPA_HW_THREADS_COUNT;
+	pthread_mutex_unlock(&rt->lock);
+	return hart;
+}
+
+void snap_dpa_rt_event_core_put(struct snap_dpa_rt *rt, int i)
+{
+}
+
 struct snap_dpa_rt_worker *snap_dpa_rt_worker_create(struct snap_dpa_rt *rt)
 {
 	return NULL;
@@ -167,10 +224,25 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr, struct ibv_pd *pd_i
 	struct ibv_pd *dpa_pd = rt->dpa_proc->pd;
 	struct snap_hw_cq hw_cq;
 	int ret;
+	cpu_set_t cpu_mask;
 
 	/* create thread first because in the event mode we will have to
 	 * connect cqs to it
 	 */
+	CPU_ZERO(&cpu_mask);
+	if (rt_thr->mode == SNAP_DPA_RT_THR_POLLING)
+		rt_thr->hart = snap_dpa_rt_polling_core_get(rt);
+	else if (rt_thr->mode == SNAP_DPA_RT_THR_EVENT)
+		rt_thr->hart = snap_dpa_rt_event_core_get(rt);
+	else
+		return -EINVAL;
+	if (rt_thr->hart < 0)
+		return -EINVAL;
+
+	CPU_SET(rt_thr->hart, &cpu_mask);
+	attr.hart_set = &cpu_mask;
+	attr.user_flag = rt_thr->mode;
+
 	rt_thr->thread = snap_dpa_thread_create(rt->dpa_proc, &attr);
 	if (!rt_thr->thread)
 		return -EINVAL;
@@ -254,6 +326,11 @@ static void rt_thread_reset(struct snap_dpa_rt_thread *rt_thr)
 	snap_dma_ep_destroy(rt_thr->dpa_cmd_chan.dma_q);
 	snap_dma_ep_destroy(rt_thr->dpu_cmd_chan.dma_q);
 	snap_dpa_thread_destroy(rt_thr->thread);
+
+	if (rt_thr->mode == SNAP_DPA_RT_THR_POLLING)
+		snap_dpa_rt_polling_core_put(rt_thr->rt, rt_thr->hart);
+	else if (rt_thr->mode == SNAP_DPA_RT_THR_EVENT)
+		snap_dpa_rt_event_core_put(rt_thr->rt, rt_thr->hart);
 }
 
 /**

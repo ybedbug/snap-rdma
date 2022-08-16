@@ -44,7 +44,20 @@ struct snap_dpa_rt {
 	char name[SNAP_DPA_RT_NAME_LEN];
 
 	LIST_ENTRY(snap_dpa_rt) entry;
+
+	cpu_set_t polling_core_set;
+	cpu_set_t polling_cores;
+	int next_polling_core;
+
+	cpu_set_t event_core_set;
+	int next_event_core;
 };
+
+int snap_dpa_rt_polling_core_get(struct snap_dpa_rt *rt);
+void snap_dpa_rt_polling_core_put(struct snap_dpa_rt *rt, int i);
+
+int snap_dpa_rt_event_core_get(struct snap_dpa_rt *rt);
+void snap_dpa_rt_event_core_put(struct snap_dpa_rt *rt, int i);
 
 struct snap_dpa_rt *snap_dpa_rt_get(struct ibv_context *ctx, const char *name,
 		struct snap_dpa_rt_attr *attr);
@@ -93,6 +106,7 @@ struct snap_dpa_rt_thread {
 	struct snap_cq *msix_cq;
 	struct snap_msix_map *msix_vector;
 	int n_msix;
+	int hart;
 };
 
 struct dpa_rt_context {
