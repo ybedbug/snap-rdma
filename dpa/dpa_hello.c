@@ -24,7 +24,8 @@ int dpa_run()
 {
 	printf("HELLO [POLLING], i am dummy dpa code\n");
 
-	printf("thread_ctx@%p size %ld\n", flexio_os_get_thread_ctx(), sizeof(struct flexio_os_thread_ctx));
+	printf("thread_ctx@%p size %ld tcb_size %ld\n", flexio_os_get_thread_ctx(), sizeof(struct flexio_os_thread_ctx),
+			sizeof(struct snap_dpa_tcb));
 
 	printf("WAIT4 exit command\n");
 	snap_dpa_cmd_recv(dpa_mbox(), SNAP_DPA_CMD_STOP);
