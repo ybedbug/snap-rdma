@@ -135,6 +135,7 @@ void dpa_rt_init(void)
 
 void dpa_rt_start(void)
 {
+	struct snap_dpa_tcb *tcb = dpa_tcb();
 	struct dpa_rt_context *ctx = dpa_rt_ctx();
 	struct snap_dpa_cmd *cmd;
 
@@ -149,6 +150,7 @@ void dpa_rt_start(void)
 
 	snap_dpa_rsp_send(dpa_mbox(), SNAP_DPA_RSP_OK);
 	dpa_debug("dma q at %p db_cq at %p\n", ctx->dpa_cmd_chan.dma_q, (void *)ctx->db_cq.cq_addr);
+	tcb->cmd_last_sn = cmd->sn;
 }
 
 /* TODO: per dpa process/thread logging instead of dumping to simx */

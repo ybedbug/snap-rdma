@@ -33,6 +33,11 @@
 #define COMMAND_DELAY 100000
 #endif
 
+static inline bool is_event_mode()
+{
+	return dpa_tcb()->user_flag == SNAP_DPA_RT_THR_EVENT;
+}
+
 static inline struct dpa_virtq *get_vq()
 {
 	/* will redo to be mt safe */
@@ -53,11 +58,22 @@ static void dump_stats(struct dpa_virtq *vq)
 		vq->stats.n_vq_tables);
 }
 
+static inline void dpa_virtq_duar_arm()
+{
+	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
+
+	/* todo: use always armed in event mode */
+	if (is_event_mode())
+		snap_dv_arm_cq(&rt_ctx->db_cq);
+
+	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
+}
+
 int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq = get_vq();
-	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
 	uint16_t idx;
 	uint16_t vhca_id;
 
@@ -65,8 +81,10 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 
 	idx = vcmd->cmd_create.vq.common.idx;
 	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
-	dpa_info("vhca_id 0x%0x duar_id 0x%0x virtq create: %d size %d dpa_xmkey 0x%x dpu_xmkey 0x%x\n",
-			vhca_id, vq->duar_id, idx, vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey);
+	dpa_info("vhca_id 0x%0x duar_id 0x%0x %s virtq create: %d size %d dpa_xmkey 0x%x dpu_xmkey 0x%x\n",
+			vhca_id, vq->duar_id,
+			is_event_mode() ? "event" : "polling",
+			idx, vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey);
 	//dpa_window_set_active_mkey(vq->host_mkey);
 	//dpa_debug("set active mkey 0x%x\n", vq->host_mkey);
 
@@ -77,10 +95,9 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 	 * can send doorbell before we armed it
 	 */
 	vq->pending = 1;
-	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
-	/* TODO: host can submit requests even before the queue is ready,
-	 * get initial avail index.
-	 */
+
+	dpa_virtq_duar_arm();
+
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -191,15 +208,6 @@ static inline void virtq_progress()
 	int i, n;
 	//int cr_update;
 
-	// hack to slow things down on simx
-#if SIMX_BUILD
-	static int count;
-
-	if (count++ % COMMAND_DELAY)
-		return;
-#endif
-
-	/* load avail index */
 	if (!vq->enabled)
 		return;
 
@@ -250,9 +258,13 @@ static inline void virtq_progress()
 	if (n == 0 && !vq->pending)
 		return;
 
-	/* snap_dv_arm_cq(&rt_ctx->db_cq); - only need in the event mode */
-	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
 	vq->pending = 0;
+
+	/* note: this is going to disable db batching, optimize */
+	if (is_event_mode())
+		snap_dma_q_arm(rt_ctx->dpa_cmd_chan.dma_q);
+
+	dpa_virtq_duar_arm();
 
 	/* todo: consider keeping window adjusted 'driver' address */
 	avail_ring = (void *)dpa_window_get_base() + vq->common.driver;
@@ -290,6 +302,7 @@ static inline void virtq_progress()
 	vq->stats.n_delta_total += delta;
 
 	if (delta < DPA_TABLE_THRESHOLD) {
+		/* post send */
 		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
 				vq->hw_available_index, host_avail_idx, vq->common.driver,
@@ -302,6 +315,7 @@ static inline void virtq_progress()
 		}
 		vq->stats.n_vq_heads++;
 	} else {
+		/* rdma_write 4k; post send */
 		n = snap_dpa_p2p_send_vq_table(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
 				vq->hw_available_index, host_avail_idx, vq->common.driver,
@@ -338,7 +352,8 @@ again:
 
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
-			dpa_info("error sending vq heads\n");
+			dpa_error("error sending vq heads, err=%d, delta=%d, hw_avail=%d host_avail=%d\n",
+					n, delta, vq->hw_available_index, host_avail_idx);
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
@@ -346,7 +361,7 @@ again:
 		vq->stats.n_sends++;
 		vq->stats.n_long_sends++;
 
-		if (vq->hw_available_index + (uint16_t)n != host_avail_idx) {
+		if ((uint16_t)(vq->hw_available_index + (uint16_t)n) != host_avail_idx) {
 			goto again;
 		}
 	}
@@ -357,6 +372,7 @@ again:
 	/* kick off doorbells, pickup completions */
 	rt_ctx->dpa_cmd_chan.dma_q->ops->progress_tx(rt_ctx->dpa_cmd_chan.dma_q);
 	return;
+
 fatal_err:
 	/* todo: add logic */
 	dpa_debug("FATAL processing error, disabling vq\n");
@@ -378,24 +394,39 @@ int dpa_init()
 	return 0;
 }
 
-int dpa_run()
+static void dpa_run_polling()
+{
+	int done = 0;
+
+	dpa_rt_start();
+
+	do {
+		process_commands(&done);
+		virtq_progress();
+	} while (!done);
+}
+
+static inline void dpa_run_event()
 {
 	struct snap_dpa_tcb *tcb = dpa_tcb();
 	int done;
-	int ret;
-	struct snap_dpa_cmd *cmd;
 
-	dpa_rt_start();
-	cmd = dpa_mbox();
-	tcb->cmd_last_sn = cmd->sn;
-	done = 0;
+	/* may be add post init ?? */
+	if (snap_unlikely(tcb->init_done == 1)) {
+		dpa_rt_start();
+		tcb->init_done = 2;
+	}
 
-	do {
-		ret = process_commands(&done);
-		virtq_progress();
-	} while (!done);
+	do_command(&done);
+	virtq_progress();
+}
 
-	dpa_debug("virtq_split done\n");
-
-	return ret;
+int dpa_run()
+{
+	if (snap_likely(is_event_mode())) {
+		dpa_run_event();
+	} else {
+		dpa_run_polling();
+	}
+	return 0;
 }
