@@ -394,11 +394,6 @@ static inline int snap_virtio_ctrl_queue_enable_check(struct snap_virtio_ctrl *c
 	if (!ctrl->sdev->sctx->virtio_net_caps.virtio_q_cfg_v2)
 		return 0;
 
-	/* Update BAR because cbs_start and reset check may change BAR */
-	ret = snap_virtio_ctrl_bar_update(ctrl, ctrl->bar_curr);
-	if (ret)
-		return ret;
-
 	for (i = 0; i < ctrl->max_queues; i++) {
 		if (!ctrl->q_ops->enable_check)
 			continue;
