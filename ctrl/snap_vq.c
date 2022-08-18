@@ -20,6 +20,8 @@
 #include "snap.h"
 #include "snap_dma.h"
 #include "snap_vq_prm.h"
+#include "snap_virtio_common_ctrl.h"
+#include "snap_virtio_net.h"
 
 
 #define SNAP_VQ_NO_MSIX (0xffff)
@@ -427,8 +429,9 @@ static int snap_vq_hwq_modify_state(struct snap_vq *q, enum snap_virtq_state sta
 static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 				const struct snap_vq_create_attr *qattr)
 {
-
+	struct snap_virtio_net_queue_attr net_attr = {};
 	struct snap_virtio_queue_attr hw_qattr = {};
+	struct snap_virtio_queue_attr *act_attr;
 	struct snap_virtio_queue *hw_q;
 	struct ibv_qp *qp = snap_dma_q_get_fw_qp(dma_q);
 	int ret;
@@ -468,8 +471,21 @@ static int snap_vq_hwq_create(struct snap_vq *q, struct snap_dma_q *dma_q,
 	hw_qattr.queue_period_mode = 0;
 	hw_qattr.queue_period = 0;
 	hw_qattr.queue_max_count = 0;
+
+	if (qattr->sdev->pci->type == SNAP_VIRTIO_NET_PF ||
+	    qattr->sdev->pci->type == SNAP_VIRTIO_NET_VF) {
+		memcpy(&net_attr.vattr, &hw_qattr,
+		       sizeof(struct snap_virtio_queue_attr));
+		net_attr.hw_available_index = hw_qattr.hw_available_index;
+		net_attr.hw_used_index = hw_qattr.hw_used_index;
+
+		act_attr = &net_attr.vattr;
+	} else {
+		act_attr = &hw_qattr;
+	}
+
 	ret = snap_virtio_create_hw_queue(qattr->sdev, hw_q, qattr->caps,
-					  &hw_qattr);
+					  act_attr);
 	if (ret)
 		goto free_ctrs;
 
