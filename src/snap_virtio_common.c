@@ -239,7 +239,7 @@ snap_virtio_net_queue_config_fill(void *in, uint64_t mask,
 	}
 	if (mask & SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET) {
 		*fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET;
-		DEVX_SET(virtio_q_layout_v2, q, queue_reset,
+		DEVX_SET(virtio_q_layout_v2, in, queue_reset,
 			 nattr->q_attrs[i].vattr.reset);
 	}
 	if (mask & SNAP_VIRTIO_MOD_QUEUE_CFG) {
@@ -258,7 +258,7 @@ snap_virtio_net_queue_config_fill(void *in, uint64_t mask,
 			   nattr->q_attrs[i].vattr.driver);
 		DEVX_SET64(virtio_q_layout, q, queue_device,
 			   nattr->q_attrs[i].vattr.device);
-		DEVX_SET(virtio_q_layout_v2, q, queue_reset,
+		DEVX_SET(virtio_q_layout_v2, in, queue_reset,
 			 nattr->q_attrs[i].vattr.reset);
 	}
 }
