@@ -200,11 +200,88 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	free(vq);
 }
 
-int snap_dpa_virtq_query(struct snap_dpa_virtq *vq,
+static enum dpa_virtq_state to_dpa_virtq_state(enum snap_virtq_state state)
+{
+	switch (state) {
+	case SNAP_VIRTQ_STATE_INIT:
+		return DPA_VIRTQ_STATE_INIT;
+	case SNAP_VIRTQ_STATE_RDY:
+		return DPA_VIRTQ_STATE_RDY;
+	case SNAP_VIRTQ_STATE_SUSPEND:
+		return DPA_VIRTQ_STATE_SUSPEND;
+	case SNAP_VIRTQ_STATE_ERR:
+		return DPA_VIRTQ_STATE_ERR;
+	}
+
+	return DPA_VIRTQ_STATE_ERR;
+}
+
+static enum snap_virtq_state to_snap_virtq_state(enum dpa_virtq_state state)
+{
+	switch (state) {
+	case DPA_VIRTQ_STATE_INIT:
+		return SNAP_VIRTQ_STATE_INIT;
+	case DPA_VIRTQ_STATE_RDY:
+		return SNAP_VIRTQ_STATE_RDY;
+	case DPA_VIRTQ_STATE_SUSPEND:
+		return SNAP_VIRTQ_STATE_SUSPEND;
+	case DPA_VIRTQ_STATE_ERR:
+		return SNAP_VIRTQ_STATE_ERR;
+	}
+
+	return SNAP_VIRTQ_STATE_ERR;
+}
+
+static int snap_dpa_virtq_query(struct snap_dpa_virtq *vq,
 		struct snap_virtio_common_queue_attr *attr)
 {
-	/* TODO */
-	snap_warn("DPA query is not supported. Returning OK\n");
+	void *mbox;
+	struct dpa_virtq_cmd *cmd;
+	struct dpa_virtq_rsp *rsp;
+
+	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
+
+	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
+	snap_dpa_cmd_send(vq->rt_thr->thread, &cmd->base, DPA_VIRTQ_CMD_QUERY);
+
+	rsp = (struct dpa_virtq_rsp *)snap_dpa_rsp_wait(mbox);
+	if (rsp->base.status != SNAP_DPA_RSP_OK) {
+		snap_error("Failed to query DPA virtio queue: %d\n", rsp->base.status);
+		snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
+	}
+
+	snap_info("DPA query: vq_state %d avail %d used %d\n", rsp->vq_state.state,
+			rsp->vq_state.hw_available_index,
+			vq->hw_used_index);
+
+	attr->vattr.state = to_snap_virtq_state(rsp->vq_state.state);
+	attr->hw_available_index = rsp->vq_state.hw_available_index;
+	attr->hw_used_index = vq->hw_used_index;
+	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
+	return 0;
+}
+
+static int snap_dpa_virtq_modify(struct snap_dpa_virtq *vq,
+		struct snap_virtio_common_queue_attr *attr)
+{
+	void *mbox;
+	struct dpa_virtq_cmd *cmd;
+	struct snap_dpa_rsp *rsp;
+
+	snap_info("DPA modify to state %d\n", attr->vattr.state);
+	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);
+
+	cmd = (struct dpa_virtq_cmd *)snap_dpa_mbox_to_cmd(mbox);
+	cmd->cmd_modify.state = to_dpa_virtq_state(attr->vattr.state);
+	snap_dpa_cmd_send(vq->rt_thr->thread, &cmd->base, DPA_VIRTQ_CMD_MODIFY);
+
+	rsp = snap_dpa_rsp_wait(mbox);
+	if (rsp->status != SNAP_DPA_RSP_OK) {
+		snap_error("Failed to modify DPA virtio queue: %d\n", rsp->status);
+		snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
+	}
+
+	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
 	return 0;
 }
 
@@ -241,8 +318,13 @@ int virtq_blk_dpa_query(struct snap_virtio_queue *vbq,
 int virtq_blk_dpa_modify(struct snap_virtio_queue *vbq,
 		uint64_t mask, struct snap_virtio_common_queue_attr *attr)
 {
-	snap_warn("DPA modify is not supported. Returning OK\n");
-	return 0;
+	struct snap_dpa_virtq *vq;
+
+	if (mask != SNAP_VIRTIO_BLK_QUEUE_MOD_STATE)
+		return -EINVAL;
+
+	vq = (struct snap_dpa_virtq *)vbq;
+	return snap_dpa_virtq_modify(vq, attr);
 }
 
 #else

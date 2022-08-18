@@ -70,6 +70,17 @@ static inline void dpa_virtq_duar_arm()
 	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
 }
 
+static void dpa_virtq_write_rsp(struct dpa_virtq *vq)
+{
+	struct dpa_virtq_rsp *rsp;
+
+	rsp = (struct dpa_virtq_rsp *)snap_dpa_mbox_to_rsp(dpa_mbox());
+
+	rsp->vq_state.state = vq->state;
+	rsp->vq_state.hw_available_index = vq->hw_available_index;
+	rsp->vq_state.hw_used_index = vq->hw_used_index;
+}
+
 int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
@@ -85,19 +96,17 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 			vhca_id, vq->duar_id,
 			is_event_mode() ? "event" : "polling",
 			idx, vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey);
-	//dpa_window_set_active_mkey(vq->host_mkey);
-	//dpa_debug("set active mkey 0x%x\n", vq->host_mkey);
-
 	/* TODO: input validation/sanity check */
-	/* TODO: enable in 'modify' */
-	vq->enabled = 1;
-	/* there is a race between vq enable and doorbell. Basically driver
-	 * can send doorbell before we armed it
+
+	/* allow queue creation in the rdy state, save 3-5usec on extra modify
 	 */
-	vq->pending = 1;
+	if (vq->state == DPA_VIRTQ_STATE_RDY) {
+		vq->pending = 1;
+		dpa_virtq_duar_arm();
+	} else
+		vq->state = DPA_VIRTQ_STATE_INIT;
 
-	dpa_virtq_duar_arm();
-
+	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -105,26 +114,73 @@ int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
 
-	//dpa_window_set_active_mkey(dpa_tcb()->mbox_lkey);
 	dpa_info("0x%0x virtq destroy: %d hw_avail: %d\n", vq->common.vhca_id, vq->common.idx, vq->hw_available_index);
 	dump_stats(vq);
-	vq->enabled = 0;
+	vq->state = DPA_VIRTQ_STATE_ERR;
 	return SNAP_DPA_RSP_OK;
 }
 
 int dpa_virtq_modify(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
+	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
+	enum dpa_virtq_state next_state = vcmd->cmd_modify.state;
 
-	dpa_info("0x%0x virtq modify: %d\n", vq->common.vhca_id, vq->common.idx);
+	dpa_info("0x%0x virtq modify: %d state %d new_state %d\n", vq->common.vhca_id,
+			vq->common.idx, vq->state, next_state);
+
+	if (vq->state == next_state)
+		return SNAP_DPA_RSP_OK;
+
+	if (next_state == DPA_VIRTQ_STATE_ERR)
+		goto done;
+
+	switch (vq->state) {
+		case DPA_VIRTQ_STATE_INIT:
+			if (next_state != DPA_VIRTQ_STATE_RDY)
+				return SNAP_DPA_RSP_ERR;
+			/* there is a race between vq enable and doorbell. Basically driver
+			 * can send doorbell before we armed it
+			 */
+			vq->pending = 1;
+			dpa_virtq_duar_arm();
+			break;
+
+		case DPA_VIRTQ_STATE_RDY:
+			if (next_state != DPA_VIRTQ_STATE_SUSPEND)
+				goto done_bad_state;
+
+			/*
+			 * It is nice to guarantee that after suspend all outstanding
+			 * tx to dpu are completed. But is it needed ?
+			 */
+			snap_dma_q_flush(rt_ctx->dpa_cmd_chan.dma_q);
+			break;
+
+		case DPA_VIRTQ_STATE_SUSPEND:
+		case DPA_VIRTQ_STATE_ERR:
+			if (next_state != DPA_VIRTQ_STATE_ERR)
+				goto done_bad_state;
+			break;
+	}
+
+done:
+	vq->state = next_state;
+	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
+
+done_bad_state:
+	dpa_error("0x%0x bad state transition\n", vq->common.vhca_id);
+	return SNAP_DPA_RSP_ERR;
 }
 
 int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
 
-	dpa_info("0x%0x virtq modify: %d\n", vq->common.vhca_id, vq->common.idx);
+	dpa_info("0x%0x virtq query: %d\n", vq->common.vhca_id, vq->common.idx);
+	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
 }
 
@@ -179,7 +235,7 @@ static int do_command(int *done)
 	dpa_debug("sn %d: done command 0x%x status %d\n", cmd->sn, cmd->cmd, rsp_status);
 	snap_dpa_rsp_send(dpa_mbox(), rsp_status);
 cmd_done:
-	if (vq->enabled)
+	if (vq->state == DPA_VIRTQ_STATE_RDY)
 		dpa_window_set_active_mkey(vq->dpa_xmkey);
 
 	return 0;
@@ -208,7 +264,7 @@ static inline void virtq_progress()
 	int i, n;
 	//int cr_update;
 
-	if (!vq->enabled)
+	if (vq->state != DPA_VIRTQ_STATE_RDY)
 		return;
 
 	rt_ctx = dpa_rt_ctx();
@@ -376,7 +432,7 @@ again:
 fatal_err:
 	/* todo: add logic */
 	dpa_debug("FATAL processing error, disabling vq\n");
-	vq->enabled = 0;
+	vq->state = DPA_VIRTQ_STATE_ERR;
 	return;
 }
 

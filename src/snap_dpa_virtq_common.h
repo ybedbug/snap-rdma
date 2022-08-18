@@ -48,6 +48,22 @@ enum {
 	DPA_VIRTQ_CMD_QUERY,
 };
 
+
+enum dpa_virtq_state {
+	DPA_VIRTQ_STATE_INIT = 0,
+	DPA_VIRTQ_STATE_RDY,
+	DPA_VIRTQ_STATE_SUSPEND,
+	DPA_VIRTQ_STATE_ERR,
+};
+
+struct dpa_virtq_stats {
+	uint32_t n_vq_heads;
+	uint32_t n_vq_tables;
+	uint32_t n_sends;
+	uint32_t n_long_sends;
+	uint32_t n_delta_total;
+};
+
 /* TODO: optimize field alignment */
 struct dpa_virtq {
 	struct snap_dpa_virtq_common common;
@@ -61,27 +77,40 @@ struct dpa_virtq {
 	uint64_t dpu_desc_shadow_addr;
 
 	uint32_t duar_id;
-	uint32_t enabled;
+	enum dpa_virtq_state state;
 
 	uint32_t pending;
 
-	struct {
-		uint32_t n_vq_heads;
-		uint32_t n_vq_tables;
-		uint32_t n_sends;
-		uint32_t n_long_sends;
-		uint32_t n_delta_total;
-	} stats;
+	struct dpa_virtq_stats stats;
 };
 
 struct __attribute__((packed)) dpa_virtq_cmd_create {
 	struct dpa_virtq vq;
 };
 
+struct dpa_virtq_cmd_modify {
+	enum dpa_virtq_state state;
+};
+
+struct dpa_virtq_rsp_query {
+	enum dpa_virtq_state state;
+	uint16_t hw_available_index;
+	uint16_t hw_used_index;
+};
+
 struct dpa_virtq_cmd {
 	struct snap_dpa_cmd base;
 	union {
 		struct dpa_virtq_cmd_create cmd_create;
+		struct dpa_virtq_cmd_modify cmd_modify;
+	};
+};
+
+struct dpa_virtq_rsp {
+	struct snap_dpa_rsp base;
+	union {
+		struct dpa_virtq_rsp_query vq_state;
+		struct dpa_virtq_stats vq_stats;
 	};
 };
 
