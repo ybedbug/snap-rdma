@@ -33,6 +33,16 @@
 #define COMMAND_DELAY 100000
 #endif
 
+#define dpa_virtq_error(_vq, _fmt, ...) \
+do { \
+	dpa_error("vq 0x%x#%d " _fmt, (_vq)->common.vhca_id, (_vq)->common.idx, ##__VA_ARGS__); \
+} while (0)
+
+#define dpa_virtq_info(_vq, _fmt, ...) \
+do { \
+	dpa_info("vq 0x%x#%d " _fmt, (_vq)->common.vhca_id, (_vq)->common.idx, ##__VA_ARGS__); \
+} while (0)
+
 static inline bool is_event_mode()
 {
 	return dpa_tcb()->user_flag == SNAP_DPA_RT_THR_EVENT;
@@ -49,8 +59,7 @@ static inline struct dpa_virtq *get_vq()
 
 static void dump_stats(struct dpa_virtq *vq)
 {
-	dpa_info("vq 0x%x#%d : sends %lu long_sends %lu delta_total %lu vq_heads %lu vq_tables %lu\n",
-		vq->common.vhca_id, vq->common.idx,
+	dpa_virtq_info(vq, "sends %u long_sends %u delta_total %u vq_heads %u vq_tables %u\n",
 		vq->stats.n_sends,
 		vq->stats.n_long_sends,
 		vq->stats.n_delta_total,
@@ -85,19 +94,26 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq = get_vq();
-	uint16_t idx;
-	uint16_t vhca_id;
 
 	memcpy(vq, &vcmd->cmd_create.vq, sizeof(vcmd->cmd_create.vq));
 
-	idx = vcmd->cmd_create.vq.common.idx;
-	vhca_id = vcmd->cmd_create.vq.common.vhca_id;
-	dpa_info("vhca_id 0x%0x duar_id 0x%0x %s virtq create: %d size %d dpa_xmkey 0x%x dpu_xmkey 0x%x\n",
-			vhca_id, vq->duar_id,
-			is_event_mode() ? "event" : "polling",
-			idx, vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey);
 	/* TODO: input validation/sanity check */
 
+	if (vcmd->cmd_create.do_recovery) {
+		/* it makes code less ugly. Unlike ace code we can not create
+		 * dma_q first, read used/avail and then handoff same dma_q
+		 * to the 'fw'.
+		 * We can either use a separate dma_q or do recovery as part
+		 * of the virtq creation
+		 */
+		struct virtq_device_ring *used_ring;
+
+		dpa_window_set_active_mkey(vq->dpa_xmkey);
+		used_ring = (struct virtq_device_ring *)vq->common.device;
+		snap_memory_bus_fence();
+		vq->hw_used_index = used_ring->idx;
+		vq->hw_available_index = used_ring->idx;
+	}
 	/* allow queue creation in the rdy state, save 3-5usec on extra modify
 	 */
 	if (vq->state == DPA_VIRTQ_STATE_RDY) {
@@ -105,6 +121,11 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 		dpa_virtq_duar_arm();
 	} else
 		vq->state = DPA_VIRTQ_STATE_INIT;
+
+	dpa_virtq_info(vq, "%s virtq create: size %d dpa_xmkey 0x%x dpu_xmkey 0x%x duar_id 0x%x recover %d avail_idx %d\n",
+			is_event_mode() ? "event" : "polling",
+			vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey, vq->duar_id,
+			vcmd->cmd_create.do_recovery, vq->hw_available_index);
 
 	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
@@ -114,7 +135,7 @@ int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
 
-	dpa_info("0x%0x virtq destroy: %d hw_avail: %d\n", vq->common.vhca_id, vq->common.idx, vq->hw_available_index);
+	dpa_virtq_info(vq, "virtq destroy: hw_avail %d\n", vq->hw_available_index);
 	dump_stats(vq);
 	vq->state = DPA_VIRTQ_STATE_ERR;
 	return SNAP_DPA_RSP_OK;
@@ -127,8 +148,7 @@ int dpa_virtq_modify(struct snap_dpa_cmd *cmd)
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	enum dpa_virtq_state next_state = vcmd->cmd_modify.state;
 
-	dpa_info("0x%0x virtq modify: %d state %d new_state %d\n", vq->common.vhca_id,
-			vq->common.idx, vq->state, next_state);
+	dpa_virtq_info(vq, "virtq modify: state %d new_state %d\n", vq->state, next_state);
 
 	if (vq->state == next_state)
 		return SNAP_DPA_RSP_OK;
@@ -171,7 +191,7 @@ done:
 	return SNAP_DPA_RSP_OK;
 
 done_bad_state:
-	dpa_error("0x%0x bad state transition\n", vq->common.vhca_id);
+	dpa_virtq_error(vq, "0x%0x bad state transition\n");
 	return SNAP_DPA_RSP_ERR;
 }
 
@@ -179,7 +199,7 @@ int dpa_virtq_query(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
 
-	dpa_info("0x%0x virtq query: %d\n", vq->common.vhca_id, vq->common.idx);
+	dpa_virtq_info(vq, "virtq query\n");
 	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
 }
@@ -365,7 +385,7 @@ static inline void virtq_progress()
 				vq->dpu_xmkey);
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
-			dpa_info("error sending vq heads\n");
+			dpa_virtq_error(vq, "error (%d) sending vq heads\n", vq);
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
@@ -379,7 +399,7 @@ static inline void virtq_progress()
 				vq->common.desc, vq->dpu_desc_shadow_addr, vq->dpu_desc_shadow_mkey);
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
-			dpa_info("error sending vq table\n");
+			dpa_virtq_error(vq, "error (%d) sending vq table\n", vq);
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
 		}
@@ -408,7 +428,7 @@ again:
 
 		if (n <= 0) {
 			/* todo: error handling if not EGAIN */
-			dpa_error("error sending vq heads, err=%d, delta=%d, hw_avail=%d host_avail=%d\n",
+			dpa_virtq_error(vq, "error sending vq heads, err=%d, delta=%d, hw_avail=%d host_avail=%d\n",
 					n, delta, vq->hw_available_index, host_avail_idx);
 			// should not happen, atm qp is large enough to handle all tx
 			goto fatal_err;
@@ -431,7 +451,7 @@ again:
 
 fatal_err:
 	/* todo: add logic */
-	dpa_debug("FATAL processing error, disabling vq\n");
+	dpa_virtq_error(vq, "FATAL processing error, disabling virtqueue\n");
 	vq->state = DPA_VIRTQ_STATE_ERR;
 	return;
 }
