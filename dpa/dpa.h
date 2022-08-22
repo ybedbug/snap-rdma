@@ -21,6 +21,8 @@
 #include <libflexio-os/flexio_os_syscall.h>
 #include <libflexio-os/flexio_os.h>
 
+#include "flexio_dev_dpa_arch.h"
+
 #include "dpa_log.h"
 #include "snap_dma_compat.h"
 #include "snap_dpa_common.h"
@@ -32,6 +34,16 @@
 #endif
 
 #define DPA_CACHE_LINE_BYTES 64
+
+static inline struct flexio_os_thread_ctx *dpa_get_thread_ctx()
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	asm("mv %0, tp" : "=r"(ctx));
+	return ctx;
+	// Use inline assembly to avoid function call
+	// return flexio_os_get_thread_ctx();
+}
 
 /**
  * dpa_window_set_mkey() - set window memory key
@@ -47,7 +59,7 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
 	uint32_t *window_u_cfg;
 
 	/* this is based on flexio rpc entry_point.c */
-	ctx = flexio_os_get_thread_ctx();
+	ctx = dpa_get_thread_ctx();
 	window_u_cfg = (uint32_t *)ctx->window_config_base;
 	/* consider weaker barrier */
 	snap_memory_bus_fence();
@@ -62,7 +74,7 @@ static inline void dpa_window_set_mkey(uint32_t mkey)
  */
 static inline uint64_t dpa_window_get_base(void)
 {
-	return flexio_os_get_thread_ctx()->window_base;
+	return dpa_get_thread_ctx()->window_base;
 }
 
 /**
@@ -75,7 +87,7 @@ static inline struct snap_dpa_tcb *dpa_tcb(void)
 {
 	struct flexio_os_thread_ctx *ctx;
 
-	ctx = flexio_os_get_thread_ctx();
+	ctx = dpa_get_thread_ctx();
 
 	/*
 	 * Note: flexio uses metadata for its internal bookkeepig
@@ -129,24 +141,27 @@ static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
 	/* NOTE: thread context is not a syscall but a read of tp register
 	 * this is fast but flexio should make these inline 
 	 */
-	ctx = flexio_os_get_thread_ctx();
-	flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
+	ctx = dpa_get_thread_ctx();
+	//flexio_dev_qp_sq_ring_db((struct flexio_dev_thread_ctx *)ctx, pi, qpnum);
+	outbox_write(ctx->outbox_base, SXD_DB, OUTBOX_V_SXD_DB(pi, qpnum));
 }
 
 static inline void dpa_dma_q_arm_cq(uint16_t cqnum, uint16_t ci)
 {
 	struct flexio_os_thread_ctx *ctx;
 
-	ctx = flexio_os_get_thread_ctx();
-	flexio_dev_cq_arm((struct flexio_dev_thread_ctx *)ctx, ci, cqnum);
+	ctx = dpa_get_thread_ctx();
+	//flexio_dev_cq_arm((struct flexio_dev_thread_ctx *)ctx, ci, cqnum);
+	outbox_write(ctx->outbox_base, CQ_DB, OUTBOX_V_CQ_DB(cqnum, ci));
 }
 
 static inline void dpa_duar_arm(uint32_t duar_id, uint32_t cq_num)
 {
 	struct flexio_os_thread_ctx *ctx;
 
-	ctx = flexio_os_get_thread_ctx();
-	flexio_dev_db_ctx_arm((struct flexio_dev_thread_ctx *)ctx, cq_num, duar_id);
+	ctx = dpa_get_thread_ctx();
+	//flexio_dev_db_ctx_arm((struct flexio_dev_thread_ctx *)ctx, cq_num, duar_id);
+	outbox_write(ctx->outbox_base, EMU_CAP, OUTBOX_V_EMU_CAP(cq_num, duar_id));
 }
 
 /**
