@@ -83,7 +83,7 @@ int snap_dpa_p2p_recv_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg **ms
 	return comps;
 }
 
-static int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
+static inline int send_vq_update(struct snap_dpa_p2p_q *q, int cr_delta, int type,
 			uint16_t vqid, uint16_t vqsize, uint16_t last_avail_index, uint16_t avail_index,
 			uint64_t driver, uint32_t driver_mkey)
 {
