@@ -345,7 +345,7 @@ static inline void virtq_progress()
 	/* todo: consider keeping window adjusted 'driver' address */
 	avail_ring = (void *)dpa_window_get_base() + vq->common.driver;
 	/* use load fence (i) ? */
-	snap_memory_bus_fence();
+	snap_memory_bus_load_fence();
 	/* NOTE: window mapping is going to be invalidated on controller reset
 	 * flr etc. It means that there is a chance that thread will be
 	 * reading available index from the invalid window.
@@ -377,7 +377,7 @@ static inline void virtq_progress()
 
 	vq->stats.n_delta_total += delta;
 
-	if (delta < DPA_TABLE_THRESHOLD) {
+	if (snap_unlikely(delta < DPA_TABLE_THRESHOLD)) {
 		/* post send */
 		n = snap_dpa_p2p_send_vq_heads(&rt_ctx->dpa_cmd_chan, vq->common.idx,
 				vq->common.size,
