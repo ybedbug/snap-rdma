@@ -3084,9 +3084,11 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
 	u8	   reset[0x1];
-	u8	   reserved_at_62[0x2];
+	u8	   dynamic_vf_msix_control[0x1];
+	u8	   dynamic_vf_msix_reset[0x1];
 	u8	   pci_hotplug_state[0x3];
-	u8	   reserved_at_68[0x18];
+	u8	   reserved_at_65[0x8];
+	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
 
