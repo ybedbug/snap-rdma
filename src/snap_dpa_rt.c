@@ -9,7 +9,9 @@
  * This software product is governed by the End User License Agreement
  * provided with the software product.
  */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <sched.h>
 
 #include "config.h"
