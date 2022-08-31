@@ -1540,7 +1540,9 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 
 	u8	 reserved_at_a0[0x20];
 
-	u8	 reserved_at_c1[0x1f];
+	u8	 reserved_at_c1[0x1c];
+	u8	 emulated_dev_db_cq_map[0x2];
+	u8	 emulated_dev_eq[0x1];
 	u8	 virtio_q_cfg_v2[0x1];
 
 	u8	 reserved_at_e0[0x20];
@@ -2641,6 +2643,8 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_APU_OUTBOX = 0x200000000000,
 	MLX5_OBJ_TYPE_APU_EQ = 0x8000000000000,
 	MLX5_OBJ_TYPE_APU_WINDOW = 0x200000000000000,
+
+	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49
 };
 
 enum {
@@ -3087,7 +3091,9 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   dynamic_vf_msix_control[0x1];
 	u8	   dynamic_vf_msix_reset[0x1];
 	u8	   pci_hotplug_state[0x3];
-	u8	   reserved_at_65[0x8];
+	u8	   emulated_dev_eq[0x1];
+	u8	   emulated_dev_db_cq_map[0x1];
+	u8	   reserved_at_65[0x6];
 	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
@@ -3116,7 +3122,13 @@ struct mlx5_ifc_virtio_fs_device_emulation_bits {
 	u8	   enabled[0x1];
 	u8	   resources_on_emulation_manager[0x1];
 	u8	   reset[0x1];
-	u8	   reserved_at_63[0x1d];
+	u8	   dynamic_vf_msix_control[0x1];
+	u8	   dynamic_vf_msix_reset[0x1];
+	u8	   pci_hotplug_state[0x3];
+	u8	   emulated_dev_eq[0x1];
+	u8	   emulated_dev_db_cq_map[0x1];
+	u8	   reserved_at_65[0x6];
+	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
 
@@ -4560,7 +4572,8 @@ enum {
 
 enum {
 	MLX5_APU_ELEMENT_TYPE_THREAD = 0x0,
-	MLX5_APU_ELEMENT_TYPE_EQ = 0x1
+	MLX5_APU_ELEMENT_TYPE_EQ = 0x1,
+	MLX5_APU_ELEMENT_TYPE_EMULATED_DEV_EQ = 0x2,
 };
 
 struct mlx5_ifc_cqc_bits {
@@ -4653,6 +4666,33 @@ struct mlx5_ifc_create_cq_in_bits {
 
 	u8 reserved_at_300[0x580];
 	u8 pas[0x0];
+};
+
+struct mlx5_ifc_create_emulated_dev_eq_in_bits {
+	u8 modify_field_select[0x40];
+
+	u8 reserved_at_40[0x40];
+
+	u8 reserved_at_80[0x40];
+
+	u8 device_emulation_id[0x20];
+
+	u8 reserved_at_e0[0x260];
+
+	u8 reserved_at_340[0x15];
+	u8 intr[0xb];
+};
+
+struct mlx5_ifc_create_eq_out_bits {
+	u8 status[0x8];
+	u8 reserved_at_8[0x18];
+
+	u8 syndrome[0x20];
+
+	u8 reserved_at_40[0x18];
+	u8 eqn[0x8];
+
+	u8 reserved_at_60[0x20];
 };
 
 #endif /* MLX5_IFC_H */
