@@ -66,7 +66,7 @@ conf_data.set10('HAVE_DECL_IBV_QUERY_GID_EX',
 configure_file(output : 'config.h', configuration : conf_data)
 
 # common cflags
-common_cflags = []
+common_cflags = ['-Werror', '-Wall', '-fms-extensions']
 if get_option('enable-debug')
 	common_cflags += '-DSNAP_DEBUG=1'
 endif

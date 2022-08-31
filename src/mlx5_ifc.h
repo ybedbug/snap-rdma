@@ -4072,7 +4072,42 @@ struct mlx5_ifc_virtio_q_bits {
 };
 
 enum {
-	MLX5_VIRTIO_NET_Q_MODIFY_STATE = 1 << 0,
+	MLX5_VIRTIO_COMMON_Q_MODIFY_STATE = 1 << 0,
+};
+
+struct mlx5_ifc_virtio_common_q_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x20];
+
+	u8	   qpn_vhca_id[0x10];
+	u8	   reserved_at_70[0x10];
+
+	u8	   reserved_at_80[0xa];
+	u8	   dirty_bitmap_dump_enable[0x1];
+	u8	   vhost_log_page[0x5];
+	u8	   reserved_at_90[0xc];
+	u8	   state[0x4];
+
+	u8	   reserved_at_a0[0x8];
+	u8	   qpn[0x18];
+
+	u8	   dirty_bitmap_mkey[0x20];
+
+	u8	   dirty_bitmap_size[0x20];
+
+	u8	   dirty_bitmap_addr[0x40];
+
+	u8	   hw_available_index[0x10];
+	u8	   hw_used_index[0x10];
+
+	u8	   reserved_at_160[0xa0];
+
+	struct mlx5_ifc_virtio_q_bits virtqc;
+};
+
+enum {
+	MLX5_VIRTIO_NET_Q_MODIFY_STATE = MLX5_VIRTIO_COMMON_Q_MODIFY_STATE,
 };
 
 enum {
@@ -4119,76 +4154,23 @@ struct mlx5_ifc_virtio_net_q_bits {
 };
 
 enum {
-	MLX5_VIRTIO_BLK_Q_MODIFY_STATE = 1 << 0,
+	MLX5_VIRTIO_BLK_Q_MODIFY_STATE = MLX5_VIRTIO_COMMON_Q_MODIFY_STATE,
 };
 
 /* Virtio block emulation related structures */
 struct mlx5_ifc_virtio_blk_q_bits {
-	u8	   modify_field_select[0x40];
-
-	u8	   reserved_at_40[0x20];
-
-	u8	   qpn_vhca_id[0x10];
-	u8	   reserved_at_70[0x10];
-
-	u8	   reserved_at_80[0xa];
-	u8	   dirty_bitmap_dump_enable[0x1];
-	u8	   vhost_log_page[0x5];
-	u8	   reserved_at_90[0xc];
-	u8	   state[0x4];
-
-	u8	   reserved_at_a0[0x8];
-	u8	   qpn[0x18];
-
-	u8	   dirty_bitmap_mkey[0x20];
-
-	u8	   dirty_bitmap_size[0x20];
-
-	u8	   dirty_bitmap_addr[0x40];
-
-	u8	   hw_available_index[0x10];
-	u8	   hw_used_index[0x10];
-
-	u8	   reserved_at_160[0xa0];
-
-	struct mlx5_ifc_virtio_q_bits virtqc;
+	struct mlx5_ifc_virtio_common_q_bits;
 };
 
 enum {
-	MLX5_VIRTIO_FS_Q_MODIFY_STATE  = 1 << 0,
+	MLX5_VIRTIO_FS_Q_MODIFY_STATE  = MLX5_VIRTIO_COMMON_Q_MODIFY_STATE,
 };
 
 /* Virtio fs emulation related structures */
 struct mlx5_ifc_virtio_fs_q_bits {
-	u8	   modify_field_select[0x40];
-
-	u8	   reserved_at_40[0x20];
-
-	u8	   qpn_vhca_id[0x10];
-	u8	   reserved_at_70[0x10];
-
-	u8	   reserved_at_80[0xa];
-	u8	   dirty_bitmap_dump_enable[0x1];
-	u8	   vhost_log_page[0x5];
-	u8	   reserved_at_90[0xc];
-	u8	   state[0x4];
-
-	u8	   reserved_at_a0[0x8];
-	u8	   qpn[0x18];
-
-	u8	   dirty_bitmap_mkey[0x20];
-
-	u8	   dirty_bitmap_size[0x20];
-
-	u8	   dirty_bitmap_addr[0x40];
-
-	u8	   hw_available_index[0x10];
-	u8	   hw_used_index[0x10];
-
-	u8	   reserved_at_160[0xa0];
-
-	struct mlx5_ifc_virtio_q_bits virtqc;
+	struct mlx5_ifc_virtio_common_q_bits;
 };
+
 /* NVMe emulation related structures */
 struct mlx5_ifc_nvme_namespace_bits {
 	u8	   modify_field_select[0x40];

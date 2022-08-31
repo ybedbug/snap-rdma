@@ -52,7 +52,7 @@ AC_PREFIX_DEFAULT(/usr/local/snap)
 
 # debug mode
 
-BASE_CFLAGS="-g -O2 -Wall -Werror"
+BASE_CFLAGS="-g -O2 -Wall -Werror -fms-extensions"
 #BASE_CFLAGS="-g -O2"
 
 AC_ARG_ENABLE(debug,
