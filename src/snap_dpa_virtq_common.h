@@ -37,7 +37,7 @@ struct snap_dpa_virtq_common {
 	uint64_t driver;
 	uint64_t device;
 	uint16_t msix_vector;
-	uint16_t vhca_id;
+	uint16_t dev_emu_id;
 };
 
 

@@ -34,6 +34,11 @@ struct snap_dpa_virtq_attr {
 	size_t type_size;
 };
 
+static uint32_t snap_get_dev_emu_id(struct snap_device *sdev)
+{
+	return sdev->mdev.device_emulation->obj_id;
+}
+
 static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 		struct snap_dpa_virtq_attr *dpa_vq_attr, struct snap_virtio_common_queue_attr *vq_attr)
 {
@@ -80,7 +85,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	vq->common.desc = vq_attr->vattr.desc;
 	vq->common.driver = vq_attr->vattr.driver;
 	vq->common.device = vq_attr->vattr.device;
-	vq->common.vhca_id = snap_get_vhca_id(sdev);
+	vq->common.dev_emu_id = snap_get_dev_emu_id(sdev);
 
 	/* register mr for the avail staging buffer */
 	desc_shadow_size = vq->common.size * sizeof(struct virtq_desc);
@@ -111,16 +116,16 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	if (ret)
 		goto free_dpa_window_mr;
 
-	vq->duar = snap_dpa_duar_create(sdev->sctx->context, sdev->mdev.device_emulation->obj_id,
+	vq->duar = snap_dpa_duar_create(sdev->sctx->context, snap_get_dev_emu_id(sdev),
 			vq_attr->vattr.idx, db_hw_cq.cq_num);
 	if (!vq->duar) {
-		snap_error("Failed to create virt duar mapping: vhca_id %d queue_id %d cq_num 0x%x\n",
-				snap_get_vhca_id(sdev), vq_attr->vattr.idx, db_hw_cq.cq_num);
+		snap_error("Failed to create virt duar mapping: dev_emu_id %d queue_id %d cq_num 0x%x\n",
+				snap_get_dev_emu_id(sdev), vq_attr->vattr.idx, db_hw_cq.cq_num);
 		goto free_dpa_window_mr;
 	}
 
-	snap_debug("virtq duar 0x%x mapping: vhca_id %d queue_id %d cq_num 0x%x\n",
-			snap_dpa_duar_id(vq->duar), snap_get_vhca_id(sdev),
+	snap_debug("virtq duar 0x%x mapping: dev_emu_id %d queue_id %d cq_num 0x%x\n",
+			snap_dpa_duar_id(vq->duar), snap_get_dev_emu_id(sdev),
 			vq_attr->vattr.idx, db_hw_cq.cq_num);
 	//printf("duar mapping created\n");getchar();
 
@@ -175,7 +180,7 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	struct snap_dpa_rsp *rsp;
 
 	snap_info("destroy dpa virtq: 0x%x:%d io_completed: %d comp_updates: %d used_updates: %d\n",
-			vq->common.vhca_id, vq->common.idx,
+			vq->common.dev_emu_id, vq->common.idx,
 			vq->stats.n_io_completed, vq->stats.n_compl_updates, vq->stats.n_used_updates);
 	snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 	mbox = snap_dpa_thread_mbox_acquire(vq->rt_thr->thread);

@@ -35,12 +35,12 @@
 
 #define dpa_virtq_error(_vq, _fmt, ...) \
 do { \
-	dpa_error("vq 0x%x#%d " _fmt, (_vq)->common.vhca_id, (_vq)->common.idx, ##__VA_ARGS__); \
+	dpa_error("vq 0x%x#%d " _fmt, (_vq)->common.dev_emu_id, (_vq)->common.idx, ##__VA_ARGS__); \
 } while (0)
 
 #define dpa_virtq_info(_vq, _fmt, ...) \
 do { \
-	dpa_info("vq 0x%x#%d " _fmt, (_vq)->common.vhca_id, (_vq)->common.idx, ##__VA_ARGS__); \
+	dpa_info("vq 0x%x#%d " _fmt, (_vq)->common.dev_emu_id, (_vq)->common.idx, ##__VA_ARGS__); \
 } while (0)
 
 static inline bool is_event_mode()
