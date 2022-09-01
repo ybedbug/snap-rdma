@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include "config.h"
 #include "snap_macros.h"
@@ -860,65 +861,6 @@ free_buf:
 	return ret;
 }
 
-/**
- * snap_dpa_duar_create() - create emulation doorbell mapping
- * @dctx:      dpa context
- * @vhca_id:   emuation device vhca id
- * @queue_id:  queue number (virtio/nvme)
- * @cq_num:    completion queue (cq) number to use
- *
- * The function creates a new doorbell context of (vhca_id, queue_id) and
- * attaches it CQ @cq_num.
- *
- * Doing NVMe or virtio doorbell will put a new CQE on the CQ.
- *
- * The CQ must be created on the DPA. If the cq is attached to DPA thread it
- * must also be armed in order to trigger thread wakeup.
- *
- * Return:
- * New doorbell context or NULL on error.
- */
-struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num)
-{
-	struct snap_dpa_duar *duar;
-	flexio_status st;
-
-	duar = calloc(1, sizeof(*duar));
-	if (!duar)
-		return NULL;
-
-	st = flexio_emu_db_to_cq_map(dctx->pd->context, vhca_id, queue_id, cq_num, &duar->map_entry);
-	if (st != FLEXIO_STATUS_SUCCESS) {
-		free(duar);
-		return NULL;
-	}
-
-	return duar;
-}
-
-/**
- * snap_dpa_duar_destroy() - destroy emulation doorbell mapping
- *
- */
-void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
-{
-	flexio_emu_db_to_cq_unmap(duar->map_entry);
-	free(duar);
-}
-
-/**
- * snap_dpa_duar_id() - get doorbell id
- * @duar: doorbell mapping
- *
- * The function returns doorbell id. The id should be passed to the DPA along
- * with the mapping cq number. Then dpa_duar_arm() should be used to enable
- * doorbells
- */
-uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
-{
-	return flexio_emu_db_to_cq_ctx_get_id(duar->map_entry);
-}
-
 #else
 
 struct snap_dpa_ctx *snap_dpa_process_create(struct ibv_context *ctx, const char *app_name)
@@ -1032,19 +974,6 @@ int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr)
 	return -ENOTSUP;
 }
 
-struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num)
-{
-	return NULL;
-}
-
-void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
-{
-}
-
-uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
-{
-	return 0xDEADBEEF;
-}
 #endif
 
 /**
@@ -1156,4 +1085,77 @@ void snap_dpa_cmd_send(struct snap_dpa_thread *thr, struct snap_dpa_cmd *cmd, ui
 	cmd->sn++;
 	snap_memory_bus_fence();
 	snap_dpa_thread_wakeup(thr);
+}
+
+/**
+ * snap_dpa_duar_create() - create emulation doorbell mapping
+ * @ctx:          ibv context context
+ * @dev_emu_id:   emuation object id
+ * @queue_id:  queue number (virtio/nvme)
+ * @cq_num:    completion queue (cq) number to use
+ *
+ * The function creates a new doorbell context of (dev_emu_id, queue_id) and
+ * attaches it CQ @cq_num.
+ *
+ * Doing NVMe or virtio doorbell will put a new CQE on the CQ.
+ *
+ * The CQ must be created on the DPA. If the cq is attached to DPA thread it
+ * must also be armed in order to trigger thread wakeup.
+ *
+ * Return:
+ * New doorbell context or NULL on error.
+ */
+struct snap_dpa_duar *snap_dpa_duar_create(struct ibv_context *ctx, uint32_t dev_emu_id, uint32_t queue_id, uint32_t cq_num)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(emulated_dev_db_cq_map)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	uint8_t *cq_db_map_in;
+	struct snap_dpa_duar *duar;
+
+	duar = calloc(1, sizeof(*duar));
+	if (!duar)
+		return NULL;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode, MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, MLX5_OBJ_TYPE_DPA_DB_CQ_MAPPING);
+
+	cq_db_map_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(emulated_dev_db_cq_map, cq_db_map_in, device_emulation_id, dev_emu_id);
+	DEVX_SET(emulated_dev_db_cq_map, cq_db_map_in, queue_id, queue_id);
+	DEVX_SET(emulated_dev_db_cq_map, cq_db_map_in, cqn, cq_num);
+
+	duar->obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
+	if (!duar->obj)
+		goto free_duar;
+
+	duar->duar_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	return duar;
+free_duar:
+	free(duar);
+	return NULL;
+}
+
+/**
+ * snap_dpa_duar_destroy() - destroy emulation doorbell mapping
+ *
+ */
+void snap_dpa_duar_destroy(struct snap_dpa_duar *duar)
+{
+	mlx5dv_devx_obj_destroy(duar->obj);
+	free(duar);
+}
+
+/**
+ * snap_dpa_duar_id() - get doorbell id
+ * @duar: doorbell mapping
+ *
+ * The function returns doorbell id. The id should be passed to the DPA along
+ * with the mapping cq number. Then dpa_duar_arm() should be used to enable
+ * doorbells
+ */
+uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar)
+{
+	return duar->duar_id;
 }

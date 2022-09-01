@@ -143,10 +143,11 @@ int snap_dpa_thread_wakeup(struct snap_dpa_thread *thr);
 int snap_dpa_thread_mr_copy_sync(struct snap_dpa_thread *thr, uint64_t va, uint64_t len, uint32_t mkey);
 
 struct snap_dpa_duar {
-	struct flexio_emu_db_to_cq_ctx *map_entry;
+	struct mlx5dv_devx_obj *obj;
+	uint32_t duar_id;
 };
 
-struct snap_dpa_duar *snap_dpa_duar_create(struct snap_dpa_ctx *dctx, uint32_t vhca_id, uint32_t queue_id, uint32_t cq_num);
+struct snap_dpa_duar *snap_dpa_duar_create(struct ibv_context *ctx, uint32_t dev_emu_id, uint32_t queue_id, uint32_t cq_num);
 void snap_dpa_duar_destroy(struct snap_dpa_duar *duar);
 uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar);
 

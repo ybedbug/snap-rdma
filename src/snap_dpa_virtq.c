@@ -111,7 +111,7 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	if (ret)
 		goto free_dpa_window_mr;
 
-	vq->duar = snap_dpa_duar_create(vq->rt->dpa_proc, snap_get_vhca_id(sdev),
+	vq->duar = snap_dpa_duar_create(sdev->sctx->context, sdev->mdev.device_emulation->obj_id,
 			vq_attr->vattr.idx, db_hw_cq.cq_num);
 	if (!vq->duar) {
 		snap_error("Failed to create virt duar mapping: vhca_id %d queue_id %d cq_num 0x%x\n",
