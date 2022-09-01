@@ -1540,7 +1540,7 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 
 	u8	 reserved_at_a0[0x20];
 
-	u8	 reserved_at_c1[0x1d];
+	u8	 reserved_at_c0[0x1d];
 	u8	 emulated_dev_db_cq_map[0x1];
 	u8	 emulated_dev_eq[0x1];
 	u8	 virtio_q_cfg_v2[0x1];
@@ -2645,7 +2645,8 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_APU_EQ = 0x8000000000000,
 	MLX5_OBJ_TYPE_APU_WINDOW = 0x200000000000000,
 
-	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49
+	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49,
+	MLX5_OBJ_TYPE_DPA_DB_CQ_MAPPING = 0x32
 };
 
 enum {
@@ -3097,7 +3098,7 @@ struct mlx5_ifc_virtio_blk_device_emulation_bits {
 	u8	   pci_hotplug_state[0x3];
 	u8	   emulated_dev_eq[0x1];
 	u8	   emulated_dev_db_cq_map[0x1];
-	u8	   reserved_at_67[0x6];
+	u8	   reserved_at_6b[0x6];
 	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
@@ -3131,7 +3132,7 @@ struct mlx5_ifc_virtio_fs_device_emulation_bits {
 	u8	   pci_hotplug_state[0x3];
 	u8	   emulated_dev_eq[0x1];
 	u8	   emulated_dev_db_cq_map[0x1];
-	u8	   reserved_at_65[0x6];
+	u8	   reserved_at_6b[0x6];
 	u8	   num_free_dynamic_vfs_msix[0x10];
 
 	u8	   reserved_at_80[0x40];
@@ -4654,31 +4655,32 @@ struct mlx5_ifc_create_cq_in_bits {
 	u8 pas[0x0];
 };
 
-struct mlx5_ifc_create_emulated_dev_eq_in_bits {
+struct mlx5_ifc_emulated_dev_eq_bits {
+	u8 modify_field_select[0x40];
+
+	u8 reserved_at_40[0x20];
+
+	u8 device_emulation_id[0x20];
+
+	u8 reserved_at_80[0x120];
+
+	u8 reserved_at_1a0[0x14];
+	u8 intr[0xc];
+
+	u8 reserved_1c0[0x40];
+};
+
+struct mlx5_ifc_emulated_dev_db_cq_map_bits {
 	u8 modify_field_select[0x40];
 
 	u8 reserved_at_40[0x40];
 
-	u8 reserved_at_80[0x40];
-
 	u8 device_emulation_id[0x20];
 
-	u8 reserved_at_e0[0x260];
+	u8 queue_id[0x20];
 
-	u8 reserved_at_340[0x15];
-	u8 intr[0xb];
+	u8 cqn[0x20];
+
+	u8 reserved_at_e0[0x120];
 };
-
-struct mlx5_ifc_create_eq_out_bits {
-	u8 status[0x8];
-	u8 reserved_at_8[0x18];
-
-	u8 syndrome[0x20];
-
-	u8 reserved_at_40[0x18];
-	u8 eqn[0x8];
-
-	u8 reserved_at_60[0x20];
-};
-
 #endif /* MLX5_IFC_H */
