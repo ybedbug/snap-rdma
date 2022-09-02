@@ -761,6 +761,10 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		out, capability.virtio_emulation_cap.min_num_vf_dynamic_msix);
 	virtio->max_num_vf_dynamic_msix = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.max_num_vf_dynamic_msix);
+	virtio->emulated_dev_db_cq_map = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.emulated_dev_db_cq_map);
+	virtio->emulated_dev_eq = DEVX_GET(query_hca_cap_out,
+		out, capability.virtio_emulation_cap.emulated_dev_eq);
 
 	virtio->virtio_q_index_modify = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.virtio_q_index_modify);
@@ -2926,6 +2930,12 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 		 q_cfg_version, sdev->sctx->virtio_net_caps.virtio_q_cfg_v2 ? 1 : 0);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 emulated_dev_db_cq_map,
+		 sdev->sctx->virtio_net_caps.emulated_dev_db_cq_map ? 1 : 0);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 emulated_dev_eq,
+		 sdev->sctx->virtio_net_caps.emulated_dev_eq ? 1 : 0);
 
 	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&
 	    (net_caps->max_num_vf_dynamic_msix != 0)) {

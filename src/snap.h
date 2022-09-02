@@ -334,6 +334,8 @@ struct snap_virtio_caps {
 	uint16_t	max_num_vf_dynamic_msix;
 	bool		virtio_q_counters;
 	uint8_t		virtio_q_cfg_v2;
+	uint8_t		emulated_dev_eq;
+	uint8_t		emulated_dev_db_cq_map;
 };
 
 struct snap_context {

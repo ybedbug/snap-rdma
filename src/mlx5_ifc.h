@@ -1540,8 +1540,8 @@ struct mlx5_ifc_virtio_emulation_cap_bits {
 
 	u8	 reserved_at_a0[0x20];
 
-	u8	 reserved_at_c1[0x1c];
-	u8	 emulated_dev_db_cq_map[0x2];
+	u8	 reserved_at_c1[0x1d];
+	u8	 emulated_dev_db_cq_map[0x1];
 	u8	 emulated_dev_eq[0x1];
 	u8	 virtio_q_cfg_v2[0x1];
 
@@ -3052,7 +3052,10 @@ struct mlx5_ifc_virtio_net_device_emulation_bits {
 	u8	   dynamic_vf_msix_control[0x1];
 	u8	   dynamic_vf_msix_reset[0x1];
 	u8	   pci_hotplug_state[0x3];
-	u8	   reserved_at_65[0x6];
+	u8	   emulated_dev_eq[0x1];
+	u8	   emulated_dev_db_cq_map[0x1];
+	u8	   reserved_at_65[0x4];
+
 	u8	   q_cfg_version[0x2];
 	u8	   num_free_dynamic_vfs_msix[0x10];
 
