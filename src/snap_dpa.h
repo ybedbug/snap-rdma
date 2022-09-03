@@ -151,4 +151,15 @@ struct snap_dpa_duar *snap_dpa_duar_create(struct ibv_context *ctx, uint32_t dev
 void snap_dpa_duar_destroy(struct snap_dpa_duar *duar);
 uint32_t snap_dpa_duar_id(struct snap_dpa_duar *duar);
 
+struct snap_dpa_msix_eq {
+	struct mlx5dv_devx_obj *obj;
+	uint32_t eq_id;
+	uint16_t msix_vector;
+};
+
+struct snap_dpa_msix_eq *snap_dpa_msix_eq_create(struct ibv_context *ctx, uint32_t dev_emu_id, uint16_t msix_vector);
+void snap_dpa_msix_eq_destroy(struct snap_dpa_msix_eq *eq);
+uint32_t snap_dpa_msix_eq_id(struct snap_dpa_msix_eq *eq);
+uint16_t snap_dpa_msix_vector(struct snap_dpa_msix_eq *eq);
+
 #endif
