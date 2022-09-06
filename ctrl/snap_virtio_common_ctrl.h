@@ -119,6 +119,8 @@ struct snap_virtio_ctrl_attr {
 	bool recover;
 	bool vf_dynamic_msix_supported;
 	bool force_recover;
+	bool db_cq_map_supported;
+	bool eq_in_sw_supported;
 };
 
 struct snap_virtio_ctrl_queue {

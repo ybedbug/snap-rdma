@@ -2938,12 +2938,19 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
 		 q_cfg_version, sdev->sctx->virtio_net_caps.virtio_q_cfg_v2 ? 1 : 0);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-		 emulated_dev_db_cq_map,
-		 sdev->sctx->virtio_net_caps.emulated_dev_db_cq_map ? 1 : 0);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-		 emulated_dev_eq,
-		 sdev->sctx->virtio_net_caps.emulated_dev_eq ? 1 : 0);
+
+	if ((attr->flags & SNAP_DEVICE_FLAGS_DB_CQ_MAP) &&
+	    net_caps->emulated_dev_db_cq_map) {
+		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+			 emulated_dev_db_cq_map, 1);
+		snap_debug("Set db_cq_map feature\n");
+	}
+	if ((attr->flags & SNAP_DEVICE_FLAGS_EQ_IN_SW) &&
+	    net_caps->emulated_dev_eq) {
+		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+				emulated_dev_eq, 1);
+		snap_debug("Set eq_in_sw feature\n");
+	}
 
 	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&
 	    (net_caps->max_num_vf_dynamic_msix != 0)) {

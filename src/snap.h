@@ -56,6 +56,8 @@ enum snap_emulation_type {
 enum snap_device_attr_flags {
 	SNAP_DEVICE_FLAGS_EVENT_CHANNEL = 1 << 0,
 	SNAP_DEVICE_FLAGS_VF_DYN_MSIX	= 1 << 1,
+	SNAP_DEVICE_FLAGS_DB_CQ_MAP	= 1 << 2,
+	SNAP_DEVICE_FLAGS_EQ_IN_SW	= 1 << 3,
 };
 
 struct snap_context;

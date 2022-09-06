@@ -1087,6 +1087,10 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
 	if (attr->vf_dynamic_msix_supported)
 		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_VF_DYN_MSIX;
+	if (attr->db_cq_map_supported)
+		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_DB_CQ_MAP;
+	if (attr->eq_in_sw_supported)
+		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_EQ_IN_SW;
 	ctrl->sdev_attr.context = attr->context;
 	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
