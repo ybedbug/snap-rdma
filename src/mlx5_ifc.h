@@ -1603,7 +1603,8 @@ struct mlx5_ifc_hotplug_cap_bits {
 	u8	 max_hotplug_devices[0x8];
 
 	u8	 pci_hotplug_state_change[0x1];
-	u8	 reserved_at_21[0x0f];
+	u8	 virtio_transitional_device_hotplug[0x1];
+	u8	 reserved_at_22[0x0e];
 	u8	 max_total_vfs[0x10];
 
 	u8	 reserved_at_40[0x7c0];

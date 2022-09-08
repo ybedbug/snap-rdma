@@ -154,6 +154,8 @@ def main():
     p.set_defaults(func=emulation_device_detach)
 
     def emulation_device_attach(args):
+        if args.transitional_device is not None and args.type != 'virtio_blk':
+            raise JsonRpcSnapException("Error: Support hotplug Virtio-blk transitional device ONLY");
         params = {
             'emulation_manager': args.emu_manager,
             'device_type': args.type,
@@ -182,6 +184,8 @@ def main():
             params['total_vf'] = args.total_vf
         if args.num_msix:
             params['num_msix'] = args.num_msix
+        if args.transitional_device:
+            params['transitional_device'] = args.transitional_device
         if args.version:
             params['version'] = args.version
         result = args.client.call('emulation_device_attach', params)
@@ -210,6 +214,8 @@ def main():
                    required=False)
     p.add_argument('--num_msix', help='MSI-X vector size', type=int,
                    required=False)
+    p.add_argument('--transitional_device', help='Hotplug a virtio-blk transitional device',
+                   required=False, action='store_true')
     p.add_argument('--version', help='Specification version to use', type=str,
                    required=False)
     p.set_defaults(func=emulation_device_attach)
