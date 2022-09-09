@@ -154,8 +154,9 @@ def main():
     p.set_defaults(func=emulation_device_detach)
 
     def emulation_device_attach(args):
-        if args.transitional_device is not None and args.type != 'virtio_blk':
+        if args.transitional_device is True and args.type != 'virtio_blk':
             raise JsonRpcSnapException("Error: Support hotplug Virtio-blk transitional device ONLY");
+
         params = {
             'emulation_manager': args.emu_manager,
             'device_type': args.type,
