@@ -101,14 +101,15 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 			}
 			devx_cq->eqn_or_dpa_element = snap_dpa_thread_id(attr->dpa_thread);
 			dpa_proc = attr->dpa_thread->dctx;
-		} else if (attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_EQ) {
+		} else if (attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_EQ ||
+			   attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_EMULATED_DEV_EQ) {
 			dpa_proc = attr->dpa_proc;
 			if (!dpa_proc) {
 				ret = -EINVAL;
 				goto deref_uar;
 			}
 
-			if (attr->use_eqn)
+			if (attr->use_eqn || attr->dpa_element_type == MLX5_APU_ELEMENT_TYPE_EMULATED_DEV_EQ)
 				devx_cq->eqn_or_dpa_element = attr->eqn;
 			else
 				devx_cq->eqn_or_dpa_element = snap_dpa_process_eq_id(dpa_proc);
