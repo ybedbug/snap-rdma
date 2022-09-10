@@ -10,6 +10,7 @@
  * provided with the software product.
  */
 #include <stdlib.h>
+#include <linux/virtio_pci.h>
 
 #include "snap_macros.h"
 #include "config.h"
@@ -85,7 +86,9 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 	vq->common.desc = vq_attr->vattr.desc;
 	vq->common.driver = vq_attr->vattr.driver;
 	vq->common.device = vq_attr->vattr.device;
+	vq->common.msix_vector = vq_attr->vattr.event_qpn_or_msix;
 	vq->common.dev_emu_id = snap_get_dev_emu_id(sdev);
+	snap_info("Got ev_mode 0x%x msix 0x%x\n", vq_attr->vattr.ev_mode, vq_attr->vattr.event_qpn_or_msix);
 
 	/* register mr for the avail staging buffer */
 	desc_shadow_size = vq->common.size * sizeof(struct virtq_desc);
@@ -129,10 +132,31 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 			vq_attr->vattr.idx, db_hw_cq.cq_num);
 	//printf("duar mapping created\n");getchar();
 
+	if (vq->common.msix_vector != VIRTIO_MSI_NO_VECTOR) {
+		/* EQ should sit on the sdev level, but this is going to be
+		 * implemented only on 'devemu' branch
+		 */
+		vq->msix_eq = snap_dpa_msix_eq_create(sdev->sctx->context, snap_get_dev_emu_id(sdev),
+				vq->common.msix_vector);
+		if (!vq->msix_eq) {
+			snap_error("Failed to create MSIX_EQ\n");
+			goto free_dpa_duar;
+		}
+
+		ret = snap_dpa_rt_thread_msix_add(vq->rt_thr, vq->msix_eq, &cmd->cmd_create.vq.msix_cqnum);
+		if (ret)
+			goto free_msix_eq;
+
+		snap_info("MSIX eqn 0x%x cqn 0x%x msix_vector %d\n",
+				snap_dpa_msix_eq_id(vq->msix_eq),
+				cmd->cmd_create.vq.msix_cqnum,
+				vq->common.msix_vector);
+	}
+
 	vq->cross_mkey = snap_create_cross_mkey(vq->rt->dpa_proc->pd, sdev);
 	if (!vq->cross_mkey) {
 		snap_error("Failed to create virtq cross mkey\n");
-		goto free_dpa_duar;
+		goto remove_msix_vector;
 	}
 
 	//sleep(1);
@@ -157,6 +181,12 @@ static struct snap_dpa_virtq *snap_dpa_virtq_create(struct snap_device *sdev,
 
 free_cross_mkey:
 	snap_destroy_cross_mkey(vq->cross_mkey);
+remove_msix_vector:
+	if (vq->msix_eq)
+		snap_dpa_rt_thread_msix_remove(vq->rt_thr, vq->msix_eq);
+free_msix_eq:
+	if (vq->msix_eq)
+		snap_dpa_msix_eq_destroy(vq->msix_eq);
 free_dpa_duar:
 	snap_dpa_duar_destroy(vq->duar);
 free_dpa_window_mr:
@@ -196,6 +226,10 @@ static void snap_dpa_virtq_destroy(struct snap_dpa_virtq *vq)
 	snap_dpa_thread_mbox_release(vq->rt_thr->thread);
 	snap_dpa_log_print(vq->rt_thr->thread->dpa_log);
 	//printf("wait... a4 destroy command\n");getchar();
+	if (vq->msix_eq) {
+		snap_dpa_rt_thread_msix_remove(vq->rt_thr, vq->msix_eq);
+		snap_dpa_msix_eq_destroy(vq->msix_eq);
+	}
 	snap_dpa_duar_destroy(vq->duar);
 	snap_dpa_rt_thread_put(vq->rt_thr);
 	snap_dpa_rt_put(vq->rt);
@@ -488,6 +522,12 @@ int virtq_blk_dpa_send_completions(struct snap_virtio_queue *vq)
 	/* if msix enabled, send also msix message */
 	dpa_q->last_hw_used_index = dpa_q->hw_used_index;
 	dpa_q->stats.n_used_updates++;
+
+	if (dpa_q->msix_eq) {
+		ret = snap_dpa_p2p_send_msix(&dpa_q->rt_thr->dpu_cmd_chan, 0);
+		if (ret)
+			snap_info("failed to send msix msg at used %d ret %d\n", dpa_q->last_hw_used_index, ret);
+	}
 
 	/* kick off completions */
 	dpa_q->rt_thr->dpu_cmd_chan.dma_q->ops->progress_tx(dpa_q->rt_thr->dpu_cmd_chan.dma_q);

@@ -33,6 +33,10 @@ struct snap_dpa_virtq {
 	struct vring_desc *desc_shadow;
 	struct snap_cross_mkey *cross_mkey;
 	struct snap_dpa_duar *duar;
+	/* should be stored on the device level to support msix sharing with several
+	 * queues. Only devemu will support this
+	 */
+	struct snap_dpa_msix_eq *msix_eq;
 
 	struct snap_dpa_virtq_common common;
 

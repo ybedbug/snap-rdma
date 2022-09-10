@@ -62,6 +62,8 @@ struct dpa_virtq_stats {
 	uint32_t n_sends;
 	uint32_t n_long_sends;
 	uint32_t n_delta_total;
+	uint32_t n_msix_rcvd;
+	uint32_t n_msix_sent;
 };
 
 /* TODO: optimize field alignment */
@@ -77,9 +79,11 @@ struct dpa_virtq {
 	uint64_t dpu_desc_shadow_addr;
 
 	uint32_t duar_id;
+	uint32_t msix_cqnum;
 	enum dpa_virtq_state state;
 
 	uint32_t pending;
+	uint32_t do_recovery;
 
 	struct dpa_virtq_stats stats;
 };

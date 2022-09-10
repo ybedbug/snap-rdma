@@ -43,6 +43,9 @@ do { \
 	dpa_info("vq 0x%x#%d " _fmt, (_vq)->common.dev_emu_id, (_vq)->common.idx, ##__VA_ARGS__); \
 } while (0)
 
+static inline int dpa_virtq_msix_recv();
+static inline void dpa_virtq_msix_raise();
+
 static inline bool is_event_mode()
 {
 	return dpa_tcb()->user_flag == SNAP_DPA_RT_THR_EVENT;
@@ -59,12 +62,14 @@ static inline struct dpa_virtq *get_vq()
 
 static void dump_stats(struct dpa_virtq *vq)
 {
-	dpa_virtq_info(vq, "sends %u long_sends %u delta_total %u vq_heads %u vq_tables %u\n",
+	dpa_virtq_info(vq, "sends %u long_sends %u delta_total %u vq_heads %u vq_tables %u msix_msg_rcvd %u msix_raised %u\n",
 		vq->stats.n_sends,
 		vq->stats.n_long_sends,
 		vq->stats.n_delta_total,
 		vq->stats.n_vq_heads,
-		vq->stats.n_vq_tables);
+		vq->stats.n_vq_tables,
+		vq->stats.n_msix_rcvd,
+		vq->stats.n_msix_sent);
 }
 
 static inline void dpa_virtq_duar_arm()
@@ -77,6 +82,21 @@ static inline void dpa_virtq_duar_arm()
 		snap_dv_arm_cq(&rt_ctx->db_cq);
 
 	dpa_duar_arm(vq->duar_id, rt_ctx->db_cq.cq_num);
+}
+
+static inline void dpa_virtq_msix_arm()
+{
+	/* todo: use always armed in event mode */
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
+	struct mlx5_cqe64 *cqe;
+	int n;
+
+	for (n = 0; n < SNAP_DPA_RT_THR_MSIX_CQE_CNT; n++) {
+		cqe = snap_dv_poll_cq(&rt_ctx->msix_cq, 64);
+		if (!cqe)
+			break;
+	}
+	snap_dv_arm_cq(&rt_ctx->msix_cq);
 }
 
 static void dpa_virtq_write_rsp(struct dpa_virtq *vq)
@@ -94,6 +114,7 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq_cmd *vcmd = (struct dpa_virtq_cmd *)cmd;
 	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
 
 	memcpy(vq, &vcmd->cmd_create.vq, sizeof(vcmd->cmd_create.vq));
 
@@ -113,6 +134,7 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 		snap_memory_bus_fence();
 		vq->hw_used_index = used_ring->idx;
 		vq->hw_available_index = used_ring->idx;
+		vq->do_recovery = 1;
 	}
 	/* allow queue creation in the rdy state, save 3-5usec on extra modify
 	 */
@@ -122,10 +144,18 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 	} else
 		vq->state = DPA_VIRTQ_STATE_INIT;
 
-	dpa_virtq_info(vq, "%s virtq create: size %d dpa_xmkey 0x%x dpu_xmkey 0x%x duar_id 0x%x recover %d avail_idx %d\n",
+	dpa_virtq_info(vq, "%s virtq create: size %d dpa_xmkey 0x%x dpu_xmkey 0x%x recover %d avail_idx %d msix_vector 0x%x\n",
 			is_event_mode() ? "event" : "polling",
-			vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey, vq->duar_id,
-			vcmd->cmd_create.do_recovery, vq->hw_available_index);
+			vq->common.size, vq->dpa_xmkey, vq->dpu_xmkey,
+			vcmd->cmd_create.do_recovery, vq->hw_available_index,
+			vq->common.msix_vector);
+
+	dpa_virtq_info(vq, "DPA_RT_CONFIG: qp 0x%x rx_cq 0x%x tx_cq 0x%x db_cq 0x%x duar_id 0x%x msix_cq 0x%x\n",
+		  rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_qp.hw_qp.qp_num,
+		  rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_rx_cq.cq_num,
+		  rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_tx_cq.cq_num,
+		  rt_ctx->db_cq.cq_num, vq->duar_id,
+		  rt_ctx->msix_cq.cq_num);
 
 	dpa_virtq_write_rsp(vq);
 	return SNAP_DPA_RSP_OK;
@@ -134,6 +164,11 @@ int dpa_virtq_create(struct snap_dpa_cmd *cmd)
 int dpa_virtq_destroy(struct snap_dpa_cmd *cmd)
 {
 	struct dpa_virtq *vq = get_vq();
+	int n_msix;
+
+	n_msix = dpa_virtq_msix_recv();
+	if (n_msix)
+		dpa_virtq_error(vq, "virtq_destroy: %d pending msix messages. Host driver may hang\n", n_msix);
 
 	dpa_virtq_info(vq, "virtq destroy: hw_avail %d\n", vq->hw_available_index);
 	dump_stats(vq);
@@ -165,6 +200,16 @@ int dpa_virtq_modify(struct snap_dpa_cmd *cmd)
 			 */
 			vq->pending = 1;
 			dpa_virtq_duar_arm();
+			/* It is possible that controller died
+			 * after updating used index but before sending MSIX.
+			 */
+			if (vq->common.msix_vector != 0xFFFF) {
+				if (vq->do_recovery)
+					dpa_virtq_msix_raise();
+
+				if (is_event_mode())
+					snap_dv_arm_cq(&rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_rx_cq);
+			}
 			break;
 
 		case DPA_VIRTQ_STATE_RDY:
@@ -270,8 +315,58 @@ static inline int process_commands(int *done)
 	return do_command(done);
 }
 
-#define VIRTQ_DPA_NUM_P2P_MSGS 16
+#define VIRTQ_DPA_NUM_P2P_MSGS 32
 #define DPA_TABLE_THRESHOLD 4
+
+static inline int dpa_virtq_msix_recv()
+{
+	struct dpa_virtq *vq = get_vq();
+	struct dpa_rt_context *rt_ctx = dpa_rt_ctx();
+	struct snap_dpa_p2p_msg *msgs[VIRTQ_DPA_NUM_P2P_MSGS];
+	int n, msix_count;
+
+	msix_count = 0;
+	do {
+		n = snap_dpa_p2p_recv_msg(&rt_ctx->dpa_cmd_chan, msgs, VIRTQ_DPA_NUM_P2P_MSGS);
+		if (n)
+			dpa_debug("recv %d new messages\n", n);
+		msix_count += n;
+	} while (n != 0);
+
+	if (msix_count == 0)
+		return 0;
+
+	vq->stats.n_msix_rcvd += msix_count;
+
+	if (is_event_mode())
+		snap_dv_arm_cq(&rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_rx_cq);
+#if 0
+	/* at the moment we are only getting msix messages for the one queue. no need to parse */
+	for (msix_count = i = 0; i < n; i++) {
+		rt_ctx->dpa_cmd_chan.credit_count += msgs[i]->base.credit_delta;
+		if (msgs[i]->base.type == SNAP_DPA_P2P_MSG_CR_UPDATE) {
+			//cr_update = 1;
+			continue;
+		}
+		if (msgs[i]->base.type != SNAP_DPA_P2P_MSG_VQ_MSIX)
+			continue;
+		/* TODO: log bad messages */
+		msix_count++;
+	}
+#endif
+
+	return msix_count;
+}
+
+static inline void dpa_virtq_msix_raise()
+{
+	struct dpa_virtq *vq = get_vq();
+
+	dpa_virtq_msix_recv();
+	dpa_virtq_msix_arm();
+	dpa_msix_send(vq->msix_cqnum);
+	vq->stats.n_msix_sent++;
+}
 
 static inline void virtq_progress()
 {
@@ -280,8 +375,7 @@ static inline void virtq_progress()
 	struct virtq_device_ring *avail_ring;
 	uint16_t delta, host_avail_idx;
 	struct mlx5_cqe64 *cqe;
-	struct snap_dpa_p2p_msg *msgs[VIRTQ_DPA_NUM_P2P_MSGS];
-	int i, n;
+	int n, msix_count;
 	//int cr_update;
 
 	if (vq->state != DPA_VIRTQ_STATE_RDY)
@@ -291,21 +385,10 @@ static inline void virtq_progress()
 
 	/* recv messages from DPU */
 	//cr_update = 0;
-	n = snap_dpa_p2p_recv_msg(&rt_ctx->dpa_cmd_chan, msgs, VIRTQ_DPA_NUM_P2P_MSGS);
-	for (i = 0; i < n; i++) {
-		rt_ctx->dpa_cmd_chan.credit_count += msgs[i]->base.credit_delta;
-		if (msgs[i]->base.type == SNAP_DPA_P2P_MSG_CR_UPDATE) {
-			//cr_update = 1;
-			continue;
-		}
-		if (msgs[i]->base.type != SNAP_DPA_P2P_MSG_VQ_MSIX)
-			continue;
-		/* TODO: trigger msix, log bad messages */
-	}
 
-	if (n)
-		dpa_debug("recv %d new messages\n", n);
-
+	msix_count = dpa_virtq_msix_recv();
+	if (msix_count)
+		dpa_virtq_msix_raise();
 #if 0
 	/* todo: fix credit logic */
 	if (cr_update) {
@@ -319,8 +402,6 @@ static inline void virtq_progress()
 		}
 	}
 #endif
-	/* event mode: arm channel */
-
 	/* we can collapse doorbells and just pick up last avail index,
 	 * todo use 1 entry cq
 	 */
@@ -328,7 +409,6 @@ static inline void virtq_progress()
 		cqe = snap_dv_poll_cq(&rt_ctx->db_cq, 64);
 		if (!cqe)
 			break;
-		n++;
 	}
 
 	if (n == 0 && !vq->pending)
@@ -338,7 +418,7 @@ static inline void virtq_progress()
 
 	/* note: this is going to disable db batching, optimize */
 	if (is_event_mode())
-		snap_dma_q_arm(rt_ctx->dpa_cmd_chan.dma_q);
+		snap_dv_arm_cq(&rt_ctx->dpa_cmd_chan.dma_q->sw_qp.dv_tx_cq);
 
 	dpa_virtq_duar_arm();
 
