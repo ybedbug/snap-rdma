@@ -57,8 +57,7 @@ struct snap_hw_cq {
 	uint64_t cq_addr;
 	uint32_t cqe_cnt;
 	uint32_t cqe_size;
-	uint16_t rsvd1;
-	uint16_t ci;
+	uint32_t ci;
 	uint64_t dbr_addr;
 	uint64_t uar_addr;
 	uint32_t cq_num;

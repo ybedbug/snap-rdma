@@ -146,7 +146,7 @@ static inline void dpa_dma_q_ring_tx_db(uint16_t qpnum, uint16_t pi)
 	outbox_write(ctx->outbox_base, SXD_DB, OUTBOX_V_SXD_DB(pi, qpnum));
 }
 
-static inline void dpa_dma_q_arm_cq(uint16_t cqnum, uint16_t ci)
+static inline void dpa_dma_q_arm_cq(uint16_t cqnum, uint32_t ci)
 {
 	struct flexio_os_thread_ctx *ctx;
 
