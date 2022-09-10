@@ -246,6 +246,8 @@ enum {
 	SNAP_DPA_Q_PROVIDER = 2,
 };
 
+#define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
+
 static inline struct snap_virtio_common_queue_attr*
 to_common_queue_attr(struct snap_virtio_queue_attr *vattr)
 {

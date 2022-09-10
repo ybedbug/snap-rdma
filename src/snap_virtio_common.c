@@ -24,7 +24,6 @@
 #include "snap_sw_virtio_blk.h"
 #include "snap_dpa_virtq.h"
 
-#define SNAP_QUEUE_PROVIDER   "SNAP_QUEUE_PROVIDER"
 SNAP_ENV_REG_ENV_VARIABLE(SNAP_QUEUE_PROVIDER, 0);
 
 static int snap_virtio_init_virtq_umem(struct ibv_context *context,

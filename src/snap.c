@@ -17,6 +17,7 @@
 #include "snap_virtio_net.h"
 #include "snap_queue.h"
 #include "snap_internal.h"
+#include "snap_env.h"
 
 #include "mlx5_ifc.h"
 
@@ -776,6 +777,11 @@ static void snap_fill_virtio_caps(struct snap_virtio_caps *virtio,
 		out, capability.virtio_emulation_cap.vnet_modify_ext);
 	virtio->virtio_q_cfg_v2 = DEVX_GET(query_hca_cap_out,
 		out, capability.virtio_emulation_cap.virtio_q_cfg_v2);
+
+	virtio->emulated_dev_db_cq_map = DEVX_GET(query_hca_cap_out, out,
+			capability.virtio_emulation_cap.emulated_dev_db_cq_map);
+	virtio->emulated_dev_eq = DEVX_GET(query_hca_cap_out, out,
+			capability.virtio_emulation_cap.emulated_dev_eq);
 
 	if (DEVX_GET(query_hca_cap_out, out,
 		     capability.virtio_emulation_cap.virtio_queue_type) &
@@ -2988,6 +2994,12 @@ snap_create_virtio_blk_device_emulation(struct snap_device *sdev)
 		 resources_on_emulation_manager,
 		 sdev->sctx->mctx.virtio_blk_need_tunnel ? 0 : 1);
 	DEVX_SET(virtio_blk_device_emulation, device_emulation_in, enabled, 1);
+
+	/* these properties are required by the DPA but ACE cannot work with them */
+	if (snap_env_getenv(SNAP_QUEUE_PROVIDER) == SNAP_DPA_Q_PROVIDER) {
+		DEVX_SET(virtio_blk_device_emulation, device_emulation_in, emulated_dev_db_cq_map, 1);
+		DEVX_SET(virtio_blk_device_emulation, device_emulation_in, emulated_dev_eq, 1);
+	}
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
