@@ -164,6 +164,15 @@ static inline void dpa_duar_arm(uint32_t duar_id, uint32_t cq_num)
 	outbox_write(ctx->outbox_base, EMU_CAP, OUTBOX_V_EMU_CAP(cq_num, duar_id));
 }
 
+static inline void dpa_msix_send(uint32_t cq_num)
+{
+	struct flexio_os_thread_ctx *ctx;
+
+	ctx = dpa_get_thread_ctx();
+	//flexio_dev_msix_send((struct flexio_dev_thread_ctx *)ctx, cq_num);
+	outbox_write(ctx->outbox_base, RXT_DB, OUTBOX_V_RXT_DB(cq_num));
+}
+
 /**
  * dpa_init() - initialize thread
  * @tcb: thread control block
