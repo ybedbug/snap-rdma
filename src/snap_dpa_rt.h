@@ -100,11 +100,10 @@ struct snap_dpa_rt_thread {
 	struct snap_dpa_p2p_q dpa_cmd_chan;
 	struct snap_dpa_p2p_q dpu_cmd_chan;
 	struct snap_cq *db_cq;
-	/* in manyq per thread, we should have array of msix, for now use
-	 * one msix per cq
+	/* in manyq per thread, we should have array of msix_cqs, for now use
+	 * one msix vector per thread
 	 */
 	struct snap_cq *msix_cq;
-	struct snap_msix_map *msix_vector;
 	int n_msix;
 	int hart;
 };
@@ -112,6 +111,7 @@ struct snap_dpa_rt_thread {
 struct dpa_rt_context {
 	struct snap_hw_cq db_cq;
 	struct snap_dpa_p2p_q dpa_cmd_chan;
+	struct snap_hw_cq msix_cq;
 };
 
 #define SNAP_DPA_RT_QP_TX_SIZE 256
@@ -121,10 +121,17 @@ struct dpa_rt_context {
 
 #define SNAP_DPA_RT_THR_SINGLE_DB_CQE_SIZE 64
 #define SNAP_DPA_RT_THR_SINGLE_DB_CQE_CNT 2
+
+#define SNAP_DPA_RT_THR_MSIX_CQE_SIZE 64
+#define SNAP_DPA_RT_THR_MSIX_CQE_CNT 2
+
 #define SNAP_DPA_RT_THR_SINGLE_HEAP_SIZE (96 * 1024)
 
 struct snap_dpa_rt_thread *snap_dpa_rt_thread_get(struct snap_dpa_rt *rt, struct snap_dpa_rt_filter *filter);
 void snap_dpa_rt_thread_put(struct snap_dpa_rt_thread *rt);
+
+int snap_dpa_rt_thread_msix_add(struct snap_dpa_rt_thread *rt_thr, struct snap_dpa_msix_eq *msix_eq, uint32_t *msix_cqnum);
+void snap_dpa_rt_thread_msix_remove(struct snap_dpa_rt_thread *rt_thr, struct snap_dpa_msix_eq *msix_eq);
 
 /* TODO: add a worker to support 1w:Ndpa threads model */
 #endif

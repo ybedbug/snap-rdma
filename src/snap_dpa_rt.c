@@ -284,7 +284,6 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr, struct ibv_pd *pd_i
 	if (!rt_thr->db_cq)
 		goto free_dpa_qp;
 
-	/* TODO: create EQ/MSIX cq */
 	ret = snap_cq_to_hw_cq(rt_thr->db_cq, &hw_cq);
 	if (ret)
 		goto free_db_cq;
@@ -296,20 +295,18 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr, struct ibv_pd *pd_i
 	if (ret)
 		goto free_db_cq;
 
-	/* todo: attribute, copy to rt context */
-	rt_thr->msix_cq = snap_cq_create(dpa_pd->context, &db_cq_attr);
-	if (!rt_thr->msix_cq)
-		goto free_db_cq;
-
 	/* must be last because it acts as an init barrier */
 	ret = snap_dma_ep_dpa_copy_sync(rt_thr->thread, rt_thr->dpa_cmd_chan.dma_q);
 	if (ret)
-		goto free_msix_cq;
+		goto free_db_cq;
 
+	snap_info("DPA_RT: qp 0x%x rx_cq 0x%x tx_cq 0x%x db_cq 0x%x\n",
+		  rt_thr->dpa_cmd_chan.dma_q->sw_qp.dv_qp.hw_qp.qp_num,
+		  rt_thr->dpa_cmd_chan.dma_q->sw_qp.dv_rx_cq.cq_num,
+		  rt_thr->dpa_cmd_chan.dma_q->sw_qp.dv_tx_cq.cq_num,
+		  hw_cq.cq_num);
 	return 0;
 
-free_msix_cq:
-	snap_cq_destroy(rt_thr->msix_cq);
 free_db_cq:
 	snap_cq_destroy(rt_thr->db_cq);
 free_dpa_qp:
@@ -323,7 +320,8 @@ free_dpa_thread:
 
 static void rt_thread_reset(struct snap_dpa_rt_thread *rt_thr)
 {
-	snap_cq_destroy(rt_thr->msix_cq);
+	if (rt_thr->msix_cq)
+		snap_cq_destroy(rt_thr->msix_cq);
 	snap_cq_destroy(rt_thr->db_cq);
 	snap_dma_ep_destroy(rt_thr->dpa_cmd_chan.dma_q);
 	snap_dma_ep_destroy(rt_thr->dpu_cmd_chan.dma_q);
@@ -389,4 +387,74 @@ void snap_dpa_rt_thread_put(struct snap_dpa_rt_thread *rt_thr)
 {
 	rt_thread_reset(rt_thr);
 	free(rt_thr);
+}
+
+/**
+ * snap_dpa_rt_thread_msix_add() - add msix_vector to the rt_thread
+ * @rt_thr:     thread to add msix vector
+ * @msix_eq:    event queue that is already mapped to the msix_vector
+ * @msix_cqnum: cq number that should be used to raise msix
+ *
+ * The function adds (msix_eq, msix_cq) mapping to the rt thread. If the mapping
+ * already exists the old one will be reused
+ */
+int snap_dpa_rt_thread_msix_add(struct snap_dpa_rt_thread *rt_thr, struct snap_dpa_msix_eq *msix_eq, uint32_t *msix_cqnum)
+{
+	/* TODO: if thread serves several queues the mapping should be ref
+	 * counted.
+	 * Note: unlike db_cq, msix_cq cannot be created at rt_thread init because
+	 * msix_vector(eq) is only known at the queue creation time. cq
+	 * cannot be created without eq_id.
+	 */
+	struct snap_cq_attr msix_cq_attr = {
+		.cq_type = SNAP_OBJ_DEVX,
+		.cqe_size = SNAP_DPA_RT_THR_MSIX_CQE_SIZE,
+		.cqe_cnt = SNAP_DPA_RT_THR_MSIX_CQE_CNT,
+		.cq_on_dpa = true,
+		.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EMULATED_DEV_EQ,
+		.eqn = snap_dpa_msix_eq_id(msix_eq),
+		.use_eqn = true,
+		.dpa_proc = rt_thr->rt->dpa_proc
+	};
+	struct snap_hw_cq hw_cq;
+	int ret;
+
+	rt_thr->msix_cq = snap_cq_create(rt_thr->rt->dpa_proc->pd->context, &msix_cq_attr);
+	if (!rt_thr->msix_cq)
+		return -EINVAL;
+
+	ret = snap_cq_to_hw_cq(rt_thr->msix_cq, &hw_cq);
+	if (ret)
+		goto destroy_cq;
+
+	/* note that rt context is at the beginning of the thread heap */
+	ret = snap_dpa_memcpy(rt_thr->rt->dpa_proc,
+			snap_dpa_thread_heap_base(rt_thr->thread) + offsetof(struct dpa_rt_context, msix_cq),
+			&hw_cq, sizeof(hw_cq));
+	if (ret)
+		goto destroy_cq;
+
+	*msix_cqnum = hw_cq.cq_num;
+	return 0;
+
+destroy_cq:
+	snap_cq_destroy(rt_thr->msix_cq);
+	return -EINVAL;
+}
+
+/**
+ * snap_dpa_rt_thread_msix_remove() - remove msix_vector to the rt_thread
+ * @rt_thr:     thread to remove msix vector
+ * @msix_eq:    event queue that is already mapped to the msix_vector
+ *
+ * The function removes (msix_eq, msix_cq) mapping.
+ */
+void snap_dpa_rt_thread_msix_remove(struct snap_dpa_rt_thread *rt_thr, struct snap_dpa_msix_eq *msix_eq)
+{
+	/* TODO: deref... */
+	if (!rt_thr->msix_cq)
+		return;
+
+	snap_cq_destroy(rt_thr->msix_cq);
+	rt_thr->msix_cq = NULL;
 }
