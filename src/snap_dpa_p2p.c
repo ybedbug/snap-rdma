@@ -33,7 +33,7 @@ int snap_dpa_p2p_send_msg(struct snap_dpa_p2p_q *q, struct snap_dpa_p2p_msg *msg
 
 	rc = snap_dma_q_send_completion(q->dma_q, (void *)msg,
 			sizeof(struct snap_dpa_p2p_msg));
-	--q->credit_count;
+	//--q->credit_count;
 
 	return rc;
 }
@@ -206,4 +206,15 @@ int snap_dpa_p2p_send_vq_table(struct snap_dpa_p2p_q *q,
 		 avail_index, driver, driver_mkey);
 
 	return n;
+}
+
+int snap_dpa_p2p_send_msix(struct snap_dpa_p2p_q *q, int credit)
+{
+	struct snap_dpa_p2p_msg msg;
+
+	msg.base.credit_delta = credit;
+	msg.base.type = SNAP_DPA_P2P_MSG_VQ_MSIX;
+	msg.base.qid = q->qid;
+
+	return snap_dpa_p2p_send_msg(q, (struct snap_dpa_p2p_msg *) &msg);
 }
