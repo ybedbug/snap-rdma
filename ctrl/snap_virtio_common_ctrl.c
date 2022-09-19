@@ -336,95 +336,6 @@ static int snap_virtio_ctrl_queue_progress(struct snap_virtio_ctrl_queue *vq)
 	return ctrl->q_ops->progress(vq);
 }
 
-static inline int snap_virtio_ctrl_queue_reset_check(struct snap_virtio_ctrl *ctrl)
-{
-	bool found = false;
-	uint64_t mask = 0;
-	int ret = 0, i;
-	bool reset;
-
-	if (ctrl->type != SNAP_VIRTIO_NET_CTRL ||
-	    !SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
-		return 0;
-
-	if (!ctrl->sdev->sctx->virtio_net_caps.virtio_q_cfg_v2)
-		return 0;
-
-	for (i = 0; i < ctrl->max_queues; i++) {
-		if (!ctrl->queues[i] || !ctrl->q_ops->reset_check)
-			continue;
-
-		reset = ctrl->q_ops->reset_check(ctrl->queues[i]);
-		if (!reset)
-			continue;
-
-		if (!ctrl->q_cbs || !ctrl->q_cbs->reset) {
-			snap_warn("Queue reset function does not exist\n");
-			continue;
-		}
-
-		found = true;
-
-		ctrl->q_cbs->reset(ctrl->cb_ctx, i);
-
-		snap_virtio_ctrl_queue_destroy(ctrl->queues[i]);
-		ctrl->queues[i] = NULL;
-	}
-
-	if (found) {
-		mask |= SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET;
-		ret = snap_virtio_modify_device(ctrl->sdev, SNAP_VIRTIO_NET,
-						mask, ctrl->bar_curr);
-		if (ret)
-			snap_error("Failed to modify device for vq reset err(%d)\n", ret);
-	}
-
-	return ret;
-}
-
-static inline int snap_virtio_ctrl_queue_enable_check(struct snap_virtio_ctrl *ctrl)
-{
-	int err = 0, ret = 0, i;
-	bool enable;
-
-	if (ctrl->type != SNAP_VIRTIO_NET_CTRL ||
-	    !SNAP_VIRTIO_CTRL_LIVE_DETECTED(ctrl))
-		return 0;
-
-	if (!ctrl->sdev->sctx->virtio_net_caps.virtio_q_cfg_v2)
-		return 0;
-
-	for (i = 0; i < ctrl->max_queues; i++) {
-		if (!ctrl->q_ops->enable_check)
-			continue;
-
-		enable = ctrl->q_ops->enable_check(ctrl, i);
-		if (!enable)
-			continue;
-
-		if (!ctrl->q_cbs || !ctrl->q_cbs->enable) {
-			snap_warn("Queue enable function does not exist\n");
-			continue;
-		}
-
-		ctrl->queues[i] = snap_virtio_ctrl_queue_create(ctrl, i);
-		if (!ctrl->queues[i]) {
-			ret = -ENOMEM;
-			snap_warn("Failed to create SNAP queue err(%d)", ret);
-			continue;
-		}
-
-		err = ctrl->q_cbs->enable(ctrl->cb_ctx, i);
-		if (err) {
-			ret = err;
-			snap_warn("Failed to enable queue err(%d)\n", err);
-			continue;
-		}
-	}
-
-	return ret;
-}
-
 static int snap_virtio_ctrl_validate(struct snap_virtio_ctrl *ctrl)
 {
 	if (ctrl->bar_cbs.validate)
@@ -1077,16 +988,6 @@ void snap_virtio_ctrl_progress(struct snap_virtio_ctrl *ctrl)
 	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
 		snap_virtio_ctrl_change_num_vfs(ctrl);
 
-	if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED) {
-		ret = snap_virtio_ctrl_queue_reset_check(ctrl);
-		if (ret)
-			goto out;
-
-		ret = snap_virtio_ctrl_queue_enable_check(ctrl);
-		if (ret)
-			goto out;
-	}
-
 out:
 	snap_virtio_ctrl_progress_unlock(ctrl);
 }
@@ -1195,7 +1096,6 @@ int snap_virtio_ctrl_open(struct snap_virtio_ctrl *ctrl,
 
 	ctrl->bar_ops = bar_ops;
 	ctrl->bar_cbs = *attr->bar_cbs;
-	ctrl->q_cbs = attr->q_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
 	ctrl->lb_pd = attr->pd;
 	ret = snap_virtio_ctrl_bars_init(ctrl);

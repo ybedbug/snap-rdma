@@ -298,36 +298,6 @@ static bool snap_virtio_net_ctrl_queue_is_suspended(struct snap_virtio_ctrl_queu
 	return true;
 }
 
-static bool snap_virtio_net_ctrl_queue_reset_check(struct snap_virtio_ctrl_queue *vq)
-{
-	struct snap_virtio_net_device_attr *dev_attr;
-	struct snap_virtio_ctrl *ctrl;
-	int index = vq->index;
-
-	ctrl = vq->ctrl;
-	dev_attr = to_net_device_attr(ctrl->bar_curr);
-
-	if (dev_attr->q_attrs[index].vattr.enable &&
-	    dev_attr->q_attrs[index].vattr.reset) {
-		dev_attr->q_attrs[index].vattr.reset = 0;
-		return true;
-	}
-
-	return false;
-}
-
-static bool
-snap_virtio_net_ctrl_queue_enable_check(struct snap_virtio_ctrl *ctrl, int index)
-{
-	struct snap_virtio_net_device_attr *prev_attr, *curr_attr;
-
-	prev_attr = to_net_device_attr(ctrl->bar_prev);
-	curr_attr = to_net_device_attr(ctrl->bar_curr);
-
-	return !prev_attr->q_attrs[index].vattr.enable &&
-		curr_attr->q_attrs[index].vattr.enable;
-}
-
 static struct snap_virtio_queue_ops snap_virtio_net_queue_ops = {
 	.create = snap_virtio_net_ctrl_queue_create,
 	.destroy = snap_virtio_net_ctrl_queue_destroy,
@@ -336,8 +306,6 @@ static struct snap_virtio_queue_ops snap_virtio_net_queue_ops = {
 	.is_suspended = snap_virtio_net_ctrl_queue_is_suspended,
 	.resume = snap_virtio_net_ctrl_queue_resume,
 	.get_state = snap_virtio_net_ctrl_queue_get_state,
-	.reset_check = snap_virtio_net_ctrl_queue_reset_check,
-	.enable_check = snap_virtio_net_ctrl_queue_enable_check,
 };
 
 /**
