@@ -58,6 +58,7 @@ libsnap_la_HEADERS = snap.h \
 		     snap_virtio_blk.h \
 		     snap_virtio_fs.h \
 		     snap_virtio_net.h \
+		     snap_vrdma.h \
 		     mlx5_snap.h \
 		     mlx5_ifc.h \
 		     snap_channel.h \
@@ -72,6 +73,7 @@ libsnap_la_SOURCES = snap.c \
 		     snap_virtio_fs.c \
 		     snap_virtio_net.c \
 		     snap_virtio_common.c \
+		     snap_vrdma.c \
 		     snap_rdma_channel.c \
 		     snap_channel.c \
 		     snap_dpa_virtq.c \

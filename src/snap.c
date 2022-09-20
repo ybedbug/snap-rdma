@@ -15,6 +15,7 @@
 #include "snap_virtio_blk.h"
 #include "snap_virtio_fs.h"
 #include "snap_virtio_net.h"
+#include "snap_vrdma.h"
 #include "snap_queue.h"
 #include "snap_internal.h"
 #include "snap_env.h"
@@ -135,6 +136,7 @@ static int snap_alloc_pci_bar(struct snap_pci *pci)
 	case SNAP_VIRTIO_BLK_VF:
 	case SNAP_VIRTIO_FS_PF:
 	case SNAP_VIRTIO_FS_VF:
+	case SNAP_VRDMA_PF:
 		break;
 	default:
 		return -EINVAL;
@@ -182,6 +184,8 @@ snap_emulation_type_to_pf_type(enum snap_emulation_type type)
 		return SNAP_VIRTIO_BLK_PF;
 	case SNAP_VIRTIO_FS:
 		return SNAP_VIRTIO_FS_PF;
+	case SNAP_VRDMA:
+		return SNAP_VRDMA_PF;
 	default:
 		return SNAP_NONE_PF;
 	}
@@ -2610,6 +2614,9 @@ static int snap_consume_device_emulation_event(struct mlx5_snap_devx_obj *obj,
 	case SNAP_VIRTIO_FS_VF:
 		sevent->type = SNAP_EVENT_VIRTIO_FS_DEVICE_CHANGE;
 		break;
+	case SNAP_VRDMA_PF:
+		sevent->type = SNAP_EVENT_VRDMA_DEVICE_CHANGE;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2855,6 +2862,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	struct snap_virtio_net_device_attr net_attr = {};
 	struct snap_virtio_blk_device_attr blk_attr = {};
 	struct snap_virtio_fs_device_attr fs_attr = {};
+	struct snap_vrdma_device_attr vrdma_attr = {};
 	int ret;
 
 	if (!sdev->pci->plugged)
@@ -2893,6 +2901,13 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 			sdev->crossed_vhca_mkey = fs_attr.crossed_vhca_mkey;
 		}
 		break;
+	case SNAP_VRDMA_PF:
+		ret = snap_vrdma_query_device(sdev, &vrdma_attr);
+		if (!ret) {
+			sdev->mod_allowed_mask = vrdma_attr.modifiable_fields;
+			sdev->crossed_vhca_mkey = vrdma_attr.crossed_vhca_mkey;
+		}
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2910,6 +2925,60 @@ void snap_emulation_device_destroy(struct snap_device *sdev)
 
 static struct mlx5_snap_devx_obj*
 snap_create_virtio_net_device_emulation(struct snap_device *sdev,
+					struct snap_device_attr *attr)
+{
+	struct snap_virtio_caps *net_caps = &sdev->sctx->virtio_net_caps;
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
+	struct ibv_context *context = sdev->sctx->context;
+	uint8_t *device_emulation_in;
+	struct mlx5_snap_devx_obj *device_emulation;
+
+	device_emulation = calloc(1, sizeof(*device_emulation));
+	if (!device_emulation)
+		goto out_err;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
+
+	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
+		 sdev->pci->mpci.vhca_id);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 resources_on_emulation_manager,
+		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		 q_cfg_version, sdev->sctx->virtio_net_caps.virtio_q_cfg_v2 ? 1 : 0);
+	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
+
+	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&
+	    (net_caps->max_num_vf_dynamic_msix != 0)) {
+		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+			 dynamic_vf_msix_control, 1);
+		snap_debug("Set dynamic_vf_msix_control for PF\n");
+	}
+
+	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
+						       out, sizeof(out));
+	if (!device_emulation->obj)
+		goto out_free;
+
+	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	device_emulation->sdev = sdev;
+
+	return device_emulation;
+
+out_free:
+	free(device_emulation);
+out_err:
+	return NULL;
+}
+
+static struct mlx5_snap_devx_obj*
+snap_create_vrdma_device_emulation(struct snap_device *sdev,
 					struct snap_device_attr *attr)
 {
 	struct snap_virtio_caps *net_caps = &sdev->sctx->virtio_net_caps;
@@ -3134,6 +3203,8 @@ snap_emulation_device_create(struct snap_device *sdev,
 	case SNAP_VIRTIO_FS_PF:
 	case SNAP_VIRTIO_FS_VF:
 		return snap_create_virtio_fs_device_emulation(sdev);
+	case SNAP_VRDMA_PF:
+		return snap_create_vrdma_device_emulation(sdev, attr);
 	default:
 		return NULL;
 	}
@@ -3167,6 +3238,8 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		pfs_ctx = &sctx->virtio_blk_pfs;
 	else if (type == SNAP_VIRTIO_FS)
 		pfs_ctx = &sctx->virtio_fs_pfs;
+	else if (type == SNAP_VRDMA)
+		pfs_ctx = &sctx->vrdma_pfs;
 	else
 		return 0;
 
@@ -3467,6 +3540,10 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		   attr->pf_id < sctx->virtio_fs_pfs.max_pfs) {
 		pfs = &sctx->virtio_fs_pfs;
 		need_tunnel = sctx->mctx.virtio_fs_need_tunnel;
+	} else if ((attr->type == SNAP_VRDMA_PF) &&
+		   attr->pf_id < sctx->vrdma_pfs.max_pfs) {
+		pfs = &sctx->vrdma_pfs;
+		need_tunnel = false;
 	} else {
 		errno = EINVAL;
 		goto out_err;

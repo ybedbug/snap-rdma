@@ -113,6 +113,8 @@ int snap_virtio_query_device(struct snap_device *sdev,
 		return -EINVAL;
 	else if (type == SNAP_NVME)
 		return -EINVAL;
+	else if (type == SNAP_VRDMA)
+		return -EINVAL;
 
 	if (type == SNAP_VIRTIO_BLK) {
 		in = in_blk;
@@ -481,6 +483,8 @@ int snap_virtio_modify_device(struct snap_device *sdev,
 		  sdev->pci->type != SNAP_VIRTIO_FS_VF))
 		return -EINVAL;
 	else if (type == SNAP_NVME)
+		return -EINVAL;
+	else if (type == SNAP_VRDMA)
 		return -EINVAL;
 
 	//we'll modify only allowed fields

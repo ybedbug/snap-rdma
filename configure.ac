@@ -69,6 +69,7 @@ AC_CONFIG_FILES([Makefile
                  src/Makefile
                  dpa/Makefile
                  ctrl/Makefile
+                 vrdma/Makefile
                  rpc/Makefile
                  tests/Makefile])
 
