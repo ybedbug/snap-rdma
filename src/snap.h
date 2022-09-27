@@ -262,11 +262,16 @@ struct snap_virtio_fs_registers {
 	uint16_t	num_request_queues;
 };
 
+struct snap_vrdma_registers {
+	uint64_t	mac;
+};
+
 union snap_device_registers {
 	struct snap_nvme_registers nvme;
 	struct snap_virtio_net_registers virtio_net;
 	struct snap_virtio_blk_registers virtio_blk;
 	struct snap_virtio_fs_registers  virtio_fs;
+	struct snap_vrdma_registers vrdma;
 };
 
 struct snap_hotplug_attr {
@@ -347,14 +352,9 @@ struct snap_virtio_caps {
 };
 
 struct snap_vrdma_caps {
-	int		supported_types;//mask of snap_virtq_type
-	uint32_t	max_emulated_vrdma_cqs;
-	uint32_t	max_emulated_vrdma_sqs;
-	uint32_t	max_queue_depth;
 	bool		crossing_vhca_mkey;
-        bool		cq_interrupt_disabled;
-	bool		vnet_modify_ext;
 };
+#define SNAP_VRDMA_MAX_PFS 1
 
 struct snap_context {
 	struct ibv_context			*context;

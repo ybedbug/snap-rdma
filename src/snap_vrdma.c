@@ -19,7 +19,7 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 	uint8_t *out, int outlen)
 {
 	uint8_t in_net[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
+		DEVX_ST_SZ_BYTES(vrdma_device_emulation)] = {0};
 	uint8_t *in, *device_emulation_in;
 	int inlen;
 
@@ -32,7 +32,8 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
+	/*lizh TBD: need check ???*/
+	DEVX_SET(vrdma_device_emulation, device_emulation_in, vhca_id,
 			sdev->pci->mpci.vhca_id);
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
@@ -44,36 +45,18 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 				     inlen, out, outlen);
 }
 
-#if 0
 static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 				 struct snap_vrdma_device_attr *vattr,
 				 void *device_configuration)
 {
-
-	vattr->device_feature = DEVX_GET64(virtio_device, device_configuration,
-					   device_feature);
-	vattr->driver_feature = DEVX_GET64(virtio_device, device_configuration,
-					   driver_feature);
-	vattr->msix_config = DEVX_GET(virtio_device, device_configuration,
+	vattr->msix_config = DEVX_GET(vrdma_device, device_configuration,
 				      msix_config);
-	vattr->max_queues = DEVX_GET(virtio_device, device_configuration,
-				     num_queues);
-	vattr->max_queue_size = DEVX_GET(virtio_device, device_configuration,
-					 max_queue_size);
-	vattr->pci_bdf = DEVX_GET(virtio_device, device_configuration,
+	vattr->pci_bdf = DEVX_GET(vrdma_device, device_configuration,
 				  pci_bdf);
-	vattr->status = DEVX_GET(virtio_device, device_configuration,
+	vattr->status = DEVX_GET(vrdma_device, device_configuration,
 				 device_status);
-	vattr->config_generation = DEVX_GET(virtio_device, device_configuration,
-					    config_generation);
-	vattr->device_feature_select = DEVX_GET(virtio_device, device_configuration,
-						device_feature_select);
-	vattr->driver_feature_select = DEVX_GET(virtio_device, device_configuration,
-						driver_feature_select);
-	vattr->queue_select = DEVX_GET(virtio_device, device_configuration,
-				       queue_select);
 }
-#endif
+
 
 /**
  * snap_vrdma_query_device() - Query an vRDMA snap device
@@ -92,10 +75,10 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 	//struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_out;
 	int ret, out_size;
-	//uint64_t dev_allowed;
+	uint64_t dev_allowed;
 
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation);
+		   DEVX_ST_SZ_BYTES(vrdma_device_emulation);
 	out = calloc(1, out_size);
 	if (!out)
 		return -ENOMEM;
@@ -107,78 +90,37 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 	device_emulation_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
 
 	snap_get_pci_attr(&sdev->pci->pci_attr,
-			  DEVX_ADDR_OF(virtio_net_device_emulation,
+			  DEVX_ADDR_OF(vrdma_device_emulation,
 				       device_emulation_out,
 				       pci_params));
-#if 0
-	//attr->num_of_vfs = sdev->pci->pci_attr.num_of_vfs;
+
 	attr->num_msix = sdev->pci->pci_attr.num_msix;
 	snap_vrdma_get_device_attr(sdev, attr,
-				    DEVX_ADDR_OF(virtio_net_device_emulation,
+				    DEVX_ADDR_OF(vrdma_device_emulation,
 						 device_emulation_out,
-						 virtio_device));
+						 vrdma_device));
 	snap_update_pci_bdf(sdev->pci, attr->pci_bdf);
-	attr->enabled = DEVX_GET(virtio_net_device_emulation,
+	attr->enabled = DEVX_GET(vrdma_device_emulation,
 				       device_emulation_out, enabled);
-	attr->reset = DEVX_GET(virtio_net_device_emulation,
+	attr->reset = DEVX_GET(vrdma_device_emulation,
 				     device_emulation_out, reset);
 	attr->modifiable_fields = 0;
-	dev_allowed = DEVX_GET64(virtio_net_device_emulation,
+	dev_allowed = DEVX_GET64(vrdma_device_emulation,
 				 device_emulation_out, modify_field_select);
 	if (dev_allowed) {
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_STATUS)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_STATUS;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_LINK)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_LINK_STATUS;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_RESET)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_RESET;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_PCI_COMMON_CFG;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DEV_CFG;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_ALL)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_ALL;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_QUEUE_CFG)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_QUEUE_CFG;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_NUM_MSIX)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_NUM_MSIX;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_DYN_VF_MSIX_RESET)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_DYN_MSIX_RESET;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_PCI_HOTPLUG_STATE)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_PCI_HOTPLUG_STATE;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_SIZE)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_SIZE;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_MSIX_VECTOR)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_MSIX_VECTOR;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_ENABLE)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_ENABLE;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_NOTIFY_OFF)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_NOTIFY_OFF;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DESC)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DESC;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DRIVER)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DRIVER;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_DEVICE)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_DEVICE;
-		if (dev_allowed & MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET)
-			attr->modifiable_fields |= SNAP_VIRTIO_MOD_VQ_CFG_Q_RESET;
+		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_STATUS)
+			attr->modifiable_fields |= SNAP_VRDMA_MOD_DEV_STATUS;
+		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_RESET)
+			attr->modifiable_fields |= SNAP_VRDMA_MOD_RESET;
+
 	}
-	attr->pci_hotplug_state = DEVX_GET(virtio_net_device_emulation,
-						   device_emulation_out, pci_hotplug_state);
-	attr->mtu = DEVX_GET(virtio_net_device_emulation,
-			     device_emulation_out, virtio_net_config.mtu);
-	attr->status = DEVX_GET(virtio_net_device_emulation,
-				device_emulation_out, virtio_net_config.status);
-	attr->max_queue_pairs = DEVX_GET(virtio_net_device_emulation,
-					 device_emulation_out, virtio_net_config.max_virtqueue_pairs);
-	attr->mac = (uint64_t)DEVX_GET(virtio_net_device_emulation,
-				       device_emulation_out, virtio_net_config.mac_47_16) << 16;
-	attr->mac |= DEVX_GET(virtio_net_device_emulation,
-			      device_emulation_out, virtio_net_config.mac_15_0);
-	attr->crossed_vhca_mkey = DEVX_GET(virtio_net_device_emulation,
+	attr->mac = (uint64_t)DEVX_GET(vrdma_device_emulation,
+				       device_emulation_out, vrdma_config.mac_47_16) << 16;
+	attr->mac |= DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_config.mac_15_0);
+	attr->crossed_vhca_mkey = DEVX_GET(vrdma_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
-#endif
 out_free:
 	free(out);
 	return ret;
@@ -212,11 +154,11 @@ snap_vrdma_get_modifiable_device_fields(struct snap_device *sdev)
 int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_vrdma_device_attr *attr)
 {
-	//uint64_t fields_to_modify = 0;
-	//uint8_t *in;
-	//int inlen;
-	//uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
-	//uint8_t *device_emulation_in;
+	uint64_t fields_to_modify = 0;
+	uint8_t *in;
+	int inlen;
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)];
+	uint8_t *device_emulation_in;
 	//int q_cnt = 0;
 	int ret;
 
@@ -234,11 +176,10 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 	snap_debug("mask 0x%0lx vs allowed 0x%0lx\n", mask, sdev->mod_allowed_mask);
 	if (mask & ~sdev->mod_allowed_mask)
 		return -EINVAL;
-#if 0
-	inlen = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	struct snap_virtio_net_device_attr *nattr = to_net_device_attr(attr);
 
-	inlen += DEVX_ST_SZ_BYTES(virtio_net_device_emulation);
+	inlen = DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+
+	inlen += DEVX_ST_SZ_BYTES(vrdma_device_emulation);
 	in = calloc(1, inlen);
 	if (!in)
 		return -ENOMEM;
@@ -247,86 +188,18 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 		MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
-	if (mask & (SNAP_VRDMA_MOD_DEV_STATUS |SNAP_VRDMA_MOD_ALL)) {
+	if (mask & (SNAP_VRDMA_MOD_DEV_STATUS)) {
 		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_STATUS;
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-			virtio_device.device_status, attr->status);
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
+			vrdma_device.device_status, attr->status);
 	}
-	if (mask & (SNAP_VRDMA_MOD_LINK_STATUS | SNAP_VRDMA_MOD_ALL)) {
-		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_LINK;
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-			virtio_net_config.status, nattr->status);
-	}
-	if (mask & (SNAP_VRDMA_MOD_RESET | SNAP_VRDMA_MOD_ALL)) {
+	if (mask & (SNAP_VRDMA_MOD_RESET)) {
 		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_RESET;
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
 			reset, attr->reset);
 	}
-	if (mask & (SNAP_VRDMA_MOD_NUM_MSIX | SNAP_VRDMA_MOD_ALL)) {
-		void *pci_params;
-
-		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_NUM_MSIX;
-		pci_params = DEVX_ADDR_OF(virtio_net_device_emulation, device_emulation_in,
-						  pci_params);
-		DEVX_SET(device_pci_parameters, pci_params, num_msix, attr->num_msix);
-		snap_debug("Setting SNAP_VIRTIO_MOD_NUM_MSIX, msix number: %d\n",
-				   attr->num_msix);
-	}
-
-	if (mask & (SNAP_VRDMA_MOD_PCI_COMMON_CFG | SNAP_VIRTIO_MOD_ALL)) {
-		fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_PCI_COMMON_CFG;
-		DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
-				   virtio_device.device_feature, attr->device_feature);
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.num_queues, attr->max_queues);
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.max_queue_size, attr->max_queue_size);
-	}
-	if (mask & (SNAP_VIRTIO_MOD_DEV_CFG | SNAP_VIRTIO_MOD_ALL)) {
-		fields_to_modify |= MLX5_VIRTIO_DEVICE_MODIFY_DEV_CFG;
-			DEVX_SET(virtio_net_device_emulation,
-				 device_emulation_in,
-				 virtio_net_config.mac_47_16,
-				 nattr->mac >> 16);
-			DEVX_SET(virtio_net_device_emulation,
-				 device_emulation_in,
-				 virtio_net_config.mac_15_0,
-				 nattr->mac & 0xffff);
-			DEVX_SET(virtio_net_device_emulation,
-				 device_emulation_in,
-				 virtio_net_config.max_virtqueue_pairs,
-				 nattr->max_queue_pairs);
-			DEVX_SET(virtio_net_device_emulation,
-				 device_emulation_in,
-				 virtio_net_config.mtu, nattr->mtu);
-	}
-
-	if (mask & SNAP_VIRTIO_MOD_ALL) {
-			fields_to_modify = MLX5_VIRTIO_DEVICE_MODIFY_ALL;
-			DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
-				   virtio_device.driver_feature, attr->driver_feature);
-
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.num_queues, attr->max_queues);
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.max_queue_size, attr->max_queue_size);
-
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.msix_config,
-				 attr->msix_config);
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.config_generation,
-				 attr->config_generation);
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.driver_feature_select,
-				 attr->driver_feature_select);
-			DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				 virtio_device.device_feature_select,
-				 attr->device_feature_select);
-	}
-
-	DEVX_SET64(virtio_net_device_emulation, device_emulation_in,
-			   modify_field_select, fields_to_modify);
+	DEVX_SET64(vrdma_device_emulation, device_emulation_in,
+			modify_field_select, fields_to_modify);
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
@@ -339,7 +212,6 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 	snap_debug("snap_vrdma_modify_device ret %d in %p inlen %d modify 0x%0lx\n",
 		ret, in, inlen, fields_to_modify);
 	free(in);
-#endif
 	return ret;
 }
 
@@ -353,19 +225,19 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
  *
  * Return: Returns 0 in case of success.
  */
-int snap_vrdma_init_device(struct snap_device *sdev)
+int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 {
-	struct snap_vrdma_device *vndev;
+	struct snap_vrdma_device *vdev;
 	//int ret, i;
 	int ret;
 
 	if (sdev->pci->type != SNAP_VRDMA_PF)
 		return -EINVAL;
 
-	vndev = calloc(1, sizeof(*vndev));
-	if (!vndev)
+	vdev = calloc(1, sizeof(*vdev));
+	if (!vdev)
 		return -ENOMEM;
-
+	vdev->vdev_idx = vdev_idx;
 #if 0
 	vndev->num_queues = sdev->sctx->virtio_net_caps.max_emulated_virtqs;
 
@@ -391,7 +263,7 @@ int snap_vrdma_init_device(struct snap_device *sdev)
 		//goto out_free_virtqs;
 		goto out_free;
 
-	sdev->dd_data = vndev;
+	sdev->dd_data = vdev;
 
 	return 0;
 
@@ -404,7 +276,7 @@ out_free_virtqs:
 	free(vndev->virtqs);
 #endif
 out_free:
-	free(vndev);
+	free(vdev);
 	return ret;
 }
 
@@ -491,13 +363,13 @@ void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx)
 		 * We rely on the driver to clean itself up.
 		 * If the state is POWER OFF or PREPARE we need to unplug the function.
 		 */
-		if (attr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF ||
+		/*if (attr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_POWER_OFF ||
 			attr.pci_hotplug_state == MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE)
-			snap_hotunplug_pf(pfs[i]);
+			snap_hotunplug_pf(pfs[i]);*/
 
-		snap_debug("hotplug virtio net function pf id =%d bdf=%02x:%02x.%d with state %d.\n",
+		snap_debug("hotplug virtio net function pf id =%d bdf=%02x:%02x.%d.\n",
 			  pfs[i]->id, pfs[i]->pci_bdf.bdf.bus, pfs[i]->pci_bdf.bdf.device,
-			  pfs[i]->pci_bdf.bdf.function, attr.pci_hotplug_state);
+			  pfs[i]->pci_bdf.bdf.function);
 	}
 
 err:
