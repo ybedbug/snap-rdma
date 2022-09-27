@@ -347,14 +347,9 @@ struct snap_virtio_caps {
 };
 
 struct snap_vrdma_caps {
-	int		supported_types;//mask of snap_virtq_type
-	uint32_t	max_emulated_vrdma_cqs;
-	uint32_t	max_emulated_vrdma_sqs;
-	uint32_t	max_queue_depth;
 	bool		crossing_vhca_mkey;
-        bool		cq_interrupt_disabled;
-	bool		vnet_modify_ext;
 };
+#define SNAP_VRDMA_MAX_PFS 1
 
 struct snap_context {
 	struct ibv_context			*context;
