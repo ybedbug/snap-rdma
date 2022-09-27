@@ -1597,6 +1597,11 @@ enum {
 	MLX5_VIRTIO_DEVICE_MODIFY_VQ_CFG_Q_RESET = 1 << 18,
 };
 
+enum {
+	MLX5_VRDMA_DEVICE_MODIFY_STATUS = 1 << 0,
+	MLX5_VRDMA_DEVICE_MODIFY_RESET = 1 << 2,
+};
+
 struct mlx5_ifc_hotplug_cap_bits {
 	u8	 hotplug_device_types_supported[0x10];
 	u8	 log_max_bar_size[0x8];
@@ -3176,6 +3181,62 @@ struct mlx5_ifc_nvme_device_emulation_bits {
 	struct mlx5_ifc_device_pci_parameters_bits pci_params;
 
 	u8	   register_data[0][0x20];
+};
+
+struct mlx5_ifc_vrdma_device_bits {
+	u8	   reserved_at_0[0x80];
+	u8	   msix_config[0x10];
+	u8	   reserved_at_90[0x10];
+
+	u8	   device_status[0x8];
+	u8	   reserved_at_a8[0x8];
+	u8	   pci_bdf[0x10];
+
+	u8	   reserved_at_c0[0xc0];
+};
+
+struct mlx5_ifc_vrdma_config_bits {
+	u8	   mac_47_16[0x20];
+
+	u8	   mac_15_0[0x10];
+	u8	   reserved_at_30[0x50];
+};
+
+struct mlx5_ifc_vrdma_adminq_config_bits {
+	u8	   reserved_at_0[0x10];
+	u8	   adminq_size[0x10];
+
+	u8	   adminq_msix_vector[0x20];
+
+	u8	   adminq_notify_off[0x20];
+
+	u8	   adminq_base_addr[0x40];
+};
+
+struct mlx5_ifc_vrdma_device_emulation_bits {
+	u8	   modify_field_select[0x40];
+
+	u8	   reserved_at_40[0x10];
+	u8	   vhca_id[0x10];
+
+	u8	   enabled[0x1];
+	u8	   reserved_at_61[0x1];
+	u8	   reset[0x1];
+	u8	   reserved_at_63[0x5d];
+
+	u8	   emulated_device_crossed_vhca_mkey[0x20];
+
+	u8	   reserved_at_e0[0x20];
+
+	struct mlx5_ifc_device_pci_parameters_bits pci_params;
+
+	u8	   reserved_at_180[0x80];
+
+	struct mlx5_ifc_vrdma_device_bits vrdma_device;
+
+	struct mlx5_ifc_vrdma_config_bits vrdma_config;
+
+	struct mlx5_ifc_vrdma_adminq_config_bits vrdma_adminq_config;
 };
 
 enum {

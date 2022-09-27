@@ -182,7 +182,7 @@ snap_vrdma_ctrl_open(struct snap_context *sctx,
 		goto free_ctrl;
 	}
 
-	ret = snap_vrdma_init_device(ctrl->sdev);
+	ret = snap_vrdma_init_device(ctrl->sdev, attr->pf_id);
 	if (ret)
 		goto close_ctrl;
 
@@ -845,13 +845,4 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 #endif
 out:
 	snap_vrdma_ctrl_progress_unlock(ctrl);
-}
-
-int snap_vrdma_ctrl_hotunplug(struct snap_vrdma_ctrl *ctrl)
-{
-	struct snap_vrdma_device_attr *attr = ctrl->bar_curr;
-	uint64_t mask = SNAP_VRDMA_MOD_PCI_HOTPLUG_STATE;
-
-	attr->pci_hotplug_state = MLX5_EMULATION_HOTPLUG_STATE_HOTUNPLUG_PREPARE;
-	return snap_vrdma_ctrl_bar_modify(ctrl, mask, attr);
 }

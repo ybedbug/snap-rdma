@@ -668,7 +668,6 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 		sctx->virtio_blk_caps.crossing_vhca_mkey = false;
 		sctx->virtio_fs_caps.crossing_vhca_mkey = false;
 	}
-
 	if (DEVX_GET(query_hca_cap_out, out,
 		capability.cmd_hca_cap.virtio_blk_device_emulation_manager) &&
 	    general_obj_types & (1UL << MLX5_OBJ_TYPE_VIRTIO_Q_COUNTERS)) {
@@ -684,7 +683,7 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 	} else {
 		sctx->virtio_net_caps.virtio_q_counters = false;
 	}
-
+	sctx->vrdma_caps.crossing_vhca_mkey = true;
 	return 0;
 }
 
@@ -952,6 +951,13 @@ static int snap_query_nvme_emulation_caps(struct snap_context *sctx)
 
 }
 
+static int snap_query_vrdma_emulation_caps(struct snap_context *sctx)
+{
+	sctx->vrdma_pfs.type = SNAP_VRDMA;
+	sctx->vrdma_pfs.max_pfs = SNAP_VRDMA_MAX_PFS;
+	return 0;
+}
+
 static int snap_query_hotplug_caps(struct snap_context *sctx)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(query_hca_cap_in)] = {};
@@ -1019,7 +1025,11 @@ static int snap_query_emulation_caps(struct snap_context *sctx)
 		if (ret)
 			return ret;
 	}
-
+	if (sctx->emulation_caps & SNAP_VRDMA) {
+		ret = snap_query_vrdma_emulation_caps(sctx);
+		if (ret)
+			return ret;
+	}
 	return 0;
 
 }
@@ -2981,9 +2991,8 @@ static struct mlx5_snap_devx_obj*
 snap_create_vrdma_device_emulation(struct snap_device *sdev,
 					struct snap_device_attr *attr)
 {
-	struct snap_virtio_caps *net_caps = &sdev->sctx->virtio_net_caps;
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
-		   DEVX_ST_SZ_BYTES(virtio_net_device_emulation)] = {0};
+		   DEVX_ST_SZ_BYTES(vrdma_device_emulation)] = {0};
 	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {0};
 	struct ibv_context *context = sdev->sctx->context;
 	uint8_t *device_emulation_in;
@@ -2996,37 +3005,13 @@ snap_create_vrdma_device_emulation(struct snap_device *sdev,
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
+		 MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
 
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
+	/*lizh TBD need check vhca_id*/
+	DEVX_SET(vrdma_device_emulation, device_emulation_in, vhca_id,
 		 sdev->pci->mpci.vhca_id);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-		 resources_on_emulation_manager,
-		 sdev->sctx->mctx.virtio_net_need_tunnel ? 0 : 1);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-		 q_cfg_version, sdev->sctx->virtio_net_caps.virtio_q_cfg_v2 ? 1 : 0);
-	DEVX_SET(virtio_net_device_emulation, device_emulation_in, enabled, 1);
-
-	if ((attr->flags & SNAP_DEVICE_FLAGS_DB_CQ_MAP) &&
-	    net_caps->emulated_dev_db_cq_map) {
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-			 emulated_dev_db_cq_map, 1);
-		snap_debug("Set db_cq_map feature\n");
-	}
-	if ((attr->flags & SNAP_DEVICE_FLAGS_EQ_IN_SW) &&
-	    net_caps->emulated_dev_eq) {
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-				emulated_dev_eq, 1);
-		snap_debug("Set eq_in_sw feature\n");
-	}
-
-	if ((attr->flags & SNAP_DEVICE_FLAGS_VF_DYN_MSIX) &&
-	    (net_caps->max_num_vf_dynamic_msix != 0)) {
-		DEVX_SET(virtio_net_device_emulation, device_emulation_in,
-			 dynamic_vf_msix_control, 1);
-		snap_debug("Set dynamic_vf_msix_control for PF\n");
-	}
+	DEVX_SET(vrdma_device_emulation, device_emulation_in, enabled, 1);
 
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
@@ -3035,7 +3020,6 @@ snap_create_vrdma_device_emulation(struct snap_device *sdev,
 
 	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
 	device_emulation->sdev = sdev;
-
 	return device_emulation;
 
 out_free:
