@@ -99,9 +99,15 @@ struct snap_vrdma_ctrl_attr {
 
 int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl);
 int snap_vrdma_ctrl_stop(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl);
+bool snap_vrdma_ctrl_is_suspended(struct snap_vrdma_ctrl *ctrl);
+bool snap_vrdma_ctrl_is_stopped(struct snap_vrdma_ctrl *ctrl);
 struct snap_vrdma_ctrl*
 snap_vrdma_ctrl_open(struct snap_context *sctx,
 			  struct snap_vrdma_ctrl_attr *attr);
 void snap_vrdma_ctrl_close(struct snap_vrdma_ctrl *ctrl);
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
+					     uint32_t thread_id);
 #endif
