@@ -352,7 +352,9 @@ struct snap_virtio_caps {
 };
 
 struct snap_vrdma_caps {
-	bool		crossing_vhca_mkey;
+	bool	crossing_vhca_mkey;
+	uint8_t log_max_pd;
+	uint8_t log_max_mkey;
 };
 #define SNAP_VRDMA_MAX_PFS 1
 
