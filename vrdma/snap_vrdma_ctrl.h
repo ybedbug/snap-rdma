@@ -70,6 +70,7 @@ struct snap_vrdma_ctrl {
 	struct ibv_pd *adminq_pd;
 	struct ibv_mr *adminq_mr;
 	struct snap_dma_q *adminq_dma_q;
+	struct snap_dma_completion *adminq_dma_comp;
 	uint64_t adminq_driver_addr;
 	uint16_t adminq_q_size;
 	void *adminq_buf;
@@ -99,6 +100,7 @@ struct snap_vrdma_ctrl_attr {
 	struct ibv_pd *pd;
 	struct ibv_mr *mr;
 	void *adminq_buf;
+	struct snap_dma_completion *adminq_dma_comp;
 	uint32_t adminq_size;
 	uint32_t npgs;
 	bool force_in_order;

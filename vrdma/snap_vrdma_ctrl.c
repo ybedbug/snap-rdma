@@ -111,6 +111,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ctrl->adminq_mr = attr->mr;
 	ctrl->adminq_buf = attr->adminq_buf;
 	ctrl->adminq_size = attr->adminq_size;
+	ctrl->adminq_dma_comp = attr->adminq_dma_comp;
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;
@@ -716,7 +717,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
 	ret = snap_dma_q_read(ctrl->adminq_dma_q, ctrl->adminq_buf, ctrl->adminq_size,
-			      lkey, (uint64_t)ctrl->bar_curr->adminq_base_addr, rkey, NULL);
+			      lkey, (uint64_t)ctrl->bar_curr->adminq_base_addr, rkey,
+				  ctrl->adminq_dma_comp);
 	if (ret) {
 		snap_error("Failed to read admin queue for controller %p ",
 			  ctrl);
