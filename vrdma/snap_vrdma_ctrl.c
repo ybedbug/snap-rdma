@@ -12,10 +12,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
-//#include "snap_dp_map.h"
-//#include "snap_vrdma_srv.h"
 #include "snap_vrdma_ctrl.h"
-
+#include "snap_dma.h"
 
 static struct snap_vrdma_device_attr*
 snap_vrdma_ctrl_bar_create(void)
@@ -97,12 +95,9 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	}
 
 	ctrl->sdev_attr.pf_id = attr->pf_id;
-	//ctrl->sdev_attr.vf_id = attr->vf_id;
 	ctrl->sdev_attr.type = attr->pci_type;
 	if (attr->event)
 		ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_EVENT_CHANNEL;
-	//if (attr->vf_dynamic_msix_supported)
-	//	ctrl->sdev_attr.flags |= SNAP_DEVICE_FLAGS_VF_DYN_MSIX;
 	ctrl->sdev_attr.context = attr->context;
 	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
@@ -112,7 +107,10 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 
 	ctrl->bar_cbs = *attr->bar_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
-	ctrl->lb_pd = attr->pd;
+	ctrl->adminq_pd = attr->pd;
+	ctrl->adminq_mr = attr->mr;
+	ctrl->adminq_buf = attr->adminq_buf;
+	ctrl->adminq_size = attr->adminq_size;
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;
@@ -213,14 +211,6 @@ void snap_vrdma_ctrl_close(struct snap_vrdma_ctrl *ctrl)
 	for (i = 0; i < ctrl->pg_ctx.npgs; i++)
 		if (!TAILQ_EMPTY(&ctrl->pg_ctx.pgs[i].q_list))
 			snap_warn("Closing ctrl %p with queue %d still active", ctrl, i);
-	/* if controller is destroyed while dirty page tracking is enabled
-	 * need to destroy dp tracking structs to avoid memory leak
-	 */
-	if (ctrl->pf_xmkey)
-		snap_destroy_cross_mkey(ctrl->pf_xmkey);
-	if (ctrl->dp_map)
-		snap_dp_bmap_destroy(ctrl->dp_map);
-
 	(void)snap_destroy_cross_mkey(ctrl->xmkey);
 	snap_pgs_free(&ctrl->pg_ctx);
 	pthread_mutex_destroy(&ctrl->progress_lock);
@@ -693,10 +683,9 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
  */
 int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 {
+	struct snap_dma_q_create_attr dma_q_attr = {};
+	uint32_t rkey, lkey;
 	int ret = 0;
-	int n_enabled = 0;
-	//int i, j;
-	//const struct snap_vrdma_queue_attr *vq;
 
 	if (ctrl->state == SNAP_VRDMA_CTRL_STARTED)
 		goto out;
@@ -708,48 +697,48 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-#if 0
-	for (i = 0; i < ctrl->max_queues; i++) {
-		vq = to_virtio_queue_attr(ctrl, ctrl->bar_curr, i);
-
-		if (vq->enable) {
-			ctrl->queues[i] = snap_virtio_ctrl_queue_create(ctrl, i);
-			if (!ctrl->queues[i]) {
-				ret = -ENOMEM;
-				goto vq_cleanup;
-			}
-			n_enabled++;
-		}
+	/* Create dma queue for admin-queue*/
+	dma_q_attr.tx_qsize = SNAP_VRDMA_ADMINQ_DMA_Q_SIZE;
+	dma_q_attr.rx_qsize = SNAP_VRDMA_ADMINQ_DMA_Q_SIZE;
+	dma_q_attr.tx_elem_size = ctrl->adminq_size;
+	dma_q_attr.rx_elem_size = ctrl->adminq_size;
+	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
+	dma_q_attr.use_devx = true;
+	//dma_q_attr.rx_cb = dummy_rx_cb;
+	ctrl->adminq_dma_q = snap_dma_q_create(ctrl->adminq_pd, &dma_q_attr);
+	if (!ctrl->adminq_dma_q) {
+		snap_error("Failed to create dma for admin queue controller %p ",
+			  ctrl);
+		ret = -EINVAL;
+		goto out;
 	}
-#endif
+	/* Init adminq_buf for admin queue */;
+	rkey = ctrl->xmkey->mkey;
+	lkey = ctrl->adminq_mr->lkey;
+	ret = snap_dma_q_read(ctrl->adminq_dma_q, ctrl->adminq_buf, ctrl->adminq_size,
+			      lkey, (uint64_t)ctrl->bar_curr->adminq_base_addr, rkey, NULL);
+	if (ret) {
+		snap_error("Failed to read admin queue for controller %p ",
+			  ctrl);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	if (ctrl->bar_cbs.start) {
 		ret = ctrl->bar_cbs.start(ctrl->cb_ctx);
 		if (ret) {
 			snap_vrdma_ctrl_device_error(ctrl);
-			//goto vq_cleanup;
 			goto out;
 		}
 	}
 
 	if (ctrl->state != SNAP_VRDMA_CTRL_SUSPENDED) {
-		snap_info("vrdma controller %p started with %d queues\n", ctrl, n_enabled);
+		snap_info("vrdma controller %p started\n", ctrl);
 		ctrl->state = SNAP_VRDMA_CTRL_STARTED;
 	} else
-		snap_info("vrdma controller %p SUSPENDED with %d queues\n", ctrl, n_enabled);
-#if 0
-	goto out;
-
-
-vq_cleanup:
-	for (j = 0; j < i; j++)
-		if (ctrl->queues[j])
-			snap_virtio_ctrl_queue_destroy(ctrl->queues[j]);
-#endif
+		snap_info("vrdma controller %p SUSPENDED\n", ctrl);
 
 out:
-	//if (ctrl->state == SNAP_VIRTIO_CTRL_STARTED)
-	//	snap_vrdma_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
-
 	return ret;
 }
 
