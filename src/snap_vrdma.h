@@ -22,12 +22,14 @@ struct snap_vrdma_device;
 
 enum snap_vrdma_dev_modify {
 	SNAP_VRDMA_MOD_DEV_STATUS = (1ULL << 0),
-	SNAP_VRDMA_MOD_RESET = (1ULL << 2),
+	SNAP_VRDMA_MOD_RESET = (1ULL << 1),
+	SNAP_VRDMA_MOD_MAC = (1ULL << 2),
 };
 
 struct snap_vrdma_device_attr {
 	uint64_t			mac;
 	uint16_t			status;
+	uint16_t			mtu;
 	uint16_t			msix_config;
 	uint16_t			pci_bdf;
 	bool				enabled;

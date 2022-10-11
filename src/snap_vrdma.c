@@ -112,12 +112,15 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VRDMA_MOD_DEV_STATUS;
 		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_RESET)
 			attr->modifiable_fields |= SNAP_VRDMA_MOD_RESET;
-
+		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_MAC)
+			attr->modifiable_fields |= SNAP_VRDMA_MOD_MAC;
 	}
 	attr->mac = (uint64_t)DEVX_GET(vrdma_device_emulation,
 				       device_emulation_out, vrdma_config.mac_47_16) << 16;
 	attr->mac |= DEVX_GET(vrdma_device_emulation,
 			      device_emulation_out, vrdma_config.mac_15_0);
+	attr->mtu = DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_config.mtu);
 	attr->crossed_vhca_mkey = DEVX_GET(vrdma_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
@@ -197,6 +200,13 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_RESET;
 		DEVX_SET(vrdma_device_emulation, device_emulation_in,
 			reset, attr->reset);
+	}
+	if (mask & (SNAP_VRDMA_MOD_MAC)) {
+		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_MAC;
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
+			vrdma_config.mac_47_16, attr->mac >> 16);
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
+			vrdma_config.mac_15_0, attr->mac & 0xffff);
 	}
 	DEVX_SET64(vrdma_device_emulation, device_emulation_in,
 			modify_field_select, fields_to_modify);

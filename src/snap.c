@@ -687,6 +687,8 @@ static int snap_set_device_emulation_caps(struct snap_context *sctx)
 				capability.cmd_hca_cap.log_max_pd);
 	sctx->vrdma_caps.log_max_mkey = DEVX_GET(query_hca_cap_out, out,
 				capability.cmd_hca_cap.log_max_mkey);
+	sctx->vrdma_caps.log_max_msg = DEVX_GET(query_hca_cap_out, out,
+				capability.cmd_hca_cap.log_max_msg);
 	sctx->vrdma_caps.crossing_vhca_mkey = true;
 	sctx->emulation_caps |= SNAP_VRDMA;
 	return 0;

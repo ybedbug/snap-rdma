@@ -105,7 +105,6 @@ struct snap_vrdma_ctrl_attr {
 	uint32_t npgs;
 	bool force_in_order;
 	bool suspended;
-	struct snap_vrdma_registers regs;
 };
 
 int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl);

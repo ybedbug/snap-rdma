@@ -1599,7 +1599,8 @@ enum {
 
 enum {
 	MLX5_VRDMA_DEVICE_MODIFY_STATUS = 1 << 0,
-	MLX5_VRDMA_DEVICE_MODIFY_RESET = 1 << 2,
+	MLX5_VRDMA_DEVICE_MODIFY_RESET = 1 << 1,
+	MLX5_VRDMA_DEVICE_MODIFY_MAC = 1 << 2,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -3199,14 +3200,14 @@ struct mlx5_ifc_vrdma_config_bits {
 	u8	   mac_47_16[0x20];
 
 	u8	   mac_15_0[0x10];
-	u8	   reserved_at_30[0x50];
+	u8	   mtu[0x10];
+
+	u8	   reserved_at_40[0x40];
 };
 
 struct mlx5_ifc_vrdma_adminq_config_bits {
-	u8	   reserved_at_0[0x10];
+	u8	   adminq_msix_vector[0x10];
 	u8	   adminq_size[0x10];
-
-	u8	   adminq_msix_vector[0x20];
 
 	u8	   adminq_notify_off[0x20];
 
