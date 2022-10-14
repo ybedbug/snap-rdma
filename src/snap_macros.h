@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <stdint.h>
+#include <syslog.h>
 
 #ifndef SNAP_DEBUG
 #define SNAP_DEBUG 0
@@ -95,9 +96,24 @@
 	} while (0)
 
 // TODO: Add formal logger
+#if 0
 #define snap_error printf
 #define snap_warn  printf
 #define snap_info  printf
+
+#else
+#define snap_error(M, ...) \
+		syslog(LOG_ERR, "[ERROR] %s:%d:%s: " M "\n", \
+				__FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
+#define snap_info(M, ...) \
+		syslog(LOG_INFO, "[INFO] %s:%d:%s: " M "\n", \
+				__FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
+#define snap_warn(M, ...) \
+		syslog(LOG_DEBUG, "[DEBUG] %s:%d:%s: " M "\n", \
+				__FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#endif
 
 static inline int snap_ref_safe(int *refcnt)
 {
