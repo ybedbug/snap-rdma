@@ -423,6 +423,10 @@ static int snap_query_functions_info(struct snap_context *sctx,
 			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS);
 		DEVX_SET(query_emulated_functions_info_in, in, pf_vhca_id, vhca_id);
 		break;
+	case SNAP_VRDMA:
+		DEVX_SET(query_emulated_functions_info_in, in, op_mod,
+			 MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VRDMA_PHYSICAL_FUNCTIONS);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -491,6 +495,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 	int i, j;
 	int ret, output_size, num_emulated_pfs;
 
+	snap_error("\nlizh snap_open _snap_alloc_functions \n");
 	pfs_ctx->dirty = false;
 	pfs_ctx->pfs = calloc(pfs_ctx->max_pfs, sizeof(struct snap_pci));
 	if (!pfs_ctx->pfs)
@@ -506,11 +511,13 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 
 	ret = snap_query_functions_info(sctx, pfs_ctx->type, SNAP_UNINITIALIZED_VHCA_ID,
 					out, output_size);
+	snap_error("\nlizh snap_open _snap_alloc_functions snap_query_functions_info pfs_ctx->type %d ret %d\n", pfs_ctx->type, ret);
 	if (ret)
 		goto out_free;
 
 	num_emulated_pfs = DEVX_GET(query_emulated_functions_info_out, out,
 				    num_emulated_functions);
+	snap_error("\nlizh snap_open _snap_alloc_functions num_emulated_pfs %d max_pfs %d\n", num_emulated_pfs, pfs_ctx->max_pfs);
 	if (num_emulated_pfs > pfs_ctx->max_pfs) {
 		ret = -EINVAL;
 		goto out_free;
@@ -523,6 +530,8 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		pf->sctx = sctx;
 		pf->id = i;
 		pf->mpci.vhca_id = SNAP_UNINITIALIZED_VHCA_ID;
+		snap_error("\nlizh snap_open _snap_alloc_functions pf->id %d pf->type %d\n", pf->id, pf->type);
+
 		ret = snap_alloc_pci_bar(pf);
 		if (ret)
 			goto free_vfs;
@@ -577,7 +586,12 @@ static int snap_alloc_functions(struct snap_context *sctx)
 		if (ret)
 			goto out_err_blk;
 	}
-
+	if (sctx->vrdma_pfs.max_pfs) {
+		snap_error("\nlizh snap_open snap_alloc_functions vrdma_pfs.max_pfs \n");
+		ret = _snap_alloc_functions(sctx, &sctx->vrdma_pfs);
+		if (ret)
+			goto out_err_blk;
+	}
 	return 0;
 
 out_err_blk:
@@ -2882,6 +2896,7 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 	struct snap_vrdma_device_attr vrdma_attr = {};
 	int ret;
 
+	snap_error("lizh snap_query_device_emulation plugged %d\n", sdev->pci->plugged);
 	if (!sdev->pci->plugged)
 		return -ENODEV;
 
@@ -2952,6 +2967,7 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 	uint8_t *device_emulation_in;
 	struct mlx5_snap_devx_obj *device_emulation;
 
+	snap_error("\nlizh snap_create_virtio_net_device_emulation..vhca_id %d.start\n", sdev->pci->mpci.vhca_id);
 	device_emulation = calloc(1, sizeof(*device_emulation));
 	if (!device_emulation)
 		goto out_err;
@@ -2959,7 +2975,7 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
 		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
-		 MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
+		 MLX5_OBJ_TYPE_VIRTIO_NET_DEVICE_EMULATION);
 
 	device_emulation_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
 	DEVX_SET(virtio_net_device_emulation, device_emulation_in, vhca_id,
@@ -2985,7 +3001,7 @@ snap_create_virtio_net_device_emulation(struct snap_device *sdev,
 
 	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
 	device_emulation->sdev = sdev;
-
+	snap_error("\nlizh snap_create_virtio_net_device_emulation..obj_id %d.done\n", device_emulation->obj_id);
 	return device_emulation;
 
 out_free:
@@ -3249,14 +3265,15 @@ int snap_get_pf_list(struct snap_context *sctx, enum snap_emulation_type type,
 		}
 
 		ret = snap_query_functions_info(sctx, pfs_ctx->type,
-				SNAP_UNINITIALIZED_VHCA_ID, out, output_size);
+					SNAP_UNINITIALIZED_VHCA_ID, out, output_size);
 		if (ret) {
 			snap_warn("query functions info failed, ret:%d\n", ret);
 			free(out);
 			goto out;
 		}
-
 		for (i = 0; i < pfs_ctx->max_pfs; i++) {
+			snap_error("\nlizh snap_open snap_get_pf_list pf[%d] hotplugged=%d pci_bdf.raw=%d\n",
+			i, pfs[i]->hotplugged, pfs[i]->pci_bdf.raw);
 			if (pfs[i]->hotplugged && !pfs[i]->pci_bdf.raw) {
 				ret = snap_pf_get_pci_info(pfs[i], out);
 				if (ret) {
@@ -3401,6 +3418,8 @@ struct snap_pci *snap_hotplug_pf(struct snap_context *sctx,
 		pfs_ctx = &sctx->virtio_blk_pfs;
 	} else if (attr->type == SNAP_VIRTIO_FS) {
 		pfs_ctx = &sctx->virtio_fs_pfs;
+	} else if (attr->type == SNAP_VRDMA) {
+		pfs_ctx = &sctx->vrdma_pfs;
 	} else {
 		errno = EINVAL;
 		goto out_err;
@@ -3514,7 +3533,8 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		errno = EINVAL;
 		return NULL;
 	}
-
+	snap_error("\n lizh snap_open_device start type %d pf_id %d max_pfs %d\n",
+	attr->type, attr->pf_id, sctx->vrdma_pfs.max_pfs);
 	if ((attr->type == SNAP_NVME_PF || attr->type == SNAP_NVME_VF) &&
 	    attr->pf_id < sctx->nvme_pfs.max_pfs) {
 		pfs = &sctx->nvme_pfs;
@@ -3566,6 +3586,8 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	if (attr->type & (SNAP_VIRTIO_NET_VF | SNAP_VIRTIO_BLK_VF | SNAP_NVME_VF | SNAP_VIRTIO_FS_VF)) {
 		if (attr->vf_id < 0 || attr->vf_id >= pfs->pfs[attr->pf_id].num_vfs) {
 			errno = EINVAL;
+			snap_error("lizh SNAP_VIRTIO_NET_VF attr->vf_id:%d num_vfs %d out_free_mutex\n",
+			attr->vf_id, pfs->pfs[attr->pf_id].num_vfs);
 			goto out_free_mutex;
 		}
 		sdev->pci = &pfs->pfs[attr->pf_id].vfs[attr->vf_id];
@@ -3580,11 +3602,13 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 	ret = snap_query_device_emulation(sdev);
 	if (ret) {
 		errno = ret;
+		snap_error("lizh snap_query_device_emulation fail\n");
 		goto out_free_device_emulation;
 	}
 
 	sdev->transitional_device = snap_virtio_is_transitional_device(sdev);
 	snap_info("pci:%s transitional_device:%d\n", sdev->pci->pci_number, sdev->transitional_device);
+	snap_error("lizh pci:%s transitional_device:%d\n", sdev->pci->pci_number, sdev->transitional_device);
 
 	/* This should be done only for BF-1 */
 	if (need_tunnel) {
@@ -3659,8 +3683,10 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	struct ibv_context *context;
 	int rc;
 
+	snap_error("\nlizh snap_open \n");
 	if (!mlx5dv_is_supported(ibdev)) {
 		errno = ENOTSUP;
+		snap_error("\nlizh snap_open mlx5dv_is_supported \n");
 		goto out_err;
 	}
 
@@ -3668,41 +3694,48 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	context = mlx5dv_open_device(ibdev, &attrs);
 	if (!context) {
 		errno = EAGAIN;
+		snap_error("\nlizh snap_open mlx5dv_open_device \n");
 		goto out_err;
 	}
 
 	sctx = calloc(1, sizeof(*sctx));
 	if (!sctx) {
 		errno = ENOMEM;
+		snap_error("\nlizh snap_open calloc \n");
 		goto out_close_device;
 	}
 
 	sctx->context = context;
 	if (snap_set_device_emulation_caps(sctx)) {
 		errno = EAGAIN;
+		snap_error("\nlizh snap_open snap_set_device_emulation_caps \n");
 		goto out_free;
 	}
 
 	if (!sctx->emulation_caps) {
 		errno = EINVAL;
+		snap_error("\nlizh snap_open !sctx->emulation_caps \n");
 		goto out_free;
 	}
 
 	rc = snap_query_emulation_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
+		snap_error("\nlizh snap_open snap_query_emulation_caps \n");
 		goto out_free;
 	}
 
 	rc = snap_query_flow_table_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
+		snap_error("\nlizh snap_open snap_query_flow_table_caps \n");
 		goto out_free;
 	}
 
 	rc = snap_query_hotplug_caps(sctx);
 	if (rc) {
 		errno = EINVAL;
+		snap_error("\nlizh snap_open snap_query_hotplug_caps \n");
 		goto out_free;
 	}
 
@@ -3715,6 +3748,7 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	rc = snap_alloc_functions(sctx);
 	if (rc) {
 		errno = -rc;
+		snap_error("\nlizh snap_open snap_alloc_functions \n");
 		goto out_free;
 	}
 
@@ -3733,6 +3767,7 @@ struct snap_context *snap_open(struct ibv_device *ibdev)
 	}
 
 	TAILQ_INIT(&sctx->hotplug_device_list);
+	snap_error("lizh snap_open return sctx\n");
 	return sctx;
 
 out_free_mutex:

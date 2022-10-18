@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
+#include "snap_vrdma.h"
 #include "snap_vrdma_ctrl.h"
 #include "snap_dma.h"
 
@@ -82,6 +83,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	uint32_t npgs;
 	struct snap_cross_mkey_attr cm_attr = {};
 
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal..pci_type %d .pf_id %d start", attr->pci_type, attr->pf_id);
 	if (!sctx) {
 		ret = -ENODEV;
 		goto err;
@@ -93,6 +95,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	} else {
 		npgs = attr->npgs;
 	}
+	snap_error("lizh snap_vrdma_ctrl_open_internal...npgs %d", npgs);
 
 	ctrl->sdev_attr.pf_id = attr->pf_id;
 	ctrl->sdev_attr.type = attr->pci_type;
@@ -101,6 +104,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ctrl->sdev_attr.context = attr->context;
 	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
+		snap_error("lizh snap_vrdma_ctrl_open_internal...snap_open_device fail");
 		ret = -ENODEV;
 		goto err;
 	}
@@ -138,6 +142,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	}
 
 	ctrl->force_in_order = attr->force_in_order;
+	snap_error("lizh snap_vrdma_ctrl_open_internal...done");
 	return 0;
 
 free_pgs:
@@ -384,6 +389,10 @@ static int snap_vrdma_ctrl_reset(struct snap_vrdma_ctrl *ctrl)
 		return ret;
 
 	if (ctrl->bar_curr->pci_bdf) {
+
+		ret = snap_vrdma_device_mac_init(ctrl->sdev);
+		if (ret)
+			return ret;
 		/*
 		 * When done with reset process, need to set reset bit
 		 * back to `0` which signal FW to update `device_status`

@@ -47,6 +47,7 @@ struct snap_vrdma_device {
 	uint32_t vdev_idx;
 };
 
+int snap_vrdma_device_mac_init(struct snap_device *sdev);
 int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx);
 int snap_vrdma_teardown_device(struct snap_device *sdev);
 int snap_vrdma_query_device(struct snap_device *sdev,
