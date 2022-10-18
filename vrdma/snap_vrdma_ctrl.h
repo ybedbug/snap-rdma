@@ -20,6 +20,8 @@
 #include "../ctrl/snap_dp_map.h"
 #include "../ctrl/snap_poll_groups.h"
 
+#define SNAP_VRDMA_ADMINQ_DMA_Q_SIZE 128
+
 enum snap_vrdma_ctrl_state {
 	SNAP_VRDMA_CTRL_STOPPED,
 	SNAP_VRDMA_CTRL_STARTED,
@@ -65,7 +67,14 @@ struct snap_vrdma_ctrl {
 	struct snap_vrdma_ctrl_bar_cbs bar_cbs;
 	struct snap_vrdma_device_attr *bar_curr;
 	struct snap_vrdma_device_attr *bar_prev;
-	struct ibv_pd *lb_pd;
+	struct ibv_pd *adminq_pd;
+	struct ibv_mr *adminq_mr;
+	struct snap_dma_q *adminq_dma_q;
+	struct snap_dma_completion *adminq_dma_comp;
+	uint64_t adminq_driver_addr;
+	uint16_t adminq_q_size;
+	void *adminq_buf;
+	uint32_t adminq_size;
 	struct snap_pg_ctx pg_ctx;
 	bool log_writes_to_host;
 	/* true if reset was requested while some queues are not suspended */
@@ -79,8 +88,6 @@ struct snap_vrdma_ctrl {
 	bool is_quiesce;
 	/* true if ctrl resume was requested while ctrl was still suspending */
 	bool pending_resume;
-	struct snap_dp_bmap *dp_map;
-	struct snap_cross_mkey *pf_xmkey;
 };
 
 struct snap_vrdma_ctrl_attr {
@@ -91,18 +98,26 @@ struct snap_vrdma_ctrl_attr {
 	void *cb_ctx;
 	struct snap_vrdma_ctrl_bar_cbs *bar_cbs;
 	struct ibv_pd *pd;
+	struct ibv_mr *mr;
+	void *adminq_buf;
+	struct snap_dma_completion *adminq_dma_comp;
+	uint32_t adminq_size;
 	uint32_t npgs;
 	bool force_in_order;
 	bool suspended;
-	bool recover;
-	bool force_recover;
 };
 
 int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl);
 int snap_vrdma_ctrl_stop(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl);
+bool snap_vrdma_ctrl_is_suspended(struct snap_vrdma_ctrl *ctrl);
+bool snap_vrdma_ctrl_is_stopped(struct snap_vrdma_ctrl *ctrl);
 struct snap_vrdma_ctrl*
 snap_vrdma_ctrl_open(struct snap_context *sctx,
 			  struct snap_vrdma_ctrl_attr *attr);
 void snap_vrdma_ctrl_close(struct snap_vrdma_ctrl *ctrl);
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
+					     uint32_t thread_id);
 #endif

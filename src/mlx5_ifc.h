@@ -1599,7 +1599,8 @@ enum {
 
 enum {
 	MLX5_VRDMA_DEVICE_MODIFY_STATUS = 1 << 0,
-	MLX5_VRDMA_DEVICE_MODIFY_RESET = 1 << 2,
+	MLX5_VRDMA_DEVICE_MODIFY_RESET = 1 << 1,
+	MLX5_VRDMA_DEVICE_MODIFY_MAC = 1 << 2,
 };
 
 struct mlx5_ifc_hotplug_cap_bits {
@@ -1717,7 +1718,8 @@ enum mlx5_emu_fns_op_mod {
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_NET_PHYSICAL_FUNCTIONS = 0x1,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_BLK_PHYSICAL_FUNCTIONS = 0x2,
 	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTUAL_FUNCTIONS = 0x3,
-	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_FS_PHYSICAL_FUNCTIONS = 0x5
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VIRTIO_FS_PHYSICAL_FUNCTIONS = 0x5,
+	MLX5_SET_EMULATED_FUNCTIONS_OP_MOD_VRDMA_PHYSICAL_FUNCTIONS = 0x6
 };
 
 struct mlx5_ifc_emulated_function_info_bits {
@@ -2642,7 +2644,7 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_NVME_SQ_BE = 0x0038,
 	MLX5_OBJ_TYPE_VIRTIO_FS_DEVICE_EMULATION = 0x003d,
 	MLX5_OBJ_TYPE_VIRTIO_FS_Q = 0x003e,
-	MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION = 0x0045, /*lizh TBD: need PRM*/
+	MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION = 0xFFFE,
 
 	MLX5_OBJ_TYPE_APU_MEM = 0x10000000000,
 	MLX5_OBJ_TYPE_APU_PROCESS = 0x40000000000,
@@ -3199,14 +3201,14 @@ struct mlx5_ifc_vrdma_config_bits {
 	u8	   mac_47_16[0x20];
 
 	u8	   mac_15_0[0x10];
-	u8	   reserved_at_30[0x50];
+	u8	   mtu[0x10];
+
+	u8	   reserved_at_40[0x40];
 };
 
 struct mlx5_ifc_vrdma_adminq_config_bits {
-	u8	   reserved_at_0[0x10];
+	u8	   adminq_msix_vector[0x10];
 	u8	   adminq_size[0x10];
-
-	u8	   adminq_msix_vector[0x20];
 
 	u8	   adminq_notify_off[0x20];
 

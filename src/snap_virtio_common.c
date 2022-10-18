@@ -98,7 +98,9 @@ int snap_virtio_query_device(struct snap_device *sdev,
 		DEVX_ST_SZ_BYTES(virtio_fs_device_emulation)] = {0};
 	uint8_t *in, *device_emulation_in;
 	int inlen;
+	int ret;
 
+	snap_error("\nlizh snap_virtio_query_device type %d sdev->pci->type %d\n", type, sdev->pci->type);
 	if (type == SNAP_VIRTIO_BLK &&
 	    (sdev->pci->type != SNAP_VIRTIO_BLK_PF &&
 	     sdev->pci->type != SNAP_VIRTIO_BLK_VF))
@@ -150,8 +152,11 @@ int snap_virtio_query_device(struct snap_device *sdev,
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id,
 		 sdev->mdev.device_emulation->obj_id);
 
-	return mlx5dv_devx_obj_query(sdev->mdev.device_emulation->obj, in,
+	ret = mlx5dv_devx_obj_query(sdev->mdev.device_emulation->obj, in,
 				     inlen, out, outlen);
+	snap_error("\nlizh snap_virtio_query_device obj_id %d ret %d\n",
+	sdev->mdev.device_emulation->obj_id, ret);
+	return ret;
 }
 
 static void snap_virtio_net_modify_queues(void *in, struct snap_virtio_device_attr *attr)

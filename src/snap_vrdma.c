@@ -9,7 +9,7 @@
  * This software product is governed by the End User License Agreement
  * provided with the software product.
  */
-
+#include <sys/time.h>
 #include "snap_macros.h"
 #include "snap_vrdma.h"
 #include "snap_internal.h"
@@ -112,12 +112,15 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 			attr->modifiable_fields |= SNAP_VRDMA_MOD_DEV_STATUS;
 		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_RESET)
 			attr->modifiable_fields |= SNAP_VRDMA_MOD_RESET;
-
+		if (dev_allowed & MLX5_VRDMA_DEVICE_MODIFY_MAC)
+			attr->modifiable_fields |= SNAP_VRDMA_MOD_MAC;
 	}
 	attr->mac = (uint64_t)DEVX_GET(vrdma_device_emulation,
 				       device_emulation_out, vrdma_config.mac_47_16) << 16;
 	attr->mac |= DEVX_GET(vrdma_device_emulation,
 			      device_emulation_out, vrdma_config.mac_15_0);
+	attr->mtu = DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_config.mtu);
 	attr->crossed_vhca_mkey = DEVX_GET(vrdma_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
@@ -198,6 +201,13 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 		DEVX_SET(vrdma_device_emulation, device_emulation_in,
 			reset, attr->reset);
 	}
+	if (mask & (SNAP_VRDMA_MOD_MAC)) {
+		fields_to_modify |= MLX5_VRDMA_DEVICE_MODIFY_MAC;
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
+			vrdma_config.mac_47_16, attr->mac >> 16);
+		DEVX_SET(vrdma_device_emulation, device_emulation_in,
+			vrdma_config.mac_15_0, attr->mac & 0xffff);
+	}
 	DEVX_SET64(vrdma_device_emulation, device_emulation_in,
 			modify_field_select, fields_to_modify);
 
@@ -212,6 +222,41 @@ int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 	snap_debug("snap_vrdma_modify_device ret %d in %p inlen %d modify 0x%0lx\n",
 		ret, in, inlen, fields_to_modify);
 	free(in);
+	return ret;
+}
+
+static inline void eth_random_addr(uint8_t *addr)
+{
+	struct timeval t;
+	uint64_t rand;
+
+	gettimeofday(&t, NULL);
+	srandom(t.tv_sec + t.tv_usec);
+	rand = random();
+
+	rand = rand << 32 | random();
+
+	memcpy(addr, (uint8_t *)&rand, 6);
+	addr[0] &= 0xfe;        /* clear multicast bit */
+	addr[0] |= 0x02;        /* set local assignment bit (IEEE802) */
+}
+
+int snap_vrdma_device_mac_init(struct snap_device *sdev)
+{
+	struct snap_vrdma_device_attr vattr = {};
+	uint8_t *vmac;
+	int ret;
+
+	ret = snap_vrdma_query_device(sdev, &vattr);
+	if (ret)
+		return -1;
+	vmac = (uint8_t *)&vattr.mac;
+	eth_random_addr(&vmac[2]);
+	vattr.mac = be64toh(vattr.mac);
+
+	ret = snap_vrdma_modify_device(sdev, SNAP_VRDMA_MOD_MAC, &vattr);
+	if (ret)
+		ret = -1;
 	return ret;
 }
 
@@ -231,8 +276,9 @@ int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 	//int ret, i;
 	int ret;
 
-	if (sdev->pci->type != SNAP_VRDMA_PF)
-		return -EINVAL;
+	/*lizh Just for test*/
+	//if (sdev->pci->type != SNAP_VRDMA_PF)
+	//	return -EINVAL;
 
 	vdev = calloc(1, sizeof(*vdev));
 	if (!vdev)
@@ -264,7 +310,7 @@ int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 		goto out_free;
 
 	sdev->dd_data = vdev;
-
+	snap_error("lizh snap_vrdma_init_device...done");
 	return 0;
 
 #if 0
@@ -332,6 +378,7 @@ void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx)
 	struct snap_device_attr sdev_attr = {};
 	struct snap_device *sdev;
 
+	snap_error("\nlizh snap_vrdma_pci_functions_cleanup max_pfs %d\n", sctx->vrdma_pfs.max_pfs);
 	if (sctx->vrdma_pfs.max_pfs <= 0)
 		return;
 
@@ -347,8 +394,13 @@ void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx)
 
 	num_pfs = snap_get_pf_list(sctx, SNAP_VRDMA, pfs);
 	for (i = 0; i < num_pfs; i++) {
+		snap_error("\n lizh snap_vrdma_pci_functions_cleanup i %d num_pfs %d \n", i, num_pfs);
+		if (!pfs[i])
+			snap_error("\n lizh snap_vrdma_pci_functions_cleanup pfs[%d] is NULL \n", i);
+		snap_error("\n lizh snap_vrdma_pci_functions_cleanup i %d hotplugged %d \n", i, pfs[i]->hotplugged);
 		if (!pfs[i]->hotplugged)
 			continue;
+		snap_error("\n lizh snap_vrdma_pci_functions_cleanup num_pfs %d \n", num_pfs);
 		sdev->sctx = sctx;
 		sdev->pci = pfs[i];
 		sdev->mdev.device_emulation = snap_emulation_device_create(sdev, &sdev_attr);

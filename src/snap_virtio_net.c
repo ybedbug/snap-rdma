@@ -61,6 +61,8 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	int ret, out_size;
 	uint64_t dev_allowed;
 
+	snap_error("lizh snap_virtio_net_query_device queues %d max_emulated_virtqs %d\n",
+		attr->queues, sctx->virtio_net_caps.max_emulated_virtqs);
 	if (attr->queues > sctx->virtio_net_caps.max_emulated_virtqs)
 		return -EINVAL;
 
@@ -72,6 +74,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 		return -ENOMEM;
 
 	ret = snap_virtio_query_device(sdev, SNAP_VIRTIO_NET, out, out_size);
+	snap_error("lizh snap_virtio_query_device ret %d\n", ret);
 	if (ret)
 		goto out_free;
 
@@ -158,7 +161,7 @@ int snap_virtio_net_query_device(struct snap_device *sdev,
 	attr->crossed_vhca_mkey = DEVX_GET(virtio_net_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
-
+	snap_error("lizh snap_virtio_net_query_device attr->crossed_vhca_mkey 0x%x\n", attr->crossed_vhca_mkey);
 out_free:
 	free(out);
 	return ret;

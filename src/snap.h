@@ -43,7 +43,7 @@ enum snap_pci_type {
 	SNAP_VIRTIO_BLK_VF	= 1 << 5,
 	SNAP_VIRTIO_FS_PF	= 1 << 6,
 	SNAP_VIRTIO_FS_VF	= 1 << 7,
-	SNAP_VRDMA_PF	        = 1 << 8,
+	SNAP_VRDMA_PF	    = 1 << 8,
 };
 
 enum snap_emulation_type {
@@ -347,9 +347,13 @@ struct snap_virtio_caps {
 };
 
 struct snap_vrdma_caps {
-	bool		crossing_vhca_mkey;
+	bool	crossing_vhca_mkey;
+	uint8_t log_max_pd;
+	uint8_t log_max_mkey;
+	uint8_t log_max_msg;
 };
-#define SNAP_VRDMA_MAX_PFS 1
+//#define SNAP_VRDMA_MAX_PFS 1
+#define SNAP_VRDMA_MAX_PFS 0  /*lizh just for test*/
 
 struct snap_context {
 	struct ibv_context			*context;

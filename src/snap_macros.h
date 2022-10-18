@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <stdint.h>
+#include <syslog.h>
 
 #ifndef SNAP_DEBUG
 #define SNAP_DEBUG 0
