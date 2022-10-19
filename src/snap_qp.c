@@ -465,15 +465,18 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	uint32_t umem_id;
 	uint64_t umem_offset;
 
+	snap_error("\nlizh devx_qp_init sq_max_inline_size %d", attr->sq_max_inline_size);
 	/* TODO: check actual caps */
 	if (attr->sq_max_inline_size > 256)
 		return -EINVAL;
 
 	ret = snap_get_pd_id(pd, &pd_id);
+	snap_error("\nlizh devx_qp_init snap_get_pd_id ret %d", ret);
 	if (ret)
 		return ret;
 
 	qp_uar = snap_uar_get(ctx);
+	snap_error("\nlizh devx_qp_init snap_uar_get qp_uar %p", qp_uar);
 	if (!qp_uar)
 		return -EINVAL;
 
@@ -496,6 +499,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	if (!attr->qp_on_dpa) {
 		devx_qp->devx.umem.size = qp_buf_len + SNAP_MLX5_DBR_SIZE;
 		ret = snap_umem_init(ctx, &devx_qp->devx.umem);
+		snap_error("\nlizh devx_qp_init snap_umem_init ret %d", ret);
 		if (ret)
 			goto deref_uar;
 
@@ -503,12 +507,14 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 		umem_offset = 0;
 
 	} else {
+		snap_error("\nlizh devx_qp_init attr->dpa_proc %p", attr->dpa_proc);
 		if (!attr->dpa_proc) {
 			ret = -EINVAL;
 			goto deref_uar;
 		}
 
 		devx_qp->devx.dpa_mem = snap_dpa_mem_alloc(attr->dpa_proc, qp_buf_len + SNAP_MLX5_DBR_SIZE);
+		snap_error("\nlizh devx_qp_init dpa_mem %p", devx_qp->devx.dpa_mem);
 		if (!devx_qp->devx.dpa_mem) {
 			ret = -ENOMEM;
 			goto deref_uar;
@@ -531,6 +537,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 		DEVX_SET(qpc, qpc, log_page_size, log_page_size - MLX5_ADAPTER_PAGE_SHIFT);
 
 	if (attr->sq_size) {
+		snap_error("\nlizh devx_qp_init attr->sq_cq->type %d", attr->sq_cq->type);
 		if (attr->sq_cq->type != SNAP_OBJ_DEVX) {
 			ret = -EINVAL;
 			goto reset_qp_umem;
@@ -543,6 +550,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 		DEVX_SET(qpc, qpc, no_sq, 1);
 	}
 	if (attr->rq_size) {
+		snap_error("\nlizh devx_qp_init attr->rq_cq->type %d", attr->rq_cq->type);
 		if (attr->rq_cq->type != SNAP_OBJ_DEVX) {
 			ret = -EINVAL;
 			goto reset_qp_umem;
@@ -574,6 +582,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	DEVX_SET64(create_qp_in, in, wq_umem_offset, umem_offset);
 
 	devx_qp->devx.devx_obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
+	snap_error("\nlizh devx_qp_init devx_qp->devx.devx_obj %p", devx_qp->devx.devx_obj);
 	if (!devx_qp->devx.devx_obj) {
 		ret = -errno;
 		goto reset_qp_umem;
@@ -768,6 +777,7 @@ struct snap_qp *snap_qp_create(struct ibv_pd *pd, const struct snap_qp_attr *att
 
 	qp->type = attr->qp_type;
 
+	snap_error("\nlizh snap_qp_create qp_type %d", attr->qp_type);
 	if (attr->qp_type == SNAP_OBJ_DEVX)
 		qp->ops = &devx_qp_ops;
 	else if (attr->qp_type == SNAP_OBJ_VERBS)
@@ -777,8 +787,10 @@ struct snap_qp *snap_qp_create(struct ibv_pd *pd, const struct snap_qp_attr *att
 	else
 		goto free_qp;
 
-	if (qp->ops->init(qp, pd, attr))
+	if (qp->ops->init(qp, pd, attr)) {
+		snap_error("\nlizh snap_qp_create qp->ops->init fail");
 		goto free_qp;
+	}
 
 	return qp;
 free_qp:
