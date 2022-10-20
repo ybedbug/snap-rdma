@@ -37,8 +37,8 @@
 #include <stdbool.h>
 #include "snap.h"
 #include <sys/uio.h>
-#include "snap_vrdma_common_ctrl.h"
 #include "snap_dma.h"
+#include "snap_poll_groups.h"
 
 /**
  * struct snap_vrdma_vq_common_ctx - Main struct for common snap_vrdma_vq
@@ -109,14 +109,11 @@ struct snap_vrdma_ctrl_queue_out_counter {
 };
 
 struct snap_vrdma_common_queue_attr {
-	uint64_t			modifiable_fields;//mask of snap_virtio_queue_modify
-	struct ibv_qp		*qp;
-	uint16_t			hw_available_index;
-	uint16_t			hw_used_index;
+	struct ibv_qp *qp;
 
-	struct snap_virtio_queue_attr   vattr;
-	int					q_provider;
-	struct snap_dma_q	*dma_q;
+	//struct snap_virtio_queue_attr   vattr;
+	int q_provider;
+	struct snap_dma_q *dma_q;
 };
 
 /**
@@ -206,8 +203,8 @@ struct snap_vrdma_vq_impl_ops {
 	void (*clear_status)(struct snap_vrdma_vq_cmd *cmd);
 	void (*status_data)(struct snap_vrdma_vq_cmd *cmd, struct snap_vrdma_vq_status_data *sd);
 	void (*release_cmd)(struct snap_vrdma_vq_cmd *cmd);
-	int (*progress_suspend)(struct snap_virtio_queue *snap_vbq,
-			struct snap_virtio_common_queue_attr *qattr);
+	int (*progress_suspend)(struct snap_vrdma_queue *vrdma_vq,
+			struct snap_vrdma_common_queue_attr *qattr);
 	int (*send_comp)(struct snap_vrdma_vq_cmd *cmd, struct snap_dma_q *q);
 };
 

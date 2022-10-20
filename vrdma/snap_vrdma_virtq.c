@@ -10,14 +10,13 @@
  * provided with the software product.
  */
 
-#include "virtq_common.h"
 #include <linux/virtio_ring.h>
 #include <linux/virtio_pci.h>
 #include "snap_channel.h"
 #include "snap_dma.h"
 #include "snap_env.h"
-#include "snap_dp_map.h"
 #include "snap_vrdma_virtq.h"
+#include "snap_vrdma_ctrl.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
@@ -495,7 +494,7 @@ void snap_vrdma_ctrl_sched_q(struct snap_vrdma_ctrl *ctrl,
 	pg = snap_pg_get_next(&ctrl->pg_ctx);
 
 	pthread_spin_lock(&pg->lock);
-	snap_virtio_ctrl_sched_q_nolock(ctrl, vq, pg);
+	snap_vrdma_ctrl_sched_q_nolock(ctrl, vq, pg);
 	snap_debug("VRDMA queue polling group id = %d\n", vq->pg->id);
 	pthread_spin_unlock(&pg->lock);
 }
@@ -520,11 +519,11 @@ void snap_vrdma_ctrl_desched_q(struct snap_vrdma_queue *vq)
 		return;
 
 	pthread_spin_lock(&pg->lock);
-	snap_virtio_ctrl_desched_q_nolock(vq);
+	snap_vrdma_ctrl_desched_q_nolock(vq);
 	pthread_spin_unlock(&pg->lock);
 }
 
-static inline struct snap_vrdma_ctrl_queue *
+static inline struct snap_vrdma_queue *
 pg_q_entry_to_vrdma_qp(struct snap_pg_q_entry *pg_q)
 {
 	return container_of(pg_q, struct snap_vrdma_queue, pg_q);

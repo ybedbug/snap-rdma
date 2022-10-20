@@ -19,6 +19,7 @@
 #include "snap_vrdma.h"
 #include "../ctrl/snap_dp_map.h"
 #include "../ctrl/snap_poll_groups.h"
+#include "snap_vrdma_virtq.h"
 
 #define SNAP_VRDMA_ADMINQ_DMA_Q_SIZE 128
 
@@ -132,7 +133,4 @@ snap_vrdma_ctrl_open(struct snap_context *sctx,
 			  struct snap_vrdma_ctrl_attr *attr);
 void snap_vrdma_ctrl_close(struct snap_vrdma_ctrl *ctrl);
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl);
-int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
-int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
-					     uint32_t thread_id);
 #endif
