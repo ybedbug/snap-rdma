@@ -216,12 +216,15 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 
 	qp->mode = mode;
 
+	snap_error("\nlizh snap_create_qp_helper mode %d", mode);
 	/* TODO: add attribute to choose how snap_qp/cq are created */
 	if (mode == SNAP_DMA_Q_MODE_VERBS)
 		cq_attr.cq_type = SNAP_OBJ_VERBS;
 	else
 		cq_attr.cq_type = dma_q_attr->use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
 
+	snap_error("\nlizh snap_create_qp_helper cq_type %d dpa_mode %d",
+	cq_attr.cq_type, dma_q_attr->dpa_mode);
 	switch (dma_q_attr->dpa_mode) {
 	case SNAP_DMA_Q_DPA_MODE_POLLING:
 		qp_init_attr->qp_on_dpa = true;
@@ -261,6 +264,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 
 	if (qp_init_attr->sq_size) {
 		qp->tx_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_create_qp_helper qp->tx_cq %p", qp->tx_cq);
 		if (!qp->tx_cq)
 			return -EINVAL;
 	} else
@@ -274,6 +278,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 		 */
 		cq_attr.cqe_size = SNAP_DMA_Q_RX_CQE_SIZE;
 		qp->rx_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_create_qp_helper qp->rx_cq %p", qp->rx_cq);
 		if (!qp->rx_cq)
 			goto free_tx_cq;
 	} else
@@ -284,10 +289,12 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 	qp_init_attr->rq_cq = qp->rx_cq;
 
 	qp->qp = snap_qp_create(pd, qp_init_attr);
+	snap_error("\nlizh snap_create_qp_helper snap_qp_create qp->qp %p", qp->qp);
 	if (!qp->qp)
 		goto free_rx_cq;
 
 	rc = snap_qp_to_hw_qp(qp->qp, &qp->dv_qp.hw_qp);
+	snap_error("\nlizh snap_create_qp_helper snap_qp_to_hw_qp rc %d", rc);
 	if (rc)
 		goto free_qp;
 
@@ -296,12 +303,14 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 
 	if (qp->tx_cq) {
 		rc = snap_cq_to_hw_cq(qp->tx_cq, &qp->dv_tx_cq);
+		snap_error("\nlizh snap_create_qp_helper snap_cq_to_hw_cq tx_cq rc %d", rc);
 		if (rc)
 			goto free_qp;
 	}
 
 	if (qp->rx_cq) {
 		rc = snap_cq_to_hw_cq(qp->rx_cq, &qp->dv_rx_cq);
+		snap_error("\nlizh snap_create_qp_helper snap_cq_to_hw_cq rx_cq rc %d", rc);
 		if (rc)
 			goto free_qp;
 	}
@@ -309,6 +318,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 	if (!qp_init_attr->qp_on_dpa) {
 		rc = posix_memalign((void **)&qp->dv_qp.comps, SNAP_DMA_BUF_ALIGN,
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
+		snap_error("\nlizh snap_create_qp_helper posix_memalign rc %d", rc);
 		if (rc)
 			goto free_qp;
 
@@ -316,6 +326,7 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 				qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct snap_dv_dma_completion));
 	} else {
 		qp->dpa.mkey = snap_dpa_mkey_alloc(qp_init_attr->dpa_proc, pd);
+		snap_error("\nlizh snap_create_qp_helper snap_dpa_mkey_alloc mkey %p", qp->dpa.mkey);
 		if (!qp->dpa.mkey)
 			goto free_qp;
 		qp->dv_qp.dpa_mkey = snap_dpa_mkey_id(qp->dpa.mkey);
@@ -338,12 +349,14 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 	rc = posix_memalign((void **)&qp->dv_qp.opaque_buf,
 			    sizeof(struct mlx5_dma_opaque),
 			    qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque));
+	snap_error("\nlizh snap_create_qp_helper posix_memalign gga on dpa rc %d", rc);
 	if (rc)
 		goto free_comps;
 
 	qp->dv_qp.opaque_mr = ibv_reg_mr(pd, qp->dv_qp.opaque_buf,
 					 qp->dv_qp.hw_qp.sq.wqe_cnt * sizeof(struct mlx5_dma_opaque),
 					 IBV_ACCESS_LOCAL_WRITE);
+	snap_error("\nlizh snap_create_qp_helper ibv_reg_mr mr %p", qp->dv_qp.opaque_mr);
 	if (!qp->dv_qp.opaque_mr)
 		goto free_opaque;
 
@@ -744,17 +757,20 @@ static int snap_create_sw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	rc = snap_qp_attr_helper(q, pd, attr, &qp_init_attr);
 	if (rc)
 		return rc;
-
+	snap_error("\nlizh snap_create_sw_qp...wk %p", attr->wk);
 	if (attr->wk)
 		rc = snap_create_worker_qp_helper(pd, &qp_init_attr, &q->sw_qp,
 				q->ops->mode);
 	else
 		rc = snap_create_qp_helper(pd, attr, &qp_init_attr, &q->sw_qp,
 				q->ops->mode);
+	snap_error("\nlizh snap_create_sw_qp...snap_create_qp_helper rc %d", rc);
 	if (rc)
 		return rc;
 
-	return snap_sw_qp_rx_wqe_helper(q, pd, attr);
+	rc = snap_sw_qp_rx_wqe_helper(q, pd, attr);
+	snap_error("\nlizh snap_create_sw_qp...snap_sw_qp_rx_wqe_helper rc %d", rc);
+	return rc;
 }
 
 static void snap_destroy_fw_qp(struct snap_dma_q *q)
@@ -1585,6 +1601,7 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 	int rc;
 	struct snap_dma_q *q;
 
+	snap_error("\nlizh snap_dma_ep_create...pd %p", pd);
 	if (!pd)
 		return NULL;
 
@@ -1597,12 +1614,12 @@ struct snap_dma_q *snap_dma_ep_create(struct ibv_pd *pd,
 		q = snap_dma_worker_queue_get(attr->wk);
 	if (!q)
 		return NULL;
-
+	snap_error("\nlizh snap_dma_ep_create...q done");
 	q->worker = attr->wk;
 	rc = snap_create_sw_qp(q, pd, attr);
 	if (rc)
 		goto free_q;
-
+	snap_error("\nlizh snap_dma_ep_create...snap_create_sw_qp done");
 	q->uctx = attr->uctx;
 	q->rx_cb = attr->rx_cb;
 	return q;
@@ -1645,15 +1662,15 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	q = snap_dma_ep_create(pd, attr);
 	if (!q)
 		return NULL;
-
+	snap_error("lizh snap_dma_q_create...snap_dma_ep_create done");
 	rc = snap_create_fw_qp(q, pd, attr);
 	if (rc)
 		goto free_sw_qp;
-
+	snap_error("lizh snap_dma_q_create...snap_create_fw_qp done");
 	rc = snap_dma_ep_connect_helper(&q->sw_qp, &q->fw_qp, pd);
 	if (rc)
 		goto free_fw_qp;
-
+	snap_error("lizh snap_dma_q_create...snap_dma_ep_connect_helper done");
 	/* In general one must post recvs before qp is moved to the RTR.
 	 * However in our case we control both sides and there is no traffic
 	 * until fw qp is passed to the FW
@@ -1661,10 +1678,12 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	rc = snap_dma_q_post_recv(q);
 	if (rc)
 		goto free_fw_qp;
+	snap_error("lizh snap_dma_q_create...snap_dma_q_post_recv done");
 
 	rc = snap_create_io_ctx(q, pd, attr);
 	if (rc)
 		goto free_fw_qp;
+	snap_error("lizh snap_dma_q_create...snap_create_io_ctx done");
 
 	return q;
 

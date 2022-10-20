@@ -482,7 +482,7 @@ static int snap_pf_get_pci_info(struct snap_pci *pf,
 				 emulated_info_out,
 				 emulated_function_info[idx].max_num_vfs);
 
-
+	snap_error("\nlizh snap_pf_get_pci_info pf->mpci.vhca_id %d \n", pf->mpci.vhca_id);
 	snap_query_pci_vuid(pf);
 
 	return 0;
@@ -3607,7 +3607,6 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 		snap_error("lizh snap_query_device_emulation fail\n");
 		goto out_free_device_emulation;
 	}
-
 	sdev->transitional_device = snap_virtio_is_transitional_device(sdev);
 	snap_info("pci:%s transitional_device:%d\n", sdev->pci->pci_number, sdev->transitional_device);
 	snap_error("lizh pci:%s transitional_device:%d\n", sdev->pci->pci_number, sdev->transitional_device);

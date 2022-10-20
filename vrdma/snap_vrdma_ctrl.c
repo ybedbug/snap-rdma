@@ -95,7 +95,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	} else {
 		npgs = attr->npgs;
 	}
-	snap_error("lizh snap_vrdma_ctrl_open_internal...npgs %d", npgs);
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal...npgs %d", npgs);
 
 	ctrl->sdev_attr.pf_id = attr->pf_id;
 	ctrl->sdev_attr.type = attr->pci_type;
@@ -119,6 +119,8 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_vrdma_ctrl_bars_init adminq_pd %p ctrl->adminq_mr %p done",
+	ctrl->adminq_pd, ctrl->adminq_mr);
 
 	ret = pthread_mutex_init(&ctrl->progress_lock, NULL);
 	if (ret)
@@ -129,6 +131,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 		ret = -EINVAL;
 		goto mutex_destroy;
 	}
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_pgs_alloc done");
 
 	cm_attr.vtunnel = ctrl->sdev->mdev.vtunnel;
 	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
@@ -140,9 +143,8 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 		ret = -EACCES;
 		goto free_pgs;
 	}
-
 	ctrl->force_in_order = attr->force_in_order;
-	snap_error("lizh snap_vrdma_ctrl_open_internal...done");
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal..ctrl->xmkey %p.done", ctrl->xmkey);
 	return 0;
 
 free_pgs:
@@ -678,6 +680,11 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 	return ret;
 }
 
+static void vrdma_dummy_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len, uint32_t imm_data)
+{
+	snap_error("VRDMA: rx cb called\n");
+}
+
 /**
  * snap_vrdma_ctrl_start() - start vrdma controller
  * @ctrl:   vrdma controller
@@ -714,7 +721,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	dma_q_attr.rx_elem_size = ctrl->adminq_size;
 	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	dma_q_attr.use_devx = true;
-	//dma_q_attr.rx_cb = dummy_rx_cb;
+	dma_q_attr.rx_cb = vrdma_dummy_rx_cb;
 	ctrl->adminq_dma_q = snap_dma_q_create(ctrl->adminq_pd, &dma_q_attr);
 	if (!ctrl->adminq_dma_q) {
 		snap_error("Failed to create dma for admin queue controller %p ",
@@ -722,6 +729,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
+	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p ctrl->adminq_mr %p done \n",
+	ctrl->xmkey, ctrl->adminq_mr);
 	/* Init adminq_buf for admin queue */;
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
@@ -734,7 +743,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-
+	snap_error("\nlizh snap_vrdma_ctrl_start snap_dma_q_read done rkey 0x%x\n", rkey);
 	if (ctrl->bar_cbs.start) {
 		ret = ctrl->bar_cbs.start(ctrl->cb_ctx);
 		if (ret) {
@@ -745,6 +754,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 
 	if (ctrl->state != SNAP_VRDMA_CTRL_SUSPENDED) {
 		snap_info("vrdma controller %p started\n", ctrl);
+		snap_error("lizh vrdma controller %p started\n", ctrl);
 		ctrl->state = SNAP_VRDMA_CTRL_STARTED;
 	} else
 		snap_info("vrdma controller %p SUSPENDED\n", ctrl);
@@ -800,7 +810,7 @@ static void snap_vrdma_ctrl_progress_unlock(struct snap_vrdma_ctrl *ctrl)
  */
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 {
-	int ret;
+	//int ret;
 
 	snap_vrdma_ctrl_progress_lock(ctrl);
 
@@ -818,9 +828,19 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 	if (ctrl->state == SNAP_VRDMA_CTRL_SUSPENDING)
 		snap_vrdma_ctrl_progress_suspend(ctrl);
 
+	/* lizh just for test*/
+	(void)snap_vrdma_ctrl_bar_update(ctrl, ctrl->bar_curr);
+#if 0
 	ret = snap_vrdma_ctrl_bar_update(ctrl, ctrl->bar_curr);
 	if (ret)
 		goto out;
+#endif
+	if (!ctrl->bar_curr->status) {
+		ctrl->bar_curr->status = SNAP_VRDMA_DEVICE_S_DRIVER_OK;
+		ctrl->bar_curr->enabled = 1;
+		snap_error("\nlizh snap_vrdma_ctrl_progress..ctrl->bar_curr->status DRIVER_OK \n");
+	}
+	/* End: lizh just for test*/
 
 	/* Handle device_status changes */
 	if (snap_vrdma_ctrl_critical_bar_change_detected(ctrl)) {
