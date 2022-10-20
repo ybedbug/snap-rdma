@@ -847,30 +847,3 @@ out:
 	snap_vrdma_ctrl_progress_unlock(ctrl);
 }
 
-/**
- * snap_vrdma_ctrl_io_progress() - single-threaded IO requests handling
- * @ctrl:       controller instance
- *
- * Looks for any IO requests from host received on any QPs, and handles
- * them based on the request's parameters.
- */
-int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl)
-{
-	/*TBD*/
-	return 0;
-}
-
-/**
- * snap_vrdma_ctrl_io_progress_thread() - Handle IO requests for thread
- * @ctrl:       controller instance
- * @thread_id:	id queues belong to
- *
- * Looks for any IO requests from host received on QPs which belong to thread
- * thread_id, and handles them based on the request's parameters.
- */
-int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
-					     uint32_t thread_id)
-{
-	/*TBD*/
-	return 0;
-}
