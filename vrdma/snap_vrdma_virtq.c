@@ -394,22 +394,31 @@ static void snap_vrdma_vq_progress_suspend(struct snap_vrdma_queue *q)
 	q->swq_state = SW_VIRTQ_SUSPENDED;
 }
 
-/**
- * virtq_start() - set virtq attributes used for operating
- * @q:		queue to start
- * @attr:	attrs used to start the quue
- *
- * Function set attributes queue needs in order to operate.
- *
- * Return: void
- */
-inline void snap_vrdma_qp_start(struct snap_vrdma_queue *q, 
-							struct snap_vrdma_vq_start_attr *attr)
+static struct snap_vrdma_queue *
+snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl)
 {
-	q->pg_id = attr->pg_id;
+	struct snap_vrdma_queue *virtq;
+
+	virtq = calloc(1, sizeof(*virtq));
+	//TODO: add vq create handling
+	TAILQ_INSERT_TAIL(&vctrl->virtqs, virtq, vq);
+	return virtq;
 }
 
-static int snap_vrdma_qp_progress(struct snap_vrdma_queue *q)
+static void snap_vrdma_vq_destroy(struct snap_vrdma_ctrl *vctrl,
+				struct snap_vrdma_queue *virtq)
+{
+	//TODO: add vq destroy handling
+	TAILQ_REMOVE(&vctrl->virtqs, virtq, vq);
+	free(virtq);
+}
+
+static void snap_vrdma_vq_start(struct snap_vrdma_queue *q)
+{
+	//TODO: add start handling
+}
+
+static int snap_vrdma_vq_progress(struct snap_vrdma_queue *q)
 {
 	int n = 0;
 
@@ -444,7 +453,7 @@ out:
  *
  * Return: 0 on success, else error code
  */
-int snap_vrdma_vq_suspend(struct snap_vrdma_queue *q)
+static int snap_vrdma_vq_suspend(struct snap_vrdma_queue *q)
 {
 	if (q->swq_state != SW_VIRTQ_RUNNING) {
 		snap_debug("queue %d: suspend was already requested\n", q->idx);
@@ -471,10 +480,20 @@ int snap_vrdma_vq_suspend(struct snap_vrdma_queue *q)
  *
  * Return: True when queue suspended, and False for not suspended
  */
-bool snap_vrdma_vq_is_suspended(struct snap_vrdma_queue *q)
+static bool snap_vrdma_vq_is_suspended(struct snap_vrdma_queue *q)
 {
 	return q->swq_state == SW_VIRTQ_SUSPENDED;
 }
+
+struct snap_vrdma_queue_ops snap_vrdma_queue_ops = {
+	.create = snap_vrdma_vq_create,
+	.destroy = snap_vrdma_vq_destroy,
+	.progress = snap_vrdma_vq_progress,
+	.start = snap_vrdma_vq_start,
+	.suspend = snap_vrdma_vq_suspend,
+	.is_suspended = snap_vrdma_vq_is_suspended,
+	.resume = NULL,
+};
 
 static void snap_vrdma_ctrl_sched_q_nolock(struct snap_vrdma_ctrl *ctrl,
 					    struct snap_vrdma_queue *vq,
@@ -541,7 +560,7 @@ static int snap_vrdma_ctrl_pg_thread_io_progress(
 	TAILQ_FOREACH(pg_q, &pg->q_list, entry) {
 		vq = pg_q_entry_to_vrdma_qp(pg_q);
 		vq->thread_id = thread_id;
-		n += snap_vrdma_qp_progress(vq);
+		n += snap_vrdma_vq_progress(vq);
 	}
 	pthread_spin_unlock(&pg->lock);
 

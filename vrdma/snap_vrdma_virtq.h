@@ -167,6 +167,7 @@ enum snap_vrdma_error_type {
 };
 
 struct snap_vrdma_queue {
+	TAILQ_ENTRY(snap_vrdma_queue) vq;
 	struct snap_vrdma_ctrl *ctrl;
 	struct snap_pg *pg;
 	struct snap_pg_q_entry pg_q;
@@ -206,6 +207,16 @@ struct snap_vrdma_vq_impl_ops {
 	int (*progress_suspend)(struct snap_vrdma_queue *vrdma_vq,
 			struct snap_vrdma_common_queue_attr *qattr);
 	int (*send_comp)(struct snap_vrdma_vq_cmd *cmd, struct snap_dma_q *q);
+};
+
+struct snap_vrdma_queue_ops {
+	struct snap_vrdma_queue *(*create)(struct snap_vrdma_ctrl *ctrl);
+	void (*destroy)(struct snap_vrdma_ctrl *ctrl, struct snap_vrdma_queue *queue);
+	int (*progress)(struct snap_vrdma_queue *queue);
+	void (*start)(struct snap_vrdma_queue *queue);
+	int (*suspend)(struct snap_vrdma_queue *queue);
+	bool (*is_suspended)(struct snap_vrdma_queue *queue);
+	int (*resume)(struct snap_vrdma_queue *queue);
 };
 
 struct snap_vrdma_vq_ctx_init_attr {

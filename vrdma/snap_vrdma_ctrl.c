@@ -15,6 +15,7 @@
 #include "snap_vrdma.h"
 #include "snap_vrdma_ctrl.h"
 #include "snap_dma.h"
+#include "snap_queue.h"
 
 static struct snap_vrdma_device_attr*
 snap_vrdma_ctrl_bar_create(void)
@@ -432,6 +433,7 @@ static int snap_vrdma_ctrl_reset(struct snap_vrdma_ctrl *ctrl)
 int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl)
 {
 	//int i;
+	struct snap_vrdma_queue *virtq, *tmp_q;
 
 	if (ctrl->state == SNAP_VRDMA_CTRL_SUSPENDING)
 		return 0;
@@ -455,6 +457,11 @@ int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl)
 		if (ctrl->queues[i])
 			ctrl->q_ops->suspend(ctrl->queues[i]);
 	}*/
+	SNAP_TAILQ_FOREACH_SAFE(virtq, &ctrl->virtqs, vq, tmp_q) {
+		if(virtq) {
+			ctrl->q_ops->suspend(virtq);
+		}
+	}
 	snap_pgs_resume(&ctrl->pg_ctx);
 
 	ctrl->state = SNAP_VRDMA_CTRL_SUSPENDING;
