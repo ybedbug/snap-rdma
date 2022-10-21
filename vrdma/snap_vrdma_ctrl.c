@@ -432,6 +432,7 @@ static int snap_vrdma_ctrl_reset(struct snap_vrdma_ctrl *ctrl)
 int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl)
 {
 	//int i;
+	struct snap_vrdma_queue *virtq, *tmp_q;
 
 	if (ctrl->state == SNAP_VRDMA_CTRL_SUSPENDING)
 		return 0;
@@ -455,6 +456,11 @@ int snap_vrdma_ctrl_suspend(struct snap_vrdma_ctrl *ctrl)
 		if (ctrl->queues[i])
 			ctrl->q_ops->suspend(ctrl->queues[i]);
 	}*/
+	TAILQ_FOREACH_SAFE(virtq, &ctrl->virtqs, vq, tmp_q)) {
+		if(virtq) {
+			ctrl->q_ops->suspend(virtq);
+		}
+	}
 	snap_pgs_resume(&ctrl->pg_ctx);
 
 	ctrl->state = SNAP_VRDMA_CTRL_SUSPENDING;

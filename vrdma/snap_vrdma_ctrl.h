@@ -60,17 +60,6 @@ struct snap_vrdma_ctrl_bar_cbs {
 	int (*post_flr)(void *cb_ctx);
 };
 
-struct snap_vrdma_queue_ops {
-	struct snap_vrdma_ctrl_queue *(*create)(struct snap_vrdma_ctrl *ctrl,
-						 int index);
-	void (*destroy)(struct snap_vrdma_queue *queue);
-	int (*progress)(struct snap_vrdma_queue *queue);
-	void (*start)(struct snap_vrdma_queue *queue);
-	void (*suspend)(struct snap_vrdma_queue *queue);
-	bool (*is_suspended)(struct snap_vrdma_queue *queue);
-	int (*resume)(struct snap_vrdma_queue *queue);
-};
-
 struct snap_vrdma_ctrl {
 	enum snap_vrdma_ctrl_state state;
 	pthread_mutex_t progress_lock;
@@ -78,7 +67,7 @@ struct snap_vrdma_ctrl {
 	void *cb_ctx; /* bar callback context */
 	size_t max_queues;
 	size_t enabled_queues;
-	struct snap_vrdma_queue **queues;
+	TAILQ_HEAD(, snap_vrdma_queue) virtqs;
 	struct snap_vrdma_queue_ops *q_ops;
 	struct snap_vrdma_ctrl_bar_cbs bar_cbs;
 	struct snap_vrdma_device_attr *bar_curr;
