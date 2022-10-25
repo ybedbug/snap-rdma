@@ -19,7 +19,6 @@
 #include "snap_vrdma.h"
 #include "../ctrl/snap_dp_map.h"
 #include "../ctrl/snap_poll_groups.h"
-#include "snap_vrdma_virtq.h"
 
 #define SNAP_VRDMA_ADMINQ_DMA_Q_SIZE 128
 
@@ -61,6 +60,7 @@ struct snap_vrdma_ctrl_bar_cbs {
 };
 
 struct snap_vrdma_ctrl {
+	uint64_t mac;
 	enum snap_vrdma_ctrl_state state;
 	pthread_mutex_t progress_lock;
 	struct snap_device *sdev;
@@ -76,10 +76,8 @@ struct snap_vrdma_ctrl {
 	struct ibv_mr *adminq_mr;
 	struct snap_dma_q *adminq_dma_q;
 	struct snap_dma_completion *adminq_dma_comp;
-	uint64_t adminq_driver_addr;
-	uint16_t adminq_q_size;
 	void *adminq_buf;
-	uint32_t adminq_size;
+	uint32_t adminq_dma_entry_size;
 	struct snap_pg_ctx pg_ctx;
 	bool log_writes_to_host;
 	/* true if reset was requested while some queues are not suspended */
@@ -106,7 +104,7 @@ struct snap_vrdma_ctrl_attr {
 	struct ibv_mr *mr;
 	void *adminq_buf;
 	struct snap_dma_completion *adminq_dma_comp;
-	uint32_t adminq_size;
+	uint32_t adminq_dma_entry_size;
 	uint32_t npgs;
 	bool force_in_order;
 	bool suspended;
@@ -122,4 +120,7 @@ snap_vrdma_ctrl_open(struct snap_context *sctx,
 			  struct snap_vrdma_ctrl_attr *attr);
 void snap_vrdma_ctrl_close(struct snap_vrdma_ctrl *ctrl);
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
+int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
+					     uint32_t thread_id);
 #endif

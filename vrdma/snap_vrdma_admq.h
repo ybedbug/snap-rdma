@@ -181,7 +181,6 @@ struct vrdma_create_mr_req {
 	uint64_t vaddr;
 	uint32_t sge_count;
 	struct vrdma_sge {
-		uint64_t va;
 		uint64_t pa;
 		uint32_t length;
 	} sge_list[];
@@ -251,6 +250,7 @@ struct vrdma_create_qp_req {
 	//uint64_t qpc_l0_paddr; /* qpc buffer vm phy addr */
 	uint64_t sq_l0_paddr;  /* sqe buffer vm phy addr */
 	uint64_t rq_l0_paddr;  /* rqe buffer vm phy addr */
+	uint64_t sq_pi_paddr;
 	uint64_t rq_pi_paddr;
 } __attribute__((packed));
 

@@ -959,6 +959,51 @@ def main():
                    default=-1, type=int, required=False)
     p.set_defaults(func=controller_nvme_async_event_enable)
 
+    def int_hex(x):
+        return int(x, 16)
+
+    def controller_vrdma_configue(args):
+        if args.dev_id == -1 or args.emu_manager is None:
+            raise JsonRpcSnapException("Device id and emulation manager must be configured")
+        if args.mac is None and args.dev_state == -1 and args.adminq_paddr == -1 and args.adminq_length == -1:
+            raise JsonRpcSnapException("Either mac, device state admin-queue address or admin-queue length must be configured")
+        if args.adminq_paddr != -1 and args.adminq_length == -1:
+            raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
+        if args.adminq_paddr == -1 and args.adminq_length != -1:
+            raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
+        params = {
+        }
+        if args.emu_manager != None:
+            params['emu_manager'] = args.emu_manager
+        if args.dev_id != -1:
+            params['dev_id'] = args.dev_id
+        if args.mac != None:
+            params['mac'] = args.mac
+        if args.dev_state != -1:
+            params['dev_state'] = args.dev_state
+        if args.adminq_paddr != -1:
+            params['adminq_paddr'] = args.adminq_paddr
+        if args.adminq_length != -1:
+            params['adminq_length'] = args.adminq_length
+        result = args.client.call('controller_vrdma_configue', params)
+        print(json.dumps(result, indent=2).strip('"'))
+    p = subparsers.add_parser('controller_vrdma_configue',
+                              help='Configure vrdma controller')
+    p.add_argument('-e', '--emu_manager', help="emulation manager name, such as mlx5_0",
+                   required=True, type=str)
+    p.add_argument('-d', '--dev_id', help='device id of vrdma controller. '
+                   'Must be set ', default=-1, type=int, required=True)
+    p.add_argument('-m', '--mac', help="MAC in format 0x001122334455 for 00:11:22:33:44:55",
+                   required=False, type=int_hex)
+    p.add_argument('-s', '--dev_state', help='device status: '
+                    '0:reset; 4:driver_ok 0x40:need_reset 0x80:driver_error. ',
+                    default=-1, type=int, required=False)
+    p.add_argument('-p', '--adminq_paddr', help='controller admin-queue physic address for test',
+                    default=-1, type=int_hex, required=False)
+    p.add_argument('-l', '--adminq_length', help='controller admin-queue length for test',
+                    default=-1, type=int, required=False)
+    p.set_defaults(func=controller_vrdma_configue)
+
     def call_rpc_func(args):
         args.func(args)
 

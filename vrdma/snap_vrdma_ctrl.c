@@ -115,7 +115,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ctrl->adminq_pd = attr->pd;
 	ctrl->adminq_mr = attr->mr;
 	ctrl->adminq_buf = attr->adminq_buf;
-	ctrl->adminq_size = attr->adminq_size;
+	ctrl->adminq_dma_entry_size = attr->adminq_dma_entry_size;
 	ctrl->adminq_dma_comp = attr->adminq_dma_comp;
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
@@ -393,7 +393,7 @@ static int snap_vrdma_ctrl_reset(struct snap_vrdma_ctrl *ctrl)
 
 	if (ctrl->bar_curr->pci_bdf) {
 
-		ret = snap_vrdma_device_mac_init(ctrl->sdev);
+		ret = snap_vrdma_device_mac_init(ctrl);
 		if (ret)
 			return ret;
 		/*
@@ -724,8 +724,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	/* Create dma queue for admin-queue*/
 	dma_q_attr.tx_qsize = SNAP_VRDMA_ADMINQ_DMA_Q_SIZE;
 	dma_q_attr.rx_qsize = SNAP_VRDMA_ADMINQ_DMA_Q_SIZE;
-	dma_q_attr.tx_elem_size = ctrl->adminq_size;
-	dma_q_attr.rx_elem_size = ctrl->adminq_size;
+	dma_q_attr.tx_elem_size = ctrl->adminq_dma_entry_size;
+	dma_q_attr.rx_elem_size = ctrl->adminq_dma_entry_size;
 	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	dma_q_attr.use_devx = true;
 	dma_q_attr.rx_cb = vrdma_dummy_rx_cb;
@@ -741,7 +741,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	/* Init adminq_buf for admin queue */;
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
-	ret = snap_dma_q_read(ctrl->adminq_dma_q, ctrl->adminq_buf, ctrl->adminq_size,
+	ret = snap_dma_q_read(ctrl->adminq_dma_q, ctrl->adminq_buf, ctrl->adminq_dma_entry_size,
 			      lkey, (uint64_t)ctrl->bar_curr->adminq_base_addr, rkey,
 				  ctrl->adminq_dma_comp);
 	if (ret) {
@@ -845,7 +845,7 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 	if (!ctrl->bar_curr->status) {
 		ctrl->bar_curr->status = SNAP_VRDMA_DEVICE_S_DRIVER_OK;
 		ctrl->bar_curr->enabled = 1;
-		snap_error("\nlizh snap_vrdma_ctrl_progress..ctrl->bar_curr->status DRIVER_OK \n");
+		//snap_error("\nlizh snap_vrdma_ctrl_progress..ctrl->bar_curr->status DRIVER_OK \n");
 	}
 	/* End: lizh just for test*/
 
@@ -874,3 +874,30 @@ out:
 	snap_vrdma_ctrl_progress_unlock(ctrl);
 }
 
+/**
+ * snap_vrdma_ctrl_io_progress() - single-threaded IO requests handling
+ * @ctrl:       controller instance
+ *
+ * Looks for any IO requests from host received on any QPs, and handles
+ * them based on the request's parameters.
+ */
+int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl)
+{
+	/*TBD*/
+	return 0;
+}
+
+/**
+ * snap_vrdma_ctrl_io_progress_thread() - Handle IO requests for thread
+ * @ctrl:       controller instance
+ * @thread_id:	id queues belong to
+ *
+ * Looks for any IO requests from host received on QPs which belong to thread
+ * thread_id, and handles them based on the request's parameters.
+ */
+int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
+					     uint32_t thread_id)
+{
+	/*TBD*/
+	return 0;
+}

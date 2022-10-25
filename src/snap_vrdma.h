@@ -19,6 +19,7 @@
 #include "snap.h"
 
 struct snap_vrdma_device;
+struct snap_vrdma_ctrl;
 
 enum snap_vrdma_dev_modify {
 	SNAP_VRDMA_MOD_DEV_STATUS = (1ULL << 0),
@@ -37,17 +38,35 @@ struct snap_vrdma_device_attr {
 	uint16_t			num_msix;
 	uint64_t			modifiable_fields;//mask of snap_vrdma_dev_modify
 	uint32_t			crossed_vhca_mkey;
-	uint16_t			adminq_size;
-	uint32_t			adminq_msix_vector;
+	uint16_t			adminq_msix_vector;
+	uint16_t			adminq_size; //admin-queue depth
 	uint32_t			adminq_nodify_off;
 	uint64_t			adminq_base_addr;
 };
+
+struct snap_vrdma_test_dummy_device {
+	uint64_t			mac;
+	uint16_t			status;
+	uint16_t			mtu;
+	uint16_t			msix_config;
+	uint16_t			pci_bdf;
+	bool				enabled;
+	bool				reset;
+	uint16_t			num_msix;
+	uint64_t			modifiable_fields;//mask of snap_vrdma_dev_modify
+	uint32_t			crossed_vhca_mkey;
+	uint16_t			adminq_msix_vector;
+	uint16_t			adminq_size; //admin-queue depth
+	uint32_t			adminq_nodify_off;
+	uint64_t			adminq_base_addr;
+};
+extern struct snap_vrdma_test_dummy_device g_bar_test;
 
 struct snap_vrdma_device {
 	uint32_t vdev_idx;
 };
 
-int snap_vrdma_device_mac_init(struct snap_device *sdev);
+int snap_vrdma_device_mac_init(struct snap_vrdma_ctrl *ctrl);
 int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx);
 int snap_vrdma_teardown_device(struct snap_device *sdev);
 int snap_vrdma_query_device(struct snap_device *sdev,
