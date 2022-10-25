@@ -211,10 +211,10 @@ struct snap_vrdma_vq_impl_ops {
 
 struct snap_vrdma_queue_ops {
 	struct snap_vrdma_queue *(*create)(struct snap_vrdma_ctrl *ctrl);
-	void (*destroy)(struct snap_vrdma_queue *queue);
+	void (*destroy)(struct snap_vrdma_ctrl *ctrl, struct snap_vrdma_queue *queue);
 	int (*progress)(struct snap_vrdma_queue *queue);
 	void (*start)(struct snap_vrdma_queue *queue);
-	void (*suspend)(struct snap_vrdma_queue *queue);
+	int (*suspend)(struct snap_vrdma_queue *queue);
 	bool (*is_suspended)(struct snap_vrdma_queue *queue);
 	int (*resume)(struct snap_vrdma_queue *queue);
 };

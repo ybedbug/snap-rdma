@@ -406,20 +406,16 @@ snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl)
 }
 
 static void snap_vrdma_vq_destroy(struct snap_vrdma_ctrl *vctrl,
-										struct snap_vrdma_queue *virtq)
+				struct snap_vrdma_queue *virtq)
 {
-	struct snap_virtio_blk_ctrl_queue *vbq = to_blk_ctrl_q(vq);
-	struct snap_virtio_blk_device_attr *dev_attr;
-
 	//TODO: add vq destroy handling
 	TAILQ_REMOVE(&vctrl->virtqs, virtq, vq);
 	free(virtq);
 }
 
-static void snap_vrdma_vq_start(struct snap_vrdma_queue *q, 
-							struct snap_vrdma_vq_start_attr *attr)
+static void snap_vrdma_vq_start(struct snap_vrdma_queue *q)
 {
-	q->pg_id = attr->pg_id;
+	//TODO: add start handling
 }
 
 static int snap_vrdma_vq_progress(struct snap_vrdma_queue *q)
@@ -564,7 +560,7 @@ static int snap_vrdma_ctrl_pg_thread_io_progress(
 	TAILQ_FOREACH(pg_q, &pg->q_list, entry) {
 		vq = pg_q_entry_to_vrdma_qp(pg_q);
 		vq->thread_id = thread_id;
-		n += snap_vrdma_qp_progress(vq);
+		n += snap_vrdma_vq_progress(vq);
 	}
 	pthread_spin_unlock(&pg->lock);
 
