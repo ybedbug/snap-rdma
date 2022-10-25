@@ -12,9 +12,13 @@
 #include <sys/time.h>
 #include "snap_macros.h"
 #include "snap_vrdma.h"
+#include "vrdma/snap_vrdma_ctrl.h"
 #include "snap_internal.h"
 #include "mlx5_ifc.h"
 
+struct snap_vrdma_test_dummy_device g_bar_test;
+
+#if 0 /* lizh just for test bar*/
 static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 	uint8_t *out, int outlen)
 {
@@ -45,6 +49,7 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 				     inlen, out, outlen);
 }
 
+
 static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 				 struct snap_vrdma_device_attr *vattr,
 				 void *device_configuration)
@@ -56,7 +61,7 @@ static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 	vattr->status = DEVX_GET(vrdma_device, device_configuration,
 				 device_status);
 }
-
+#endif
 
 /**
  * snap_vrdma_query_device() - Query an vRDMA snap device
@@ -71,12 +76,18 @@ static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 int snap_vrdma_query_device(struct snap_device *sdev,
 	struct snap_vrdma_device_attr *attr)
 {
+#if 0
 	uint8_t *out;
 	//struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_out;
 	int ret, out_size;
 	uint64_t dev_allowed;
+#endif
 
+	/* lizh just for test bar*/
+	memcpy(attr, &g_bar_test, sizeof(*attr));
+	return 0;
+#if 0
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(vrdma_device_emulation);
 	out = calloc(1, out_size);
@@ -124,9 +135,18 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 	attr->crossed_vhca_mkey = DEVX_GET(vrdma_device_emulation,
 					   device_emulation_out,
 					   emulated_device_crossed_vhca_mkey);
+	attr->adminq_msix_vector = DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_adminq_config.adminq_msix_vector);
+	attr->adminq_size = DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_adminq_config.adminq_size);
+	attr->adminq_nodify_off = DEVX_GET(vrdma_device_emulation,
+			      device_emulation_out, vrdma_adminq_config.adminq_nodify_off);
+	attr->adminq_base_addr = DEVX_GET64(vrdma_device_emulation,
+				  device_emulation_out, vrdma_adminq_config.adminq_base_addr);
 out_free:
 	free(out);
 	return ret;
+#endif
 }
 
 static int
@@ -241,8 +261,9 @@ static inline void eth_random_addr(uint8_t *addr)
 	addr[0] |= 0x02;        /* set local assignment bit (IEEE802) */
 }
 
-int snap_vrdma_device_mac_init(struct snap_device *sdev)
+int snap_vrdma_device_mac_init(struct snap_vrdma_ctrl *ctrl)
 {
+	struct snap_device *sdev = ctrl->sdev;
 	struct snap_vrdma_device_attr vattr = {};
 	uint8_t *vmac;
 	int ret;
@@ -250,10 +271,13 @@ int snap_vrdma_device_mac_init(struct snap_device *sdev)
 	ret = snap_vrdma_query_device(sdev, &vattr);
 	if (ret)
 		return -1;
-	vmac = (uint8_t *)&vattr.mac;
-	eth_random_addr(&vmac[2]);
-	vattr.mac = be64toh(vattr.mac);
-
+	if (ctrl->mac) {
+		vattr.mac = ctrl->mac;
+	} else {
+		vmac = (uint8_t *)&vattr.mac;
+		eth_random_addr(&vmac[2]);
+		vattr.mac = be64toh(vattr.mac);
+	}
 	ret = snap_vrdma_modify_device(sdev, SNAP_VRDMA_MOD_MAC, &vattr);
 	if (ret)
 		ret = -1;
@@ -310,6 +334,8 @@ int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 		goto out_free;
 
 	sdev->dd_data = vdev;
+	/* lizh just for test bar*/
+	memset(&g_bar_test, 0, sizeof(struct snap_vrdma_test_dummy_device));
 	snap_error("lizh snap_vrdma_init_device...done");
 	return 0;
 
