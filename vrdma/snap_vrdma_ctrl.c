@@ -736,8 +736,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p ctrl->adminq_mr %p done \n",
-	ctrl->xmkey, ctrl->adminq_mr);
+	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p ctrl->adminq_mr %p adminq_base_addr 0x%lx adminq_dma_comp %p done \n",
+	ctrl->xmkey, ctrl->adminq_mr, (uint64_t)ctrl->bar_curr->adminq_base_addr, ctrl->adminq_dma_comp);
 	/* Init adminq_buf for admin queue */;
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
@@ -843,7 +843,7 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 		goto out;
 #endif
 	if (!ctrl->bar_curr->status) {
-		ctrl->bar_curr->status = SNAP_VRDMA_DEVICE_S_DRIVER_OK;
+		//ctrl->bar_curr->status = SNAP_VRDMA_DEVICE_S_DRIVER_OK;
 		ctrl->bar_curr->enabled = 1;
 		//snap_error("\nlizh snap_vrdma_ctrl_progress..ctrl->bar_curr->status DRIVER_OK \n");
 	}
