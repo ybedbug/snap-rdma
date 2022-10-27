@@ -104,16 +104,6 @@ struct snap_vrdma_queue {
 	struct snap_vrdma_ctrl_queue_out_counter cmd_cntrs;
 };
 
-struct snap_vrdma_vq_impl_ops {
-	void (*error_status)(struct snap_vrdma_vq_cmd *cmd);
-	void (*clear_status)(struct snap_vrdma_vq_cmd *cmd);
-	void (*status_data)(struct snap_vrdma_vq_cmd *cmd, struct snap_vrdma_vq_status_data *sd);
-	void (*release_cmd)(struct snap_vrdma_vq_cmd *cmd);
-	int (*progress_suspend)(struct snap_vrdma_queue *vrdma_vq,
-			struct snap_vrdma_common_queue_attr *qattr);
-	int (*send_comp)(struct snap_vrdma_vq_cmd *cmd, struct snap_dma_q *q);
-};
-
 struct snap_vrdma_vq_create_attr {
 	void *bdev;
 	struct ibv_pd *pd;
