@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include "snap_vrdma.h"
 #include "snap_vrdma_ctrl.h"
+#include "snap_vrdma_virtq.h"
 #include "snap_dma.h"
 #include "snap_queue.h"
 
@@ -145,6 +146,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 		goto free_pgs;
 	}
 	ctrl->force_in_order = attr->force_in_order;
+	ctrl->q_ops = get_vrdma_queue_ops();
 	snap_error("\nlizh snap_vrdma_ctrl_open_internal..ctrl->xmkey %p.done", ctrl->xmkey);
 	return 0;
 

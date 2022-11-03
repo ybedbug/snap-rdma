@@ -17,6 +17,7 @@
 #include "snap_env.h"
 #include "snap_vrdma_virtq.h"
 #include "snap_vrdma_ctrl.h"
+#include "mlx5_ifc.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
 
@@ -185,6 +186,11 @@ struct snap_vrdma_queue_ops snap_vrdma_queue_ops = {
 	.resume = NULL,
 };
 
+struct snap_vrdma_queue_ops *get_vrdma_queue_ops(void)
+{
+	return &snap_vrdma_queue_ops;
+}
+
 static void snap_vrdma_sched_vq_nolock(struct snap_vrdma_ctrl *ctrl,
 					    struct snap_vrdma_queue *vq,
 					    struct snap_pg *pg)
@@ -289,4 +295,226 @@ int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
 	return snap_vrdma_ctrl_pg_thread_io_progress(ctrl, thread_id, thread_id);
 }
 
+int snap_vrdma_create_qp_helper(struct ibv_pd *pd, 
+			struct snap_vrdma_backend_qp *qp)
+{
+	struct snap_qp_attr *qp_attr = &qp->qp_attr;
+	struct snap_cq_attr cq_attr = {0};
+	int rc;
 
+	snap_error("\nlizh snap_vrdma_create_qp_helper...start");
+	cq_attr.cq_type = SNAP_OBJ_DEVX;
+	cq_attr.cqe_size = SNAP_VRDMA_CQE_SIZE;
+	if (qp_attr->sq_size) {
+		cq_attr.cqe_cnt = qp_attr->sq_size;
+		qp_attr->sq_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->sq_cq %p", qp_attr->sq_cq);
+		if (!qp_attr->sq_cq)
+			return -EINVAL;
+	} else {
+		qp_attr->sq_cq = NULL;
+	}
+
+	if (qp_attr->rq_size) {
+		cq_attr.cqe_cnt = qp_attr->rq_size;
+		qp_attr->rq_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->rq_cq %p", qp_attr->rq_cq);
+		if (!qp_attr->rq_cq)
+			goto free_sq_cq;
+	} else {
+		qp_attr->rq_cq = NULL;
+	}
+
+	qp_attr->qp_type = cq_attr.cq_type;
+
+	qp->sqp = snap_qp_create(pd, qp_attr);
+	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_create qp->sqp %p", qp->sqp);
+	if (!qp->sqp)
+		goto free_rq_cq;
+
+	rc = snap_qp_to_hw_qp(qp->sqp, &qp->hw_qp);
+	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_to_hw_qp rc %d", rc);
+	if (rc)
+		goto free_qp;
+
+	if (qp_attr->sq_cq) {
+		rc = snap_cq_to_hw_cq(qp_attr->sq_cq, &qp->sq_hw_cq);
+		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq sq_cq rc %d", rc);
+		if (rc)
+			goto free_qp;
+	}
+
+	if (qp_attr->rq_cq) {
+		rc = snap_cq_to_hw_cq(qp_attr->rq_cq, &qp->rq_hw_cq);
+		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq rx_cq rc %d", rc);
+		if (rc)
+			goto free_qp;
+	}
+	return 0;
+
+free_qp:
+	snap_qp_destroy(qp->sqp);
+free_rq_cq:
+	if (qp_attr->rq_cq)
+		snap_cq_destroy(qp_attr->rq_cq);
+free_sq_cq:
+	if (qp_attr->sq_cq)
+		snap_cq_destroy(qp_attr->sq_cq);
+	return -EINVAL;
+}
+
+void snap_vrdma_destroy_qp_helper(struct snap_vrdma_backend_qp *qp)
+{
+	if (qp->sqp)
+		snap_qp_destroy(qp->sqp);
+	if (qp->qp_attr.rq_cq)
+		snap_cq_destroy(qp->qp_attr.rq_cq);
+	if (qp->qp_attr.sq_cq)
+		snap_cq_destroy(qp->qp_attr.sq_cq);
+}
+
+#if 0
+/**
+ * snap_vrdma_virtq_destroy() - Destroys vrdma virtq
+ * @q: queue to be destroyed
+ *
+ * Context: Destroy should be called only when queue is in suspended state.
+ *
+ * Return: void
+ */
+void snap_vrdma_virtq_destroy(struct snap_vrdma_ctrl *ctrl,
+			struct snap_vrdma_queue *queue)
+{
+	struct virtq_priv *vq_priv = q->common_ctx.priv;
+
+	snap_debug("destroying queue %d\n", q->common_ctx.idx);
+
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntrs.outstanding_total)
+		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.outstanding_total);
+
+	if (vq_priv->cmd_cntrs.fatal)
+		snap_warn("queue %d: destroying while %d command(s) completed with fatal error\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.fatal);
+	ctrl->q_ops->destroy(ctrl, queue);
+
+	free_blk_virtq_cmd_arr(vq_priv);
+	virtq_ctx_destroy(vq_priv);
+	free(q);
+}
+#endif
+
+int snap_vrdma_modify_bankend_qp_rst2init(struct snap_qp *qp,
+				     struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rst2init_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rst2init_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
+	DEVX_SET(rst2init_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
+	DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num, 1);
+
+	if (attr_mask & IBV_QP_ACCESS_FLAGS) {
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_READ)
+			DEVX_SET(qpc, qpc, rre, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_WRITE)
+			DEVX_SET(qpc, qpc, rwe, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_ATOMIC) {
+			DEVX_SET(qpc, qpc, rae, 1);
+			DEVX_SET(qpc, qpc, atomic_mode, MLX5_QPC_ATOMIC_MODE_UP_TO_8B);
+		}
+	}
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to init with errno = %d\n", ret);
+	return ret;
+}
+
+int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
+			struct ibv_qp_attr *qp_attr, int attr_mask,
+			struct snap_vrdma_bk_qp_rdy_attr *rdy_attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
+	void *address_path;
+	int ret;
+
+	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
+	DEVX_SET(init2rtr_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+
+	/* 30 is the maximum value for Infiniband QPs*/
+	DEVX_SET(qpc, qpc, log_msg_max, 30);
+
+	/* TODO: add more attributes */
+	if (attr_mask & IBV_QP_PATH_MTU)
+		DEVX_SET(qpc, qpc, mtu, qp_attr->path_mtu);
+	if (attr_mask & IBV_QP_DEST_QPN)
+		DEVX_SET(qpc, qpc, remote_qpn, qp_attr->dest_qp_num);
+	if (attr_mask & IBV_QP_RQ_PSN)
+		DEVX_SET(qpc, qpc, next_rcv_psn, qp_attr->rq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_MAX_DEST_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_rra_max,
+			 snap_u32log2(qp_attr->max_dest_rd_atomic));
+	if (attr_mask & IBV_QP_MIN_RNR_TIMER)
+		DEVX_SET(qpc, qpc, min_rnr_nak, qp_attr->min_rnr_timer);
+	if (attr_mask & IBV_QP_AV) {
+		DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
+	} else {
+		address_path = DEVX_ADDR_OF(qpc, qpc, primary_address_path);
+		/* Only connection type supported is ETH - ROCE */
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+		       rdy_attr->dest_mac, MAC_ADDR_2MSBYTES_LEN);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_31_0),
+		       rdy_attr->dest_mac + MAC_ADDR_2MSBYTES_LEN,
+		       MAC_ADDR_LEN - MAC_ADDR_2MSBYTES_LEN);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+		       &rdy_attr->rgid_rip, sizeof(rdy_attr->rgid_rip));
+
+		DEVX_SET(ads, address_path, rlid, 0xc000);
+		DEVX_SET(ads, address_path, src_addr_index, rdy_attr->src_addr_index);
+		DEVX_SET(ads, address_path, hop_limit, 255); /* High value so it won't limit */
+	}
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rtr with errno = %d\n", ret);
+	return ret;
+}
+
+int snap_vrdma_modify_bankend_qp_rtr2rts(struct snap_qp *qp,
+				    struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rtr2rts_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rtr2rts_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rtr2rts_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
+	DEVX_SET(rtr2rts_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_RETRY_CNT)
+		DEVX_SET(qpc, qpc, retry_count, qp_attr->retry_cnt);
+	if (attr_mask & IBV_QP_SQ_PSN)
+		DEVX_SET(qpc, qpc, next_send_psn, qp_attr->sq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_RNR_RETRY)
+		DEVX_SET(qpc, qpc, rnr_retry, qp_attr->rnr_retry);
+	if (attr_mask & IBV_QP_MAX_QP_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_sra_max,
+			 snap_u32log2(qp_attr->max_rd_atomic));
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rts with errno = %d\n", ret);
+	return ret;
+}

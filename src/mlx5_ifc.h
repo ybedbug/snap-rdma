@@ -3291,6 +3291,17 @@ struct mlx5_ifc_ads_bits {
 	u8	 rmac_31_0[0x20];
 };
 
+enum {
+	MLX5_QPC_ATOMIC_MODE_IB_SPEC     = 0x1,
+	MLX5_QPC_ATOMIC_MODE_ONLY_8B     = 0x2,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_8B    = 0x3,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_16B   = 0x4,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_32B   = 0x5,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_64B   = 0x6,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_128B  = 0x7,
+	MLX5_QPC_ATOMIC_MODE_UP_TO_256B  = 0x8,
+};
+
 struct mlx5_ifc_qpc_bits {
 	u8	 state[0x4];
 	u8	 lag_tx_port_affinity[0x4];

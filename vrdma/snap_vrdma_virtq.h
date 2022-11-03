@@ -114,6 +114,24 @@ struct snap_vrdma_vq_create_attr {
 	uint32_t vqpn;
 };
 
+#define SNAP_VRDMA_CQE_SIZE 64
+#define MAC_ADDR_LEN 6
+#define MAC_ADDR_2MSBYTES_LEN 2
+
+struct snap_vrdma_backend_qp {
+	struct snap_qp *sqp;
+	struct snap_hw_qp hw_qp;
+	struct snap_qp_attr qp_attr;
+	struct snap_hw_cq rq_hw_cq;
+	struct snap_hw_cq sq_hw_cq;
+};
+
+struct snap_vrdma_bk_qp_rdy_attr {
+	uint8_t src_addr_index;
+	uint8_t *dest_mac;
+	union ibv_gid rgid_rip;
+};
+
 struct snap_vrdma_queue_ops {
 	struct snap_vrdma_queue *(*create)(struct snap_vrdma_ctrl *ctrl, 
 										struct snap_vrdma_vq_create_attr *q_attr);
@@ -132,6 +150,16 @@ void snap_vrdma_desched_vq(struct snap_vrdma_queue *vq);
 int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
 int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
 					     uint32_t thread_id);
-
+struct snap_vrdma_queue_ops *get_vrdma_queue_ops(void);
+int snap_vrdma_create_qp_helper(struct ibv_pd *pd, 
+			struct snap_vrdma_backend_qp *qp);
+void snap_vrdma_destroy_qp_helper(struct snap_vrdma_backend_qp *qp);
+int snap_vrdma_modify_bankend_qp_rst2init(struct snap_qp *qp,
+			struct ibv_qp_attr *qp_attr, int attr_mask);
+int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
+			struct ibv_qp_attr *qp_attr, int attr_mask,
+			struct snap_vrdma_bk_qp_rdy_attr *rdy_attr);
+int snap_vrdma_modify_bankend_qp_rtr2rts(struct snap_qp *qp,
+			struct ibv_qp_attr *qp_attr, int attr_mask);
 #endif
 
