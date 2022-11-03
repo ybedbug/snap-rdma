@@ -17,342 +17,9 @@
 #include "snap_env.h"
 #include "snap_vrdma_virtq.h"
 #include "snap_vrdma_ctrl.h"
+#include "mlx5_ifc.h"
 
 #define SNAP_DMA_Q_OPMODE   "SNAP_DMA_Q_OPMODE"
-
-#if 0
-static struct snap_dma_q *virtq_rdma_qp_init(struct virtq_create_attr *attr,
-		struct virtq_priv *vq_priv, int tx_elem_size, int rx_elem_size,
-		snap_dma_rx_cb_t cb)
-{
-	struct snap_dma_q_create_attr rdma_qp_create_attr = { };
-
-	rdma_qp_create_attr.tx_qsize = attr->queue_size;
-	rdma_qp_create_attr.tx_elem_size = tx_elem_size;
-	rdma_qp_create_attr.rx_qsize = attr->queue_size;
-	rdma_qp_create_attr.rx_elem_size = rx_elem_size;
-	rdma_qp_create_attr.uctx = vq_priv;
-	rdma_qp_create_attr.rx_cb = cb;
-	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
-
-	return snap_dma_q_create(attr->pd, &rdma_qp_create_attr);
-}
-
-static void virtq_vattr_from_attr(struct virtq_create_attr *attr,
-		struct snap_virtio_queue_attr *vattr, uint16_t max_tunnel_desc)
-{
-
-	vattr->type = SNAP_VIRTQ_SPLIT_MODE;
-	vattr->ev_mode =
-			(attr->msix_vector == VIRTIO_MSI_NO_VECTOR) ?
-					SNAP_VIRTQ_NO_MSIX_MODE : SNAP_VIRTQ_MSIX_MODE;
-	vattr->virtio_version_1_0 = attr->virtio_version_1_0;
-	vattr->offload_type = SNAP_VIRTQ_OFFLOAD_DESC_TUNNEL;
-	vattr->idx = attr->idx;
-	vattr->size = attr->queue_size;
-	vattr->desc = attr->desc;
-	vattr->driver = attr->driver;
-	vattr->device = attr->device;
-	vattr->hw_available_index = attr->hw_available_index;
-	vattr->hw_used_index = attr->hw_used_index;
-	vattr->full_emulation = true;
-	vattr->max_tunnel_desc = snap_min(attr->max_tunnel_desc, max_tunnel_desc);
-	vattr->event_qpn_or_msix = attr->msix_vector;
-	vattr->pd = attr->pd;
-}
-
-/**
- * virtq_ctxt_init() - Creates a new virtq object, along with RDMA QPs.
-
- * @attr:	Configuration attributes
- *
- * Creates the snap queues, virtio attributes and RDMA queues. For RDMA queues
- * creates hw and sw qps, hw qps will be given to VIRTIO_BLK_Q.
- * Completion is sent inline, hence tx elem size is completion size
- * the rx queue size should match the number of possible descriptors
- * this in the worst case scenario is the VIRTQ size.
- *
- * Context: Calling function should attach the virtqueue to a polling group
- *
- * Return: true if successful, false otherwise
- */
-bool virtq_ctx_init(struct virtq_common_ctx *vq_ctx,
-		    struct virtq_create_attr *attr,
-		    struct virtq_ctx_init_attr *ctxt_attr)
-{
-	struct virtq_priv *vq_priv = calloc(1, sizeof(struct virtq_priv));
-	struct ibv_qp *fw_qp;
-	uint16_t hw_used;
-
-	if (!vq_priv)
-		goto err;
-	struct snap_virtio_common_queue_attr *snap_attr = calloc(1, sizeof(struct snap_virtio_common_queue_attr));
-
-	if (!snap_attr)
-		goto release_priv;
-	vq_priv->vq_ctx = vq_ctx;
-	vq_ctx->priv = vq_priv;
-	vq_priv->virtq_dev.ctx = ctxt_attr->bdev;
-	vq_priv->pd = attr->pd;
-	vq_ctx->idx = attr->idx;
-	vq_ctx->fatal_err = 0;
-	vq_priv->seg_max = attr->seg_max;
-	vq_priv->size_max = attr->size_max;
-	vq_priv->swq_state = SW_VIRTQ_RUNNING;
-	vq_priv->vbq = ctxt_attr->vq;
-	memset(&vq_priv->cmd_cntrs, 0, sizeof(vq_priv->cmd_cntrs));
-	vq_priv->force_in_order = attr->force_in_order;
-	vq_priv->dma_q = virtq_rdma_qp_init(attr, vq_priv,
-					    ctxt_attr->tx_elem_size,
-					    ctxt_attr->rx_elem_size,
-					    ctxt_attr->cb);
-	if (!vq_priv->dma_q) {
-		snap_error("failed creating rdma qp loop\n");
-		goto destroy_attr;
-	}
-
-	if (attr->in_recovery) {
-		if (snap_virtio_get_used_index_from_host(vq_priv->dma_q,
-				attr->device, attr->xmkey, &hw_used))
-			goto destroy_dma_q;
-	} else {
-		hw_used = 0;
-	}
-
-	attr->hw_available_index = hw_used;
-	attr->hw_used_index = hw_used;
-
-	vq_priv->ctrl_available_index = attr->hw_available_index;
-	vq_priv->ctrl_used_index = vq_priv->ctrl_available_index;
-
-	snap_virtio_common_queue_config(snap_attr,
-			attr->hw_available_index, attr->hw_used_index, vq_priv->dma_q);
-	fw_qp = snap_dma_q_get_fw_qp(vq_priv->dma_q);
-	snap_attr->vattr.tisn_or_qpn = fw_qp->qp_num;
-	snap_attr->vattr.vhca_id = snap_get_dev_vhca_id(fw_qp->context);
-	virtq_vattr_from_attr(attr, &snap_attr->vattr, ctxt_attr->max_tunnel_desc);
-	vq_priv->vattr = &snap_attr->vattr;
-	vq_priv->vattr->size = attr->queue_size;
-	vq_priv->vattr->dma_mkey = attr->xmkey;
-
-	return true;
-
-destroy_dma_q:
-	snap_dma_q_destroy(vq_priv->dma_q);
-destroy_attr:
-	free(snap_attr);
-release_priv:
-	free(vq_priv);
-err:
-	snap_error("failed creating virtq %d\n", attr->idx);
-	return false;
-}
-
-/**
- * virtq_cmd_progress() - command state machine progress handle
- * @cmd:	command to be processed
- * @status:	status of calling function (can be a callback)
- *
- * Return: 0 (Currently no option to fail)
- */
-int snap_vrdma_vq_cmd_progress(struct virtq_cmd *cmd,
-		enum virtq_cmd_sm_op_status status)
-{
-	struct virtq_state_machine *sm;
-	bool repeat = true;
-
-	while (repeat) {
-		repeat = false;
-		snap_debug("virtq cmd sm state: %d\n", cmd->state);
-		sm = cmd->vq_priv->custom_sm;
-		if (snap_likely(cmd->state < VIRTQ_CMD_NUM_OF_STATES))
-			repeat = sm->sm_array[cmd->state].sm_handler(cmd, status);
-		else
-			snap_error("reached invalid state %d\n", cmd->state);
-	}
-
-	return 0;
-}
-
-bool virtq_sm_idle(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
-{
-	snap_error("command in invalid state %d\n",
-					   VIRTQ_CMD_STATE_IDLE);
-	return false;
-}
-
-/**
- * virtq_sm_write_back_done() - check write to bdev result status
- * @cmd:	command which requested the write
- * @status:	status of write operation
- */
-bool virtq_sm_write_back_done(struct virtq_cmd *cmd,
-				   enum virtq_cmd_sm_op_status status)
-{
-	cmd->state = VIRTQ_CMD_STATE_WRITE_STATUS;
-	if (status != VIRTQ_CMD_SM_OP_OK)
-		cmd->vq_priv->ops->error_status(cmd);
-
-	return true;
-}
-
-int virtq_blk_dpa_send_status(struct snap_virtio_queue *vq, void *data, int size, uint64_t raddr);
-/**
- * virtq_sm_write_status() - Write command status to host memory upon finish
- * @cmd:	command which requested the write
- * @status:	callback status, expected 0 for no errors
- *
- * Return: True if state machine is moved synchronously to the new state
- * (error cases) or false if the state transition will be done asynchronously.
- */
-inline bool virtq_sm_write_status(struct virtq_cmd *cmd,
-				   enum virtq_cmd_sm_op_status status)
-{
-	int ret;
-	struct virtq_status_data sd;
-	struct vring_desc *descs = cmd->vq_priv->ops->get_descs(cmd);
-
-	cmd->vq_priv->ops->status_data(cmd, &sd);
-	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK))
-		cmd->vq_priv->ops->error_status(cmd);
-
-	virtq_log_data(cmd, "WRITE_STATUS: pa 0x%llx len %u\n",
-		       descs[sd.desc].addr,
-			   sd.status_size);
-	/* hack... */
-	if (snap_unlikely(cmd->vq_priv->ops->send_status))
-		ret = cmd->vq_priv->ops->send_status(cmd->vq_priv->snap_vbq, sd.us_status, sd.status_size, descs[sd.desc].addr);
-	else
-		ret = snap_dma_q_write_short(cmd->vq_priv->dma_q, sd.us_status,
-				sd.status_size,
-				descs[sd.desc].addr,
-				cmd->vq_priv->vattr->dma_mkey);
-
-	if (snap_unlikely(ret)) {
-		/* TODO: at some point we will have to do pending queue */
-		ERR_ON_CMD(cmd, "failed to send status, err=%d", ret);
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-
-	virtq_mark_dirty_mem(cmd, descs[sd.desc].addr, sd.status_size, false);
-
-	cmd->total_in_len += sd.status_size;
-	cmd->state = VIRTQ_CMD_STATE_SEND_COMP;
-	return true;
-}
-
-int virtq_sw_send_comp(struct virtq_cmd *cmd, struct snap_dma_q *q)
-{
-	struct snap_virtio_common_queue_attr *cmn_queue = to_common_queue_attr(cmd->vq_priv->vattr);
-	uint64_t used_idx_addr, used_elem_addr;
-	struct vring_used_elem elem;
-	int ret;
-
-	elem.id = cmd->descr_head_idx;
-	elem.len = cmd->total_in_len;
-	used_elem_addr = cmd->vq_priv->vattr->device +
-			offsetof(struct vring_used, ring[cmn_queue->hw_used_index % cmd->vq_priv->vattr->size]);
-	ret = snap_dma_q_write_short(q, &elem, sizeof(elem),
-			used_elem_addr,
-			cmd->vq_priv->vattr->dma_mkey);
-	if (snap_unlikely(ret))
-		return ret;
-
-	used_idx_addr = cmd->vq_priv->vattr->device + offsetof(struct vring_used, idx);
-	cmn_queue->hw_used_index = cmn_queue->hw_used_index + 1;
-	ret = snap_dma_q_write_short(q, &cmn_queue->hw_used_index, sizeof(uint16_t),
-						   used_idx_addr,
-					       cmd->vq_priv->vattr->dma_mkey);
-
-	return ret;
-}
-
-/**
- * sm_send_completion() - send command completion to FW
- * @cmd: Command being processed
- * @status: Status of callback
- *
- * Return:
- * True if state machine is moved synchronously to the new state
- * (error cases) or false if the state transition will be done asynchronously.
- */
-inline bool virtq_sm_send_completion(struct virtq_cmd *cmd,
-				     enum virtq_cmd_sm_op_status status)
-{
-	int ret;
-	bool unordered = false;
-
-	if (snap_unlikely(status != VIRTQ_CMD_SM_OP_OK)) {
-		snap_error("failed to write the request status field\n");
-
-		/* TODO: if VIRTQ_CMD_STATE_FATAL_ERR could be recovered in the future,
-		 * handle case when cmd with VIRTQ_CMD_STATE_FATAL_ERR handled unordered.
-		 */
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-		return true;
-	}
-
-	if (snap_unlikely(cmd->cmd_available_index != cmd->vq_priv->ctrl_used_index)) {
-		virtq_log_data(cmd, "UNORD_COMP: cmd_idx:%d, in_num:%d, wait for in_num:%d\n",
-			cmd->idx, cmd->cmd_available_index, cmd->vq_priv->ctrl_used_index);
-		if (cmd->io_cmd_stat)
-			++cmd->io_cmd_stat->unordered;
-		unordered = true;
-	}
-
-	/* check order of completed command, if the command unordered - wait for
-	 * other completions
-	 */
-	if (snap_unlikely(cmd->vq_priv->force_in_order) && snap_unlikely(unordered)) {
-		cmd->state = VIRTQ_CMD_STATE_SEND_IN_ORDER_COMP;
-		return false;
-	}
-
-	ret = cmd->vq_priv->ops->send_comp(cmd, cmd->vq_priv->dma_q);
-	if (snap_unlikely(ret)) {
-		/* TODO: pending queue */
-		ERR_ON_CMD(cmd, "failed to send completion ret %d\n", ret);
-		cmd->state = VIRTQ_CMD_STATE_FATAL_ERR;
-	} else {
-		virtq_mark_dirty_mem(cmd, 0, 0, true);
-
-		cmd->state = VIRTQ_CMD_STATE_RELEASE;
-		++cmd->vq_priv->ctrl_used_index;
-	}
-
-	return true;
-}
-
-bool snap_vrdma_vq_sm_release(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
-{
-	bool repeat = false;
-
-	repeat = virtq_common_release(cmd);
-	--cmd->vq_priv->cmd_cntrs.outstanding_total;
-	return repeat;
-}
-
-bool snap_vrdma_vq_sm_fatal_error(struct virtq_cmd *cmd, enum virtq_cmd_sm_op_status status)
-{
-	virtq_common_release(cmd);
-	cmd->vq_priv->vq_ctx->fatal_err = -1;
-	++cmd->vq_priv->cmd_cntrs.fatal;
-	/*
-	 * TODO: propagate fatal error to the controller.
-	 * At the moment attempt to resume/state copy
-	 * of such controller will have unpredictable
-	 * results.
-	 */
-
-	return false;
-}
-#endif
-
-void snap_vrdma_vq_ctx_destroy(struct snap_vrdma_queue *q)
-{
-	snap_dma_q_destroy(q->dma_q);
-}
 
 static inline bool 
 vrdma_q_check_outstanding_prog_suspend(struct snap_vrdma_queue *q)
@@ -373,7 +40,6 @@ vrdma_q_check_outstanding_prog_suspend(struct snap_vrdma_queue *q)
 
 static void snap_vrdma_vq_progress_suspend(struct snap_vrdma_queue *q)
 {
-	//struct snap_vrdma_common_queue_attr qattr = { };
 	int n;
 
 	/* TODO: add option to ignore commands in the bdev layer */
@@ -395,12 +61,36 @@ static void snap_vrdma_vq_progress_suspend(struct snap_vrdma_queue *q)
 }
 
 static struct snap_vrdma_queue *
-snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl)
+snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl,
+							struct snap_vrdma_vq_create_attr *q_attr)
 {
 	struct snap_vrdma_queue *virtq;
+	struct snap_dma_q_create_attr rdma_qp_create_attr = {};
 
 	virtq = calloc(1, sizeof(*virtq));
-	//TODO: add vq create handling
+	if (!virtq) {
+		snap_error("create queue %d: no memory\n", q_attr->vqpn);
+		return NULL;
+	}
+
+	rdma_qp_create_attr.tx_qsize = q_attr->sq_size;
+	rdma_qp_create_attr.tx_elem_size = q_attr->tx_elem_size;
+	rdma_qp_create_attr.rx_qsize = q_attr->rq_size;
+	rdma_qp_create_attr.rx_elem_size = q_attr->rx_elem_size;
+	rdma_qp_create_attr.uctx = virtq;
+	rdma_qp_create_attr.rx_cb = NULL;
+	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
+	virtq->dma_q = snap_dma_q_create(q_attr->pd, &rdma_qp_create_attr);
+	if (!virtq->dma_q) {
+		free(virtq);
+		snap_error("create queue %d: create dma queue failed\n", q_attr->vqpn);
+		return NULL;
+	}
+	virtq->ctrl = vctrl;
+	virtq->idx = q_attr->vqpn;
+	virtq->pd = q_attr->pd;
+	virtq->dma_mkey = vctrl->xmkey->mkey;
+	
 	TAILQ_INSERT_TAIL(&vctrl->virtqs, virtq, vq);
 	return virtq;
 }
@@ -409,6 +99,7 @@ static void snap_vrdma_vq_destroy(struct snap_vrdma_ctrl *vctrl,
 				struct snap_vrdma_queue *virtq)
 {
 	//TODO: add vq destroy handling
+	snap_dma_q_destroy(virtq->dma_q);
 	TAILQ_REMOVE(&vctrl->virtqs, virtq, vq);
 	free(virtq);
 }
@@ -495,7 +186,12 @@ struct snap_vrdma_queue_ops snap_vrdma_queue_ops = {
 	.resume = NULL,
 };
 
-static void snap_vrdma_ctrl_sched_q_nolock(struct snap_vrdma_ctrl *ctrl,
+struct snap_vrdma_queue_ops *get_vrdma_queue_ops(void)
+{
+	return &snap_vrdma_queue_ops;
+}
+
+static void snap_vrdma_sched_vq_nolock(struct snap_vrdma_ctrl *ctrl,
 					    struct snap_vrdma_queue *vq,
 					    struct snap_pg *pg)
 {
@@ -505,7 +201,7 @@ static void snap_vrdma_ctrl_sched_q_nolock(struct snap_vrdma_ctrl *ctrl,
 		ctrl->q_ops->start(vq);
 }
 
-void snap_vrdma_ctrl_sched_q(struct snap_vrdma_ctrl *ctrl,
+void snap_vrdma_sched_vq(struct snap_vrdma_ctrl *ctrl,
 				     struct snap_vrdma_queue *vq)
 {
 	struct snap_pg *pg;
@@ -513,12 +209,12 @@ void snap_vrdma_ctrl_sched_q(struct snap_vrdma_ctrl *ctrl,
 	pg = snap_pg_get_next(&ctrl->pg_ctx);
 
 	pthread_spin_lock(&pg->lock);
-	snap_vrdma_ctrl_sched_q_nolock(ctrl, vq, pg);
+	snap_vrdma_sched_vq_nolock(ctrl, vq, pg);
 	snap_debug("VRDMA queue polling group id = %d\n", vq->pg->id);
 	pthread_spin_unlock(&pg->lock);
 }
 
-static void snap_vrdma_ctrl_desched_q_nolock(struct snap_vrdma_queue *vq)
+static void snap_vrdma_desched_vq_nolock(struct snap_vrdma_queue *vq)
 {
 	struct snap_pg *pg = vq->pg;
 
@@ -530,7 +226,7 @@ static void snap_vrdma_ctrl_desched_q_nolock(struct snap_vrdma_queue *vq)
 	vq->pg = NULL;
 }
 
-void snap_vrdma_ctrl_desched_q(struct snap_vrdma_queue *vq)
+void snap_vrdma_desched_vq(struct snap_vrdma_queue *vq)
 {
 	struct snap_pg *pg = vq->pg;
 
@@ -538,7 +234,7 @@ void snap_vrdma_ctrl_desched_q(struct snap_vrdma_queue *vq)
 		return;
 
 	pthread_spin_lock(&pg->lock);
-	snap_vrdma_ctrl_desched_q_nolock(vq);
+	snap_vrdma_desched_vq_nolock(vq);
 	pthread_spin_unlock(&pg->lock);
 }
 
@@ -599,4 +295,226 @@ int snap_vrdma_ctrl_io_progress_thread(struct snap_vrdma_ctrl *ctrl,
 	return snap_vrdma_ctrl_pg_thread_io_progress(ctrl, thread_id, thread_id);
 }
 
+int snap_vrdma_create_qp_helper(struct ibv_pd *pd, 
+			struct snap_vrdma_backend_qp *qp)
+{
+	struct snap_qp_attr *qp_attr = &qp->qp_attr;
+	struct snap_cq_attr cq_attr = {0};
+	int rc;
 
+	snap_error("\nlizh snap_vrdma_create_qp_helper...start");
+	cq_attr.cq_type = SNAP_OBJ_DEVX;
+	cq_attr.cqe_size = SNAP_VRDMA_CQE_SIZE;
+	if (qp_attr->sq_size) {
+		cq_attr.cqe_cnt = qp_attr->sq_size;
+		qp_attr->sq_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->sq_cq %p", qp_attr->sq_cq);
+		if (!qp_attr->sq_cq)
+			return -EINVAL;
+	} else {
+		qp_attr->sq_cq = NULL;
+	}
+
+	if (qp_attr->rq_size) {
+		cq_attr.cqe_cnt = qp_attr->rq_size;
+		qp_attr->rq_cq = snap_cq_create(pd->context, &cq_attr);
+		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->rq_cq %p", qp_attr->rq_cq);
+		if (!qp_attr->rq_cq)
+			goto free_sq_cq;
+	} else {
+		qp_attr->rq_cq = NULL;
+	}
+
+	qp_attr->qp_type = cq_attr.cq_type;
+
+	qp->sqp = snap_qp_create(pd, qp_attr);
+	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_create qp->sqp %p", qp->sqp);
+	if (!qp->sqp)
+		goto free_rq_cq;
+
+	rc = snap_qp_to_hw_qp(qp->sqp, &qp->hw_qp);
+	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_to_hw_qp rc %d", rc);
+	if (rc)
+		goto free_qp;
+
+	if (qp_attr->sq_cq) {
+		rc = snap_cq_to_hw_cq(qp_attr->sq_cq, &qp->sq_hw_cq);
+		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq sq_cq rc %d", rc);
+		if (rc)
+			goto free_qp;
+	}
+
+	if (qp_attr->rq_cq) {
+		rc = snap_cq_to_hw_cq(qp_attr->rq_cq, &qp->rq_hw_cq);
+		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq rx_cq rc %d", rc);
+		if (rc)
+			goto free_qp;
+	}
+	return 0;
+
+free_qp:
+	snap_qp_destroy(qp->sqp);
+free_rq_cq:
+	if (qp_attr->rq_cq)
+		snap_cq_destroy(qp_attr->rq_cq);
+free_sq_cq:
+	if (qp_attr->sq_cq)
+		snap_cq_destroy(qp_attr->sq_cq);
+	return -EINVAL;
+}
+
+void snap_vrdma_destroy_qp_helper(struct snap_vrdma_backend_qp *qp)
+{
+	if (qp->sqp)
+		snap_qp_destroy(qp->sqp);
+	if (qp->qp_attr.rq_cq)
+		snap_cq_destroy(qp->qp_attr.rq_cq);
+	if (qp->qp_attr.sq_cq)
+		snap_cq_destroy(qp->qp_attr.sq_cq);
+}
+
+#if 0
+/**
+ * snap_vrdma_virtq_destroy() - Destroys vrdma virtq
+ * @q: queue to be destroyed
+ *
+ * Context: Destroy should be called only when queue is in suspended state.
+ *
+ * Return: void
+ */
+void snap_vrdma_virtq_destroy(struct snap_vrdma_ctrl *ctrl,
+			struct snap_vrdma_queue *queue)
+{
+	struct virtq_priv *vq_priv = q->common_ctx.priv;
+
+	snap_debug("destroying queue %d\n", q->common_ctx.idx);
+
+	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntrs.outstanding_total)
+		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.outstanding_total);
+
+	if (vq_priv->cmd_cntrs.fatal)
+		snap_warn("queue %d: destroying while %d command(s) completed with fatal error\n",
+			  q->common_ctx.idx, vq_priv->cmd_cntrs.fatal);
+	ctrl->q_ops->destroy(ctrl, queue);
+
+	free_blk_virtq_cmd_arr(vq_priv);
+	virtq_ctx_destroy(vq_priv);
+	free(q);
+}
+#endif
+
+int snap_vrdma_modify_bankend_qp_rst2init(struct snap_qp *qp,
+				     struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rst2init_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rst2init_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rst2init_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rst2init_qp_in, in, opcode, MLX5_CMD_OP_RST2INIT_QP);
+	DEVX_SET(rst2init_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+	DEVX_SET(qpc, qpc, pm_state, MLX5_QP_PM_MIGRATED);
+	DEVX_SET(qpc, qpc, primary_address_path.vhca_port_num, 1);
+
+	if (attr_mask & IBV_QP_ACCESS_FLAGS) {
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_READ)
+			DEVX_SET(qpc, qpc, rre, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_WRITE)
+			DEVX_SET(qpc, qpc, rwe, 1);
+		if (qp_attr->qp_access_flags & IBV_ACCESS_REMOTE_ATOMIC) {
+			DEVX_SET(qpc, qpc, rae, 1);
+			DEVX_SET(qpc, qpc, atomic_mode, MLX5_QPC_ATOMIC_MODE_UP_TO_8B);
+		}
+	}
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to init with errno = %d\n", ret);
+	return ret;
+}
+
+int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
+			struct ibv_qp_attr *qp_attr, int attr_mask,
+			struct snap_vrdma_bk_qp_rdy_attr *rdy_attr)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(init2rtr_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(init2rtr_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(init2rtr_qp_in, in, qpc);
+	void *address_path;
+	int ret;
+
+	DEVX_SET(init2rtr_qp_in, in, opcode, MLX5_CMD_OP_INIT2RTR_QP);
+	DEVX_SET(init2rtr_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+
+	/* 30 is the maximum value for Infiniband QPs*/
+	DEVX_SET(qpc, qpc, log_msg_max, 30);
+
+	/* TODO: add more attributes */
+	if (attr_mask & IBV_QP_PATH_MTU)
+		DEVX_SET(qpc, qpc, mtu, qp_attr->path_mtu);
+	if (attr_mask & IBV_QP_DEST_QPN)
+		DEVX_SET(qpc, qpc, remote_qpn, qp_attr->dest_qp_num);
+	if (attr_mask & IBV_QP_RQ_PSN)
+		DEVX_SET(qpc, qpc, next_rcv_psn, qp_attr->rq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_MAX_DEST_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_rra_max,
+			 snap_u32log2(qp_attr->max_dest_rd_atomic));
+	if (attr_mask & IBV_QP_MIN_RNR_TIMER)
+		DEVX_SET(qpc, qpc, min_rnr_nak, qp_attr->min_rnr_timer);
+	if (attr_mask & IBV_QP_AV) {
+		DEVX_SET(qpc, qpc, primary_address_path.fl, 1);
+	} else {
+		address_path = DEVX_ADDR_OF(qpc, qpc, primary_address_path);
+		/* Only connection type supported is ETH - ROCE */
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+		       rdy_attr->dest_mac, MAC_ADDR_2MSBYTES_LEN);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rmac_31_0),
+		       rdy_attr->dest_mac + MAC_ADDR_2MSBYTES_LEN,
+		       MAC_ADDR_LEN - MAC_ADDR_2MSBYTES_LEN);
+		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+		       &rdy_attr->rgid_rip, sizeof(rdy_attr->rgid_rip));
+
+		DEVX_SET(ads, address_path, rlid, 0xc000);
+		DEVX_SET(ads, address_path, src_addr_index, rdy_attr->src_addr_index);
+		DEVX_SET(ads, address_path, hop_limit, 255); /* High value so it won't limit */
+	}
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rtr with errno = %d\n", ret);
+	return ret;
+}
+
+int snap_vrdma_modify_bankend_qp_rtr2rts(struct snap_qp *qp,
+				    struct ibv_qp_attr *qp_attr, int attr_mask)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(rtr2rts_qp_in)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(rtr2rts_qp_out)] = {0};
+	void *qpc = DEVX_ADDR_OF(rtr2rts_qp_in, in, qpc);
+	int ret;
+
+	DEVX_SET(rtr2rts_qp_in, in, opcode, MLX5_CMD_OP_RTR2RTS_QP);
+	DEVX_SET(rtr2rts_qp_in, in, qpn, snap_qp_get_qpnum(qp));
+
+	if (attr_mask & IBV_QP_TIMEOUT)
+		DEVX_SET(qpc, qpc, primary_address_path.ack_timeout,
+			 qp_attr->timeout);
+	if (attr_mask & IBV_QP_RETRY_CNT)
+		DEVX_SET(qpc, qpc, retry_count, qp_attr->retry_cnt);
+	if (attr_mask & IBV_QP_SQ_PSN)
+		DEVX_SET(qpc, qpc, next_send_psn, qp_attr->sq_psn & 0xffffff);
+	if (attr_mask & IBV_QP_RNR_RETRY)
+		DEVX_SET(qpc, qpc, rnr_retry, qp_attr->rnr_retry);
+	if (attr_mask & IBV_QP_MAX_QP_RD_ATOMIC)
+		DEVX_SET(qpc, qpc, log_sra_max,
+			 snap_u32log2(qp_attr->max_rd_atomic));
+
+	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		snap_error("failed to modify qp to rts with errno = %d\n", ret);
+	return ret;
+}
