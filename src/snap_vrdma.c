@@ -85,6 +85,7 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 #endif
 
 	/* lizh just for test bar*/
+	g_bar_test.num_msix = 64;
 	memcpy(attr, &g_bar_test, sizeof(*attr));
 	return 0;
 #if 0
