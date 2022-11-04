@@ -60,6 +60,11 @@ static void snap_vrdma_vq_progress_suspend(struct snap_vrdma_queue *q)
 	q->swq_state = SW_VIRTQ_SUSPENDED;
 }
 
+static void snap_vrdma_vq_dummy_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len, uint32_t imm_data)
+{
+	snap_error("VRDMA: rx cb called\n");
+}
+
 static struct snap_vrdma_queue *
 snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl,
 							struct snap_vrdma_vq_create_attr *q_attr)
@@ -78,7 +83,7 @@ snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl,
 	rdma_qp_create_attr.rx_qsize = q_attr->rq_size;
 	rdma_qp_create_attr.rx_elem_size = q_attr->rx_elem_size;
 	rdma_qp_create_attr.uctx = virtq;
-	rdma_qp_create_attr.rx_cb = NULL;
+	rdma_qp_create_attr.rx_cb = snap_vrdma_vq_dummy_rx_cb;
 	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
 	virtq->dma_q = snap_dma_q_create(q_attr->pd, &rdma_qp_create_attr);
 	if (!virtq->dma_q) {
@@ -304,7 +309,7 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 
 	snap_error("\nlizh snap_vrdma_create_qp_helper...start");
 	cq_attr.cq_type = SNAP_OBJ_DEVX;
-	cq_attr.cqe_size = SNAP_VRDMA_CQE_SIZE;
+	cq_attr.cqe_size = SNAP_VRDMA_BACKEND_CQE_SIZE;
 	if (qp_attr->sq_size) {
 		cq_attr.cqe_cnt = qp_attr->sq_size;
 		qp_attr->sq_cq = snap_cq_create(pd->context, &cq_attr);
@@ -325,8 +330,7 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 		qp_attr->rq_cq = NULL;
 	}
 
-	qp_attr->qp_type = cq_attr.cq_type;
-
+	qp_attr->qp_type = SNAP_OBJ_DEVX;
 	qp->sqp = snap_qp_create(pd, qp_attr);
 	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_create qp->sqp %p", qp->sqp);
 	if (!qp->sqp)

@@ -794,6 +794,7 @@ static int snap_create_fw_qp(struct snap_dma_q *q, struct ibv_pd *pd,
 	fw_dma_q_attr.comp_channel = NULL;
 	fw_dma_q_attr.comp_context = NULL;
 	fw_dma_q_attr.comp_context = NULL;
+	snap_error("\nlizh snap_create_fw_qp...wk %p", attr->wk);
 
 	/* cannot create empty cq or a qp without one */
 	qp_init_attr.sq_size = snap_max(attr->tx_qsize / 4, SNAP_DMA_FW_QP_MIN_SEND_WR);
@@ -1662,15 +1663,15 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	q = snap_dma_ep_create(pd, attr);
 	if (!q)
 		return NULL;
-	snap_error("lizh snap_dma_q_create...snap_dma_ep_create done");
+	snap_error("\nlizh snap_dma_q_create...snap_dma_ep_create done");
 	rc = snap_create_fw_qp(q, pd, attr);
 	if (rc)
 		goto free_sw_qp;
-	snap_error("lizh snap_dma_q_create...snap_create_fw_qp done");
+	snap_error("\nlizh snap_dma_q_create...snap_create_fw_qp done");
 	rc = snap_dma_ep_connect_helper(&q->sw_qp, &q->fw_qp, pd);
 	if (rc)
 		goto free_fw_qp;
-	snap_error("lizh snap_dma_q_create...snap_dma_ep_connect_helper done");
+	snap_error("\nlizh snap_dma_q_create...snap_dma_ep_connect_helper done");
 	/* In general one must post recvs before qp is moved to the RTR.
 	 * However in our case we control both sides and there is no traffic
 	 * until fw qp is passed to the FW
@@ -1678,12 +1679,12 @@ struct snap_dma_q *snap_dma_q_create(struct ibv_pd *pd,
 	rc = snap_dma_q_post_recv(q);
 	if (rc)
 		goto free_fw_qp;
-	snap_error("lizh snap_dma_q_create...snap_dma_q_post_recv done");
+	snap_error("\nlizh snap_dma_q_create...snap_dma_q_post_recv done");
 
 	rc = snap_create_io_ctx(q, pd, attr);
 	if (rc)
 		goto free_fw_qp;
-	snap_error("lizh snap_dma_q_create...snap_create_io_ctx done");
+	snap_error("\nlizh snap_dma_q_create...snap_create_io_ctx done");
 
 	return q;
 
