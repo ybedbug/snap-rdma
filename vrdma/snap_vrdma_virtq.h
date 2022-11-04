@@ -114,6 +114,18 @@ struct snap_vrdma_vq_create_attr {
 	uint32_t vqpn;
 };
 
+struct snap_vrdma_qp_db_counter {
+	// total doorbels
+	uint64_t total_dbs;
+	// total processed completions
+	uint64_t total_completed;
+};
+
+struct snap_vrdma_qp_stat {
+	struct snap_vrdma_qp_db_counter rx;
+	struct snap_vrdma_qp_db_counter tx;
+};
+
 #define SNAP_VRDMA_BACKEND_CQE_SIZE 128
 #define MAC_ADDR_LEN 6
 #define MAC_ADDR_2MSBYTES_LEN 2
@@ -124,6 +136,10 @@ struct snap_vrdma_backend_qp {
 	struct snap_qp_attr qp_attr;
 	struct snap_hw_cq rq_hw_cq;
 	struct snap_hw_cq sq_hw_cq;
+	enum snap_db_ring_flag db_flag;
+	bool tx_need_ring_db;
+	struct mlx5_wqe_ctrl_seg *ctrl;
+	struct snap_vrdma_qp_stat stat;
 };
 
 struct snap_vrdma_bk_qp_rdy_attr {
