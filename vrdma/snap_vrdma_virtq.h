@@ -114,7 +114,7 @@ struct snap_vrdma_vq_create_attr {
 	uint32_t vqpn;
 };
 
-#define SNAP_VRDMA_CQE_SIZE 64
+#define SNAP_VRDMA_BACKEND_CQE_SIZE 128
 #define MAC_ADDR_LEN 6
 #define MAC_ADDR_2MSBYTES_LEN 2
 

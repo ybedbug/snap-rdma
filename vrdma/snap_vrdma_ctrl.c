@@ -760,7 +760,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 			goto out;
 		}
 	}
-
+	TAILQ_INIT(&ctrl->virtqs);
 	if (ctrl->state != SNAP_VRDMA_CTRL_SUSPENDED) {
 		snap_info("vrdma controller %p started\n", ctrl);
 		snap_error("lizh vrdma controller %p started\n", ctrl);
