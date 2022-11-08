@@ -965,12 +965,18 @@ def main():
     def controller_vrdma_configue(args):
         if args.dev_id == -1 or args.emu_manager is None:
             raise JsonRpcSnapException("Device id and emulation manager must be configured")
-        if args.mac is None and args.dev_state == -1 and args.adminq_paddr == -1 and args.adminq_length == -1:
+        if args.mac is None and args.dev_state == -1 and args.adminq_paddr == -1 and args.adminq_length == -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("Either mac, device state admin-queue address or admin-queue length must be configured")
-        if args.adminq_paddr != -1 and args.adminq_length == -1:
+        if args.adminq_paddr != -1 and args.adminq_length == -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
-        if args.adminq_paddr == -1 and args.adminq_length != -1:
+        if args.adminq_paddr == -1 and args.adminq_length != -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
+        if args.vrdma_qpn != -1:
+            if args.dest_mac is None and args.subnet_prefix == -1 and args.intf_id == -1 and args.backend_rqpn == -1:
+                raise JsonRpcSnapException("Either dest_mac, subnet_prefix, intf_id or backend_rqpn must be configured for qp test")
+        if args.dest_mac != None or args.subnet_prefix != -1 or args.intf_id != -1 and args.backend_rqpn != -1:
+            if args.vrdma_qpn == -1:
+                raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
         params = {
         }
         if args.emu_manager != None:
@@ -985,6 +991,16 @@ def main():
             params['adminq_paddr'] = args.adminq_paddr
         if args.adminq_length != -1:
             params['adminq_length'] = args.adminq_length
+        if args.dest_mac != None:
+            params['dest_mac'] = args.dest_mac
+        if args.subnet_prefix != -1:
+            params['subnet_prefix'] = args.subnet_prefix
+        if args.intf_id != -1:
+            params['intf_id'] = args.intf_id
+        if args.vrdma_qpn != -1:
+            params['vrdma_qpn'] = args.vrdma_qpn
+        if args.backend_rqpn != -1:
+            params['backend_rqpn'] = args.backend_rqpn
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1001,6 +1017,16 @@ def main():
     p.add_argument('-p', '--adminq_paddr', help='controller admin-queue physic address for test',
                     default=-1, type=int_hex, required=False)
     p.add_argument('-l', '--adminq_length', help='controller admin-queue length for test',
+                    default=-1, type=int, required=False)
+    p.add_argument('-c', '--dest_mac', help="Destination MAC in format 0x001122334455 for 00:11:22:33:44:55",
+                   required=False, type=int_hex)
+    p.add_argument('-u', '--subnet_prefix', help='subnet_prefix for qp test',
+                    default=-1, type=int_hex, required=False)
+    p.add_argument('-i', '--intf_id', help='interface id for qp test',
+                    default=-1, type=int_hex, required=False)
+    p.add_argument('-v', '--vrdma_qpn', help='vrdma qp number for qp test',
+                    default=-1, type=int, required=False)
+    p.add_argument('-b', '--backend_rqpn', help='remote vrdma backend qp number for qp test',
                     default=-1, type=int, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
