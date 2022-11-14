@@ -18,7 +18,6 @@
 
 struct snap_vrdma_test_dummy_device g_bar_test;
 
-#if 0 /* lizh just for test bar*/
 static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 	uint8_t *out, int outlen)
 {
@@ -49,7 +48,6 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 				     inlen, out, outlen);
 }
 
-
 static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 				 struct snap_vrdma_device_attr *vattr,
 				 void *device_configuration)
@@ -61,7 +59,6 @@ static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 	vattr->status = DEVX_GET(vrdma_device, device_configuration,
 				 device_status);
 }
-#endif
 
 /**
  * snap_vrdma_query_device() - Query an vRDMA snap device
@@ -76,19 +73,12 @@ static void snap_vrdma_get_device_attr(struct snap_device *sdev,
 int snap_vrdma_query_device(struct snap_device *sdev,
 	struct snap_vrdma_device_attr *attr)
 {
-#if 0
+
 	uint8_t *out;
-	//struct snap_context *sctx = sdev->sctx;
 	uint8_t *device_emulation_out;
 	int ret, out_size;
 	uint64_t dev_allowed;
-#endif
 
-	/* lizh just for test bar*/
-	g_bar_test.num_msix = 64;
-	memcpy(attr, &g_bar_test, sizeof(*attr));
-	return 0;
-#if 0
 	out_size = DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(vrdma_device_emulation);
 	out = calloc(1, out_size);
@@ -141,13 +131,12 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 	attr->adminq_size = DEVX_GET(vrdma_device_emulation,
 			      device_emulation_out, vrdma_adminq_config.adminq_size);
 	attr->adminq_nodify_off = DEVX_GET(vrdma_device_emulation,
-			      device_emulation_out, vrdma_adminq_config.adminq_nodify_off);
+			      device_emulation_out, vrdma_adminq_config.adminq_notify_off);
 	attr->adminq_base_addr = DEVX_GET64(vrdma_device_emulation,
 				  device_emulation_out, vrdma_adminq_config.adminq_base_addr);
 out_free:
 	free(out);
 	return ret;
-#endif
 }
 
 static int
@@ -298,56 +287,25 @@ int snap_vrdma_device_mac_init(struct snap_vrdma_ctrl *ctrl)
 int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 {
 	struct snap_vrdma_device *vdev;
-	//int ret, i;
 	int ret;
 
-	/*lizh Just for test*/
-	//if (sdev->pci->type != SNAP_VRDMA_PF)
-	//	return -EINVAL;
+	if (sdev->pci->type != SNAP_VRDMA_PF)
+		return -EINVAL;
 
 	vdev = calloc(1, sizeof(*vdev));
 	if (!vdev)
 		return -ENOMEM;
 	vdev->vdev_idx = vdev_idx;
-#if 0
-	vndev->num_queues = sdev->sctx->virtio_net_caps.max_emulated_virtqs;
-
-	vndev->virtqs = calloc(vndev->num_queues, sizeof(*vndev->virtqs));
-	if (!vndev->virtqs) {
-		ret = -ENOMEM;
-		goto out_free;
-	}
-
-	for (i = 0; i < vndev->num_queues; i++) {
-		vndev->virtqs[i].vndev = vndev;
-		vndev->virtqs[i].virtq.ctrs_obj =
-					snap_virtio_create_queue_counters(sdev);
-		if (!vndev->virtqs[i].virtq.ctrs_obj) {
-			ret = -ENODEV;
-			goto out_free_qctrs;
-		}
-	}
-#endif
 
 	ret = snap_init_device(sdev);
 	if (ret)
-		//goto out_free_virtqs;
 		goto out_free;
 
 	sdev->dd_data = vdev;
-	/* lizh just for test bar*/
 	memset(&g_bar_test, 0, sizeof(struct snap_vrdma_test_dummy_device));
 	snap_error("lizh snap_vrdma_init_device...done");
 	return 0;
 
-#if 0
-out_free_qctrs:
-	for (i = 0; i < vndev->num_queues; i++)
-		if (vndev->virtqs[i].virtq.ctrs_obj)
-			snap_devx_obj_destroy(vndev->virtqs[i].virtq.ctrs_obj);
-out_free_virtqs:
-	free(vndev->virtqs);
-#endif
 out_free:
 	free(vdev);
 	return ret;

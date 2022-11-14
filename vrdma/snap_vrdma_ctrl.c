@@ -819,7 +819,7 @@ static void snap_vrdma_ctrl_progress_unlock(struct snap_vrdma_ctrl *ctrl)
  */
 void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 {
-	//int ret;
+	int ret;
 
 	snap_vrdma_ctrl_progress_lock(ctrl);
 
@@ -837,19 +837,9 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 	if (ctrl->state == SNAP_VRDMA_CTRL_SUSPENDING)
 		snap_vrdma_ctrl_progress_suspend(ctrl);
 
-	/* lizh just for test*/
-	(void)snap_vrdma_ctrl_bar_update(ctrl, ctrl->bar_curr);
-#if 0
 	ret = snap_vrdma_ctrl_bar_update(ctrl, ctrl->bar_curr);
 	if (ret)
 		goto out;
-#endif
-	if (!ctrl->bar_curr->status) {
-		//ctrl->bar_curr->status = SNAP_VRDMA_DEVICE_S_DRIVER_OK;
-		ctrl->bar_curr->enabled = 1;
-		//snap_error("\nlizh snap_vrdma_ctrl_progress..ctrl->bar_curr->status DRIVER_OK \n");
-	}
-	/* End: lizh just for test*/
 
 	/* Handle device_status changes */
 	if (snap_vrdma_ctrl_critical_bar_change_detected(ctrl)) {
@@ -858,20 +848,6 @@ void snap_vrdma_ctrl_progress(struct snap_vrdma_ctrl *ctrl)
 			goto out;
 	}
 
-#if 0
-	if (ctrl->bar_curr->num_of_vfs != ctrl->bar_prev->num_of_vfs)
-		snap_virtio_ctrl_change_num_vfs(ctrl);
-
-	if (ctrl->state == SNAP_VRDMA_CTRL_STARTED) {
-		ret = snap_virtio_ctrl_queue_reset_check(ctrl);
-		if (ret)
-			goto out;
-
-		ret = snap_virtio_ctrl_queue_enable_check(ctrl);
-		if (ret)
-			goto out;
-	}
-#endif
 out:
 	snap_vrdma_ctrl_progress_unlock(ctrl);
 }

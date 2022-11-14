@@ -3023,6 +3023,7 @@ snap_create_vrdma_device_emulation(struct snap_device *sdev,
 	uint8_t *device_emulation_in;
 	struct mlx5_snap_devx_obj *device_emulation;
 
+	snap_error("\nlizh snap_create_vrdma_device_emulation...start");
 	device_emulation = calloc(1, sizeof(*device_emulation));
 	if (!device_emulation)
 		goto out_err;
@@ -3038,6 +3039,7 @@ snap_create_vrdma_device_emulation(struct snap_device *sdev,
 		 sdev->pci->mpci.vhca_id);
 	DEVX_SET(vrdma_device_emulation, device_emulation_in, enabled, 1);
 
+	snap_error("\nlizh snap_create_vrdma_device_emulation...call mlx5dv_devx_obj_create");
 	device_emulation->obj = mlx5dv_devx_obj_create(context, in, sizeof(in),
 						       out, sizeof(out));
 	if (!device_emulation->obj)
@@ -3045,6 +3047,7 @@ snap_create_vrdma_device_emulation(struct snap_device *sdev,
 
 	device_emulation->obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
 	device_emulation->sdev = sdev;
+	snap_error("\nlizh snap_create_vrdma_device_emulation...done");
 	return device_emulation;
 
 out_free:
@@ -3196,6 +3199,7 @@ struct mlx5_snap_devx_obj*
 snap_emulation_device_create(struct snap_device *sdev,
 			     struct snap_device_attr *attr)
 {
+	snap_error("lizh snap_emulation_device_create...start");
 	if (!sdev->pci->plugged)
 		return NULL;
 
