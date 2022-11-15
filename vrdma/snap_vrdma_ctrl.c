@@ -139,7 +139,8 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
 	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
 	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
-
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal...vhca_id %d crossed_vhca_mkey 0x%x",
+		cm_attr.vhca_id, cm_attr.crossed_vhca_mkey);
 	ctrl->xmkey = snap_create_cross_mkey_by_attr(attr->pd, &cm_attr);
 	if (!ctrl->xmkey) {
 		ret = -EACCES;
@@ -182,27 +183,20 @@ snap_vrdma_ctrl_open(struct snap_context *sctx,
 	ctrl = calloc(1, sizeof(*ctrl));
 	if (!ctrl) {
 		errno = ENOMEM;
-		goto err;
+		return NULL;
 	}
-
 	ret = snap_vrdma_ctrl_open_internal(ctrl, sctx, attr);
 	if (ret) {
 		errno = ENODEV;
-		goto free_ctrl;
+		free(ctrl);
+		return NULL;;
 	}
-
 	ret = snap_vrdma_init_device(ctrl->sdev, attr->pf_id);
-	if (ret)
-		goto close_ctrl;
-
+	if (ret) {
+		snap_vrdma_ctrl_close(ctrl);
+		return NULL;
+	}
 	return ctrl;
-
-close_ctrl:
-	snap_vrdma_ctrl_close(ctrl);
-free_ctrl:
-	free(ctrl);
-err:
-	return NULL;
 }
 
 /**
