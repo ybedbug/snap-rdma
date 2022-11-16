@@ -397,6 +397,8 @@ struct snap_device *snap_open_device(struct snap_context *sctx,
 
 struct snap_context *snap_open(struct ibv_device *ibdev);
 void snap_close(struct snap_context *sctx);
+ /* to open sf device in vrdma case */
+struct ibv_context *snap_vrdma_open_device(const char *name);
 
 uint16_t snap_get_vhca_id(struct snap_device *sdev);
 
