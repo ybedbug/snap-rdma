@@ -3795,8 +3795,6 @@ struct ibv_context *snap_vrdma_open_device(const char *name)
 	struct mlx5dv_context_attr attrs = {};
 	struct ibv_context *context;
 
-	printf("test vrdma_open_dev %s\n", name);
-
 	list = ibv_get_device_list(&n);
 	for (i = 0; i < n; i++) {
 		if (!name || !strncmp(name, list[i]->name,
@@ -3806,13 +3804,12 @@ struct ibv_context *snap_vrdma_open_device(const char *name)
 		}
 	}
 	if (!dev) {
-		printf("test vrdma_open_dev can not get dev %s\n", name);
 		return NULL;
 	}
 	
 	if (!mlx5dv_is_supported(dev)) {
 		errno = ENOTSUP;
-		printf("test !mlx5dv_is_supported \n");
+		snap_error("!mlx5dv_is_supported \n");
 		return NULL;
 	}
 

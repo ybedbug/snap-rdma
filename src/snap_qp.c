@@ -589,7 +589,7 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	}
 
 	devx_qp->devx.id = DEVX_GET(create_qp_out, out, qpn);
-	snap_debug("created devx qp 0x%x sq_size %u rq_size %u memsize %lu\n", devx_qp->devx.id,
+	snap_error("created devx qp 0x%x sq_size %u rq_size %u memsize %lu\n", devx_qp->devx.id,
 		   devx_qp->sq_size, devx_qp->rq_size, qp_buf_len + SNAP_MLX5_DBR_SIZE);
 	return 0;
 
