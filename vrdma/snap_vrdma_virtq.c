@@ -481,8 +481,10 @@ int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
 		       MAC_ADDR_LEN - MAC_ADDR_2MSBYTES_LEN);
 		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
 		       &rdy_attr->rgid_rip, sizeof(rdy_attr->rgid_rip));
+
 		DEVX_SET(ads, address_path, src_addr_index, rdy_attr->src_addr_index);
 		DEVX_SET(ads, address_path, hop_limit, 255); /* High value so it won't limit */
+		DEVX_SET(ads, address_path, udp_sport, 0xc000);
 	}
 
 	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
