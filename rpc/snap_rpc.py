@@ -965,12 +965,6 @@ def main():
     def controller_vrdma_configue(args):
         if args.dev_id == -1 or args.emu_manager is None:
             raise JsonRpcSnapException("Device id and emulation manager must be configured")
-        if args.mac is None and args.dev_state == -1 and args.adminq_paddr == -1 and args.adminq_length == -1 and args.vrdma_qpn == -1:
-            raise JsonRpcSnapException("Either mac, device state admin-queue address or admin-queue length must be configured")
-        if args.adminq_paddr != -1 and args.adminq_length == -1 and args.vrdma_qpn == -1:
-            raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
-        if args.adminq_paddr == -1 and args.adminq_length != -1 and args.vrdma_qpn == -1:
-            raise JsonRpcSnapException("Admin-queue address or admin-queue length must be both configured")
         if args.vrdma_qpn != -1:
             if args.dest_mac is None and args.subnet_prefix == -1 and args.intf_id == -1 and args.backend_rqpn == -1:
                 raise JsonRpcSnapException("Either dest_mac, subnet_prefix, intf_id or backend_rqpn must be configured for qp test")
@@ -1001,6 +995,8 @@ def main():
             params['vrdma_qpn'] = args.vrdma_qpn
         if args.backend_rqpn != -1:
             params['backend_rqpn'] = args.backend_rqpn
+        if args.backend_dev != None:
+            params['backend_dev'] = args.backend_dev
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1028,6 +1024,8 @@ def main():
                     default=-1, type=int, required=False)
     p.add_argument('-b', '--backend_rqpn', help='remote vrdma backend qp number for qp test',
                     default=-1, type=int, required=False)
+    p.add_argument('-n', '--backend_dev', help='vrdma backend sf dev for qp test',
+                    type=str, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
     def call_rpc_func(args):
