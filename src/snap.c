@@ -3787,6 +3787,40 @@ out_err:
 	return NULL;
 }
 
+struct ibv_context *snap_vrdma_open_device(const char *name)
+{
+	struct ibv_device **list;
+	int n, i;
+	struct ibv_device *dev = NULL;
+	struct mlx5dv_context_attr attrs = {};
+	struct ibv_context *context;
+
+	list = ibv_get_device_list(&n);
+	for (i = 0; i < n; i++) {
+		if (!name || !strncmp(name, list[i]->name,
+				      sizeof(list[i]->name))) {
+			dev = list[i];
+			break;
+		}
+	}
+	if (!dev) {
+		return NULL;
+	}
+	
+	if (!mlx5dv_is_supported(dev)) {
+		errno = ENOTSUP;
+		snap_error("!mlx5dv_is_supported \n");
+		return NULL;
+	}
+
+	attrs.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
+	context = mlx5dv_open_device(dev, &attrs);
+	
+	if (list)
+		ibv_free_device_list(list);
+	return context;
+}
+
 /**
  * snap_close() - Close and destroy a snap context
  * @sctx:       snap context
