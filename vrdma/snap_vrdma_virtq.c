@@ -335,6 +335,7 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_create qp->sqp %p", qp->sqp);
 	if (!qp->sqp)
 		goto free_rq_cq;
+	qp->qpnum = snap_qp_get_qpnum(qp->sqp);
 
 	rc = snap_qp_to_hw_qp(qp->sqp, &qp->hw_qp);
 	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_to_hw_qp rc %d", rc);
@@ -480,8 +481,8 @@ int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
 		       rdy_attr->dest_mac + MAC_ADDR_2MSBYTES_LEN,
 		       MAC_ADDR_LEN - MAC_ADDR_2MSBYTES_LEN);
 		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-		       &rdy_attr->rgid_rip, sizeof(rdy_attr->rgid_rip));
-
+			   rdy_attr->rgid_rip.raw,
+		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
 		DEVX_SET(ads, address_path, src_addr_index, rdy_attr->src_addr_index);
 		DEVX_SET(ads, address_path, hop_limit, 255); /* High value so it won't limit */
 		DEVX_SET(ads, address_path, udp_sport, 0xc000);

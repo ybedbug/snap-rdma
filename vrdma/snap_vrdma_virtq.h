@@ -132,6 +132,7 @@ struct snap_vrdma_qp_stat {
 
 struct snap_vrdma_backend_qp {
 	struct snap_qp *sqp;
+	uint32_t qpnum;
 	struct snap_hw_qp hw_qp;
 	struct snap_qp_attr qp_attr;
 	struct snap_hw_cq rq_hw_cq;
