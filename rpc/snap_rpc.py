@@ -997,6 +997,8 @@ def main():
             params['backend_rqpn'] = args.backend_rqpn
         if args.backend_dev != None:
             params['backend_dev'] = args.backend_dev
+        if args.src_addr_idx != -1:
+            params['src_addr_idx'] = args.src_addr_idx
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1026,6 +1028,8 @@ def main():
                     default=-1, type=int, required=False)
     p.add_argument('-n', '--backend_dev', help='vrdma backend sf dev for qp test',
                     type=str, required=False)
+    p.add_argument('-g', '--src_addr_idx', help='source gid id',
+                    default=-1, type=int, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
     def call_rpc_func(args):
