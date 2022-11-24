@@ -156,7 +156,7 @@ static int snap_vrdma_vq_suspend(struct snap_vrdma_queue *q)
 		return -EBUSY;
 	}
 
-	snap_info("ctrl %p queue %d: SUSPENDING command(s) - in %d bdev %d host %d fatal %d\n",
+	snap_info("\nctrl %p queue %d: SUSPENDING command(s) - in %d bdev %d host %d fatal %d\n",
 			q->ctrl, q->idx,
 			q->cmd_cntrs.outstanding_total, q->cmd_cntrs.outstanding_in_bdev,
 			q->cmd_cntrs.outstanding_to_host, q->cmd_cntrs.fatal);
@@ -370,44 +370,15 @@ free_sq_cq:
 
 void snap_vrdma_destroy_qp_helper(struct snap_vrdma_backend_qp *qp)
 {
+	snap_error("\nlizh snap_vrdma_destroy_qp_helper..start");
 	if (qp->sqp)
 		snap_qp_destroy(qp->sqp);
 	if (qp->qp_attr.rq_cq)
 		snap_cq_destroy(qp->qp_attr.rq_cq);
 	if (qp->qp_attr.sq_cq)
 		snap_cq_destroy(qp->qp_attr.sq_cq);
+	snap_error("\nlizh snap_vrdma_destroy_qp_helper..done");
 }
-
-#if 0
-/**
- * snap_vrdma_virtq_destroy() - Destroys vrdma virtq
- * @q: queue to be destroyed
- *
- * Context: Destroy should be called only when queue is in suspended state.
- *
- * Return: void
- */
-void snap_vrdma_virtq_destroy(struct snap_vrdma_ctrl *ctrl,
-			struct snap_vrdma_queue *queue)
-{
-	struct virtq_priv *vq_priv = q->common_ctx.priv;
-
-	snap_debug("destroying queue %d\n", q->common_ctx.idx);
-
-	if (vq_priv->swq_state != SW_VIRTQ_SUSPENDED && vq_priv->cmd_cntrs.outstanding_total)
-		snap_warn("queue %d: destroying while not in the SUSPENDED state, %d commands outstanding\n",
-			  q->common_ctx.idx, vq_priv->cmd_cntrs.outstanding_total);
-
-	if (vq_priv->cmd_cntrs.fatal)
-		snap_warn("queue %d: destroying while %d command(s) completed with fatal error\n",
-			  q->common_ctx.idx, vq_priv->cmd_cntrs.fatal);
-	ctrl->q_ops->destroy(ctrl, queue);
-
-	free_blk_virtq_cmd_arr(vq_priv);
-	virtq_ctx_destroy(vq_priv);
-	free(q);
-}
-#endif
 
 int snap_vrdma_modify_bankend_qp_rst2init(struct snap_qp *qp,
 				     struct ibv_qp_attr *qp_attr, int attr_mask)
