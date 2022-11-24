@@ -1023,9 +1023,9 @@ def main():
     p.add_argument('-i', '--intf_id', help='interface id for qp test',
                     default=-1, type=int_hex, required=False)
     p.add_argument('-v', '--vrdma_qpn', help='vrdma qp number for qp test',
-                    default=-1, type=int, required=False)
+                    default=-1, type=int_hex, required=False)
     p.add_argument('-b', '--backend_rqpn', help='remote vrdma backend qp number for qp test',
-                    default=-1, type=int, required=False)
+                    default=-1, type=int_hex, required=False)
     p.add_argument('-n', '--backend_dev', help='vrdma backend sf dev for qp test',
                     type=str, required=False)
     p.add_argument('-g', '--src_addr_idx', help='source gid id',
