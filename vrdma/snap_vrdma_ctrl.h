@@ -73,7 +73,7 @@ struct snap_vrdma_ctrl {
 	struct snap_vrdma_ctrl_bar_cbs bar_cbs;
 	struct snap_vrdma_device_attr *bar_curr;
 	struct snap_vrdma_device_attr *bar_prev;
-	struct ibv_pd *adminq_pd;
+	struct ibv_pd *pd;
 	struct ibv_mr *adminq_mr;
 	struct snap_dma_q *adminq_dma_q;
 	struct snap_dma_completion *adminq_dma_comp;
