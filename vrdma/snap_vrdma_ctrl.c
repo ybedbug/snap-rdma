@@ -77,13 +77,28 @@ err:
 	return ret;
 }
 
+static int snap_vrdma_ctrl_create_crossing_mkey(struct snap_vrdma_ctrl *ctrl)
+{
+	struct snap_cross_mkey_attr cm_attr = {};
+
+	cm_attr.vtunnel = ctrl->sdev->mdev.vtunnel;
+	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
+	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
+	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
+	snap_error("\nlizh snap_vrdma_ctrl_create_crossing_mkey...vhca_id %d crossed_vhca_mkey 0x%x",
+		cm_attr.vhca_id, cm_attr.crossed_vhca_mkey);
+	ctrl->xmkey = snap_create_cross_mkey_by_attr(ctrl->pd, &cm_attr);
+	if (!ctrl->xmkey)
+		return -1;
+	return 0;
+}
+
 static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 			  struct snap_context *sctx,
 			  const struct snap_vrdma_ctrl_attr *attr)
 {
 	int ret = 0;
 	uint32_t npgs;
-	struct snap_cross_mkey_attr cm_attr = {};
 
 	snap_error("\nlizh snap_vrdma_ctrl_open_internal..pci_type %d .pf_id %d start", attr->pci_type, attr->pf_id);
 	if (!sctx) {
@@ -113,7 +128,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 
 	ctrl->bar_cbs = *attr->bar_cbs;
 	ctrl->cb_ctx = attr->cb_ctx;
-	ctrl->adminq_pd = attr->pd;
+	ctrl->pd = attr->pd;
 	ctrl->adminq_mr = attr->mr;
 	ctrl->adminq_buf = attr->adminq_buf;
 	ctrl->adminq_dma_entry_size = attr->adminq_dma_entry_size;
@@ -121,8 +136,8 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_vrdma_ctrl_bars_init adminq_pd %p ctrl->adminq_mr %p done",
-	ctrl->adminq_pd, ctrl->adminq_mr);
+	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_vrdma_ctrl_bars_init adminq pd %p ctrl->adminq_mr %p done",
+	ctrl->pd, ctrl->adminq_mr);
 
 	ret = pthread_mutex_init(&ctrl->progress_lock, NULL);
 	if (ret)
@@ -134,15 +149,7 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 		goto mutex_destroy;
 	}
 	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_pgs_alloc done");
-
-	cm_attr.vtunnel = ctrl->sdev->mdev.vtunnel;
-	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
-	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
-	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal...vhca_id %d crossed_vhca_mkey 0x%x",
-		cm_attr.vhca_id, cm_attr.crossed_vhca_mkey);
-	ctrl->xmkey = snap_create_cross_mkey_by_attr(attr->pd, &cm_attr);
-	if (!ctrl->xmkey) {
+	if (snap_vrdma_ctrl_create_crossing_mkey(ctrl)) {
 		ret = -EACCES;
 		goto free_pgs;
 	}
@@ -639,6 +646,8 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 		}
 
 		snap_close_device(ctrl->sdev);
+		(void)snap_destroy_cross_mkey(ctrl->xmkey);
+		ctrl->xmkey = NULL;
 		ctrl->pending_flr = true;
 
 		/*
@@ -656,6 +665,9 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 				if (i > 9)
 					snap_warn("FLR took more than 100ms");
 				ctrl->sdev->dd_data = dd_data;
+				if (snap_vrdma_ctrl_create_crossing_mkey(ctrl))
+					snap_error("vrdma controller %p "
+					"fail to create mkey after FLR\n", ctrl);
 				ctrl->pending_flr = false;
 				break;
 			}
@@ -669,9 +681,6 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 			return -ENODEV;
 		}
 	} else {
-		//if (ctrl->lm_state == SNAP_VIRTIO_CTRL_LM_FREEZED)
-		//	snap_error("bar change while in %s\n", lm_state2str(ctrl->lm_state));
-
 		if (SNAP_VRDMA_CTRL_LIVE_DETECTED(ctrl)) {
 			ret = snap_vrdma_ctrl_validate(ctrl);
 			if (!ret)
@@ -725,7 +734,7 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	dma_q_attr.mode = SNAP_DMA_Q_MODE_DV;
 	dma_q_attr.use_devx = true;
 	dma_q_attr.rx_cb = vrdma_dummy_rx_cb;
-	ctrl->adminq_dma_q = snap_dma_q_create(ctrl->adminq_pd, &dma_q_attr);
+	ctrl->adminq_dma_q = snap_dma_q_create(ctrl->pd, &dma_q_attr);
 	if (!ctrl->adminq_dma_q) {
 		snap_error("Failed to create dma for admin queue controller %p ",
 			  ctrl);
