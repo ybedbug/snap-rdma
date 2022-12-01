@@ -223,6 +223,10 @@ static int snap_create_qp_helper(struct ibv_pd *pd, const struct snap_dma_q_crea
 	else
 		cq_attr.cq_type = dma_q_attr->use_devx ? SNAP_OBJ_DEVX : SNAP_OBJ_DV;
 
+	/* dma qp need to be overrun_ignore enable for DEVX */
+	if (cq_attr.cq_type == SNAP_OBJ_DEVX)
+		cq_attr.oi_enable = true;
+
 	snap_error("\nlizh snap_create_qp_helper cq_type %d dpa_mode %d",
 	cq_attr.cq_type, dma_q_attr->dpa_mode);
 	switch (dma_q_attr->dpa_mode) {
@@ -1809,7 +1813,8 @@ struct snap_dma_worker *snap_dma_worker_create(struct ibv_pd *pd,
 		.comp_vector = 0,
 		.cqe_cnt = attr->exp_queue_num * attr->exp_queue_rx_size,
 		.cqe_size = SNAP_DMA_Q_TX_CQE_SIZE,
-		.cq_type = SNAP_OBJ_DEVX
+		.cq_type = SNAP_OBJ_DEVX,
+		.oi_enable = true
 	};
 
 	if (!wk)

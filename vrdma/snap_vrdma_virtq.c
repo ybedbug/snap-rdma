@@ -309,6 +309,7 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 
 	snap_error("\nlizh snap_vrdma_create_qp_helper...start");
 	cq_attr.cq_type = SNAP_OBJ_DEVX;
+	cq_attr.oi_enable = false;
 	cq_attr.cqe_size = SNAP_VRDMA_BACKEND_CQE_SIZE;
 	if (qp_attr->sq_size) {
 		cq_attr.cqe_cnt = qp_attr->sq_size;

@@ -219,7 +219,8 @@ static int rt_thread_init(struct snap_dpa_rt_thread *rt_thr, struct ibv_pd *pd_i
 		.cq_type = SNAP_OBJ_DEVX,
 		.cqe_size = SNAP_DPA_RT_THR_SINGLE_DB_CQE_SIZE,
 		.cqe_cnt = SNAP_DPA_RT_THR_SINGLE_DB_CQE_CNT,
-		.cq_on_dpa = true
+		.cq_on_dpa = true,
+		.oi_enable = true
 	};
 	struct snap_dpa_rt *rt = rt_thr->rt;
 	struct ibv_pd *pd = pd_in ? pd_in : rt->dpa_proc->pd;
@@ -414,7 +415,8 @@ int snap_dpa_rt_thread_msix_add(struct snap_dpa_rt_thread *rt_thr, struct snap_d
 		.dpa_element_type = MLX5_APU_ELEMENT_TYPE_EMULATED_DEV_EQ,
 		.eqn = snap_dpa_msix_eq_id(msix_eq),
 		.use_eqn = true,
-		.dpa_proc = rt_thr->rt->dpa_proc
+		.dpa_proc = rt_thr->rt->dpa_proc,
+		.oi_enable = true
 	};
 	struct snap_hw_cq hw_cq;
 	int ret;

@@ -105,6 +105,7 @@ struct snap_cq_attr {
 
 	uint32_t eqn;
 	bool use_eqn;
+	bool oi_enable;
 };
 
 struct snap_cq;
