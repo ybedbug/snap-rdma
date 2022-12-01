@@ -158,8 +158,9 @@ static int devx_cq_init(struct snap_cq *cq, struct ibv_context *ctx, const struc
 
 	DEVX_SET(cqc, cqctx, cqe_sz, attr->cqe_size == 128 ?  MLX5_CQE_SIZE_128B : MLX5_CQE_SIZE_64B);
 
-	/* always ignore overrun */
-	DEVX_SET(cqc, cqctx, oi, 1);
+	/* always ignore overrun, for vrdma, will disable */
+	DEVX_SET(cqc, cqctx, oi, attr->oi_enable);
+
 	DEVX_SET(cqc, cqctx, log_cq_size, snap_u32log2(devx_cq->cqe_cnt));
 
 	if (log_page_size > MLX5_ADAPTER_PAGE_SHIFT)
