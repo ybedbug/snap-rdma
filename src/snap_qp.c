@@ -244,6 +244,13 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 	struct snap_devx_cq *devx_cq = &cq->devx_cq;
 
 	memset(hw_cq, 0, sizeof(*hw_cq));
+	hw_cq->ci = 0;
+	hw_cq->cqe_cnt = devx_cq->cqe_cnt;
+	hw_cq->cqe_size = devx_cq->cqe_size;
+	hw_cq->cq_num = devx_cq->devx.id;
+	hw_cq->uar_addr = (uintptr_t)devx_cq->devx.uar->uar->base_addr;
+	hw_cq->cq_sn = 0;
+
 	if (!devx_cq->devx.on_dpa) {
 		hw_cq->cq_addr = (uintptr_t)devx_cq->devx.umem.buf;
 		hw_cq->dbr_addr = hw_cq->cq_addr + hw_cq->cqe_cnt * hw_cq->cqe_size;
@@ -251,12 +258,6 @@ int devx_cq_to_hw_cq(struct snap_cq *cq, struct snap_hw_cq *hw_cq)
 		hw_cq->cq_addr = snap_dpa_mem_addr(devx_cq->devx.dpa_mem);
 		hw_cq->dbr_addr = (uintptr_t)devx_cq->devx.umem.buf;
 	}
-	hw_cq->ci = 0;
-	hw_cq->cqe_cnt = devx_cq->cqe_cnt;
-	hw_cq->cqe_size = devx_cq->cqe_size;
-	hw_cq->cq_num = devx_cq->devx.id;
-	hw_cq->uar_addr = (uintptr_t)devx_cq->devx.uar->uar->base_addr;
-	hw_cq->cq_sn = 0;
 
 	snap_debug("dv_hw_cq 0x%x: buf = 0x%lx, cqe_size = %u, cqe_count = %d dbr_addr = 0x%lx\n",
 		   devx_cq->devx.id, hw_cq->cq_addr, hw_cq->cqe_size, hw_cq->cqe_cnt, hw_cq->dbr_addr);
