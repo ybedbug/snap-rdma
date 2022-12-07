@@ -965,12 +965,16 @@ def main():
     def controller_vrdma_configue(args):
         if args.dev_id == -1 or args.emu_manager is None:
             raise JsonRpcSnapException("Device id and emulation manager must be configured")
-        if args.vrdma_qpn != -1:
-            if args.dest_mac is None and args.subnet_prefix == -1 and args.intf_id == -1 and args.backend_rqpn == -1:
-                raise JsonRpcSnapException("Either dest_mac, subnet_prefix, intf_id or backend_rqpn must be configured for qp test")
-        if args.dest_mac != None or args.subnet_prefix != -1 or args.intf_id != -1 and args.backend_rqpn != -1:
-            if args.vrdma_qpn == -1:
-                raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
+        if args.vrdma_qpn != -1 and args.backend_rqpn == -1:
+            raise JsonRpcSnapException("backend_rqpn must be configured for qp test")
+        if args.backend_rqpn != -1 and args.vrdma_qpn == -1:
+            raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
+        if args.backend_dev != None and args.sf_mac is None:
+            raise JsonRpcSnapException("sf_mac must be configured for backend_dev test")
+        if args.node_ip != -1 and args.node_rip == -1:
+            raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
+        if args.node_ip == -1 and args.node_rip != -1:
+            raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
         params = {
         }
         if args.emu_manager != None:
@@ -999,6 +1003,12 @@ def main():
             params['backend_dev'] = args.backend_dev
         if args.src_addr_idx != -1:
             params['src_addr_idx'] = args.src_addr_idx
+        if args.sf_mac != None:
+            params['sf_mac'] = args.sf_mac
+        if args.node_ip != -1:
+            params['node_ip'] = args.node_ip
+        if args.node_rip != -1:
+            params['node_rip'] = args.node_rip
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1016,11 +1026,11 @@ def main():
                     default=-1, type=int_hex, required=False)
     p.add_argument('-l', '--adminq_length', help='controller admin-queue length for test',
                     default=-1, type=int, required=False)
-    p.add_argument('-c', '--dest_mac', help="Destination MAC in format 0x001122334455 for 00:11:22:33:44:55",
+    p.add_argument('-c', '--dest_mac', help="Destination MAC on qp test or remote SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
                    required=False, type=int_hex)
-    p.add_argument('-u', '--subnet_prefix', help='subnet_prefix for qp test',
+    p.add_argument('-u', '--subnet_prefix', help='subnet_prefix on qp test or remote SF IP for test',
                     default=-1, type=int_hex, required=False)
-    p.add_argument('-i', '--intf_id', help='interface id for qp test',
+    p.add_argument('-i', '--intf_id', help='interface id on qp test or local SF IP for test',
                     default=-1, type=int_hex, required=False)
     p.add_argument('-v', '--vrdma_qpn', help='vrdma qp number for qp test',
                     default=-1, type=int_hex, required=False)
@@ -1028,8 +1038,14 @@ def main():
                     default=-1, type=int_hex, required=False)
     p.add_argument('-n', '--backend_dev', help='vrdma backend sf dev for qp test',
                     type=str, required=False)
-    p.add_argument('-g', '--src_addr_idx', help='source gid id',
+    p.add_argument('-g', '--src_addr_idx', help='source gid id on qp test or SF gid index',
                     default=-1, type=int, required=False)
+    p.add_argument('-j', '--sf_mac', help="Local SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
+                   required=False, type=int_hex)
+    p.add_argument('-o', '--node_ip', help="rpc local node ip address",
+                   default=-1, type=int_hex, required=False)
+    p.add_argument('-r', '--node_rip', help="rpc remote node ip address",
+                   default=-1, type=int_hex, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
     def call_rpc_func(args):
