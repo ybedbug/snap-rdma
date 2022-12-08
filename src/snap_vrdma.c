@@ -405,3 +405,39 @@ err:
 	free(pfs);
 	free(sdev);
 }
+
+
+struct mlx5dv_devx_obj *
+snap_vrdma_mlx_devx_create_eq(struct ibv_context *ctx, uint32_t dev_emu_id,
+		   uint16_t msix_vector, uint64_t *eqn)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
+		   DEVX_ST_SZ_BYTES(create_emulated_dev_eq_in)] = {};
+	uint8_t out[DEVX_ST_SZ_DW(general_obj_out_cmd_hdr) +
+		    DEVX_ST_SZ_BYTES(create_eq_out)] = {};
+	struct mlx5dv_devx_obj *eq = NULL;
+	uint8_t *emu_dev_eq_in;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_OBJ_TYPE_EMULATED_DEV_EQ);
+
+	emu_dev_eq_in = in + DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr);
+	DEVX_SET(create_emulated_dev_eq_in, emu_dev_eq_in, device_emulation_id,
+		 dev_emu_id);
+	DEVX_SET(create_emulated_dev_eq_in, emu_dev_eq_in, intr, msix_vector);
+
+	eq = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
+	if (eq)
+		*eqn = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+	return eq;
+}
+
+void snap_vrdma_mlx_devx_destroy_eq(struct mlx5dv_devx_obj *obj)
+{
+	mlx5dv_devx_obj_destroy(obj);
+}
+
+
+

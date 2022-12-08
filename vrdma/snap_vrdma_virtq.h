@@ -101,6 +101,7 @@ struct snap_vrdma_queue {
 	struct ibv_pd *pd;
 	uint32_t dma_mkey;
 	struct snap_dma_q *dma_q;
+	struct vrdma_dpa_vq *dpa_vq;
 	struct snap_vrdma_ctrl_queue_out_counter cmd_cntrs;
 };
 

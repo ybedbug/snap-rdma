@@ -66,6 +66,66 @@ struct snap_vrdma_device {
 	uint32_t vdev_idx;
 };
 
+#define u8 uint8_t
+#define u16 uint16_t
+#define u32 uint32_t
+
+// enum {
+// 	MLX5_CMD_OP_CREATE_GENERAL_OBJECT = 0xa00,
+// 	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49,
+// };
+
+// struct mlx5_ifc_general_obj_out_cmd_hdr_bits {
+// 	u8	 status[0x8];
+// 	u8	 reserved_at_8[0x18];
+
+// 	u8	 syndrome[0x20];
+
+// 	u8	 obj_id[0x20];
+
+// 	u8	 reserved_at_60[0x20];
+// };
+
+struct mlx5_ifc_create_emulated_dev_eq_in_bits {
+    u8     modify_field_select[0x40];
+
+    u8     reserved_at_40[0x20];
+
+    u8     device_emulation_id[0x20];
+
+    u8     reserved_at_e0[0x120];
+
+    u8     reserved0[0x14];
+    u8     intr[0xc];
+
+    u8     reserved1[0x40];
+};
+
+struct mlx5_ifc_create_eq_out_bits {
+    u8     status[0x8];
+    u8     reserved_at_8[0x18];
+
+    u8     syndrome[0x20];
+
+    u8     reserved_at_40[0x18];
+    u8     eqn[0x8];
+
+    u8     reserved_at_60[0x20];
+};
+
+// struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
+// 	u8	 opcode[0x10];
+// 	u8	 uid[0x10];
+
+// 	u8	 reserved_at_20[0x10];
+// 	u8	 obj_type[0x10];
+
+// 	u8	 obj_id[0x20];
+
+// 	u8	 alias_object[0x1];
+// 	u8	 reserved_at_61[0x1f];
+// };
+
 int snap_vrdma_device_mac_init(struct snap_vrdma_ctrl *ctrl);
 int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx);
 int snap_vrdma_teardown_device(struct snap_device *sdev);
@@ -74,4 +134,8 @@ int snap_vrdma_query_device(struct snap_device *sdev,
 int snap_vrdma_modify_device(struct snap_device *sdev, uint64_t mask,
 		struct snap_vrdma_device_attr *attr);
 void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx);
+struct mlx5dv_devx_obj *
+snap_vrdma_mlx_devx_create_eq(struct ibv_context *ctx, uint32_t dev_emu_id,
+		   uint16_t msix_vector, uint64_t *eqn);
+void snap_vrdma_mlx_devx_destroy_eq(struct mlx5dv_devx_obj *obj);
 #endif
