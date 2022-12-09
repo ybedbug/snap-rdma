@@ -614,7 +614,6 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 	} else if (SNAP_VRDMA_CTRL_FLR_DETECTED(ctrl)) {
 		struct snap_context *sctx = ctrl->sdev->sctx;
 		void *dd_data = ctrl->sdev->dd_data;
-		int i;
 
 		if (!snap_vrdma_ctrl_is_stopped(ctrl)) {
 			if (ctrl->state == SNAP_VRDMA_CTRL_STARTED) {
@@ -634,43 +633,24 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 		}
 
 		snap_info("vrdma controller %p FLR detected\n", ctrl);
-
-		/*if (ctrl->lm_state != SNAP_VIRTIO_CTRL_LM_RUNNING) {
-			snap_info("clearing live migration state");
-			snap_virtio_ctrl_set_lm_state(ctrl, SNAP_VIRTIO_CTRL_LM_RUNNING);
-		}*/
-
 		if (ctrl->bar_cbs.pre_flr) {
 			if (ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
 				return 0;
 		}
 
-		snap_close_device(ctrl->sdev);
 		(void)snap_destroy_cross_mkey(ctrl->xmkey);
+		snap_close_device(ctrl->sdev);
 		ctrl->xmkey = NULL;
 		ctrl->pending_flr = true;
 
-		/*
-		 * Per PCIe r4.0, sec 6.6.2, a device must complete a FLR
-		 * within 100ms. Creating a device emulation object succeed
-		 * only after FLR completes, so polling on this command.
-		 * Be more graceful and try to recover for 1 second.
-		 */
-
-		/* TODO: do this part asynchrounously */
-		for (i = 0; i < 100; i++) {
-			usleep(10000);
-			ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
-			if (ctrl->sdev) {
-				if (i > 9)
-					snap_warn("FLR took more than 100ms");
-				ctrl->sdev->dd_data = dd_data;
-				if (snap_vrdma_ctrl_create_crossing_mkey(ctrl))
+		usleep(10000);
+		ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
+		if (ctrl->sdev) {
+			ctrl->sdev->dd_data = dd_data;
+			if (snap_vrdma_ctrl_create_crossing_mkey(ctrl))
 					snap_error("vrdma controller %p "
 					"fail to create mkey after FLR\n", ctrl);
-				ctrl->pending_flr = false;
-				break;
-			}
+			ctrl->pending_flr = false;
 		}
 
 		if (ctrl->bar_cbs.post_flr)
