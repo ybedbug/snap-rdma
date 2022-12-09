@@ -1009,6 +1009,8 @@ def main():
             params['node_ip'] = args.node_ip
         if args.node_rip != -1:
             params['node_rip'] = args.node_rip
+        if args.show_vqpn != -1:
+            params['show_vqpn'] = args.show_vqpn
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1045,6 +1047,8 @@ def main():
     p.add_argument('-o', '--node_ip', help="rpc local node ip address",
                    default=-1, type=int_hex, required=False)
     p.add_argument('-r', '--node_rip', help="rpc remote node ip address",
+                   default=-1, type=int_hex, required=False)
+    p.add_argument('-q', '--show_vqpn', help="vqpn stats to show",
                    default=-1, type=int_hex, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
