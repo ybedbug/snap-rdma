@@ -113,6 +113,7 @@ struct snap_vrdma_vq_create_attr {
 	uint16_t tx_elem_size;
 	uint16_t rx_elem_size;
 	uint32_t vqpn;
+	snap_dma_rx_cb_t rx_cb;
 };
 
 struct snap_vrdma_qp_db_counter {

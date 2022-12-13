@@ -60,11 +60,6 @@ static void snap_vrdma_vq_progress_suspend(struct snap_vrdma_queue *q)
 	q->swq_state = SW_VIRTQ_SUSPENDED;
 }
 
-static void snap_vrdma_vq_dummy_rx_cb(struct snap_dma_q *q, const void *data, uint32_t data_len, uint32_t imm_data)
-{
-	snap_error("VRDMA: rx cb called\n");
-}
-
 static struct snap_vrdma_queue *
 snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl,
 							struct snap_vrdma_vq_create_attr *q_attr)
@@ -83,7 +78,7 @@ snap_vrdma_vq_create(struct snap_vrdma_ctrl *vctrl,
 	rdma_qp_create_attr.rx_qsize = q_attr->rq_size;
 	rdma_qp_create_attr.rx_elem_size = q_attr->rx_elem_size;
 	rdma_qp_create_attr.uctx = virtq;
-	rdma_qp_create_attr.rx_cb = snap_vrdma_vq_dummy_rx_cb;
+	rdma_qp_create_attr.rx_cb = q_attr->rx_cb; 
 	rdma_qp_create_attr.mode = snap_env_getenv(SNAP_DMA_Q_OPMODE);
 	virtq->dma_q = snap_dma_q_create(q_attr->pd, &rdma_qp_create_attr);
 	if (!virtq->dma_q) {
