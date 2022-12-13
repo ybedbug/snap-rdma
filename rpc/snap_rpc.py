@@ -969,8 +969,6 @@ def main():
             raise JsonRpcSnapException("backend_rqpn must be configured for qp test")
         if args.backend_rqpn != -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
-        if args.backend_dev != None and args.sf_mac is None:
-            raise JsonRpcSnapException("sf_mac must be configured for backend_dev test")
         if args.node_ip != -1 and args.node_rip == -1:
             raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
         if args.node_ip == -1 and args.node_rip != -1:
