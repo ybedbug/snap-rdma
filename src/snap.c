@@ -2949,6 +2949,8 @@ static int snap_query_device_emulation(struct snap_device *sdev)
 
 void snap_emulation_device_destroy(struct snap_device *sdev)
 {
+	snap_info("\nlizh snap_emulation_device_destroy obj %p\n",
+	sdev->mdev.device_emulation->obj);
 	mlx5dv_devx_obj_destroy(sdev->mdev.device_emulation->obj);
 	free(sdev->mdev.device_emulation);
 	sdev->mdev.device_emulation = NULL;
