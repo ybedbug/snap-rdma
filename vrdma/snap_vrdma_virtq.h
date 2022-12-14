@@ -103,6 +103,7 @@ struct snap_vrdma_queue {
 	struct snap_dma_q *dma_q;
 	struct vrdma_dpa_vq *dpa_vq;
 	struct snap_vrdma_ctrl_queue_out_counter cmd_cntrs;
+	void *ctx;
 };
 
 struct snap_vrdma_vq_create_attr {

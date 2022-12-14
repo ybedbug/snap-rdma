@@ -749,12 +749,12 @@ static inline int dv_dma_q_progress_rx(struct snap_dma_q *q)
 			break;
 
 		op = mlx5dv_get_cqe_opcode(cqe[n]);
-		if (snap_unlikely(op != MLX5_CQE_RESP_SEND &&
-				  op != MLX5_CQE_RESP_SEND_IMM)) {
+		if (snap_unlikely((op != MLX5_CQE_RESP_SEND &&
+                                 op != MLX5_CQE_RESP_SEND_IMM &&
+				 op != MLX5_CQE_RESP_WR_IMM))) {
 			snap_dv_cqe_err(cqe[n]);
 			return n;
 		}
-
 
 		dv_dma_q_get_rx_comp(q, cqe[n], &rx_comp[n]);
 		n++;
