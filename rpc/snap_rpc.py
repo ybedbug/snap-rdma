@@ -969,9 +969,9 @@ def main():
             raise JsonRpcSnapException("backend_rqpn must be configured for qp test")
         if args.backend_rqpn != -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
-        if args.node_ip != -1 and args.node_rip == -1:
+        if args.node_ip != None and args.node_rip == None:
             raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
-        if args.node_ip == -1 and args.node_rip != -1:
+        if args.node_ip == None and args.node_rip != None:
             raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
         params = {
         }
@@ -989,9 +989,9 @@ def main():
             params['adminq_length'] = args.adminq_length
         if args.dest_mac != None:
             params['dest_mac'] = args.dest_mac
-        if args.subnet_prefix != -1:
+        if args.subnet_prefix != None:
             params['subnet_prefix'] = args.subnet_prefix
-        if args.intf_id != -1:
+        if args.intf_id != None:
             params['intf_id'] = args.intf_id
         if args.vrdma_qpn != -1:
             params['vrdma_qpn'] = args.vrdma_qpn
@@ -1003,9 +1003,9 @@ def main():
             params['src_addr_idx'] = args.src_addr_idx
         if args.sf_mac != None:
             params['sf_mac'] = args.sf_mac
-        if args.node_ip != -1:
+        if args.node_ip != None:
             params['node_ip'] = args.node_ip
-        if args.node_rip != -1:
+        if args.node_rip != None:
             params['node_rip'] = args.node_rip
         if args.show_vqpn != -1:
             params['show_vqpn'] = args.show_vqpn
@@ -1029,9 +1029,9 @@ def main():
     p.add_argument('-c', '--dest_mac', help="Destination MAC on qp test or remote SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
                    required=False, type=int_hex)
     p.add_argument('-u', '--subnet_prefix', help='subnet_prefix on qp test or remote SF IP for test',
-                    default=-1, type=int_hex, required=False)
+                    type=str, required=False)
     p.add_argument('-i', '--intf_id', help='interface id on qp test or local SF IP for test',
-                    default=-1, type=int_hex, required=False)
+                    type=str, required=False)
     p.add_argument('-v', '--vrdma_qpn', help='vrdma qp number for qp test',
                     default=-1, type=int_hex, required=False)
     p.add_argument('-b', '--backend_rqpn', help='remote vrdma backend qp number for qp test',
@@ -1043,9 +1043,9 @@ def main():
     p.add_argument('-j', '--sf_mac', help="Local SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
                    required=False, type=int_hex)
     p.add_argument('-o', '--node_ip', help="rpc local node ip address",
-                   default=-1, type=int_hex, required=False)
+                   type=str, required=False)
     p.add_argument('-r', '--node_rip', help="rpc remote node ip address",
-                   default=-1, type=int_hex, required=False)
+                   type=str, required=False)
     p.add_argument('-q', '--show_vqpn', help="vqpn stats to show",
                    default=-1, type=int_hex, required=False)
     p.set_defaults(func=controller_vrdma_configue)

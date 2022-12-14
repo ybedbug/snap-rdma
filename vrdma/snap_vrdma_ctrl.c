@@ -632,7 +632,7 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 				return 0;
 		}
 
-		snap_info("vrdma controller %p FLR detected\n", ctrl);
+		snap_info("\nvrdma controller %p FLR detected\n", ctrl);
 		if (ctrl->bar_cbs.pre_flr) {
 			if (ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
 				return 0;
@@ -652,7 +652,7 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 					"fail to create mkey after FLR\n", ctrl);
 			ctrl->pending_flr = false;
 		}
-
+		usleep(10000);
 		if (ctrl->bar_cbs.post_flr)
 			ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 
@@ -721,8 +721,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p ctrl->adminq_mr %p adminq_base_addr 0x%lx adminq_dma_comp %p done \n",
-	ctrl->xmkey, ctrl->adminq_mr, (uint64_t)ctrl->bar_curr->adminq_base_addr, ctrl->adminq_dma_comp);
+	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p mkey 0x%x ctrl->adminq_mr %p adminq_base_addr 0x%lx adminq_dma_comp %p done \n",
+	ctrl->xmkey, ctrl->xmkey->mkey, ctrl->adminq_mr, (uint64_t)ctrl->bar_curr->adminq_base_addr, ctrl->adminq_dma_comp);
 	/* Init adminq_buf for admin queue */;
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
