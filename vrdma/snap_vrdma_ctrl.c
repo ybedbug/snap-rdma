@@ -637,22 +637,23 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 			if (ctrl->bar_cbs.pre_flr(ctrl->cb_ctx))
 				return 0;
 		}
-
+		usleep(100000);
 		(void)snap_destroy_cross_mkey(ctrl->xmkey);
+		usleep(100000);
 		snap_close_device(ctrl->sdev);
 		ctrl->xmkey = NULL;
 		ctrl->pending_flr = true;
-
-		usleep(10000);
+		usleep(100000);
 		ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 		if (ctrl->sdev) {
 			ctrl->sdev->dd_data = dd_data;
+			usleep(100000);
 			if (snap_vrdma_ctrl_create_crossing_mkey(ctrl))
 					snap_error("vrdma controller %p "
 					"fail to create mkey after FLR\n", ctrl);
 			ctrl->pending_flr = false;
 		}
-		usleep(10000);
+		usleep(100000);
 		if (ctrl->bar_cbs.post_flr)
 			ctrl->bar_cbs.post_flr(ctrl->cb_ctx);
 

@@ -352,7 +352,7 @@ struct snap_vrdma_caps {
 	uint8_t log_max_mkey;
 	uint8_t log_max_msg;
 };
-#define SNAP_VRDMA_MAX_PFS 1
+#define SNAP_VRDMA_MAX_PFS 2
 
 struct snap_context {
 	struct ibv_context			*context;
