@@ -1017,8 +1017,8 @@ def main():
                    required=True, type=str)
     p.add_argument('-d', '--dev_id', help='device id of vrdma controller. '
                    'Must be set ', default=-1, type=int, required=True)
-    p.add_argument('-m', '--mac', help="MAC in format 0x001122334455 for 00:11:22:33:44:55",
-                   required=False, type=int_hex)
+    p.add_argument('-m', '--mac', help="MAC in format 00:11:22:33:44:55",
+                   type=str, required=False)
     p.add_argument('-s', '--dev_state', help='device status: '
                     '0:reset; 4:driver_ok 0x40:need_reset 0x80:driver_error. ',
                     default=-1, type=int, required=False)
@@ -1026,8 +1026,8 @@ def main():
                     default=-1, type=int_hex, required=False)
     p.add_argument('-l', '--adminq_length', help='controller admin-queue length for test',
                     default=-1, type=int, required=False)
-    p.add_argument('-c', '--dest_mac', help="Destination MAC on qp test or remote SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
-                   required=False, type=int_hex)
+    p.add_argument('-c', '--dest_mac', help="Destination MAC on qp test or remote SF MAC in format 00:11:22:33:44:55",
+                   type=str, required=False)
     p.add_argument('-u', '--subnet_prefix', help='subnet_prefix on qp test or remote SF IP for test',
                     type=str, required=False)
     p.add_argument('-i', '--intf_id', help='interface id on qp test or local SF IP for test',
@@ -1040,8 +1040,8 @@ def main():
                     type=str, required=False)
     p.add_argument('-g', '--src_addr_idx', help='source gid id on qp test or SF gid index',
                     default=-1, type=int, required=False)
-    p.add_argument('-j', '--sf_mac', help="Local SF MAC in format 0x001122334455 for 00:11:22:33:44:55",
-                   required=False, type=int_hex)
+    p.add_argument('-j', '--sf_mac', help="Local SF MAC in format 00:11:22:33:44:55",
+                   type=str, required=False)
     p.add_argument('-o', '--node_ip', help="rpc local node ip address",
                    type=str, required=False)
     p.add_argument('-r', '--node_rip', help="rpc remote node ip address",
