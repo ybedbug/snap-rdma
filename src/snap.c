@@ -522,7 +522,7 @@ static int _snap_alloc_functions(struct snap_context *sctx,
 		ret = -EINVAL;
 		goto out_free;
 	}
-
+	pfs_ctx->num_emulated_pfs = num_emulated_pfs;
 	for (i = 0; i < pfs_ctx->max_pfs; i++) {
 		struct snap_pci *pf = &pfs_ctx->pfs[i];
 
