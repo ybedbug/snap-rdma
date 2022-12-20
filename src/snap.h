@@ -300,6 +300,7 @@ struct snap_pfs_ctx {
 	uint64_t				pf_mac;
 	struct snap_pci				*pfs;
 	bool					dirty;
+	uint32_t num_emulated_pfs;
 };
 
 struct snap_nvme_caps {
