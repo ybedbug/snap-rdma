@@ -969,6 +969,8 @@ def main():
             raise JsonRpcSnapException("backend_rqpn must be configured for qp test")
         if args.backend_rqpn != -1 and args.vrdma_qpn == -1:
             raise JsonRpcSnapException("vrdma_qpn must be configured for qp test")
+        if args.backend_dev != None and args.backend_mtu == -1:
+            raise JsonRpcSnapException("backend_mtu and backend_dev must be configured for qp test")
         if args.node_ip != None and args.node_rip == None:
             raise JsonRpcSnapException("node_ip and remote node_ip must be configured for rpc test")
         if args.node_ip == None and args.node_rip != None:
@@ -1009,6 +1011,8 @@ def main():
             params['node_rip'] = args.node_rip
         if args.show_vqpn != -1:
             params['show_vqpn'] = args.show_vqpn
+        if args.backend_mtu != -1:
+            params['backend_mtu'] = args.backend_mtu
         result = args.client.call('controller_vrdma_configue', params)
         print(json.dumps(result, indent=2).strip('"'))
     p = subparsers.add_parser('controller_vrdma_configue',
@@ -1048,6 +1052,8 @@ def main():
                    type=str, required=False)
     p.add_argument('-q', '--show_vqpn', help="vqpn stats to show",
                    default=-1, type=int_hex, required=False)
+    p.add_argument('-t', '--backend_mtu', help='vrdma backend sf dev mtu for qp test',
+                    default=-1, type=int, required=False)
     p.set_defaults(func=controller_vrdma_configue)
 
     def call_rpc_func(args):
