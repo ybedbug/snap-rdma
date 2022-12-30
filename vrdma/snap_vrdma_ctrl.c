@@ -294,19 +294,16 @@ snap_vrdma_ctrl_critical_bar_change_detected(struct snap_vrdma_ctrl *ctrl)
  */
 int snap_vrdma_ctrl_stop(struct snap_vrdma_ctrl *ctrl)
 {
-	//int i, ret = 0;
+	struct snap_vrdma_queue *virtq, *tmp_q;
 	int ret = 0;
 
 	if (ctrl->state == SNAP_VRDMA_CTRL_STOPPED)
 		return ret;
-#if 0
-	for (i = 0; i < ctrl->max_queues; i++) {
-		if (ctrl->queues[i]) {
-			snap_virtio_ctrl_queue_destroy(ctrl->queues[i]);
-			ctrl->queues[i] = NULL;
+	SNAP_TAILQ_FOREACH_SAFE(virtq, &ctrl->virtqs, vq, tmp_q) {
+		if(virtq) {
+			ctrl->q_ops->destroy(ctrl, virtq);
 		}
 	}
-#endif
 	if (ctrl->bar_cbs.stop) {
 		ret = ctrl->bar_cbs.stop(ctrl->cb_ctx);
 		if (ret)
@@ -568,6 +565,8 @@ static void snap_vrdma_ctrl_progress_suspend(struct snap_vrdma_ctrl *ctrl)
 	ctrl->state = SNAP_VRDMA_CTRL_SUSPENDED;
 	snap_info("Controller %p SUSPENDED\n", ctrl);
 
+	snap_info("lizh Controller %p SUSPENDED pending_reset %d pending_resume %d\n",
+	ctrl, ctrl->pending_reset, ctrl->pending_resume);
 	if (ctrl->pending_reset) {
 		ret = snap_vrdma_ctrl_reset(ctrl);
 		if (ret)
@@ -664,7 +663,7 @@ static int snap_vrdma_ctrl_change_status(struct snap_vrdma_ctrl *ctrl)
 	} else {
 		if (SNAP_VRDMA_CTRL_LIVE_DETECTED(ctrl)) {
 			ret = snap_vrdma_ctrl_validate(ctrl);
-			if (!ret)
+			if (!ret && !snap_vrdma_ctrl_is_suspended(ctrl))
 				ret = snap_vrdma_ctrl_start(ctrl);
 		}
 	}
