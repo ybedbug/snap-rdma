@@ -127,6 +127,7 @@ struct snap_vrdma_qp_stat {
 };
 
 #define SNAP_VRDMA_BACKEND_CQE_SIZE 128
+#define SNAP_VRDMA_BACKEND_MIN_RQ_SIZE 4
 #define MAC_ADDR_LEN 6
 #define MAC_ADDR_2MSBYTES_LEN 2
 

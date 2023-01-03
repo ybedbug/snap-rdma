@@ -322,9 +322,12 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 	}
 
 	if (qp_attr->rq_size) {
+		if (qp_attr->rq_size < SNAP_VRDMA_BACKEND_MIN_RQ_SIZE)
+			qp_attr->rq_size = SNAP_VRDMA_BACKEND_MIN_RQ_SIZE;
 		cq_attr.cqe_cnt = qp_attr->rq_size;
 		qp_attr->rq_cq = snap_cq_create(pd->context, &cq_attr);
-		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->rq_cq %p", qp_attr->rq_cq);
+		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->rq_cq %p rq_size %d",
+		qp_attr->rq_cq, qp_attr->rq_size);
 		if (!qp_attr->rq_cq)
 			goto free_sq_cq;
 	} else {
