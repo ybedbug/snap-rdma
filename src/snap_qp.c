@@ -467,7 +467,8 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 	uint32_t umem_id;
 	uint64_t umem_offset;
 
-	snap_error("\nlizh devx_qp_init sq_max_inline_size %d", attr->sq_max_inline_size);
+	snap_error("\nlizh devx_qp_init sq_max_inline_size %d sq_size %d rq_size %d",
+	attr->sq_max_inline_size, attr->sq_size, attr->rq_size);
 	/* TODO: check actual caps */
 	if (attr->sq_max_inline_size > 256)
 		return -EINVAL;
@@ -552,7 +553,8 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 		DEVX_SET(qpc, qpc, no_sq, 1);
 	}
 	if (attr->rq_size) {
-		snap_error("\nlizh devx_qp_init attr->rq_cq->type %d", attr->rq_cq->type);
+		snap_error("\nlizh devx_qp_init attr->rq_cq->type %d attr->rq_size %d devx_qp->rq_size %d",
+		attr->rq_cq->type, attr->rq_size, devx_qp->rq_size);
 		if (attr->rq_cq->type != SNAP_OBJ_DEVX) {
 			ret = -EINVAL;
 			goto reset_qp_umem;
@@ -564,6 +566,9 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 			goto reset_qp_umem;
 		}
 
+		snap_error("\nlizh devx_qp_init log_rq_size %d log_rq_stride %d ",
+		snap_u32log2(devx_qp->rq_size),
+		snap_u32log2(SNAP_MLX5_RECV_WQE_BB) - SNAP_MLX5_LOG_RQ_STRIDE_SHIFT);
 		DEVX_SET(qpc, qpc, cqn_rcv, attr->rq_cq->devx_cq.devx.id);
 		DEVX_SET(qpc, qpc, log_rq_stride, snap_u32log2(SNAP_MLX5_RECV_WQE_BB) -
 			 SNAP_MLX5_LOG_RQ_STRIDE_SHIFT);
