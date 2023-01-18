@@ -35,7 +35,6 @@ static int snap_vrdma_query_device_internal(struct snap_device *sdev,
 
 	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
 			MLX5_OBJ_TYPE_VRDMA_DEVICE_EMULATION);
-	/*lizh TBD: need check ???*/
 	DEVX_SET(vrdma_device_emulation, device_emulation_in, vhca_id,
 			sdev->pci->mpci.vhca_id);
 
@@ -303,7 +302,6 @@ int snap_vrdma_init_device(struct snap_device *sdev, uint32_t vdev_idx)
 
 	sdev->dd_data = vdev;
 	memset(&g_bar_test, 0, sizeof(struct snap_vrdma_test_dummy_device));
-	snap_error("lizh snap_vrdma_init_device...done");
 	return 0;
 
 out_free:
@@ -363,7 +361,6 @@ void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx)
 	struct snap_device_attr sdev_attr = {};
 	struct snap_device *sdev;
 
-	snap_error("\nlizh snap_vrdma_pci_functions_cleanup max_pfs %d\n", sctx->vrdma_pfs.max_pfs);
 	if (sctx->vrdma_pfs.max_pfs <= 0)
 		return;
 
@@ -379,13 +376,8 @@ void snap_vrdma_pci_functions_cleanup(struct snap_context *sctx)
 
 	num_pfs = snap_get_pf_list(sctx, SNAP_VRDMA, pfs);
 	for (i = 0; i < num_pfs; i++) {
-		snap_error("\n lizh snap_vrdma_pci_functions_cleanup i %d num_pfs %d \n", i, num_pfs);
-		if (!pfs[i])
-			snap_error("\n lizh snap_vrdma_pci_functions_cleanup pfs[%d] is NULL \n", i);
-		snap_error("\n lizh snap_vrdma_pci_functions_cleanup i %d hotplugged %d \n", i, pfs[i]->hotplugged);
 		if (!pfs[i]->hotplugged)
 			continue;
-		snap_error("\n lizh snap_vrdma_pci_functions_cleanup num_pfs %d \n", num_pfs);
 		sdev->sctx = sctx;
 		sdev->pci = pfs[i];
 		sdev->mdev.device_emulation = snap_emulation_device_create(sdev, &sdev_attr);

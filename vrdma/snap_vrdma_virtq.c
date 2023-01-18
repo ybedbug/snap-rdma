@@ -307,14 +307,12 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 	struct snap_cq_attr cq_attr = {0};
 	int rc;
 
-	snap_error("\nlizh snap_vrdma_create_qp_helper...start");
 	cq_attr.cq_type = SNAP_OBJ_DEVX;
 	cq_attr.oi_enable = false;
 	cq_attr.cqe_size = SNAP_VRDMA_BACKEND_CQE_SIZE;
 	if (qp_attr->sq_size) {
 		cq_attr.cqe_cnt = qp_attr->sq_size;
 		qp_attr->sq_cq = snap_cq_create(pd->context, &cq_attr);
-		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->sq_cq %p", qp_attr->sq_cq);
 		if (!qp_attr->sq_cq)
 			return -EINVAL;
 	} else {
@@ -326,8 +324,6 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 			qp_attr->rq_size = SNAP_VRDMA_BACKEND_MIN_RQ_SIZE;
 		cq_attr.cqe_cnt = qp_attr->rq_size;
 		qp_attr->rq_cq = snap_cq_create(pd->context, &cq_attr);
-		snap_error("\nlizh snap_vrdma_create_qp_helper qp_attr->rq_cq %p rq_size %d",
-		qp_attr->rq_cq, qp_attr->rq_size);
 		if (!qp_attr->rq_cq)
 			goto free_sq_cq;
 	} else {
@@ -336,26 +332,22 @@ int snap_vrdma_create_qp_helper(struct ibv_pd *pd,
 
 	qp_attr->qp_type = SNAP_OBJ_DEVX;
 	qp->sqp = snap_qp_create(pd, qp_attr);
-	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_create qp->sqp %p", qp->sqp);
 	if (!qp->sqp)
 		goto free_rq_cq;
 	qp->qpnum = snap_qp_get_qpnum(qp->sqp);
 
 	rc = snap_qp_to_hw_qp(qp->sqp, &qp->hw_qp);
-	snap_error("\nlizh snap_vrdma_create_qp_helper snap_qp_to_hw_qp rc %d", rc);
 	if (rc)
 		goto free_qp;
 
 	if (qp_attr->sq_cq) {
 		rc = snap_cq_to_hw_cq(qp_attr->sq_cq, &qp->sq_hw_cq);
-		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq sq_cq rc %d", rc);
 		if (rc)
 			goto free_qp;
 	}
 
 	if (qp_attr->rq_cq) {
 		rc = snap_cq_to_hw_cq(qp_attr->rq_cq, &qp->rq_hw_cq);
-		snap_error("\nlizh snap_vrdma_create_qp_helper snap_cq_to_hw_cq rx_cq rc %d", rc);
 		if (rc)
 			goto free_qp;
 	}
@@ -374,14 +366,12 @@ free_sq_cq:
 
 void snap_vrdma_destroy_qp_helper(struct snap_vrdma_backend_qp *qp)
 {
-	snap_error("\nlizh snap_vrdma_destroy_qp_helper..start");
 	if (qp->sqp)
 		snap_qp_destroy(qp->sqp);
 	if (qp->qp_attr.rq_cq)
 		snap_cq_destroy(qp->qp_attr.rq_cq);
 	if (qp->qp_attr.sq_cq)
 		snap_cq_destroy(qp->qp_attr.sq_cq);
-	snap_error("\nlizh snap_vrdma_destroy_qp_helper..done");
 }
 
 int snap_vrdma_modify_bankend_qp_rst2init(struct snap_qp *qp,
