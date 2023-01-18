@@ -85,8 +85,6 @@ static int snap_vrdma_ctrl_create_crossing_mkey(struct snap_vrdma_ctrl *ctrl)
 	cm_attr.dma_rkey = ctrl->sdev->dma_rkey;
 	cm_attr.vhca_id = snap_get_vhca_id(ctrl->sdev);
 	cm_attr.crossed_vhca_mkey = ctrl->sdev->crossed_vhca_mkey;
-	snap_error("\nlizh snap_vrdma_ctrl_create_crossing_mkey...vhca_id %d crossed_vhca_mkey 0x%x",
-		cm_attr.vhca_id, cm_attr.crossed_vhca_mkey);
 	ctrl->xmkey = snap_create_cross_mkey_by_attr(ctrl->pd, &cm_attr);
 	if (!ctrl->xmkey)
 		return -1;
@@ -100,7 +98,6 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	int ret = 0;
 	uint32_t npgs;
 
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal..pci_type %d .pf_id %d start", attr->pci_type, attr->pf_id);
 	if (!sctx) {
 		ret = -ENODEV;
 		goto err;
@@ -112,8 +109,6 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	} else {
 		npgs = attr->npgs;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal...npgs %d", npgs);
-
 	ctrl->sdev_attr.pf_id = attr->pf_id;
 	ctrl->sdev_attr.type = attr->pci_type;
 	if (attr->event)
@@ -121,7 +116,6 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ctrl->sdev_attr.context = attr->context;
 	ctrl->sdev = snap_open_device(sctx, &ctrl->sdev_attr);
 	if (!ctrl->sdev) {
-		snap_error("lizh snap_vrdma_ctrl_open_internal...snap_open_device fail");
 		ret = -ENODEV;
 		goto err;
 	}
@@ -136,9 +130,6 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 	ret = snap_vrdma_ctrl_bars_init(ctrl);
 	if (ret)
 		goto close_device;
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_vrdma_ctrl_bars_init adminq pd %p ctrl->adminq_mr %p done",
-	ctrl->pd, ctrl->adminq_mr);
-
 	ret = pthread_mutex_init(&ctrl->progress_lock, NULL);
 	if (ret)
 		goto teardown_bars;
@@ -148,14 +139,12 @@ static int snap_vrdma_ctrl_open_internal(struct snap_vrdma_ctrl *ctrl,
 		ret = -EINVAL;
 		goto mutex_destroy;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal...snap_pgs_alloc done");
 	if (snap_vrdma_ctrl_create_crossing_mkey(ctrl)) {
 		ret = -EACCES;
 		goto free_pgs;
 	}
 	ctrl->force_in_order = attr->force_in_order;
 	ctrl->q_ops = get_vrdma_queue_ops();
-	snap_error("\nlizh snap_vrdma_ctrl_open_internal..ctrl->xmkey %p.done", ctrl->xmkey);
 	return 0;
 
 free_pgs:
@@ -565,8 +554,6 @@ static void snap_vrdma_ctrl_progress_suspend(struct snap_vrdma_ctrl *ctrl)
 	ctrl->state = SNAP_VRDMA_CTRL_SUSPENDED;
 	snap_info("Controller %p SUSPENDED\n", ctrl);
 
-	snap_info("lizh Controller %p SUSPENDED pending_reset %d pending_resume %d\n",
-	ctrl, ctrl->pending_reset, ctrl->pending_resume);
 	if (ctrl->pending_reset) {
 		ret = snap_vrdma_ctrl_reset(ctrl);
 		if (ret)
@@ -721,8 +708,8 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p mkey 0x%x ctrl->adminq_mr %p adminq_base_addr 0x%lx adminq_size %d adminq_dma_comp %p done \n",
-	ctrl->xmkey, ctrl->xmkey->mkey, ctrl->adminq_mr, (uint64_t)ctrl->bar_curr->adminq_base_addr, ctrl->bar_curr->adminq_size, ctrl->adminq_dma_comp);
+	snap_error("\nsnap_vrdma_ctrl_start adminq_dma_q ctrl->xmkey %p mkey 0x%x lkey 0x%x ctrl->adminq_mr %p adminq_base_addr 0x%lx adminq_size %d adminq_dma_comp %p\n",
+	ctrl->xmkey, ctrl->xmkey->mkey, ctrl->adminq_mr->lkey, ctrl->adminq_mr, (uint64_t)ctrl->bar_curr->adminq_base_addr, ctrl->bar_curr->adminq_size, ctrl->adminq_dma_comp);
 	/* Init adminq_buf for admin queue */;
 	rkey = ctrl->xmkey->mkey;
 	lkey = ctrl->adminq_mr->lkey;
@@ -735,7 +722,6 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 		ret = -EINVAL;
 		goto out;
 	}
-	snap_error("\nlizh snap_vrdma_ctrl_start snap_dma_q_read done rkey 0x%x\n", rkey);
 	if (ctrl->bar_cbs.start) {
 		ret = ctrl->bar_cbs.start(ctrl->cb_ctx);
 		if (ret) {
@@ -746,7 +732,6 @@ int snap_vrdma_ctrl_start(struct snap_vrdma_ctrl *ctrl)
 	TAILQ_INIT(&ctrl->virtqs);
 	if (ctrl->state != SNAP_VRDMA_CTRL_SUSPENDED) {
 		snap_info("vrdma controller %p started\n", ctrl);
-		snap_error("lizh vrdma controller %p started\n", ctrl);
 		ctrl->state = SNAP_VRDMA_CTRL_STARTED;
 	} else
 		snap_info("vrdma controller %p SUSPENDED\n", ctrl);
