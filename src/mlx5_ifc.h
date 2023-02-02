@@ -2654,6 +2654,7 @@ enum mlx5_obj_type {
 	MLX5_OBJ_TYPE_APU_WINDOW = 0x200000000000000,
 
 	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49,
+
 	MLX5_OBJ_TYPE_DPA_DB_CQ_MAPPING = 0x32
 };
 
@@ -4757,5 +4758,126 @@ struct mlx5_ifc_emulated_dev_db_cq_map_bits {
 	u8 cqn[0x20];
 
 	u8 reserved_at_e0[0x120];
+};
+
+enum {
+	MLX5_GENERAL_OBJECT_TYPES_HEAP_MEM              = 0x28,
+	MLX5_GENERAL_OBJECT_TYPES_PROCESS               = 0x2a,
+	MLX5_GENERAL_OBJECT_TYPES_THREAD                = 0x2b,
+	MLX5_GENERAL_OBJECT_TYPES_OUTBOX                = 0x2d,
+	MLX5_GENERAL_OBJECT_TYPES_DPA_DB_CQ_MAPPING     = 0x32,
+	MLX5_GENERAL_OBJECT_TYPES_DPA_EQ                = 0x33,
+	MLX5_GENERAL_OBJECT_TYPES_WINDOW                = 0x39,
+	MLX5_GENERAL_OBJECT_TYPES_UAR                   = 0xff11,
+	MLX5_GENERAL_OBJECT_TYPES_PD                    = 0xff12,
+	MLX5_GENERAL_OBJECT_TYPES_DPA_DUMEM             = 0xff13,
+	MLX5_GENERAL_OBJECT_TYPES_EQ                    = 0xff14
+};
+
+struct mlx5_ifc_create_emulated_dev_eq_in_bits {
+    u8     modify_field_select[0x40];
+
+    u8     reserved_at_40[0x20];
+
+    u8     device_emulation_id[0x20];
+
+    u8     reserved_at_e0[0x120];
+
+    u8     reserved0[0x14];
+    u8     intr[0xc];
+
+    u8     reserved1[0x40];
+};
+
+// enum {
+// 	MLX5_CMD_OP_CREATE_GENERAL_OBJECT = 0xa00,
+// 	MLX5_OBJ_TYPE_EMULATED_DEV_EQ = 0x49,
+// };
+
+// struct mlx5_ifc_general_obj_out_cmd_hdr_bits {
+// 	u8	 status[0x8];
+// 	u8	 reserved_at_8[0x18];
+
+// 	u8	 syndrome[0x20];
+
+// 	u8	 obj_id[0x20];
+
+// 	u8	 reserved_at_60[0x20];
+// };
+
+
+
+// struct mlx5_ifc_alias_context_bits {
+// 	u8	 vhca_id_to_be_accessed[0x10];
+// 	u8	 reserved_at_10[0x10];
+
+// 	u8	 object_id_to_be_accessed[0x20];
+
+// 	u8	 reserved_at_40[0x40];
+
+// 	u8	 access_key[0x100];
+
+// 	u8	 reserved_at_180[0x80];
+// };
+
+struct mlx5_ifc_create_eq_out_bits {
+    u8     status[0x8];
+    u8     reserved_at_8[0x18];
+
+    u8     syndrome[0x20];
+
+    u8     reserved_at_40[0x18];
+    u8     eqn[0x8];
+
+    u8     reserved_at_60[0x20];
+};
+
+// struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
+// 	u8	 opcode[0x10];
+// 	u8	 uid[0x10];
+
+// 	u8	 reserved_at_20[0x10];
+// 	u8	 obj_type[0x10];
+
+// 	u8	 obj_id[0x20];
+
+// 	u8	 alias_object[0x1];
+// 	u8	 reserved_at_61[0x1f];
+// };
+
+struct mlx5_ifc_create_alias_in_bits {
+	struct mlx5_ifc_general_obj_in_cmd_hdr_bits hdr;
+	struct mlx5_ifc_alias_context_bits alias_ctx;
+};
+
+enum {
+	MLX5_DEV_DB_MAPPED = 0x0,
+	MLX5_DEV_DB_UNMAPPED = 0x1
+};
+
+struct mlx5_ifc_dpa_db_cq_mapping_bits {
+	uint8_t modify_field_select[0x40];
+
+	uint8_t reserved_at_40[0x10];
+	uint8_t map_state[0x4];
+	uint8_t queue_type[0x4];
+	uint8_t device_type[0x8];
+
+	uint8_t reserved_at_60[0x20];
+
+	uint8_t device_emulation_id[0x20];
+
+	uint8_t queue_id[0x20];
+
+	uint8_t cqn[0x20];
+
+	uint8_t dbr_handle[0x20];
+
+	uint8_t reserved_at_e0[0x100];
+};
+
+struct mlx5_ifc_create_dpa_db_cq_mapping_in_bits {
+	struct mlx5_ifc_general_obj_in_cmd_hdr_bits     hdr;
+	struct mlx5_ifc_dpa_db_cq_mapping_bits dpa_db_cq_mapping;
 };
 #endif /* MLX5_IFC_H */

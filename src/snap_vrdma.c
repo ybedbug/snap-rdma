@@ -408,8 +408,8 @@ err:
 
 
 struct mlx5dv_devx_obj *
-snap_vrdma_mlx_devx_create_eq(struct ibv_context *ctx, uint32_t dev_emu_id,
-		   uint16_t msix_vector, uint64_t *eqn)
+mlx_devx_create_eq(struct ibv_context *ctx, uint32_t dev_emu_id,
+		   uint16_t msix_vector, uint32_t *eqn)
 {
 	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr) +
 		   DEVX_ST_SZ_BYTES(create_emulated_dev_eq_in)] = {};
@@ -434,10 +434,167 @@ snap_vrdma_mlx_devx_create_eq(struct ibv_context *ctx, uint32_t dev_emu_id,
 	return eq;
 }
 
-void snap_vrdma_mlx_devx_destroy_eq(struct mlx5dv_devx_obj *obj)
+void mlx_devx_destroy_eq(struct mlx5dv_devx_obj *obj)
 {
 	mlx5dv_devx_obj_destroy(obj);
 }
 
+int mlx_devx_allow_other_vhca_access(struct ibv_context *ibv_ctx,
+				     struct vrdma_allow_other_vhca_access_attr *attr)
+{
+	uint32_t out[DEVX_ST_SZ_DW(allow_other_vhca_access_out)] = {};
+	uint32_t in[DEVX_ST_SZ_DW(allow_other_vhca_access_in)] = {};
+	void *access_key;
+	int err;
+
+	DEVX_SET(allow_other_vhca_access_in, in, opcode,
+		 MLX5_CMD_OP_ALLOW_OTHER_VHCA_ACCESS);
+	DEVX_SET(allow_other_vhca_access_in, in, object_type_to_be_accessed,
+		 attr->type);
+	DEVX_SET(allow_other_vhca_access_in, in, object_id_to_be_accessed,
+		 attr->obj_id);
+	access_key = DEVX_ADDR_OF(allow_other_vhca_access_in, in, access_key);
+	memcpy(access_key, &attr->access_key_be,
+	       VRDMA_ALIAS_ACCESS_KEY_NUM_DWORD * sizeof(uint32_t));
+
+	err = mlx5dv_devx_general_cmd(ibv_ctx, in, sizeof(in), out, sizeof(out));
+	if (err) {
+		snap_debug("Failed to allow other VHCA access to object, err(%d)",
+			  err);
+		return err;
+	}
+
+	return 0;
+}
+
+struct mlx5dv_devx_obj *
+mlx_devx_create_alias_obj(struct ibv_context *ctx,
+			  struct vrdma_alias_attr *attr, uint32_t *id)
+{
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {};
+	uint8_t in[DEVX_ST_SZ_BYTES(create_alias_in)] = {};
+	struct mlx5dv_devx_obj *obj = NULL;
+	void *alias_ctx, *access_key;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type, attr->type);
+	DEVX_SET(general_obj_in_cmd_hdr, in, alias_object, 0x1);
+
+	alias_ctx = DEVX_ADDR_OF(create_alias_in, in, alias_ctx);
+	DEVX_SET(alias_context, alias_ctx, vhca_id_to_be_accessed,
+		 attr->orig_vhca_id);
+	DEVX_SET(alias_context, alias_ctx, object_id_to_be_accessed,
+		 attr->orig_obj_id);
+	access_key = DEVX_ADDR_OF(alias_context, alias_ctx, access_key);
+	memcpy(access_key, &attr->access_key_be,
+	       VRDMA_ALIAS_ACCESS_KEY_NUM_DWORD * sizeof(uint32_t));
+
+	obj = mlx5dv_devx_obj_create(ctx, in, sizeof(in), out, sizeof(out));
+	if (!obj) {
+		snap_debug("Failed to create an alias for object, err(%d)", errno);
+		return NULL;
+	}
+
+	*id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	return obj;
+}
+
+static int
+mlx_devx_emu_db_to_cq_query(struct mlx5dv_devx_obj *obj, uint32_t *id,
+			    uint32_t obj_id)
+{
+	uint8_t in[DEVX_ST_SZ_BYTES(general_obj_in_cmd_hdr)] = {0};
+	uint8_t out[DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr) +
+		    DEVX_ST_SZ_BYTES(dpa_db_cq_mapping)] = {0};
+	uint8_t *cq_db_map_out;
+	int ret;
+
+	DEVX_SET(general_obj_in_cmd_hdr, in, opcode,
+		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_type,
+		 MLX5_GENERAL_OBJECT_TYPES_DPA_DB_CQ_MAPPING);
+	DEVX_SET(general_obj_in_cmd_hdr, in, obj_id, obj_id);
+
+	ret = mlx5dv_devx_obj_query(obj, in, sizeof(in), out, sizeof(out));
+	if (ret)
+		goto err;
+
+	cq_db_map_out = out + DEVX_ST_SZ_BYTES(general_obj_out_cmd_hdr);
+	*id = DEVX_GET(dpa_db_cq_mapping, cq_db_map_out, dbr_handle);
+
+err:
+	return ret;
+}
+
+struct mlx5dv_devx_obj *
+mlx_devx_emu_db_to_cq_map(struct ibv_context *ibv_ctx, uint32_t vhca_id,
+			  uint32_t queue_id, uint32_t cq_num, uint32_t *id)
+{
+	uint32_t in[DEVX_ST_SZ_DW(create_dpa_db_cq_mapping_in)] = {};
+	uint32_t out[DEVX_ST_SZ_DW(general_obj_out_cmd_hdr)] = {};
+	void *hdr, *dpa_db_cq_mapping;
+	struct mlx5dv_devx_obj *obj;
+	uint32_t obj_id;
+	int ret;
+
+	hdr = DEVX_ADDR_OF(create_dpa_db_cq_mapping_in, in, hdr);
+	DEVX_SET(general_obj_in_cmd_hdr, hdr, opcode,
+	MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	DEVX_SET(general_obj_in_cmd_hdr, hdr, obj_type,
+		 MLX5_GENERAL_OBJECT_TYPES_DPA_DB_CQ_MAPPING);//PRM 8.28.48
+
+	dpa_db_cq_mapping = DEVX_ADDR_OF(create_dpa_db_cq_mapping_in, in,
+					 dpa_db_cq_mapping);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, map_state,
+		 MLX5_DEV_DB_MAPPED);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, queue_type, 0);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, device_type,
+		 MLX5_HOTPLUG_DEVICE_TYPE_VIRTIO_NET);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, device_emulation_id, vhca_id);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, queue_id, queue_id);
+	DEVX_SET(dpa_db_cq_mapping, dpa_db_cq_mapping, cqn, cq_num);
+
+	obj = mlx5dv_devx_obj_create(ibv_ctx, in,
+				     sizeof(in), out, sizeof(out));
+	if (!obj) {
+		snap_debug("Failed to create dpa_db_cq_mapping PRM object, err(%d)",
+			  errno);
+		return NULL;
+	}
+
+	obj_id = DEVX_GET(general_obj_out_cmd_hdr, out, obj_id);
+
+	ret = mlx_devx_emu_db_to_cq_query(obj, id, obj_id);
+	if (ret) {
+		snap_debug("Failed to query dpa_db_cq_mapping PRM object, err(%d)",
+			  ret);
+		goto err;
+	}
+
+	return obj;
+
+err:
+	mlx5dv_devx_obj_destroy(obj);
+	return NULL;
+}
+
+int mlx_devx_emu_db_to_cq_unmap(struct mlx5dv_devx_obj *devx_emu_db_to_cq_ctx)
+{
+	int err;
+
+	if (devx_emu_db_to_cq_ctx) {
+		err = mlx5dv_devx_obj_destroy(devx_emu_db_to_cq_ctx);
+		if (err) {
+			snap_debug("Failed to destroy emu_db_to_cq_ctx devx object, err(%d)",
+				  err);
+			return err;
+		}
+		devx_emu_db_to_cq_ctx = NULL;
+	}
+
+	return 0;
+}
 
 
