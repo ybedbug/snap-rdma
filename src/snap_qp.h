@@ -150,6 +150,8 @@ struct snap_qp_attr {
 
 	bool qp_on_dpa;
 	struct snap_dpa_ctx *dpa_proc;
+
+	bool is_vrdma;
 };
 #endif /* !__DPA */
 

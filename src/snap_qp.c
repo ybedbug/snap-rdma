@@ -540,7 +540,10 @@ static int devx_qp_init(struct snap_qp *qp, struct ibv_pd *pd, const struct snap
 
 		DEVX_SET(qpc, qpc, cqn_snd, attr->sq_cq->devx_cq.devx.id);
 		DEVX_SET(qpc, qpc, log_sq_size, snap_u32log2(devx_qp->sq_size));
-		DEVX_SET(qpc, qpc, cs_req, MLX5_REQ_SCAT_DATA32_CQE);
+		/* vrdma backend qp does not need sq inline scatter for now */
+		if (!attr->is_vrdma) {
+			DEVX_SET(qpc, qpc, cs_req, MLX5_REQ_SCAT_DATA32_CQE);
+		}
 	} else {
 		DEVX_SET(qpc, qpc, no_sq, 1);
 	}
