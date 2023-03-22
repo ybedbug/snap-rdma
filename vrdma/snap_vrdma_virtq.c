@@ -213,6 +213,15 @@ void snap_vrdma_sched_vq(struct snap_vrdma_ctrl *ctrl,
 	snap_debug("VRDMA queue polling group id = %d\n", vq->pg->id);
 	pthread_spin_unlock(&pg->lock);
 }
+void snap_vrdma_sched_vq_by_pg(struct snap_vrdma_ctrl *ctrl,
+				     struct snap_vrdma_queue *vq,
+				     struct snap_pg *pg)
+{
+	pthread_spin_lock(&pg->lock);
+	snap_vrdma_sched_vq_nolock(ctrl, vq, pg);
+	snap_debug("VRDMA queue polling group id = %d\n", vq->pg->id);
+	pthread_spin_unlock(&pg->lock);
+}
 
 static void snap_vrdma_desched_vq_nolock(struct snap_vrdma_queue *vq)
 {
@@ -441,11 +450,11 @@ int snap_vrdma_modify_bankend_qp_init2rtr(struct snap_qp *qp,
 		       rdy_attr->dest_mac + MAC_ADDR_2MSBYTES_LEN,
 		       MAC_ADDR_LEN - MAC_ADDR_2MSBYTES_LEN);
 		memcpy(DEVX_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-			   rdy_attr->rgid_rip.raw,
+			   rdy_attr->rgid_rip->raw,
 		       DEVX_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
 		DEVX_SET(ads, address_path, src_addr_index, rdy_attr->src_addr_index);
 		DEVX_SET(ads, address_path, hop_limit, 255); /* High value so it won't limit */
-		DEVX_SET(ads, address_path, udp_sport, 0xc000);
+		DEVX_SET(ads, address_path, udp_sport, rdy_attr->udp_src_port);
 	}
 
 	ret = snap_qp_modify(qp, in, sizeof(in), out, sizeof(out));
