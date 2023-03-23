@@ -145,12 +145,14 @@ struct snap_vrdma_backend_qp {
 	bool tx_need_ring_db;
 	struct mlx5_wqe_ctrl_seg *ctrl;
 	struct snap_vrdma_qp_stat stat;
+	uint16_t sq_ci;
 };
 
 struct snap_vrdma_bk_qp_rdy_attr {
 	uint8_t src_addr_index;
+	uint16_t udp_src_port;
 	uint8_t *dest_mac;
-	union ibv_gid rgid_rip;
+	union ibv_gid *rgid_rip;
 };
 
 struct snap_vrdma_queue_ops {
@@ -166,6 +168,9 @@ struct snap_vrdma_queue_ops {
 
 void snap_vrdma_sched_vq(struct snap_vrdma_ctrl *ctrl,
 				     struct snap_vrdma_queue *vq);
+void snap_vrdma_sched_vq_by_pg(struct snap_vrdma_ctrl *ctrl,
+				     struct snap_vrdma_queue *vq,
+				     struct snap_pg *pg);
 void snap_vrdma_desched_vq(struct snap_vrdma_queue *vq);
 
 int snap_vrdma_ctrl_io_progress(struct snap_vrdma_ctrl *ctrl);
